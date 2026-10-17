@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>folio — document-first workspace</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, sans-serif;
+        background: #fafbfc;
+      }
+      header {
+        border-bottom: 1px solid #e6e8eb;
+        padding: 10px 24px;
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        background: #fff;
+        position: sticky;
+        top: 0;
+      }
+      header h1 {
+        font-size: 18px;
+        margin: 0;
+        font-weight: 700;
+      }
+      header .tag {
+        color: #57606a;
+        font-size: 13px;
+      }
+      .toolbar {
+        margin-left: auto;
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        border: 1px solid #d0d7de;
+        background: #fff;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      button:hover { background: #f3f4f6; }
+      button.active { background: #1f2328; color: #fff; border-color: #1f2328; }
+      main { padding: 24px; }
+      .editor {
+        width: 100%;
+        min-height: 60vh;
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 14px;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        padding: 16px;
+        box-sizing: border-box;
+        background: #fff;
+        line-height: 1.5;
+      }
+      #status {
+        position: fixed;
+        bottom: 12px;
+        right: 12px;
+        background: #1f2328;
+        color: #fff;
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-size: 13px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      #status.show { opacity: 0.9; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>folio</h1>
+      <span class="tag">document-first workspace — first usable build</span>
+      <div class="toolbar">
+        <button id="btn-view" class="active">Document</button>
+        <button id="btn-markdown">Markdown</button>
+        <button id="btn-download">Download .md</button>
+      </div>
+    </header>
+    <main>
+      <folio-doc id="the-doc"></folio-doc>
+      <textarea id="editor" class="editor" hidden></textarea>
+    </main>
+    <div id="status">Saved</div>
+    <script type="module" src="../src/main.ts"></script>
+  </body>
+</html>

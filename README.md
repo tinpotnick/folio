@@ -28,8 +28,29 @@ output reads like a polished report — not a notebook.
 - `tests/golden/` — lossless round-trip golden files
 - `evals/` — behavior eval set grown from real bugs
 
+## Run it
+
+```
+npm install
+npm run dev
+```
+
+Opens the demo host app: the sample document rendered as a polished
+report — headings, prose, a live table (edit a cell and every
+formula and the figure recalculate), and a chart generated from a
+query over the table. Toggle to **Markdown** to see and edit the
+source; switch back to re-parse. **Download .md** exports the doc.
+
+What works in this first build:
+- Document parse/serialize with lossless round-trip (golden-tested)
+- Typed tables with formula columns (recalc on every edit)
+- Charts as queries over tables (SVG, publication-oriented)
+- Theme from document frontmatter (closed schema; no style literals
+  ever live in the document)
+- `<folio-doc>` web component: embed it anywhere (ADR-0006)
+
 ## Status
 
-Pre-code. The seed kit (specs, ADRs, standing orders) is in place;
-the first milestone is the table-block parse/serialize round-trip
-with formula recalc, verified headlessly against the sample document.
+Milestone 1 complete (engine + round-trip + first usable app).
+The recalc dependency graph (cross-table formulas, cycle detection)
+is the next engine milestone.

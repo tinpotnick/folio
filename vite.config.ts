@@ -1,19 +1,26 @@
 import { defineConfig } from "vite";
-import dts from "vite-plugin-dts";
+import path from "node:path";
 
 export default defineConfig({
-  build: {
-    lib: {
-      entry: "src/index.ts",
-      formats: ["es"],
-      fileName: "index",
+  root: "demo",
+  publicDir: false,
+  resolve: {
+    alias: {
+      "@folio": path.resolve(__dirname, "./src"),
     },
-    outDir: "dist",
   },
-  plugins: [
-    dts({
-      entryRoot: "src",
-      rollupTypes: true,
-    }),
-  ],
+  build: {
+    emptyOutDir: true,
+    rollupOptions: {
+      input: "demo/index.html",
+      output: {
+        format: "es",
+        entryFileNames: "assets/[name].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
+      },
+    },
+    outDir: path.resolve(__dirname, "dist"),
+  },
+  plugins: [],
 });
