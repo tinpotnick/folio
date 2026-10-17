@@ -3,6 +3,7 @@
  * Document view / Markdown view toggle; edits in either mode keep
  * the document as the source of truth.
  */
+import "./component.js";
 import type { FolioDoc } from "./component.js";
 import { parseDoc, serializeDoc } from "./engine/doc.js";
 
