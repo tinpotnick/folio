@@ -121,6 +121,17 @@ export function themeCss(theme: Theme): string {
       border-radius: 3px;
     }
     p { margin: 0.9em 0; }
+    [contenteditable="true"] { border-radius: 3px; }
+    [contenteditable="true"]:hover { background: rgba(76, 110, 245, 0.05); }
+    [contenteditable="true"]:focus {
+      outline: 2px solid #4c6ef5;
+      outline-offset: 2px;
+      background: #fff;
+    }
+    [contenteditable="true"]:empty::before {
+      content: "…";
+      color: #b0b8c1;
+    }
     .chart-holder svg { width: 100%; height: auto; display: block; }
   `;
 }

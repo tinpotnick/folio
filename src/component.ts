@@ -9,6 +9,7 @@ import { recalcTable } from "@folio/engine/recalc";
 import { executeQuery } from "@folio/engine/query";
 import { themeFromDoc, themeCss } from "./render/theme.js";
 import { renderBarChart } from "./render/chart.js";
+import { inlineMarkdownToHtml, htmlToInlineMarkdown } from "./render/inline.js";
 
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
@@ -119,7 +120,13 @@ export class FolioDoc extends HTMLElement {
       }
       case "prose": {
         const el = document.createElement("p");
-        el.innerHTML = inlineMarkdown(block.text);
+        el.innerHTML = inlineMarkdownToHtml(block.text);
+        this.makeEditable(el, {
+          kind: "prose",
+          block,
+          toMd: htmlToInlineMarkdown,
+          fromMd: inlineMarkdownToHtml,
+        });
         return el;
       }
       case "table": {
@@ -219,6 +226,32 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
+  private makeEditable(
+    el: HTMLElement,
+    binding: {
+      kind: "heading" | "prose";
+      block: Extract<Doc["blocks"][number], { kind: "heading" | "prose" }>;
+      toMd: (html: string) => string;
+      fromMd: (md: string) => string;
+    },
+  ): void {
+    el.setAttribute("contenteditable", "true");
+    el.addEventListener("input", () => {
+      binding.block.text = binding.toMd(el.innerHTML);
+      this.emitChange();
+    });
+    el.addEventListener("blur", () => {
+      // Re-render from the model so canonical formatting returns.
+      el.innerHTML = binding.fromMd(binding.block.text);
+    });
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        (ev.target as HTMLElement).blur();
+      }
+    });
+  }
+
   private handleCellEdit(ev: Event): void {
     if (!this.doc) return;
     const input = ev.target as HTMLInputElement;
@@ -242,17 +275,6 @@ export class FolioDoc extends HTMLElement {
     this.render();
     this.emitChange();
   }
-}
-
-function inlineMarkdown(text: string): string {
-  const escaped = text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-  return escaped
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
 customElements.define("folio-doc", FolioDoc);
