@@ -14,6 +14,8 @@ export interface Column {
   unit?: string;
   format?: "percent" | "currency";
   expr?: string;
+  width?: number;
+  align?: "left" | "right";
 }
 
 export type Cell = string | number;
@@ -38,6 +40,7 @@ export interface Block {
 }
 
 export interface Chart {
+  id?: string; // directive anchor, e.g. growth-chart
   source: string; // table id
   query: {
     select: string[];

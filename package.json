@@ -4,7 +4,9 @@
   "description": "Document-first workspace: semantic Markdown docs with typed datasets, query-driven charts, publication-quality output.",
   "type": "module",
   "license": "MIT",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -21,6 +23,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
+    "@types/node": "^26.6.5",
     "eslint": "^9.14.0",
     "prettier": "^3.3.3",
     "typescript": "^5.6.3",
