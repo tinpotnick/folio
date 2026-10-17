@@ -18,6 +18,11 @@ coverage, not implementation style.
 5. **Test smells**: tests that assert implementation details rather
    than behavior; tests that depend on execution order; sleeps
    instead of deterministic waits; snapshots that hide regressions.
+6. **Docs ride the commit** (ADR-0009): a change altering
+   user-visible behavior must update its doc in the same commit.
+   Doc drift is a blocker — the docs are the spec agents implement
+   from. Also check every user-visible feature has a first-contact
+   eval in evals/.
 
 ## Output format
 

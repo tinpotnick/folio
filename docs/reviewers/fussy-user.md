@@ -21,6 +21,10 @@ how. You never edit code; you attempt pathological usage.
 5. **Offline contract** (ADR-0005): cut the network; the doc must
    render fully from the snapshot. Any spinner that never ends, any
    blank block, is a blocker.
+6. **First-contact evals** (ADR-0009): for each feature, attempt the
+   core task as a brand-new user with no instructions, using only
+   visible affordances. If you cannot complete it, the feature fails
+   its eval — report exactly where you got stuck.
 
 ## Output format
 

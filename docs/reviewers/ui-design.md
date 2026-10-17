@@ -23,6 +23,10 @@ product, not a collection of one-off widgets.
    (min 44px on touch targets), no keyboard traps.
 6. **Document-first feel** (ADR-0005): no execution affordances
    anywhere: no run buttons, no cell chrome, no execution state.
+7. **Layer-1 discoverability** (ADR-0009): every feature usable with
+   no instructions — affordances visible, empty states teach, blocks
+   editable in place. A feature needing a manual to be found is a
+   finding. Inline help (layer 2) belongs where confusion occurs.
 
 ## Output format
 

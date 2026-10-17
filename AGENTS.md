@@ -22,6 +22,11 @@ affordances, ever.
 - All tests pass (`just test`), lint and build are green (`just lint`, `just build`)
 - New public behavior has a spec entry in docs/specs/ and, if
   user-visible, an eval case
+- Every user-visible change ships a first-contact eval that passes
+  (ADR-0009): an agent playing a new user completes the core task
+  using only visible affordances
+- Behavior changed? The corresponding doc (spec/README/help) is
+  updated in the SAME commit — doc drift makes the change incomplete
 - Every bug fix adds a test that fails before the fix
 - If stuck after 3 attempts: STOP. Write docs/blockers/<task>.md with
   the exact failure and what you tried. Do not thrash.
