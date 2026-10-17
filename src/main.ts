@@ -59,26 +59,98 @@ btnMd.addEventListener("click", () => {
   btnView.classList.remove("active");
 });
 
-const fmtBar = requireEl<HTMLElement>("#fmt-bar");
-fmtBar.addEventListener("mousedown", (ev) => {
+function currentEditable(): HTMLElement | null {
+  const root = el.shadowRoot;
+  if (!root) return null;
+  const host = root.querySelector<HTMLElement>("article.folio-doc");
+  if (!host) return null;
+  return host.contains(root.activeElement) ? host : null;
+}
+
+const blockBar = requireEl<HTMLElement>("#block-bar");
+blockBar.addEventListener("mousedown", (ev) => {
   const btn = (ev.target as HTMLElement).closest("button");
   if (!(btn instanceof HTMLButtonElement)) return;
   ev.preventDefault();
-  const root = el.shadowRoot;
-  if (!root) return;
-  const host = root.querySelector<HTMLElement>("article.folio-doc");
-  const active = host?.contains(root.activeElement) === true ? host : null;
-  if (!active) {
+  if (!currentEditable()) {
     flash("Click into the text first");
     return;
   }
   if (btn.dataset.block) {
     document.execCommand("formatBlock", false, `<${btn.dataset.block}>`);
-  } else if (btn.dataset.cmd === "code") {
+  }
+  el.dispatchEvent(new Event("input"));
+});
+
+const fmtBar = requireEl<HTMLElement>("#fmt-bar");
+fmtBar.addEventListener("mousedown", (ev) => {
+  const btn = (ev.target as HTMLElement).closest("button");
+  if (!(btn instanceof HTMLButtonElement)) return;
+  ev.preventDefault();
+  if (!currentEditable()) {
+    flash("Click into the text first");
+    return;
+  }
+  if (btn.dataset.cmd === "code") {
     document.execCommand("formatBlock", false, "pre");
   } else {
     document.execCommand(btn.dataset.cmd ?? "");
   }
+  el.dispatchEvent(new Event("input"));
+});
+
+function reflectToolbarState(): void {
+  const inDoc = currentEditable() !== null;
+  const blockButtons = blockBar.querySelectorAll("button");
+  const fmtButtons = fmtBar.querySelectorAll("button");
+  if (!inDoc) {
+    blockButtons.forEach((b) => b.classList.remove("active"));
+    fmtButtons.forEach((b) => b.classList.remove("active"));
+    return;
+  }
+  const sel = window.getSelection();
+  let node: Node | null = sel?.anchorNode ?? null;
+  const root = el.shadowRoot;
+  const host = root?.querySelector("article.folio-doc") ?? null;
+  while (node && node.parentNode && node.parentNode !== host) {
+    node = node.parentNode;
+  }
+  const tag = node instanceof HTMLElement ? node.tagName : "";
+  blockButtons.forEach((b) => {
+    const want =
+      b.dataset.block === "p" ? "P" : (b.dataset.block ?? "").toUpperCase();
+    b.classList.toggle("active", tag === want);
+  });
+  fmtButtons.forEach((b) => {
+    const cmd = b.dataset.cmd ?? "";
+    if (cmd === "code") {
+      b.classList.toggle(
+        "active",
+        node instanceof HTMLElement ? node.tagName === "PRE" : false,
+      );
+    } else {
+      try {
+        b.classList.toggle("active", document.queryCommandState(cmd));
+      } catch {
+        b.classList.remove("active");
+      }
+    }
+  });
+}
+
+document.addEventListener("selectionchange", () => {
+  const root = el.shadowRoot;
+  if (root?.activeElement?.tagName === "ARTICLE") {
+    setTimeout(reflectToolbarState, 0);
+  }
+});
+el.addEventListener("pointerup", () => setTimeout(reflectToolbarState, 0));
+el.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
+
+const btnTable = requireEl<HTMLButtonElement>("#btn-table");
+btnTable.addEventListener("click", () => {
+  el.insertTable();
+  flash("Table inserted");
 });
 
 btnDl.addEventListener("click", () => {

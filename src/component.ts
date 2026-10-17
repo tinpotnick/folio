@@ -328,6 +328,39 @@ export class FolioDoc extends HTMLElement {
     for (const cf of chartFigures) this.drawChart(cf);
   }
 
+  insertTable(): void {
+    if (!this.doc) return;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return;
+    const sel = window.getSelection();
+    let idx = this.doc.blocks.length;
+    if (sel && sel.rangeCount > 0 && host.contains(sel.anchorNode)) {
+      let node: Node | null = sel.anchorNode;
+      while (node && node.parentNode !== host) {
+        node = node.parentNode;
+      }
+      if (node instanceof HTMLElement && node.dataset.blockIndex) {
+        idx = Number(node.dataset.blockIndex) + 1;
+      }
+    }
+    this.doc.blocks.splice(idx, 0, {
+      kind: "table",
+      table: {
+        id: `table-${String(Date.now().toString(36))}`,
+        columns: [
+          { name: "item", type: "text" },
+          { name: "value", type: "number" },
+        ],
+        rows: [
+          ["", ""],
+          ["", ""],
+        ],
+      },
+    });
+    this.render();
+    this.emitChange();
+  }
+
   private handleKeydown(ev: KeyboardEvent): void {
     if (ev.key !== "Enter" || !this.doc) return;
     const el = (ev.target as HTMLElement).closest(
