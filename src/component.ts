@@ -201,6 +201,7 @@ export class FolioDoc extends HTMLElement {
         const v = row[c];
         if (col.type === "formula") {
           td.classList.add("folio-formula");
+          td.contentEditable = "false";
           td.textContent =
             col.format === "percent" && typeof v === "number"
               ? `${(v * 100).toFixed(1)}%`

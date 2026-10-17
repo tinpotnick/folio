@@ -16,8 +16,27 @@ function columnIndex(table: Table, name: string): number {
 }
 
 function compare(a: Cell, b: Cell): number {
-  if (typeof a === "number" && typeof b === "number") return a - b;
+  const na = numericValue(a);
+  const nb = numericValue(b);
+  if (na !== null && nb !== null) return na - nb;
+  if (na !== null) return -1;
+  if (nb !== null) return 1;
+  if (a === "" && b === "") return 0;
+  if (a === "") return 1;
+  if (b === "") return -1;
   return String(a).localeCompare(String(b));
+}
+
+function numericValue(c: Cell): number | null {
+  if (typeof c === "number") return c;
+  if (
+    typeof c === "string" &&
+    c.trim() !== "" &&
+    /^-?[0-9]+(\.[0-9]+)?$/.test(c.trim())
+  ) {
+    return parseFloat(c.trim());
+  }
+  return null;
 }
 
 export function executeQuery(table: Table, chart: Chart): QueryResult {
@@ -49,7 +68,15 @@ export function executeQuery(table: Table, chart: Chart): QueryResult {
     const order = query.sort.order === "desc" ? -1 : 1;
     rows = rows
       .map((r) => r.slice())
-      .sort((x, y) => order * compare(x[idx] ?? 0, y[idx] ?? 0));
+      .sort((x, y) => {
+        const a = x[idx] ?? "";
+        const b = y[idx] ?? "";
+        const aEmpty = a === "";
+        const bEmpty = b === "";
+        if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+        if (aEmpty && bEmpty) return 0;
+        return order * compare(a, b);
+      });
   }
   const selected = query.select.map((name) => columnIndex(table, name));
   return {

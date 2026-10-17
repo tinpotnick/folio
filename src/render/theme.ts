@@ -100,7 +100,11 @@ export function themeCss(theme: Theme): string {
       opacity: 0;
     }
     td.num, th.num { text-align: right; }
-    td.folio-formula { font-feature-settings: "tnum"; }
+    td.folio-formula {
+      font-feature-settings: "tnum";
+      color: #57606a;
+      cursor: default;
+    }
     code {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 0.9em;

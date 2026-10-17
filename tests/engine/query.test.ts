@@ -50,6 +50,37 @@ describe("executeQuery", () => {
     expect(out.rows.map((r) => r[0])).toEqual(["North", "South"]);
   });
 
+  it("sorts numerically with empty cells last in asc order", () => {
+    const t: Table = {
+      id: "t",
+      columns: [
+        { name: "region", type: "text" },
+        { name: "v", type: "number" },
+      ],
+      rows: [
+        ["b", 2],
+        ["empty", ""],
+        ["a", 10],
+      ],
+    };
+    const asc = executeQuery(
+      t,
+      chart({
+        select: ["region"],
+        sort: { by: "v", order: "asc" },
+      }),
+    );
+    expect(asc.rows.map((r) => r[0])).toEqual(["b", "a", "empty"]);
+    const desc = executeQuery(
+      t,
+      chart({
+        select: ["region"],
+        sort: { by: "v", order: "desc" },
+      }),
+    );
+    expect(desc.rows.map((r) => r[0])).toEqual(["a", "b", "empty"]);
+  });
+
   it("throws on unknown select column", () => {
     expect(() => executeQuery(table, chart({ select: ["nope"] }))).toThrow(
       /Unknown column/,
