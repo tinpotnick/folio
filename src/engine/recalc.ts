@@ -67,15 +67,18 @@ export function recalcTable(table: Table): Table {
     const ast = parseFormula(col.expr ?? "");
     table.rows.forEach((row, r) => {
       const ctx: Record<string, number> = {};
+      const available = new Set<string>();
       table.columns.forEach((c, i) => {
         const cell = row[i];
-        if (c.type === "number" && typeof cell === "number") {
-          ctx[c.name] = cell;
+        if (c.type === "number") {
+          available.add(c.name);
+          ctx[c.name] = typeof cell === "number" ? cell : Number.NaN;
         }
       });
       const src = rows[r] ?? [];
       const out: Cell[] = table.columns.map((_, i) => src[i] ?? "");
-      out[index] = evalAst(ast, ctx, table.id, col.name);
+      const result = evalAst(ast, ctx, available, table.id, col.name);
+      out[index] = Number.isNaN(result) ? "" : result;
       rows[r] = out;
     });
   }
@@ -85,24 +88,24 @@ export function recalcTable(table: Table): Table {
 function evalAst(
   node: AstNode,
   ctx: Record<string, number>,
+  available: Set<string>,
   tableId: string,
   colName: string,
 ): number {
   switch (node.kind) {
     case "column": {
-      const v = ctx[node.name];
-      if (v === undefined) {
+      if (!available.has(node.name)) {
         throw new Error(
           `Formula '${colName}' in table '${tableId}': unknown or non-numeric column '${node.name}'`,
         );
       }
-      return v;
+      return ctx[node.name] ?? Number.NaN;
     }
     case "number":
       return node.value;
     case "bin": {
-      const l = evalAst(node.l, ctx, tableId, colName);
-      const r = evalAst(node.r, ctx, tableId, colName);
+      const l = evalAst(node.l, ctx, available, tableId, colName);
+      const r = evalAst(node.r, ctx, available, tableId, colName);
       switch (node.op) {
         case "+":
           return l + r;

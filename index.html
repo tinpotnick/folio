@@ -106,16 +106,18 @@
         padding: 24px;
       }
       .editor {
+        display: block;
         width: 100%;
-        min-height: 60vh;
+        min-height: calc(100vh - 72px);
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
         font-size: 14px;
-        border: 1px solid #d0d7de;
-        border-radius: 8px;
-        padding: 16px;
-        box-sizing: border-box;
-        background: #fff;
-        line-height: 1.5;
+        border: none;
+        padding: 24px 0 40vh;
+        background: transparent;
+        line-height: 1.6;
+        resize: none;
+        outline: none;
+        color: #1f2328;
       }
       folio-doc[hidden] {
         display: none;

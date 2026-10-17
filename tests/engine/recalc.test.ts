@@ -74,6 +74,25 @@ describe("recalcTable", () => {
     expect(recalcTable(t)).toBe(t);
   });
 
+  it("yields empty string for formula cells when inputs are incomplete", () => {
+    const t: Table = {
+      id: "partial",
+      columns: [
+        { name: "region", type: "text" },
+        { name: "q2", type: "number" },
+        { name: "q3", type: "number" },
+        { name: "growth", type: "formula", expr: "(q3 - q2) / q2" },
+      ],
+      rows: [
+        ["", "", ""],
+        ["South", 388, 394],
+      ],
+    };
+    const out = recalcTable(t);
+    expect(out.rows[0]?.[3]).toBe("");
+    expect(out.rows[1]?.[3]).toBeCloseTo((394 - 388) / 388, 10);
+  });
+
   it("throws on unknown column reference", () => {
     const t: Table = {
       id: "bad",
