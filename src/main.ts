@@ -20,7 +20,7 @@ const btnDl = requireEl<HTMLButtonElement>("#btn-download");
 const status = requireEl<HTMLElement>("#status");
 
 async function boot(): Promise<void> {
-  const res = await fetch("./sample-document.md");
+  const res = await fetch("/demo/sample-document.md");
   const text = await res.text();
   el.load(text);
   editor.value = text;

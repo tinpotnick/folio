@@ -2,8 +2,6 @@ import { defineConfig } from "vite";
 import path from "node:path";
 
 export default defineConfig({
-  root: "demo",
-  publicDir: false,
   resolve: {
     alias: {
       "@folio": path.resolve(__dirname, "./src"),
@@ -12,7 +10,7 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     rollupOptions: {
-      input: "demo/index.html",
+      input: "index.html",
       output: {
         format: "es",
         entryFileNames: "assets/[name].js",
