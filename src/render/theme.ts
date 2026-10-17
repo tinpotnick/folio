@@ -97,22 +97,6 @@ export function themeCss(theme: Theme): string {
     table.folio-table td, table.folio-table th { padding: 5px 10px; }
     td.num, th.num { text-align: right; }
     td.folio-formula { font-feature-settings: "tnum"; }
-    input.folio-cell {
-      border: none;
-      background: transparent;
-      font: inherit;
-      width: 100%;
-      padding: 2px 4px;
-      margin: -2px -4px;
-      border-radius: 3px;
-    }
-    input.folio-cell.num { text-align: right; }
-    input.folio-cell:hover { background: rgba(76, 110, 245, 0.08); }
-    input.folio-cell:focus {
-      outline: 2px solid #4c6ef5;
-      outline-offset: 0;
-      background: #fff;
-    }
     code {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 0.9em;
@@ -121,39 +105,44 @@ export function themeCss(theme: Theme): string {
       border-radius: 3px;
     }
     p { margin: 0.9em 0; }
-    [contenteditable="true"] { border-radius: 3px; caret-color: #1f2328; }
-    [contenteditable="true"]:hover { background: rgba(76, 110, 245, 0.05); }
-    [contenteditable="true"]:focus {
-      background: rgba(76, 110, 245, 0.07);
-      box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.07);
-    }
-    [contenteditable="true"]:empty::before {
+    article.folio-doc[contenteditable="true"] { caret-color: #1f2328; }
+    article.folio-doc[contenteditable="true"]:focus { outline: none; }
+    p:empty::before, h1:empty::before, h2:empty::before {
       content: "…";
       color: #b0b8c1;
     }
-    input.folio-cell.folio-head {
-      font-weight: 600;
-      color: inherit;
+    td[contenteditable]:hover { background: rgba(76, 110, 245, 0.05); }
+    td[contenteditable]:focus {
+      outline: none;
+      background: rgba(76, 110, 245, 0.07);
+      box-shadow: inset 0 0 0 1px rgba(76, 110, 245, 0.25);
     }
-    td.folio-ctl, th.folio-ctl {
-      width: 1%;
-      white-space: nowrap;
-      border-bottom: none !important;
-    }
-    .folio-btn {
-      border: 1px solid #d0d7de;
+    th { user-select: none; }
+    figure[data-chart-source] { user-select: none; }
+    .folio-menu {
+      position: absolute;
+      z-index: 100;
       background: #fff;
-      border-radius: 5px;
-      width: 22px;
-      height: 22px;
-      line-height: 1;
-      font-size: 13px;
-      color: #57606a;
-      cursor: pointer;
-      margin-left: 3px;
-      padding: 0;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+      padding: 4px;
+      min-width: 160px;
+      display: flex;
+      flex-direction: column;
     }
-    .folio-btn:hover { background: #f3f4f6; color: #1f2328; }
+    .folio-menu button {
+      border: none;
+      background: transparent;
+      text-align: left;
+      padding: 6px 12px;
+      font: inherit;
+      font-size: 14px;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #1f2328;
+    }
+    .folio-menu button:hover { background: #f3f4f6; }
     .chart-holder svg { width: 100%; height: auto; display: block; }
   `;
 }

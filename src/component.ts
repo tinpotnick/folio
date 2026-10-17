@@ -1,8 +1,9 @@
 /**
  * <folio-doc>: the embeddable document component (ADR-0006).
- * Shadow DOM encapsulation; programmatic API (load/getDoc/onChange);
- * renders the document-first view with live tables and charts.
- * Our apps are hosts of this component — third-party pages can be too.
+ * One contenteditable surface for the whole document (seamless
+ * WYSIWYG); the model is synced from the DOM, never the reverse
+ * during typing. Full re-render happens only on structural ops.
+ * Row/column operations live in a context menu, not on the page.
  */
 import { parseDoc, serializeDoc, type Doc } from "@folio/engine/doc";
 import { recalcTable } from "@folio/engine/recalc";
@@ -18,19 +19,23 @@ export class FolioDoc extends HTMLElement {
 
   private doc: Doc | null = null;
   private listeners: ((doc: Doc) => void)[] = [];
+  private menu: HTMLElement | null = null;
 
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
-    this.handleCellEdit = this.handleCellEdit.bind(this);
+    this.handleKeydown = this.handleKeydown.bind(this);
+    this.handleInput = this.handleInput.bind(this);
+    this.handleCellBlur = this.handleCellBlur.bind(this);
+    this.handleContextMenu = this.handleContextMenu.bind(this);
   }
 
   connectedCallback(): void {
     this.load(this.getAttribute("src") ?? "");
   }
 
-  attributeChangedCallback(_n: string, old: string, value: string): void {
-    if (_n === "src" && old !== value && this.shadowRoot?.childNodes.length) {
+  attributeChangedCallback(name: string, old: string, value: string): void {
+    if (name === "src" && old !== value && this.shadowRoot?.childNodes.length) {
       this.load(value);
     }
   }
@@ -97,292 +102,368 @@ export class FolioDoc extends HTMLElement {
   private render(): void {
     if (!this.doc || !this.shadowRoot) return;
     const theme = themeFromDoc(this.doc);
-    const host = document.createElement("article");
-    host.className = "folio-doc";
-    for (const block of this.doc.blocks) {
-      host.appendChild(this.renderBlock(block));
-    }
-    this.shadowRoot.innerHTML = "";
+    const root = this.shadowRoot;
+    root.innerHTML = "";
     const style = document.createElement("style");
     style.textContent = themeCss(theme);
-    this.shadowRoot.appendChild(style);
-    this.shadowRoot.appendChild(host);
+    root.appendChild(style);
+
+    const host = document.createElement("article");
+    host.className = "folio-doc";
+    host.setAttribute("contenteditable", "true");
+    host.spellcheck = true;
+    host.addEventListener("keydown", this.handleKeydown);
+    host.addEventListener("input", this.handleInput);
+    host.addEventListener("contextmenu", this.handleContextMenu);
+
+    this.doc.blocks.forEach((block, idx) => {
+      host.appendChild(this.renderBlock(block, idx));
+    });
+    root.appendChild(host);
   }
 
-  private renderBlock(block: Doc["blocks"][number]): HTMLElement {
+  private renderBlock(block: Doc["blocks"][number], idx: number): HTMLElement {
     switch (block.kind) {
       case "heading": {
         const el = document.createElement(
           `h${String(Math.min(block.level, 6))}`,
         );
+        el.dataset.blockIndex = String(idx);
         el.textContent = block.text;
         return el;
       }
       case "prose": {
         const el = document.createElement("p");
+        el.dataset.blockIndex = String(idx);
         el.innerHTML = inlineMarkdownToHtml(block.text);
-        this.makeEditable(el, {
-          kind: "prose",
-          block,
-          toMd: htmlToInlineMarkdown,
-          fromMd: inlineMarkdownToHtml,
-        });
         return el;
       }
       case "table": {
-        const recalced = recalcTable(block.table);
-        const figure = document.createElement("figure");
-        const table = document.createElement("table");
-        table.className = "folio-table";
-        const thead = document.createElement("thead");
-        const headRow = document.createElement("tr");
-        block.table.columns.forEach((col, ci) => {
-          const th = document.createElement("th");
-          const input = document.createElement("input");
-          input.className = "folio-cell folio-head";
-          input.value = col.name;
-          if (col.type === "number" || col.type === "formula") {
-            input.classList.add("num");
-          }
-          input.addEventListener("change", (ev) => {
-            const target = ev.target as HTMLInputElement;
-            col.name = target.value.trim() || col.name;
-            target.value = col.name;
-            this.render();
-            this.emitChange();
-          });
-          th.appendChild(input);
-          const lastTd = document.createElement("td");
-          lastTd.className = "folio-ctl";
-          void ci;
-          headRow.appendChild(th);
-        });
-        const ctlTh = document.createElement("th");
-        ctlTh.className = "folio-ctl";
-        headRow.appendChild(ctlTh);
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-        const tbody = document.createElement("tbody");
-        recalced.rows.forEach((row, r) => {
-          const tr = document.createElement("tr");
-          block.table.columns.forEach((col, c) => {
-            const td = document.createElement("td");
-            if (col.type === "formula") {
-              td.classList.add("folio-formula");
-              const v = row[c];
-              td.textContent =
-                col.format === "percent" && typeof v === "number"
-                  ? `${(v * 100).toFixed(1)}%`
-                  : String(v ?? "");
-              if (typeof v === "number") td.classList.add("num");
-            } else if (col.type === "number") {
-              const input = document.createElement("input");
-              input.className = "folio-cell num";
-              input.value = String(row[c] ?? "");
-              input.dataset.row = String(r);
-              input.dataset.col = String(c);
-              input.addEventListener("change", this.handleCellEdit);
-              td.appendChild(input);
-            } else {
-              const input = document.createElement("input");
-              input.className = "folio-cell";
-              input.value = String(row[c] ?? "");
-              input.dataset.row = String(r);
-              input.dataset.col = String(c);
-              input.addEventListener("change", this.handleCellEdit);
-              td.appendChild(input);
-            }
-            tr.appendChild(td);
-          });
-          const ctlTd = document.createElement("td");
-          ctlTd.className = "folio-ctl";
-          const addBtn = document.createElement("button");
-          addBtn.className = "folio-btn";
-          addBtn.title = "Insert row below";
-          addBtn.textContent = "+";
-          addBtn.addEventListener("click", () => {
-            const empty = block.table.columns.map(() => "");
-            block.table.rows.splice(r + 1, 0, empty);
-            this.render();
-            this.emitChange();
-          });
-          const delBtn = document.createElement("button");
-          delBtn.className = "folio-btn";
-          delBtn.title = "Delete row";
-          delBtn.textContent = "\u2212";
-          delBtn.addEventListener("click", () => {
-            block.table.rows.splice(r, 1);
-            this.render();
-            this.emitChange();
-          });
-          ctlTd.append(addBtn, delBtn);
-          tr.appendChild(ctlTd);
-          tbody.appendChild(tr);
-        });
-        table.appendChild(tbody);
-        figure.appendChild(table);
-        if (block.table.caption) {
-          const cap = document.createElement("figcaption");
-          cap.textContent = block.table.caption;
-          figure.appendChild(cap);
-        }
-        return figure;
+        return this.renderTable(block, idx);
       }
       case "chart": {
         const figure = document.createElement("figure");
+        figure.dataset.blockIndex = String(idx);
+        figure.dataset.chartSource = block.chart.source;
         const holder = document.createElement("div");
         holder.className = "chart-holder";
-        try {
-          const tableBlock = this.doc?.blocks.find(
-            (b) => b.kind === "table" && b.table.id === block.chart.source,
-          );
-          if (!tableBlock || tableBlock.kind !== "table") {
-            throw new Error(
-              `chart source table '${block.chart.source}' not found`,
-            );
-          }
-          const recalced = recalcTable(tableBlock.table);
-          const result = executeQuery(recalced, block.chart);
-          const { svg } = renderBarChart(result);
-          holder.innerHTML = svg;
-        } catch (e) {
-          holder.textContent = `Chart error: ${e instanceof Error ? e.message : String(e)}`;
-        }
         figure.appendChild(holder);
         if (block.chart.caption) {
           const cap = document.createElement("figcaption");
           cap.textContent = block.chart.caption;
           figure.appendChild(cap);
         }
+        this.drawChart(figure);
         return figure;
       }
       default: {
         const el = document.createElement("p");
-        el.textContent = "";
+        el.dataset.blockIndex = String(idx);
         return el;
       }
     }
   }
 
-  private makeEditable(
-    el: HTMLElement,
-    binding: {
-      kind: "heading" | "prose";
-      block: Extract<Doc["blocks"][number], { kind: "heading" | "prose" }>;
-      toMd: (html: string) => string;
-      fromMd: (md: string) => string;
-    },
-  ): void {
-    el.setAttribute("contenteditable", "true");
-    el.addEventListener("input", () => {
-      binding.block.text = binding.toMd(el.innerHTML);
-      this.emitChange();
+  private renderTable(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    idx: number,
+  ): HTMLElement {
+    const recalced = recalcTable(block.table);
+    const figure = document.createElement("figure");
+    figure.dataset.blockIndex = String(idx);
+    figure.dataset.tableId = block.table.id;
+    const table = document.createElement("table");
+    table.className = "folio-table";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    block.table.columns.forEach((col, ci) => {
+      const th = document.createElement("th");
+      th.dataset.colIndex = String(ci);
+      th.textContent = col.name;
+      if (col.unit !== undefined) {
+        th.title = col.unit;
+      }
+      if (col.type === "number" || col.type === "formula") {
+        th.classList.add("num");
+      }
+      headRow.appendChild(th);
     });
-    el.addEventListener("blur", () => {
-      // Re-render from the model so canonical formatting returns.
-      el.innerHTML = binding.fromMd(binding.block.text);
-    });
-    el.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") {
-        ev.preventDefault();
-        const text = binding.block.text;
-        const sel = window.getSelection();
-        let caret = text.length;
-        if (sel !== null && sel.rangeCount > 0) {
-          const range = sel.getRangeAt(0).cloneRange();
-          range.selectNodeContents(el);
-          range.setEnd(
-            sel.getRangeAt(0).endContainer,
-            sel.getRangeAt(0).endOffset,
-          );
-          caret = range.toString().length;
-        }
-        if (binding.kind === "prose" && caret < text.length) {
-          const before = text.slice(0, caret).trim();
-          const after = text.slice(caret).trim();
-          binding.block.text = before;
-          const blocks = this.doc?.blocks;
-          if (blocks) {
-            const idx = blocks.indexOf(binding.block);
-            blocks.splice(idx + 1, 0, { kind: "prose", text: after });
-            this.render();
-            this.emitChange();
-            return;
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    recalced.rows.forEach((row, r) => {
+      const tr = document.createElement("tr");
+      tr.dataset.rowIndex = String(r);
+      block.table.columns.forEach((col, c) => {
+        const td = document.createElement("td");
+        td.dataset.rowIndex = String(r);
+        td.dataset.colIndex = String(c);
+        const v = row[c];
+        if (col.type === "formula") {
+          td.classList.add("folio-formula");
+          td.textContent =
+            col.format === "percent" && typeof v === "number"
+              ? `${(v * 100).toFixed(1)}%`
+              : String(v ?? "");
+          if (typeof v === "number") td.classList.add("num");
+        } else {
+          if (col.type === "number") {
+            td.classList.add("num");
           }
+          td.textContent = String(v ?? "");
         }
-        this.focusBlockAfter(el, 1);
-      } else if (ev.key === "ArrowDown" && this.isCaretAtEnd(el)) {
-        ev.preventDefault();
-        this.focusBlockAfter(el, 1);
-      } else if (ev.key === "ArrowUp" && this.isCaretAtStart(el)) {
-        ev.preventDefault();
-        this.focusBlockAfter(el, -1);
+        td.addEventListener("blur", this.handleCellBlur, true);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    figure.appendChild(table);
+    if (block.table.caption) {
+      const cap = document.createElement("figcaption");
+      cap.textContent = block.table.caption;
+      figure.appendChild(cap);
+    }
+    return figure;
+  }
+
+  private drawChart(figure: HTMLElement): void {
+    if (!this.doc) return;
+    const source = figure.dataset.chartSource;
+    const block = this.doc.blocks.find(
+      (b) => b.kind === "chart" && b.chart.source === source,
+    );
+    if (!block || block.kind !== "chart") return;
+    const holder = figure.querySelector<HTMLElement>(".chart-holder");
+    if (!holder) return;
+    try {
+      const tableBlock = this.doc.blocks.find(
+        (b) => b.kind === "table" && b.table.id === block.chart.source,
+      );
+      if (!tableBlock || tableBlock.kind !== "table") {
+        throw new Error(`chart source table '${block.chart.source}' not found`);
+      }
+      const recalced = recalcTable(tableBlock.table);
+      const result = executeQuery(recalced, block.chart);
+      holder.innerHTML = renderBarChart(result).svg;
+    } catch (e) {
+      holder.textContent = `Chart error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+  }
+
+  private syncFromDom(): void {
+    if (!this.doc) return;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return;
+    Array.from(host.children).forEach((el) => {
+      const idx = Number((el as HTMLElement).dataset.blockIndex ?? -1);
+      const block = this.doc?.blocks[idx];
+      if (!block) return;
+      if (block.kind === "prose") {
+        block.text = htmlToInlineMarkdown((el as HTMLElement).innerHTML);
+      } else if (block.kind === "heading") {
+        block.text = (el as HTMLElement).textContent ?? "";
       }
     });
   }
 
-  private isCaretAtEnd(el: HTMLElement): boolean {
-    const sel = window.getSelection();
-    if (sel === null || sel.rangeCount === 0) return false;
-    const range = sel.getRangeAt(0);
-    const test = range.cloneRange();
-    test.selectNodeContents(el);
-    test.setStart(range.endContainer, range.endOffset);
-    return test.toString().length === 0;
+  private handleInput(): void {
+    this.syncFromDom();
+    this.emitChange();
   }
 
-  private isCaretAtStart(el: HTMLElement): boolean {
-    const sel = window.getSelection();
-    if (sel === null || sel.rangeCount === 0) return false;
-    const range = sel.getRangeAt(0);
-    const test = range.cloneRange();
-    test.selectNodeContents(el);
-    test.setEnd(range.startContainer, range.startOffset);
-    return test.toString().length === 0;
+  private handleCellBlur(ev: FocusEvent): void {
+    const td = ev.target as HTMLTableCellElement;
+    if (!td.dataset.rowIndex || !this.doc) return;
+    const figure = td.closest("figure");
+    const idx = Number(figure?.dataset.blockIndex ?? -1);
+    const block = this.doc.blocks[idx];
+    if (!block || block.kind !== "table") return;
+    const r = Number(td.dataset.rowIndex);
+    const c = Number(td.dataset.colIndex);
+    const col = block.table.columns[c];
+    if (!col || col.type === "formula") return;
+    const text = (td.textContent ?? "").trim();
+    const value: string | number = /^-?[0-9]+(\.[0-9]+)?$/.test(text)
+      ? parseFloat(text)
+      : text;
+    const row = block.table.rows[r];
+    if (row) row[c] = value;
+    this.refreshTableBlock(figure, block);
+    this.emitChange();
   }
 
-  private focusBlockAfter(current: HTMLElement, dir: 1 | -1): void {
-    const host = current.closest("article.folio-doc");
+  private refreshTableBlock(
+    figure: HTMLElement | null,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    if (!figure || !this.doc || !this.shadowRoot) return;
+    const host = figure.parentElement;
     if (!host) return;
-    const editables = Array.from(
-      host.querySelectorAll<HTMLElement>('[contenteditable="true"]'),
+    const idx = Number(figure.dataset.blockIndex ?? -1);
+    const fresh = this.renderTable(block, idx);
+    fresh.dataset.blockIndex = String(idx);
+    host.replaceChild(fresh, figure);
+    const chartFigures = Array.from(
+      host.querySelectorAll<HTMLElement>("[data-chart-source]"),
     );
-    const inputs = Array.from(
-      host.querySelectorAll<HTMLInputElement>("input.folio-cell"),
-    ).filter((i) => !i.classList.contains("folio-head"));
-    const all = [...editables, ...inputs].sort((a, b) =>
-      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? 1 : -1,
-    );
-    const idx = all.indexOf(current);
-    const next = all[idx + dir];
-    if (next) {
-      next.focus();
-      if (next instanceof HTMLInputElement) next.select();
-    }
+    for (const cf of chartFigures) this.drawChart(cf);
   }
 
-  private handleCellEdit(ev: Event): void {
-    if (!this.doc) return;
-    const input = ev.target as HTMLInputElement;
-    const r = Number(input.dataset.row);
-    const c = Number(input.dataset.col);
-    const newValue = input.value.trim();
-    let cell: string | number;
-    if (/^-?[0-9]+(\.[0-9]+)?$/.test(newValue)) {
-      cell = parseFloat(newValue);
-    } else {
-      cell = newValue;
-    }
-    outer: for (const block of this.doc.blocks) {
-      if (block.kind !== "table") continue;
-      const target = block.table.rows[r];
-      if (target && target.length > c) {
-        target[c] = cell;
-        break outer;
+  private handleKeydown(ev: KeyboardEvent): void {
+    if (ev.key !== "Enter" || !this.doc) return;
+    const el = (ev.target as HTMLElement).closest(
+      "[data-block-index]",
+    ) as HTMLElement | null;
+    if (!el) return;
+    const idx = Number(el.dataset.blockIndex ?? -1);
+    const block = this.doc.blocks[idx];
+    if (!block) return;
+    if (block.kind === "table" || block.kind === "chart") return;
+    ev.preventDefault();
+    if (block.kind === "prose") {
+      const caret = this.caretOffsetIn(el);
+      const text = block.text;
+      if (caret < text.length) {
+        const before = htmlToInlineMarkdown(el.innerHTML).slice(0, caret);
+        const after = htmlToInlineMarkdown(el.innerHTML).slice(caret);
+        block.text = before;
+        this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: after });
+      } else {
+        this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: "" });
       }
+    } else {
+      this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: "" });
     }
     this.render();
     this.emitChange();
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const next = host?.children[idx + 1] as HTMLElement | undefined;
+    if (next) {
+      next.focus();
+      const range = document.createRange();
+      range.selectNodeContents(next);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    }
+  }
+
+  private caretOffsetIn(el: HTMLElement): number {
+    const sel = window.getSelection();
+    if (sel === null || sel.rangeCount === 0) return 0;
+    const range = sel.getRangeAt(0).cloneRange();
+    const pre = range.cloneRange();
+    pre.selectNodeContents(el);
+    pre.setEnd(range.endContainer, range.endOffset);
+    return pre.toString().length;
+  }
+
+  private handleContextMenu(ev: MouseEvent): void {
+    const cell = (ev.target as HTMLElement).closest(
+      "td[data-row-index], th[data-col-index]",
+    ) as HTMLElement | null;
+    if (!cell || !this.doc) return;
+    ev.preventDefault();
+    const figure = cell.closest("figure") as HTMLElement | null;
+    if (!figure) return;
+    const idx = Number(figure.dataset.blockIndex ?? -1);
+    const block = this.doc.blocks[idx];
+    if (!block || block.kind !== "table") return;
+    const tr = cell.closest("tr") as HTMLTableRowElement | null;
+    const rowIndex = tr ? Number(tr.dataset.rowIndex ?? 0) : 0;
+    const colIndex =
+      cell.tagName === "TH"
+        ? Number(cell.dataset.colIndex ?? 0)
+        : Number(cell.dataset.colIndex ?? 0);
+    this.showMenu(ev.clientX, ev.clientY, block, rowIndex, colIndex, figure);
+  }
+
+  private showMenu(
+    x: number,
+    y: number,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    r: number,
+    c: number,
+    figure: HTMLElement,
+  ): void {
+    this.closeMenu();
+    const root = this.shadowRoot;
+    if (!root) return;
+    const menu = document.createElement("div");
+    menu.className = "folio-menu";
+    const items: [string, () => void][] = [
+      [
+        "Insert row below",
+        () => {
+          block.table.rows.splice(
+            r + 1,
+            0,
+            block.table.columns.map(() => ""),
+          );
+        },
+      ],
+      [
+        "Delete row",
+        () => {
+          block.table.rows.splice(r, 1);
+        },
+      ],
+      [
+        "Insert column right",
+        () => {
+          block.table.columns.splice(c + 1, 0, {
+            name: "new",
+            type: "text",
+          });
+          block.table.rows.forEach((row) => row.splice(c + 1, 0, ""));
+        },
+      ],
+      [
+        "Delete column",
+        () => {
+          const col = block.table.columns[c];
+          if (col && col.type === "formula") return;
+          block.table.columns.splice(c, 1);
+          block.table.rows.forEach((row) => row.splice(c, 1));
+        },
+      ],
+    ];
+    for (const [label, action] of items) {
+      const btn = document.createElement("button");
+      btn.textContent = label;
+      btn.addEventListener("click", () => {
+        action();
+        this.closeMenu();
+        this.refreshTableBlock(figure, block);
+        this.emitChange();
+      });
+      menu.appendChild(btn);
+    }
+    const hostRect = this.getBoundingClientRect();
+    menu.style.left = `${String(x - hostRect.left)}px`;
+    menu.style.top = `${String(y - hostRect.top)}px`;
+    const host = root.querySelector("article.folio-doc");
+    if (host) host.appendChild(menu);
+    this.menu = menu;
+    setTimeout(() => {
+      document.addEventListener("pointerdown", this.menuCloser, {
+        once: true,
+      });
+    });
+  }
+
+  private menuCloser = (ev: Event): void => {
+    if (ev.composedPath().includes(this.menu ?? ({} as HTMLElement))) return;
+    this.closeMenu();
+  };
+
+  private closeMenu(): void {
+    if (this.menu) {
+      this.menu.remove();
+      this.menu = null;
+    }
   }
 }
 

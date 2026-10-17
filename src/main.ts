@@ -64,9 +64,10 @@ fmtBar.addEventListener("mousedown", (ev) => {
   const btn = (ev.target as HTMLElement).closest("button");
   if (!(btn instanceof HTMLButtonElement)) return;
   ev.preventDefault();
-  const active = document.querySelector<HTMLElement>(
-    "folio-doc [contenteditable='true']:focus",
-  );
+  const root = el.shadowRoot;
+  if (!root) return;
+  const host = root.querySelector<HTMLElement>("article.folio-doc");
+  const active = host?.contains(root.activeElement) === true ? host : null;
   if (!active) {
     flash("Click into the text first");
     return;
