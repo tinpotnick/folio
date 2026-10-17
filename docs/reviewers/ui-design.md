@@ -9,9 +9,11 @@ product, not a collection of one-off widgets.
 1. **Reuse before new**: is there an existing component that does
    this? If a new component is justified, does it follow the
    established patterns (naming, props, events)?
-2. **Consistency**: same spacing scale, same typography hierarchy,
-   same color tokens as existing components. Flag any magic numbers
-   or hard-coded styles that belong in the theme.
+2. **Consistency (ADR-0008 rule 5)**: same spacing scale, same
+   typography hierarchy, same color tokens as existing components.
+   Flag any magic numbers or hard-coded styles that belong in the
+   theme. Related UI things must be done the same way everywhere;
+   cite the inconsistency's rule number in the finding.
 3. **Semantic, not styled** (ADR-0002): UI must never write style
    literals into documents. WYSIWYG actions map to semantics
    (strong/em/heading), never to fonts/colors.
