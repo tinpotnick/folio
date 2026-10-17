@@ -136,15 +136,30 @@ export class FolioDoc extends HTMLElement {
         table.className = "folio-table";
         const thead = document.createElement("thead");
         const headRow = document.createElement("tr");
-        block.table.columns.forEach((col) => {
+        block.table.columns.forEach((col, ci) => {
           const th = document.createElement("th");
-          th.textContent =
-            col.name + (col.unit !== undefined ? ` (${col.unit})` : "");
+          const input = document.createElement("input");
+          input.className = "folio-cell folio-head";
+          input.value = col.name;
           if (col.type === "number" || col.type === "formula") {
-            th.classList.add("num");
+            input.classList.add("num");
           }
+          input.addEventListener("change", (ev) => {
+            const target = ev.target as HTMLInputElement;
+            col.name = target.value.trim() || col.name;
+            target.value = col.name;
+            this.render();
+            this.emitChange();
+          });
+          th.appendChild(input);
+          const lastTd = document.createElement("td");
+          lastTd.className = "folio-ctl";
+          void ci;
           headRow.appendChild(th);
         });
+        const ctlTh = document.createElement("th");
+        ctlTh.className = "folio-ctl";
+        headRow.appendChild(ctlTh);
         thead.appendChild(headRow);
         table.appendChild(thead);
         const tbody = document.createElement("tbody");
@@ -179,6 +194,29 @@ export class FolioDoc extends HTMLElement {
             }
             tr.appendChild(td);
           });
+          const ctlTd = document.createElement("td");
+          ctlTd.className = "folio-ctl";
+          const addBtn = document.createElement("button");
+          addBtn.className = "folio-btn";
+          addBtn.title = "Insert row below";
+          addBtn.textContent = "+";
+          addBtn.addEventListener("click", () => {
+            const empty = block.table.columns.map(() => "");
+            block.table.rows.splice(r + 1, 0, empty);
+            this.render();
+            this.emitChange();
+          });
+          const delBtn = document.createElement("button");
+          delBtn.className = "folio-btn";
+          delBtn.title = "Delete row";
+          delBtn.textContent = "\u2212";
+          delBtn.addEventListener("click", () => {
+            block.table.rows.splice(r, 1);
+            this.render();
+            this.emitChange();
+          });
+          ctlTd.append(addBtn, delBtn);
+          tr.appendChild(ctlTd);
           tbody.appendChild(tr);
         });
         table.appendChild(tbody);
@@ -247,9 +285,80 @@ export class FolioDoc extends HTMLElement {
     el.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") {
         ev.preventDefault();
-        (ev.target as HTMLElement).blur();
+        const text = binding.block.text;
+        const sel = window.getSelection();
+        let caret = text.length;
+        if (sel !== null && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0).cloneRange();
+          range.selectNodeContents(el);
+          range.setEnd(
+            sel.getRangeAt(0).endContainer,
+            sel.getRangeAt(0).endOffset,
+          );
+          caret = range.toString().length;
+        }
+        if (binding.kind === "prose" && caret < text.length) {
+          const before = text.slice(0, caret).trim();
+          const after = text.slice(caret).trim();
+          binding.block.text = before;
+          const blocks = this.doc?.blocks;
+          if (blocks) {
+            const idx = blocks.indexOf(binding.block);
+            blocks.splice(idx + 1, 0, { kind: "prose", text: after });
+            this.render();
+            this.emitChange();
+            return;
+          }
+        }
+        this.focusBlockAfter(el, 1);
+      } else if (ev.key === "ArrowDown" && this.isCaretAtEnd(el)) {
+        ev.preventDefault();
+        this.focusBlockAfter(el, 1);
+      } else if (ev.key === "ArrowUp" && this.isCaretAtStart(el)) {
+        ev.preventDefault();
+        this.focusBlockAfter(el, -1);
       }
     });
+  }
+
+  private isCaretAtEnd(el: HTMLElement): boolean {
+    const sel = window.getSelection();
+    if (sel === null || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    const test = range.cloneRange();
+    test.selectNodeContents(el);
+    test.setStart(range.endContainer, range.endOffset);
+    return test.toString().length === 0;
+  }
+
+  private isCaretAtStart(el: HTMLElement): boolean {
+    const sel = window.getSelection();
+    if (sel === null || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    const test = range.cloneRange();
+    test.selectNodeContents(el);
+    test.setEnd(range.startContainer, range.startOffset);
+    return test.toString().length === 0;
+  }
+
+  private focusBlockAfter(current: HTMLElement, dir: 1 | -1): void {
+    const host = current.closest("article.folio-doc");
+    if (!host) return;
+    const editables = Array.from(
+      host.querySelectorAll<HTMLElement>('[contenteditable="true"]'),
+    );
+    const inputs = Array.from(
+      host.querySelectorAll<HTMLInputElement>("input.folio-cell"),
+    ).filter((i) => !i.classList.contains("folio-head"));
+    const all = [...editables, ...inputs].sort((a, b) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? 1 : -1,
+    );
+    const idx = all.indexOf(current);
+    const next = all[idx + dir];
+    if (next) {
+      next.focus();
+      if (next instanceof HTMLInputElement) next.select();
+    }
   }
 
   private handleCellEdit(ev: Event): void {

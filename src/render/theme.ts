@@ -121,17 +121,39 @@ export function themeCss(theme: Theme): string {
       border-radius: 3px;
     }
     p { margin: 0.9em 0; }
-    [contenteditable="true"] { border-radius: 3px; }
+    [contenteditable="true"] { border-radius: 3px; caret-color: #1f2328; }
     [contenteditable="true"]:hover { background: rgba(76, 110, 245, 0.05); }
     [contenteditable="true"]:focus {
-      outline: 2px solid #4c6ef5;
-      outline-offset: 2px;
-      background: #fff;
+      background: rgba(76, 110, 245, 0.07);
+      box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.07);
     }
     [contenteditable="true"]:empty::before {
       content: "…";
       color: #b0b8c1;
     }
+    input.folio-cell.folio-head {
+      font-weight: 600;
+      color: inherit;
+    }
+    td.folio-ctl, th.folio-ctl {
+      width: 1%;
+      white-space: nowrap;
+      border-bottom: none !important;
+    }
+    .folio-btn {
+      border: 1px solid #d0d7de;
+      background: #fff;
+      border-radius: 5px;
+      width: 22px;
+      height: 22px;
+      line-height: 1;
+      font-size: 13px;
+      color: #57606a;
+      cursor: pointer;
+      margin-left: 3px;
+      padding: 0;
+    }
+    .folio-btn:hover { background: #f3f4f6; color: #1f2328; }
     .chart-holder svg { width: 100%; height: auto; display: block; }
   `;
 }

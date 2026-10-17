@@ -59,6 +59,25 @@ btnMd.addEventListener("click", () => {
   btnView.classList.remove("active");
 });
 
+const fmtBar = requireEl<HTMLElement>("#fmt-bar");
+fmtBar.addEventListener("mousedown", (ev) => {
+  const btn = (ev.target as HTMLElement).closest("button");
+  if (!(btn instanceof HTMLButtonElement)) return;
+  ev.preventDefault();
+  const active = document.querySelector<HTMLElement>(
+    "folio-doc [contenteditable='true']:focus",
+  );
+  if (!active) {
+    flash("Click into the text first");
+    return;
+  }
+  if (btn.dataset.cmd === "code") {
+    document.execCommand("formatBlock", false, "pre");
+  } else {
+    document.execCommand(btn.dataset.cmd ?? "");
+  }
+});
+
 btnDl.addEventListener("click", () => {
   const md = el.getMarkdown();
   if (md === null) return;
