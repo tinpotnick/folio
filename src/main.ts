@@ -72,7 +72,9 @@ fmtBar.addEventListener("mousedown", (ev) => {
     flash("Click into the text first");
     return;
   }
-  if (btn.dataset.cmd === "code") {
+  if (btn.dataset.block) {
+    document.execCommand("formatBlock", false, `<${btn.dataset.block}>`);
+  } else if (btn.dataset.cmd === "code") {
     document.execCommand("formatBlock", false, "pre");
   } else {
     document.execCommand(btn.dataset.cmd ?? "");

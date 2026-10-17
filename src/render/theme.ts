@@ -95,6 +95,10 @@ export function themeCss(theme: Theme): string {
       border-bottom: 2px solid #1f2328;
     }
     table.folio-table td, table.folio-table th { padding: 5px 10px; }
+    table.folio-table td:empty::after {
+      content: "\\00a0";
+      opacity: 0;
+    }
     td.num, th.num { text-align: right; }
     td.folio-formula { font-feature-settings: "tnum"; }
     code {

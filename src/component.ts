@@ -257,12 +257,30 @@ export class FolioDoc extends HTMLElement {
     if (!host) return;
     Array.from(host.children).forEach((el) => {
       const idx = Number((el as HTMLElement).dataset.blockIndex ?? -1);
-      const block = this.doc?.blocks[idx];
-      if (!block) return;
-      if (block.kind === "prose") {
-        block.text = htmlToInlineMarkdown((el as HTMLElement).innerHTML);
-      } else if (block.kind === "heading") {
-        block.text = (el as HTMLElement).textContent ?? "";
+      const blocks = this.doc?.blocks;
+      if (!blocks) return;
+      const block = blocks[idx];
+      if (!block || block.kind === "table" || block.kind === "chart") return;
+      const tag = el.tagName;
+      const headingMatch = /^H([1-6])$/.exec(tag);
+      if (headingMatch) {
+        const level = Number(headingMatch[1]);
+        if (block.kind !== "heading" || block.level !== level) {
+          blocks[idx] = {
+            kind: "heading",
+            level,
+            text: el.textContent ?? "",
+          };
+        } else {
+          block.text = el.textContent ?? "";
+        }
+      } else {
+        const md = htmlToInlineMarkdown((el as HTMLElement).innerHTML);
+        if (block.kind !== "prose") {
+          blocks[idx] = { kind: "prose", text: md };
+        } else {
+          block.text = md;
+        }
       }
     });
   }
