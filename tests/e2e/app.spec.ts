@@ -260,6 +260,27 @@ test.describe("toolbar context state and actions", () => {
     await expect(page.locator(boldBtn)).toHaveClass(/active/);
   });
 
+  test("arrow keys move the reflected block with the caret", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    // Click near the top of the first paragraph line, then walk up to
+    // the heading and back down.
+    await page
+      .locator("folio-doc p", { hasText: "Revenue recovered" })
+      .click({ position: { x: 10, y: 4 } });
+    await expect(page.locator(pBtn)).toHaveClass(/active/);
+
+    await page.keyboard.press("ArrowUp");
+    await expect(page.locator(h1Btn)).toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeDisabled();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator(pBtn)).toHaveClass(/active/);
+    await expect(page.locator(h1Btn)).not.toHaveClass(/active/);
+  });
+
   test("markdown view: buttons reflect the line prefix and inline token at the caret", async ({
     page,
   }) => {

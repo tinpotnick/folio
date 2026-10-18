@@ -282,20 +282,96 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
   });
 }
 
+/* --- Caret hint: arrow-key tracking for engines without a pierceable
+   selection API (WebKitGTK). Clicks resolve the block exactly; arrows
+   move across the article's block elements using their own geometry
+   (block rects and the first line box are readable through the open
+   shadow root, unlike the caret itself). Chromium ignores the hint —
+   its shadow selection is read directly. --- */
+
+let caretHint: { x: number; y: number } | null = null;
+let caretBlock: HTMLElement | null = null;
+
+function blockAtPoint(x: number, y: number): HTMLElement | null {
+  const root = el.shadowRoot;
+  const article = root?.querySelector<HTMLElement>("article.folio-doc") ?? null;
+  const hit = root?.elementFromPoint(x, y) ?? null;
+  if (!article || !hit) return null;
+  let node: Node | null = hit;
+  while (node && node.parentNode !== article) node = node.parentNode;
+  return node instanceof HTMLElement ? node : null;
+}
+
+function firstLineHeight(block: HTMLElement): number {
+  const range = document.createRange();
+  range.selectNodeContents(block);
+  const rect = range.getClientRects()[0];
+  return rect ? rect.height : 20;
+}
+
 document.addEventListener("selectionchange", () => {
   const root = el.shadowRoot;
   if (root?.activeElement?.tagName === "ARTICLE") {
-    setTimeout(reflectToolbarState, 0);
+    setTimeout(() => reflectToolbarState(caretHint ?? undefined), 0);
   }
 });
 el.addEventListener("pointerup", (ev) =>
   setTimeout(() => {
     const p =
       ev instanceof PointerEvent ? { x: ev.clientX, y: ev.clientY } : undefined;
+    caretHint = p ?? caretHint;
+    if (p) caretBlock = blockAtPoint(p.x, p.y);
     reflectToolbarState(p);
   }, 0),
 );
-el.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
+el.addEventListener("keyup", (ev) =>
+  setTimeout(() => {
+    if (
+      ev instanceof KeyboardEvent &&
+      (ev.key === "ArrowUp" || ev.key === "ArrowDown") &&
+      caretHint !== null
+    ) {
+      if (caretBlock === null) {
+        caretBlock = blockAtPoint(caretHint.x, caretHint.y);
+      }
+      if (caretBlock !== null) {
+        const lh = firstLineHeight(caretBlock);
+        const rect = caretBlock.getBoundingClientRect();
+        const onFirstLine = caretHint.y - rect.top <= lh;
+        const onLastLine = rect.bottom - caretHint.y <= lh;
+        if (ev.key === "ArrowUp" && onFirstLine) {
+          const prev = caretBlock.previousElementSibling;
+          if (prev instanceof HTMLElement) {
+            caretBlock = prev;
+            caretHint = {
+              x: caretHint.x,
+              y: prev.getBoundingClientRect().bottom - 6,
+            };
+          }
+        } else if (ev.key === "ArrowDown" && onLastLine) {
+          const next = caretBlock.nextElementSibling;
+          if (next instanceof HTMLElement) {
+            caretBlock = next;
+            caretHint = {
+              x: caretHint.x,
+              y: next.getBoundingClientRect().top + 6,
+            };
+          }
+        } else {
+          const step = Math.max(lh, 8);
+          caretHint = {
+            x: caretHint.x,
+            y:
+              ev.key === "ArrowUp"
+                ? Math.max(rect.top + 4, caretHint.y - step)
+                : Math.min(rect.bottom - 4, caretHint.y + step),
+          };
+        }
+      }
+    }
+    reflectToolbarState(caretHint ?? undefined);
+  }, 0),
+);
 editor.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
 editor.addEventListener("click", () => setTimeout(reflectToolbarState, 0));
 editor.addEventListener("input", () => {

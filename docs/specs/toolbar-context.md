@@ -29,8 +29,17 @@ view, and the buttons were inert in Markdown view.
     against 2.54 via MiniBrowser + WebKitWebDriver) exposes no
     selection or caret API that pierces the shadow boundary at all;
     its shadow-root hit testing is the only source that does.
-    Keyboard navigation on such engines keeps the last shown state
-    rather than blanking the toolbar (no anchor is resolvable).
+  - **Arrow-key tracking (caret hint):** engines without a pierceable
+    selection API track the caret via a hint. Clicks resolve the
+    block element exactly (hit-testing through the shadow root);
+    ArrowUp/ArrowDown move across the article's block elements
+    using their readable geometry — block rects and the first line
+    box — crossing to the previous/next block when the caret leaves
+    the first/last line. The toolbar reflects the block at the
+    hint. Verified in WebKitGTK: ArrowUp from the first paragraph
+    line lights H1 (with inline buttons disabled), ArrowDown
+    returns to P. Chromium ignores the hint (its shadow selection
+    is read directly, so it also tracks every other key).
   - **Inline buttons disable on complete block formats:** when the
     caret's block is a heading (H1–H6) or a code block (`PRE`), the
     B/I/code buttons are disabled — the markdown carries no inline
