@@ -5,12 +5,14 @@ steps:
   - On a machine with the prerequisites (apps/desktop/README.md), run
     `npm run dev:desktop`.
   - The folio window opens with the sample document.
-  - Click "Open…" and pick a .md file from disk.
+  - Click the folder icon (tooltip "Open a .md file") and pick a .md
+    file from disk.
   - Edit the document (edit a table cell).
-  - Click "Save…" and choose a location.
+  - Click the save icon (tooltip "Save to a .md file") and choose a
+    location.
 expected:
-  - The window shows the same UI as the browser demo, with Open… and
-    Save… buttons (no file affordances on plain web).
+  - The window shows the same UI as the browser demo, with Open and
+    Save icons (no file affordances on plain web).
   - Opening a file loads and renders it, including tables and charts.
   - Saving writes a .md file that re-opens identically (round-trip).
 ---

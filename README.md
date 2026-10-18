@@ -63,7 +63,7 @@ Open/Save buttons. It starts its own Vite dev server on port 5173
 
 ### Desktop app (Tauri)
 
-The same UI as a native window with Open…/Save… file dialogs.
+The same UI as a native window with native Open/Save file dialogs.
 
 Prerequisites (one-time):
 

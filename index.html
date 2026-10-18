@@ -102,6 +102,11 @@
       button.plain:hover {
         background: #f3f4f6;
       }
+      button.plain svg {
+        display: block;
+        width: 16px;
+        height: 16px;
+      }
       .layout {
         display: flex;
         min-height: calc(100vh - 52px);
@@ -341,7 +346,17 @@
           <button data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
           <button data-cmd="code" title="Code">&#9003;</button>
         </div>
-        <button id="btn-table" class="plain" title="Insert a table">+ Table</button>
+        <button
+          id="btn-table"
+          class="plain"
+          title="Insert a table"
+          aria-label="Insert a table"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+            <path d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7" stroke-linecap="round" />
+          </svg>
+        </button>
         <div class="seg" id="view-switch">
           <button id="btn-view" class="active" title="Document view">
             <svg
@@ -362,8 +377,43 @@
             </svg>
           </button>
         </div>
-        <button id="btn-open" class="plain" hidden title="Open a .md file">Open…</button>
-        <button id="btn-save" class="plain" hidden title="Save to a .md file">Save…</button>
+        <button
+          id="btn-open"
+          class="plain"
+          hidden
+          title="Open a .md file"
+          aria-label="Open a .md file"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path d="M1.5 12.5v-9h4L7 5h6.5v7.5z" stroke-linejoin="round" />
+          </svg>
+        </button>
+        <button
+          id="btn-save"
+          class="plain"
+          hidden
+          title="Save to a .md file"
+          aria-label="Save to a .md file"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path d="M2.5 10v3.5h11V10" stroke-linejoin="round" />
+            <path
+              d="M8 1.5V10M4.5 6.5L8 10l3.5-3.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
         <button id="btn-help" class="plain" title="Help (?)">?</button>
       </div>
     </header>
