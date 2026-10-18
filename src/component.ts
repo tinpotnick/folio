@@ -5,7 +5,12 @@
  * during typing. Full re-render happens only on structural ops.
  * Row/column operations live in a context menu, not on the page.
  */
-import { parseDoc, serializeDoc, type Doc } from "@folio/engine/doc";
+import {
+  parseDoc,
+  serializeDoc,
+  type Doc,
+  type DocBlock,
+} from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable } from "@folio/engine/recalc";
 import { executeQuery } from "@folio/engine/query";
@@ -401,51 +406,53 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
+  /**
+   * Rebuild the block list from the article's children. Text blocks
+   * (prose, headings, code) are re-derived wholesale - the DOM is
+   * the source of truth during typing, including native structural
+   * edits (Enter splits, Backspace merges). Generated blocks
+   * (tables, charts, diagrams) carry their structured data in the
+   * model only, so they are preserved by figure identity, in
+   * document order.
+   */
   private syncFromDom(): void {
     if (!this.doc) return;
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     if (!host) return;
-    Array.from(host.children).forEach((el) => {
-      const idx = Number((el as HTMLElement).dataset.blockIndex ?? -1);
-      const blocks = this.doc?.blocks;
-      if (!blocks) return;
-      const block = blocks[idx];
-      if (
-        !block ||
-        block.kind === "table" ||
-        block.kind === "chart" ||
-        block.kind === "diagram"
-      ) {
-        return;
+    const generated = this.doc.blocks.filter(
+      (b) => b.kind === "table" || b.kind === "chart" || b.kind === "diagram",
+    );
+    let gi = 0;
+    const next: DocBlock[] = [];
+    for (const child of Array.from(host.children)) {
+      const el = child as HTMLElement;
+      if (el.tagName === "FIGURE") {
+        const g = generated[gi];
+        gi += 1;
+        if (g) next.push(g);
+        continue;
       }
-      if (block.kind === "code") {
-        // innerText keeps rendered line breaks (<br>, wrapped lines
-        // only where the DOM actually breaks them).
-        block.text = (el as HTMLElement).innerText;
-        return;
-      }
-      const tag = el.tagName;
-      const headingMatch = /^H([1-6])$/.exec(tag);
+      const headingMatch = /^H([1-6])$/.exec(el.tagName);
       if (headingMatch) {
-        const level = Number(headingMatch[1]);
-        if (block.kind !== "heading" || block.level !== level) {
-          blocks[idx] = {
-            kind: "heading",
-            level,
-            text: el.textContent ?? "",
-          };
-        } else {
-          block.text = el.textContent ?? "";
-        }
-      } else {
-        const md = htmlToInlineMarkdown((el as HTMLElement).innerHTML);
-        if (block.kind !== "prose") {
-          blocks[idx] = { kind: "prose", text: md };
-        } else {
-          block.text = md;
-        }
+        next.push({
+          kind: "heading",
+          level: Number(headingMatch[1]),
+          text: el.textContent ?? "",
+        });
+        continue;
       }
-    });
+      if (el.tagName === "PRE" && el.querySelector("code") !== null) {
+        next.push({
+          kind: "code",
+          ...(el.dataset.lang !== undefined ? { lang: el.dataset.lang } : {}),
+          text: el.innerText,
+        });
+        continue;
+      }
+      const md = htmlToInlineMarkdown(el.innerHTML).replace(/\n+$/, "");
+      next.push({ kind: "prose", text: md });
+    }
+    this.doc.blocks = next;
   }
 
   private handleInput(): void {
@@ -809,6 +816,16 @@ export class FolioDoc extends HTMLElement {
     const block = this.doc.blocks[idx];
     if (!block) return;
     if (block.kind === "table" || block.kind === "chart") return;
+    if (block.kind === "diagram") {
+      // Never split into a selected diagram.
+      if (
+        ev.target instanceof Element &&
+        ev.target.closest("figure.folio-diagram")
+      ) {
+        ev.preventDefault();
+      }
+      return;
+    }
     if (block.kind === "code") {
       // A line break inside the code block, not a block split.
       // syncFromDom reads code blocks via innerText so the inserted
@@ -819,36 +836,12 @@ export class FolioDoc extends HTMLElement {
       this.emitChange();
       return;
     }
-    ev.preventDefault();
-    if (block.kind === "prose") {
-      const host = this.shadowRoot?.querySelector("article.folio-doc");
-      const blockEl = (host?.children[idx] ?? null) as HTMLElement | null;
-      const caret = blockEl ? this.caretOffsetIn(blockEl) : 0;
-      const text = block.text;
-      if (blockEl && caret < text.length) {
-        const before = htmlToInlineMarkdown(blockEl.innerHTML).slice(0, caret);
-        const after = htmlToInlineMarkdown(blockEl.innerHTML).slice(caret);
-        block.text = before;
-        this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: after });
-      } else {
-        this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: "" });
-      }
-    } else {
-      this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: "" });
-    }
-    this.render();
-    this.emitChange();
-    const host = this.shadowRoot?.querySelector("article.folio-doc");
-    const next = host?.children[idx + 1] as HTMLElement | undefined;
-    if (next) {
-      next.focus();
-      const range = document.createRange();
-      range.selectNodeContents(next);
-      range.collapse(true);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    }
+    // Prose and headings: let the engine handle Enter natively -
+    // the caret lands on the new line in every engine, exactly like
+    // a word processor - and the structural sync rebuilds the model
+    // from the DOM on the input event. The old model-split +
+    // re-render path destroyed the caret, which is why typing
+    // after Enter needed a click first.
   }
 
   /**
@@ -954,33 +947,6 @@ export class FolioDoc extends HTMLElement {
       `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
     ) as HTMLTableCellElement | null;
     cell?.focus();
-  }
-
-  private caretOffsetIn(el: HTMLElement): number {
-    // The document-level selection is retargeted to the light DOM
-    // when the caret is inside the shadow tree (Chromium), which
-    // made this return garbage and mis-split blocks on Enter. Read
-    // the caret from the shadow root's selection; if the selection
-    // is not usable/pierceable (WebKitGTK), assume the end of the
-    // block so Enter appends instead of splitting.
-    const root = this.shadowRoot as
-      | (ShadowRoot & {
-          getSelection?: () => Selection | null;
-        })
-      | null;
-    const sel = root?.getSelection?.() ?? window.getSelection();
-    const fallback = el.textContent?.length ?? 0;
-    if (sel === null || sel.rangeCount === 0) return fallback;
-    try {
-      const range = sel.getRangeAt(0).cloneRange();
-      if (!el.contains(range.endContainer)) return fallback;
-      const pre = range.cloneRange();
-      pre.selectNodeContents(el);
-      pre.setEnd(range.endContainer, range.endOffset);
-      return pre.toString().length;
-    } catch {
-      return fallback;
-    }
   }
 
   private handleContextMenu(ev: MouseEvent): void {
