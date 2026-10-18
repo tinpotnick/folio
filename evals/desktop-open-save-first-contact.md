@@ -5,10 +5,10 @@ steps:
   - On a machine with the prerequisites (apps/desktop/README.md), run
     `npm run dev:desktop`.
   - The folio window opens with the sample document.
-  - Click the folder icon (tooltip "Open a .md file") and pick a .md
+  - Click the folder icon (tooltip "Open") and pick a .md
     file from disk.
   - Edit the document (edit a table cell).
-  - Click the save icon (tooltip "Save to a .md file") and choose a
+  - Click the save icon (tooltip "Save") and choose a
     location.
 expected:
   - The window shows the same UI as the browser demo, with Open and
