@@ -13,6 +13,8 @@ export function inlineMarkdownToHtml(text: string): string {
   return escaped
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/~~([^~]+)~~/g, "<del>$1</del>")
+    .replace(/\+\+([^+]+)\+\+/g, "<ins>$1</ins>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
@@ -42,6 +44,14 @@ function nodesToMarkdown(root: Node): string {
         break;
       case "CODE":
         out += `\`${el.textContent ?? ""}\``;
+        break;
+      case "DEL":
+      case "S":
+        out += `~~${nodesToMarkdown(el)}~~`;
+        break;
+      case "INS":
+      case "U":
+        out += `++${nodesToMarkdown(el)}++`;
         break;
       case "BR":
         out += "\n";

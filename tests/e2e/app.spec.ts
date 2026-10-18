@@ -14,6 +14,19 @@ async function waitForDocument(page: Page): Promise<void> {
   ).toBeVisible();
 }
 
+function caretIn(page: Page, needle: string, offset = 1): Promise<void> {
+  return page.evaluate(
+    ({ n, o }) => {
+      const ta = document.querySelector("#editor") as HTMLTextAreaElement;
+      const idx = ta.value.indexOf(n);
+      ta.focus();
+      ta.setSelectionRange(idx + o, idx + o);
+      ta.dispatchEvent(new Event("click", { bubbles: true }));
+    },
+    { n: needle, o: offset },
+  );
+}
+
 test.describe("document view", () => {
   test("renders the sample document with table and chart", async ({ page }) => {
     await waitForDocument(page);
@@ -221,19 +234,6 @@ test.describe("toolbar context state and actions", () => {
   const pBtn = '#block-bar button[data-block="p"]';
   const boldBtn = '#fmt-bar button[data-cmd="bold"]';
 
-  function caretIn(page: Page, needle: string, offset = 1): Promise<void> {
-    return page.evaluate(
-      ({ n, o }) => {
-        const ta = document.querySelector("#editor") as HTMLTextAreaElement;
-        const idx = ta.value.indexOf(n);
-        ta.focus();
-        ta.setSelectionRange(idx + o, idx + o);
-        ta.dispatchEvent(new Event("click", { bubbles: true }));
-      },
-      { n: needle, o: offset },
-    );
-  }
-
   test("document view: buttons reflect the block and inline format at the caret", async ({
     page,
   }) => {
@@ -322,16 +322,16 @@ test.describe("toolbar context state and actions", () => {
     await waitForDocument(page);
     await page.locator("#btn-markdown").click();
 
-    await caretIn(page, "Midlands", 2);
-    await page.locator(boldBtn).click();
-    let source = await page.locator("#editor").inputValue();
-    expect(source).toContain("**Midlands**");
-
     await caretIn(page, "**Midlands**", 5);
     await page.locator(boldBtn).click();
-    source = await page.locator("#editor").inputValue();
-    expect(source).not.toContain("**Midlands**");
+    let source = await page.locator("#editor").inputValue();
     expect(source).toContain("Midlands");
+    expect(source).not.toContain("**Midlands**");
+
+    await caretIn(page, "Revenue recovered", 3);
+    await page.locator(boldBtn).click();
+    source = await page.locator("#editor").inputValue();
+    expect(source).toContain("**Revenue**");
   });
 });
 
@@ -404,5 +404,66 @@ test.describe("table editing and keyboard navigation", () => {
     await page.keyboard.press("Enter");
     expect(await focusedCell(page)).toBe("3:1");
     await expect(page.locator("#the-doc tbody tr")).toHaveCount(before + 1);
+  });
+});
+
+test.describe("markdown+ inline formats", () => {
+  const strikeBtn = '#fmt-bar button[data-cmd="strike"]';
+  const underlineBtn = '#fmt-bar button[data-cmd="underline"]';
+
+  test("markdown view: strike and underline toggle around the selection", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+
+    await caretIn(page, "**Midlands**", 5);
+    await page.locator(strikeBtn).click();
+    let source = await page.locator("#editor").inputValue();
+    expect(source).toContain("**~~Midlands~~**");
+
+    await caretIn(page, "**~~Midlands~~**", 7);
+    await page.locator(strikeBtn).click();
+    source = await page.locator("#editor").inputValue();
+    expect(source).toContain("**Midlands**");
+    expect(source).not.toContain("~~Midlands~~");
+
+    await caretIn(page, "Revenue recovered", 3);
+    await page.locator(underlineBtn).click();
+    source = await page.locator("#editor").inputValue();
+    expect(source).toContain("++Revenue++");
+  });
+
+  test("markdown view: strike and underline light up at the caret", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+
+    await caretIn(page, "Revenue recovered", 3);
+    await page.locator(underlineBtn).click();
+    await caretIn(page, "++Revenue++", 5);
+    await expect(page.locator(underlineBtn)).toHaveClass(/active/);
+
+    await caretIn(page, "service outage", 10);
+    await page.locator(strikeBtn).click();
+    await caretIn(page, "~~outage~~", 5);
+    await expect(page.locator(strikeBtn)).toHaveClass(/active/);
+  });
+
+  test("document view: strike and underline render and round-trip", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await caretIn(page, "**Midlands**", 5);
+    await page.locator(strikeBtn).click();
+    await page.locator("#btn-view").click();
+
+    await expect(
+      page.locator("folio-doc del", { hasText: "Midlands" }),
+    ).toBeVisible();
+    await page.locator("folio-doc del", { hasText: "Midlands" }).click();
+    await expect(page.locator(strikeBtn)).toHaveClass(/active/);
   });
 });

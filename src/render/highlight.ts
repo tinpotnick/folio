@@ -12,6 +12,8 @@ export type MdTokenKind =
   | "bullet"
   | "bold"
   | "italic"
+  | "strike"
+  | "underline"
   | "code"
   | "directive"
   | "directive-key"
@@ -122,6 +124,18 @@ function inlineTokens(text: string): MdToken[] {
     m = /^\*([^*\n]+)\*/.exec(rest);
     if (m) {
       push("italic", m[0]);
+      i += m[0].length;
+      continue;
+    }
+    m = /^~~([^~\n]+)~~/.exec(rest);
+    if (m) {
+      push("strike", m[0]);
+      i += m[0].length;
+      continue;
+    }
+    m = /^\+\+([^+\n]+)\+\+/.exec(rest);
+    if (m) {
+      push("underline", m[0]);
       i += m[0].length;
       continue;
     }

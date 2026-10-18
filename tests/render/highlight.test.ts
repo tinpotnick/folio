@@ -66,3 +66,10 @@ describe("highlightMarkdown", () => {
     expect(texts("just words")).toEqual(["just words"]);
   });
 });
+
+describe("markdown+ token kinds", () => {
+  it("classifies strikethrough and underline", () => {
+    expect(kinds("~~gone~~")).toEqual(["strike"]);
+    expect(kinds("++added++")).toEqual(["underline"]);
+  });
+});
