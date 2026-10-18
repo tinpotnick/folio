@@ -41,7 +41,8 @@ formula and the figure recalculate), and a chart generated from a
 query over the table. Toggle to **Markdown** to see and edit the
 source with code-editor highlighting; switch back to re-parse.
 **Download .md** exports the doc. **☰ Sections** toggles the
-section browser sidebar.
+section browser sidebar. **? Help** (also the `?` key or `F1`) opens
+the built-in help — which is itself a folio document.
 
 ## Tests
 
@@ -98,7 +99,14 @@ What works in this first build:
 - Charts as queries over tables (SVG, publication-oriented)
 - Theme from document frontmatter (closed schema; no style literals
   ever live in the document)
-- `<folio-doc>` web component: embed it anywhere (ADR-0006)- Section browser: a Word-style sidebar listing every section;  click to zoom to it, collapsible from the toolbar- Markdown source view with VS Code-style syntax highlighting  (frontmatter, headings, emphasis, code, table/chart directives)- Desktop app: a Tauri v2 host with native Open/Save (ADR-0006)
+- `<folio-doc>` web component: embed it anywhere (ADR-0006)
+- Section browser: a Word-style sidebar listing every section;
+  click to zoom to it, collapsible from the toolbar
+- Markdown source view with VS Code-style syntax highlighting
+  (frontmatter, headings, emphasis, code, table/chart directives)
+- Desktop app: a Tauri v2 host with native Open/Save (ADR-0006)
+- In-app help: a `? Help` button and `?` / `F1` shortcuts opening
+  help as a folio document (docs/specs/in-app-help.md)
 
 ## Status
 

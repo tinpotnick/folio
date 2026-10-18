@@ -74,7 +74,7 @@ test.describe("markdown source view", () => {
     await waitForDocument(page);
     await page.locator("#btn-markdown").click();
     await expect(page.locator("#editor")).toBeVisible();
-    await expect(page.locator("folio-doc")).toBeHidden();
+    await expect(page.locator("#the-doc")).toBeHidden();
 
     const source = await page.locator("#editor").inputValue();
     expect(source).toContain("# Q3 Field Operations Review");
@@ -128,7 +128,7 @@ test.describe("markdown source view", () => {
 
     await expect(page.locator("#status")).toContainText("Parse error");
     await expect(page.locator("#editor")).toBeVisible();
-    await expect(page.locator("folio-doc")).toBeHidden();
+    await expect(page.locator("#the-doc")).toBeHidden();
   });
 });
 
@@ -181,5 +181,57 @@ test.describe("edits keep the document the single source of truth", () => {
     await page.locator("#btn-markdown").click();
     const source = await page.locator("#editor").inputValue();
     expect(source).toContain("(updated)");
+  });
+});
+
+test.describe("in-app help", () => {
+  test("Help button opens the help document; Close dismisses it", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-help").click();
+
+    const modal = page.locator("#help-modal");
+    await expect(modal).toBeVisible();
+    await expect(
+      page.locator("#help-doc h1", { hasText: "folio help" }),
+    ).toBeVisible();
+    await expect(page.locator("#help-doc figure table").first()).toBeVisible();
+    await expect(
+      page.locator("#help-doc p", { hasText: "Download .md" }),
+    ).toBeVisible();
+
+    await page.locator("#btn-help-close").click();
+    await expect(modal).toBeHidden();
+  });
+
+  test("Esc closes the help window", async ({ page }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-help").click();
+    await expect(page.locator("#help-modal")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#help-modal")).toBeHidden();
+  });
+
+  test("? and F1 open help; not while typing in the source editor", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const modal = page.locator("#help-modal");
+
+    await page.keyboard.press("?");
+    await expect(modal).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.keyboard.press("F1");
+    await expect(modal).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(modal).toBeHidden();
+
+    await page.locator("#btn-markdown").click();
+    await page.locator("#editor").click();
+    await page.keyboard.press("?");
+    await expect(modal).toBeHidden();
   });
 });

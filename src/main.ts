@@ -296,4 +296,36 @@ btnSave.addEventListener("click", async () => {
   if (path !== null) flash(`Saved ${path}`);
 });
 
+/* --- In-app help (spec: docs/specs/in-app-help.md) --- */
+
+const btnHelp = requireEl<HTMLButtonElement>("#btn-help");
+const helpModal = requireEl<HTMLDialogElement>("#help-modal");
+
+function openHelp(): void {
+  if (!helpModal.open) helpModal.showModal();
+}
+
+btnHelp.addEventListener("click", openHelp);
+requireEl<HTMLButtonElement>("#btn-help-close").addEventListener(
+  "click",
+  () => {
+    helpModal.close();
+  },
+);
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "?" && ev.key !== "F1") return;
+  const a = document.activeElement;
+  const editable = (node: Element | null | undefined): boolean =>
+    node instanceof HTMLElement &&
+    (node.isContentEditable ||
+      node.tagName === "TEXTAREA" ||
+      node.tagName === "INPUT");
+  // The document's editable surface lives in the component's shadow
+  // root; activeElement then resolves to the host, so pierce it.
+  if (editable(a) || editable(a?.shadowRoot?.activeElement)) return;
+  ev.preventDefault();
+  openHelp();
+});
+
 refreshOutline();
