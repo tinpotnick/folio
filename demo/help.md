@@ -17,6 +17,11 @@ document — written in the same renderer you are working with.
 
 - **Document view** is the rendered report. Click into any text and
   type; table formulas recalculate as you edit.
+- The block and format buttons (H1, H2, P, B, I, code) always show
+  where you are: the button for the block or format at your caret
+  lights up — in Document view and in Markdown view alike. In
+  Markdown view the buttons also work on the source: H1 prefixes the
+  line, B wraps the selection (or word) in `**`.
 - **Markdown view** (toolbar toggle) shows the source with syntax
   highlighting. Switch back to Document to re-parse. If a parse
   error appears, fix the reported line — folio stays in source view

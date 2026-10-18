@@ -105,8 +105,11 @@ What works in this first build:
 - Markdown source view with VS Code-style syntax highlighting
   (frontmatter, headings, emphasis, code, table/chart directives)
 - Desktop app: a Tauri v2 host with native Open/Save (ADR-0006)
-- In-app help: a `? Help` button and `?` / `F1` shortcuts opening
+- In-app help: a `?` button and `?` / `F1` shortcuts opening
   help as a folio document (docs/specs/in-app-help.md)
+- Context toolbar: H1/H2/P/B/I/code reflect the caret's block and
+  format in both views, and act on the Markdown source too
+  (docs/specs/toolbar-context.md)
 
 ## Status
 
