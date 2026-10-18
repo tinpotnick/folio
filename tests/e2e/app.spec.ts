@@ -721,3 +721,108 @@ test.describe("editor fixes", () => {
     expect(kinds).not.toContain("diagram");
   });
 });
+
+async function caretInParagraph(
+  page: Page,
+  text: string,
+  offset: number,
+): Promise<void> {
+  await page.evaluate(
+    ({ needle, off }) => {
+      const root = document.querySelector("folio-doc")?.shadowRoot as
+        (ShadowRoot & { getSelection?: () => Selection }) | undefined;
+      const ps = Array.from(root?.querySelectorAll("p") ?? []);
+      const p = ps.find((el) => el.textContent?.includes(needle));
+      if (!root || !p) return;
+      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        const idx = node.textContent?.indexOf(needle) ?? -1;
+        if (idx >= 0) {
+          root
+            .getSelection?.()
+            ?.setBaseAndExtent(node, idx + off, node, idx + off);
+          return;
+        }
+        node = walker.nextNode();
+      }
+    },
+    { needle: text, off: offset },
+  );
+}
+
+test.describe("native paragraph editing", () => {
+  test("Enter mid-paragraph splits it and typing continues on the new line", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await caretInParagraph(page, "Revenue recovered", 18);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("NEW LINE");
+
+    const blocks = await page.evaluate(() =>
+      (
+        document.querySelector("folio-doc") as unknown as {
+          getDoc: () => { blocks: { kind: string; text: string }[] };
+        }
+      )
+        .getDoc()
+        .blocks.map((b) => (b.kind === "prose" ? b.text.slice(0, 30) : b.kind)),
+    );
+    expect(
+      blocks.some(
+        (t) => typeof t === "string" && t.startsWith("Revenue recovered"),
+      ),
+    ).toBe(true);
+    expect(
+      blocks.some((t) => typeof t === "string" && t.includes("NEW LINE")),
+    ).toBe(true);
+  });
+
+  test("Backspace at a block boundary merges paragraphs", async ({ page }) => {
+    await waitForDocument(page);
+
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Backspace");
+    const merged = await page.evaluate(() =>
+      (
+        document.querySelector("folio-doc") as unknown as {
+          getDoc: () => { blocks: { kind: string; text: string }[] };
+        }
+      )
+        .getDoc()
+        .blocks.some(
+          (b) =>
+            b.kind === "prose" &&
+            b.text.includes("Revenue recovered") &&
+            b.text.includes("consecutive quarter"),
+        ),
+    );
+    expect(merged).toBe(true);
+  });
+
+  test("typing around generated blocks preserves them", async ({ page }) => {
+    await waitForDocument(page);
+
+    await page
+      .locator("folio-doc p", { hasText: "Growth was strongest" })
+      .click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" (edited)");
+
+    await expect(page.locator("#the-doc figure table").first()).toBeVisible();
+    await expect(
+      page.locator("#the-doc figure svg[role='img']").first(),
+    ).toBeVisible();
+    const source = await (async () => {
+      await page.locator("#btn-markdown").click();
+      return page.locator("#editor").inputValue();
+    })();
+    expect(source).toContain("::: table {#regional-data}");
+    expect(source).toContain("::: chart {#growth-chart}");
+    expect(source).toContain("(edited)");
+  });
+});

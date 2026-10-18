@@ -24,6 +24,19 @@ flattened back to prose - nothing durable happened.
   `innerText` (rendered line breaks become model newlines). Enter
   inside a code block inserts a line break instead of splitting the
   block.
+- **Structural sync**: `syncFromDom` REBUILDS the block list from
+  the article's children on every input - the DOM is the source of
+  truth during typing (the component's founding design). Text blocks
+  (prose, headings, code) are re-derived wholesale; generated blocks
+  (tables, charts, diagrams) are preserved by figure identity in
+  document order. This is what makes native structural edits work:
+  Enter in prose/headings runs natively (the engine splits the block
+  and places the caret on the new line - word-processor behavior in
+  every engine, including WebKitGTK), Backspace at block boundaries
+  merges, and the model follows. The old model-split + re-render
+  path destroyed the caret, which forced a click before typing.
+  Enter inside a selected diagram is prevented (diagrams never
+  split).
 - **Toolbar**: the code-block button lives in the insert group
   (table / diagram / code) with a `</>` icon. In document view it
   toggles the caret's block between prose and a code block
