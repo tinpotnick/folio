@@ -538,3 +538,39 @@ test.describe("code blocks", () => {
     );
   });
 });
+
+test.describe("mermaid diagrams", () => {
+  test("a mermaid directive renders an SVG diagram and round-trips", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await page
+      .locator("#editor")
+      .fill("# Flow\n\n::: mermaid {#flow}\ngraph TD\n  A --> B\n:::\n");
+    await page.locator("#btn-view").click();
+
+    const figure = page.locator("#the-doc figure.folio-diagram");
+    await expect(figure).toBeVisible();
+    await expect(figure.locator(".diagram-holder svg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(figure).not.toContainText("Diagram error");
+
+    await page.locator("#btn-markdown").click();
+    const source = await page.locator("#editor").inputValue();
+    expect(source).toContain("::: mermaid {#flow}\ngraph TD\n  A --> B\n:::");
+  });
+
+  test("a broken diagram shows an error, not a crash", async ({ page }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await page
+      .locator("#editor")
+      .fill("::: mermaid {#bad}\nthis is not mermaid\n:::\n");
+    await page.locator("#btn-view").click();
+
+    const figure = page.locator("#the-doc figure.folio-diagram");
+    await expect(figure).toContainText("Diagram error", { timeout: 10_000 });
+  });
+});

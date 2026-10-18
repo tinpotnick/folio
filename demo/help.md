@@ -46,6 +46,9 @@ document — written in the same renderer you are working with.
 
 - The table button (grid icon in the toolbar) inserts a typed table
   at the cursor.
+- Diagrams are Mermaid blocks: `::: mermaid {#id}` ... `:::` with
+  the diagram source in between. They render as figures; edit the
+  source in the Markdown view and switch back to re-render.
 - Code blocks use GitHub-style fences (``` with an optional
   language). In Document view the code button converts the block you
   are in to a code block and back; Enter adds lines inside it. In

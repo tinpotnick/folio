@@ -35,10 +35,18 @@ export function highlightMarkdown(src: string): MdLine[] {
   let inFrontmatter = false;
   let frontmatterSeen = false;
   let directiveDepth = 0;
+  let inMermaid = false;
   let inFence = false;
   return lines.map((line) => {
     let tokens: MdToken[];
-    if (inFence) {
+    if (inMermaid) {
+      if (line.trim() === ":::") {
+        inMermaid = false;
+        tokens = [{ kind: "directive", text: line }];
+      } else {
+        tokens = [{ kind: "code", text: line }];
+      }
+    } else if (inFence) {
       if (/^`{3,}$/.test(line.trim())) {
         inFence = false;
         tokens = [{ kind: "fence", text: line }];
@@ -66,6 +74,9 @@ export function highlightMarkdown(src: string): MdLine[] {
       } else {
         tokens = directiveLine(line);
       }
+    } else if (/^::: mermaid \{#[^}]+\}$/.test(line.trim())) {
+      inMermaid = true;
+      tokens = [{ kind: "directive", text: line }];
     } else if (/^::: (table|chart) \{#[^}]+\}$/.test(line.trim())) {
       directiveDepth = 1;
       tokens = [{ kind: "directive", text: line }];
