@@ -24,10 +24,13 @@ view, and the buttons were inert in Markdown view.
     order: `shadowRoot.getSelection()`, `document.getSelection()`
     (Chromium adjusts it to the light DOM when the caret is in the
     shadow root), `Selection.getComposedRanges()` where present, and
-    — for pointer-driven updates — the caret at the pointer position
-    via `caretRangeFromPoint`/`caretPositionFromPoint`, which resolve
-    through the flat tree and see inside the open shadow root.
-    Whichever source actually anchors inside the article wins.
+    — for pointer-driven updates — `shadowRoot.elementFromPoint()`
+    at the pointer position. WebKitGTK (the Tauri engine, verified
+    against 2.54 via MiniBrowser + WebKitWebDriver) exposes no
+    selection or caret API that pierces the shadow boundary at all;
+    its shadow-root hit testing is the only source that does.
+    Keyboard navigation on such engines keeps the last shown state
+    rather than blanking the toolbar (no anchor is resolvable).
   - **Inline buttons disable on complete block formats:** when the
     caret's block is a heading (H1–H6) or a code block (`PRE`), the
     B/I/code buttons are disabled — the markdown carries no inline

@@ -115,10 +115,14 @@ type SelectionWithComposedRanges = Selection & {
 /**
  * The caret anchor inside the document article, robust across
  * engines. Chromium's document-level selection is adjusted to the
- * light DOM when the caret is in the shadow root; WebKit exposes the
- * inner anchor differently by version. Try each source and take the
- * first one that actually anchors inside the article; as a last
- * resort resolve the caret from the pointer position.
+ * light DOM when the caret is in the shadow root, and WebKitGTK
+ * exposes NO selection or caret API that pierces the shadow
+ * boundary at all (shadowRoot.getSelection is missing there;
+ * getComposedRanges, caretRangeFromPoint, and caretPositionFromPoint
+ * all return shadow-boundary-retargeted nodes — verified against
+ * WebKitGTK 2.54, the Tauri engine). What does pierce in WebKit is
+ * the shadow root's own hit testing, so for pointer-driven updates
+ * elementFromPoint on the shadow root resolves the inner element.
  */
 function docSelectionAnchor(
   host: HTMLElement,
@@ -126,9 +130,8 @@ function docSelectionAnchor(
 ): Node | null {
   const inside = (n: Node | null): Node | null =>
     n !== null && host.contains(n) ? n : null;
-  const shadowSel = (
-    el.shadowRoot as ShadowRootWithSelection | null
-  )?.getSelection?.();
+  const root = el.shadowRoot as ShadowRootWithSelection | null;
+  const shadowSel = root?.getSelection?.();
   const shadowAnchor = inside(shadowSel?.anchorNode ?? null);
   if (shadowAnchor !== null) return shadowAnchor;
   const docSel = document.getSelection();
@@ -142,23 +145,10 @@ function docSelectionAnchor(
     if (n !== null) return n;
   }
   if (point) {
-    const n = inside(nodeAtPoint(point.x, point.y));
-    if (n !== null) return n;
+    const hit = inside(root?.elementFromPoint(point.x, point.y) ?? null);
+    if (hit !== null) return hit;
   }
   return null;
-}
-
-/**
- * Hit-test caret resolution for engines whose selection APIs only
- * expose retargeted (shadow-boundary) positions: caretRangeFromPoint
- * and caretPositionFromPoint resolve through the flat tree, so they
- * can see inside the open shadow root.
- */
-function nodeAtPoint(x: number, y: number): Node | null {
-  const range = document.caretRangeFromPoint(x, y);
-  if (range) return range.startContainer;
-  const caret = document.caretPositionFromPoint(x, y);
-  return caret ? caret.offsetNode : null;
 }
 
 const blockBar = requireEl<HTMLElement>("#block-bar");
@@ -218,6 +208,10 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
     const root = el.shadowRoot;
     const host = root?.querySelector<HTMLElement>("article.folio-doc") ?? null;
     let node: Node | null = host ? docSelectionAnchor(host, point) : null;
+    // Engines that cannot resolve the inner caret at all (WebKitGTK,
+    // on keyboard navigation) keep the last shown state rather than
+    // blanking the toolbar.
+    if (node === null) return;
     // Semantic, markdown-true inline detection: walk the ancestors for
     // STRONG/EM/CODE. queryCommandState reports rendered boldness
     // (headings render bold), which lit B on H1 lines and differs
