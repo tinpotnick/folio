@@ -6,9 +6,15 @@ native Open/Save file commands (Rust side, `src-tauri/src/lib.rs`).
 
 ## Prerequisites (Linux)
 
+    # Debian/Ubuntu
     sudo apt install libwebkit2gtk-4.1-dev build-essential \
       libxdo-dev libssl-dev libayatana-appindicator3-dev \
       librsvg2-dev pkg-config
+
+    # Fedora
+    sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
+      libappindicator-gtk3-devel librsvg2-devel libxdo-devel \
+      gcc gcc-c++ pkgconf-pkg-config
 
 macOS/Windows need only Xcode / Visual Studio (the webview is in-OS).
 
