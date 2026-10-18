@@ -102,22 +102,174 @@
       button.plain:hover {
         background: #f3f4f6;
       }
+      .layout {
+        display: flex;
+        min-height: calc(100vh - 52px);
+      }
+      #sidebar {
+        position: sticky;
+        top: 52px;
+        align-self: flex-start;
+        width: 230px;
+        flex: none;
+        border-right: 1px solid #e6e8eb;
+        background: #fff;
+        height: calc(100vh - 52px);
+        overflow-y: auto;
+        padding: 14px 8px 24px 14px;
+        box-sizing: border-box;
+      }
+      #sidebar[hidden] {
+        display: none;
+      }
+      #sidebar h2 {
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #57606a;
+        margin: 0 0 8px 6px;
+      }
+      #outline {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+      }
+      #outline button {
+        border: none;
+        background: transparent;
+        text-align: left;
+        font: inherit;
+        font-size: 13px;
+        color: #1f2328;
+        padding: 4px 8px;
+        border-radius: 6px;
+        cursor: pointer;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #outline button:hover {
+        background: #f3f4f6;
+      }
+      #outline button.active {
+        background: #e7ecff;
+        color: #1f3fbf;
+        font-weight: 600;
+      }
+      #outline .l1 {
+        font-weight: 650;
+      }
+      #outline .l2 {
+        padding-left: 20px;
+      }
+      #outline .l3,
+      #outline .l4,
+      #outline .l5,
+      #outline .l6 {
+        padding-left: 32px;
+        color: #57606a;
+      }
       main {
         padding: 24px;
+        flex: 1;
+        min-width: 0;
       }
-      .editor[hidden] { display: none; }
-      .editor {
-        display: block;
-        width: 100%;
-        min-height: calc(100vh - 72px);
+      /* --- Markdown source editor: highlighted overlay --- */
+      .md-wrap {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        min-height: calc(100vh - 100px);
+      }
+      .md-wrap[hidden] {
+        display: none;
+      }
+      .md-gutter {
+        user-select: none;
+        text-align: right;
+        color: #b0b8c1;
+        padding: 24px 10px 40vh 0;
+        white-space: pre;
+        line-height: 1.6;
+      }
+      .md-code {
+        position: relative;
+        overflow: hidden;
+        border-radius: 0 8px 8px 0;
+        padding-right: 16px;
+      }
+      #editor,
+      .md-view {
+        grid-row: 1;
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
         font-size: 14px;
-        border: none;
-        padding: 24px 0 40vh;
-        background: transparent;
         line-height: 1.6;
+        tab-size: 2;
+        white-space: pre-wrap;
+        overflow-wrap: break-word;
+        margin: 0;
+        padding: 24px 0 40vh 2px;
+        border: none;
+        background: transparent;
+        color: #1f2328;
+      }
+      #editor {
+        grid-column: 2;
+        position: relative;
         resize: none;
         outline: none;
+        color: transparent;
+        caret-color: #1f2328;
+        z-index: 2;
+        width: 100%;
+      }
+      #editor::selection {
+        background: rgba(76, 110, 245, 0.25);
+      }
+      .md-view {
+        grid-column: 2;
+        z-index: 1;
+      }
+      .md-view .ln {
+        display: block;
+        min-height: 1.6em;
+      }
+      .tk-frontmatter-delim {
+        color: #8250df;
+        font-weight: 600;
+      }
+      .tk-frontmatter-key {
+        color: #953800;
+      }
+      .tk-heading {
+        color: #0550ae;
+        font-weight: 650;
+      }
+      .tk-bullet {
+        color: #116329;
+      }
+      .tk-bold {
+        color: #1f2328;
+        font-weight: 650;
+      }
+      .tk-italic {
+        color: #1f2328;
+        font-style: italic;
+      }
+      .tk-code {
+        color: #cf222e;
+      }
+      .tk-directive {
+        color: #8250df;
+        font-weight: 600;
+      }
+      .tk-directive-key {
+        color: #0550ae;
+      }
+      .tk-directive-list {
+        color: #116329;
+      }
+      .tk-text {
         color: #1f2328;
       }
       folio-doc[hidden] {
@@ -157,6 +309,7 @@
           <button data-cmd="code" title="Code">&#9003;</button>
         </div>
         <button id="btn-table" class="plain" title="Insert a table">+ Table</button>
+        <button id="btn-sidebar" class="plain" title="Toggle the section browser">☰ Sections</button>
         <div class="seg" id="view-switch">
           <button id="btn-view" class="active" title="Document view">
             <svg
@@ -180,10 +333,20 @@
         <button id="btn-download" class="plain">Download .md</button>
       </div>
     </header>
-    <main>
-      <folio-doc id="the-doc"></folio-doc>
-      <textarea id="editor" class="editor" hidden></textarea>
-    </main>
+    <div class="layout">
+      <nav id="sidebar" aria-label="Section browser">
+        <h2>Sections</h2>
+        <div id="outline"></div>
+      </nav>
+      <main>
+        <folio-doc id="the-doc"></folio-doc>
+        <div class="md-wrap" id="md-wrap" hidden>
+          <div class="md-gutter" id="md-gutter" aria-hidden="true"></div>
+          <pre class="md-view" id="md-view" aria-hidden="true"></pre
+          ><textarea id="editor" class="editor" spellcheck="false"></textarea>
+        </div>
+      </main>
+    </div>
     <div id="status">Saved</div>
     <script type="module" src="/src/main.ts"></script>
   </body>

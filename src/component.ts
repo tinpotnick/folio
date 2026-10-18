@@ -6,6 +6,7 @@
  * Row/column operations live in a context menu, not on the page.
  */
 import { parseDoc, serializeDoc, type Doc } from "@folio/engine/doc";
+import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable } from "@folio/engine/recalc";
 import { executeQuery } from "@folio/engine/query";
 import { themeFromDoc, themeCss } from "./render/theme.js";
@@ -63,6 +64,32 @@ export class FolioDoc extends HTMLElement {
 
   getDoc(): Doc | null {
     return this.doc;
+  }
+
+  getOutline(): OutlineEntry[] {
+    return this.doc ? outlineOf(this.doc) : [];
+  }
+
+  revealBlock(blockIndex: number): void {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const el = host?.children[blockIndex] as HTMLElement | undefined;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.setAttribute("tabindex", "-1");
+    el.focus({ preventScroll: true });
+  }
+
+  firstVisibleBlockIndex(): number {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return -1;
+    const hostRect = this.getBoundingClientRect();
+    const top = hostRect.top;
+    for (let i = 0; i < host.children.length; i++) {
+      const el = host.children[i] as HTMLElement;
+      const r = el.getBoundingClientRect();
+      if (r.bottom > top + 8) return i;
+    }
+    return host.children.length - 1;
   }
 
   getMarkdown(): string | null {
