@@ -22,6 +22,7 @@ export class FolioDoc extends HTMLElement {
   private listeners: ((doc: Doc) => void)[] = [];
   private menu: HTMLElement | null = null;
   private lastCell: HTMLTableCellElement | null = null;
+  private lastBlock: HTMLElement | null = null;
 
   constructor() {
     super();
@@ -141,6 +142,15 @@ export class FolioDoc extends HTMLElement {
     host.setAttribute("contenteditable", "true");
     host.spellcheck = true;
     host.addEventListener("keydown", this.handleKeydown);
+    host.addEventListener(
+      "mousedown",
+      (ev: MouseEvent) => {
+        const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
+        const block = el?.closest("[data-block-index]") as HTMLElement | null;
+        if (block) this.lastBlock = block;
+      },
+      true,
+    );
     host.addEventListener("input", this.handleInput);
     host.addEventListener("contextmenu", this.handleContextMenu);
 
@@ -165,6 +175,16 @@ export class FolioDoc extends HTMLElement {
         el.dataset.blockIndex = String(idx);
         el.innerHTML = inlineMarkdownToHtml(block.text);
         return el;
+      }
+      case "code": {
+        const pre = document.createElement("pre");
+        pre.className = "folio-code";
+        pre.dataset.blockIndex = String(idx);
+        if (block.lang !== undefined) pre.dataset.lang = block.lang;
+        const code = document.createElement("code");
+        code.textContent = block.text;
+        pre.appendChild(code);
+        return pre;
       }
       case "table": {
         return this.renderTable(block, idx);
@@ -343,6 +363,12 @@ export class FolioDoc extends HTMLElement {
       if (!blocks) return;
       const block = blocks[idx];
       if (!block || block.kind === "table" || block.kind === "chart") return;
+      if (block.kind === "code") {
+        // innerText keeps rendered line breaks (<br>, wrapped lines
+        // only where the DOM actually breaks them).
+        block.text = (el as HTMLElement).innerText;
+        return;
+      }
       const tag = el.tagName;
       const headingMatch = /^H([1-6])$/.exec(tag);
       if (headingMatch) {
@@ -493,6 +519,66 @@ export class FolioDoc extends HTMLElement {
     for (const cf of chartFigures) this.drawChart(cf);
   }
 
+  /**
+   * Toggle the caret's block between prose and a fenced code block
+   * (the toolbar's code button in document view).
+   */
+  toggleCodeBlock(): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    if (idx < 0) return;
+    const block = this.doc.blocks[idx];
+    if (!block) return;
+    if (block.kind === "prose") {
+      this.doc.blocks[idx] = { kind: "code", text: block.text };
+      this.render();
+      this.emitChange();
+      this.focusBlockStart(idx);
+    } else if (block.kind === "code") {
+      this.doc.blocks[idx] = { kind: "prose", text: block.text };
+      this.render();
+      this.emitChange();
+      this.focusBlockStart(idx);
+    }
+  }
+
+  /** Re-rendering loses the caret; put it back at the block start. */
+  private focusBlockStart(idx: number): void {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const el = (host?.children[idx] ?? null) as HTMLElement | null;
+    if (!el) return;
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
+
+  /**
+   * The block index at the caret: the shadow selection's anchor
+   * (Chromium), or the last clicked block (tracked via shadow-root
+   * hit testing, which pierces in every engine).
+   */
+  private blockIndexAtCaret(): number {
+    const root = this.shadowRoot as
+      | (ShadowRoot & {
+          getSelection?: () => Selection | null;
+        })
+      | null;
+    let n: Node | null = root?.getSelection?.()?.anchorNode ?? null;
+    while (n !== null && !(n instanceof HTMLElement)) {
+      n = n.parentNode;
+    }
+    let el: HTMLElement | null =
+      n instanceof HTMLElement
+        ? (n.closest("[data-block-index]") as HTMLElement | null)
+        : null;
+    if (el === null) el = this.lastBlock;
+    return Number(el?.dataset.blockIndex ?? -1);
+  }
+
   insertTable(): void {
     if (!this.doc) return;
     const host = this.shadowRoot?.querySelector("article.folio-doc");
@@ -559,21 +645,37 @@ export class FolioDoc extends HTMLElement {
       return;
     }
     if (ev.key !== "Enter") return;
-    const el = (ev.target as HTMLElement).closest(
-      "[data-block-index]",
-    ) as HTMLElement | null;
-    if (!el) return;
-    const idx = Number(el.dataset.blockIndex ?? -1);
+    let idx = -1;
+    if (ev.target instanceof Element) {
+      const el = ev.target.closest("[data-block-index]") as HTMLElement | null;
+      idx = Number(el?.dataset.blockIndex ?? -1);
+    }
+    // Engines put keydown focus on the article; resolve the block
+    // from the caret (or the last clicked block) instead.
+    if (idx < 0) idx = this.blockIndexAtCaret();
+    if (idx < 0) return;
     const block = this.doc.blocks[idx];
     if (!block) return;
     if (block.kind === "table" || block.kind === "chart") return;
+    if (block.kind === "code") {
+      // A line break inside the code block, not a block split.
+      // syncFromDom reads code blocks via innerText so the inserted
+      // <br> becomes a real newline in the model.
+      ev.preventDefault();
+      document.execCommand("insertLineBreak");
+      this.syncFromDom();
+      this.emitChange();
+      return;
+    }
     ev.preventDefault();
     if (block.kind === "prose") {
-      const caret = this.caretOffsetIn(el);
+      const host = this.shadowRoot?.querySelector("article.folio-doc");
+      const blockEl = (host?.children[idx] ?? null) as HTMLElement | null;
+      const caret = blockEl ? this.caretOffsetIn(blockEl) : 0;
       const text = block.text;
-      if (caret < text.length) {
-        const before = htmlToInlineMarkdown(el.innerHTML).slice(0, caret);
-        const after = htmlToInlineMarkdown(el.innerHTML).slice(caret);
+      if (blockEl && caret < text.length) {
+        const before = htmlToInlineMarkdown(blockEl.innerHTML).slice(0, caret);
+        const after = htmlToInlineMarkdown(blockEl.innerHTML).slice(caret);
         block.text = before;
         this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: after });
       } else {

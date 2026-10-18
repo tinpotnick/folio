@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseDoc, serializeDoc } from "@folio/engine/doc";
+import { parseDoc, ParseError, serializeDoc } from "@folio/engine/doc";
 import { recalcTable } from "@folio/engine/recalc";
 
 const goldenDir = join(dirname(fileURLToPath(import.meta.url)), "..", "golden");
@@ -76,5 +76,27 @@ describe("error contracts", () => {
     expect(() => parseDoc('::: chart {#c}\ncaption: "x"\n:::\n')).toThrow(
       /missing source\/query\/type/,
     );
+  });
+});
+
+describe("fenced code blocks", () => {
+  it("parses and round-trips a fenced block with a language", () => {
+    const src = "# Title\n\n```js\nconst x = 1;\nconst y = 2;\n```\n";
+    const doc = parseDoc(src);
+    expect(doc.blocks[1]).toEqual({
+      kind: "code",
+      lang: "js",
+      text: "const x = 1;\nconst y = 2;",
+    });
+    expect(serializeDoc(doc)).toBe(src);
+  });
+
+  it("parses a fence without a language and round-trips", () => {
+    const src = "```\nplain\n```\n";
+    expect(serializeDoc(parseDoc(src))).toBe(src);
+  });
+
+  it("throws on an unterminated fence", () => {
+    expect(() => parseDoc("```\nno end")).toThrow(ParseError);
   });
 });

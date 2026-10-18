@@ -188,13 +188,15 @@ fmtBar.addEventListener("mousedown", (ev) => {
             : "`";
   if (currentEditable()) {
     if (cmd === "code") {
-      document.execCommand("formatBlock", false, "pre");
+      // Document view: the code button toggles the caret's block
+      // between prose and a fenced code block (model-level, not a
+      // bare <pre> the model would flatten back to prose).
+      el.toggleCodeBlock();
     } else if (cmd === "strike") {
       document.execCommand("strikeThrough");
     } else {
       document.execCommand(cmd);
     }
-    el.dispatchEvent(new Event("input"));
   } else if (document.activeElement === editor) {
     toggleMdWrap(mark);
   } else {
@@ -251,11 +253,15 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
     const noInline = /^H[1-6]$/.test(tag) || tag === "PRE";
     fmtButtons.forEach((b) => {
       const cmd = b.dataset.cmd ?? "";
+      // In document view the code button toggles the whole block
+      // between prose and a code block, so it stays available even
+      // where inline formats do not apply.
+      const isBlockToggle = cmd === "code";
       const active =
         cmd === "code"
           ? tag === "PRE" || (!noInline && inline === "code")
           : !noInline && cmd === inline;
-      b.disabled = noInline;
+      b.disabled = noInline && !isBlockToggle;
       b.classList.toggle("active", active);
     });
     return;

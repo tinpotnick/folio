@@ -467,3 +467,74 @@ test.describe("markdown+ inline formats", () => {
     await expect(page.locator(strikeBtn)).toHaveClass(/active/);
   });
 });
+
+test.describe("code blocks", () => {
+  const codeBtn = '#fmt-bar button[data-cmd="code"]';
+
+  test("fences in the source render as a code block and round-trip", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await page
+      .locator("#editor")
+      .fill("# Title\n\n```js\nconst x = 1;\nconst y = 2;\n```\n");
+    await page.locator("#btn-view").click();
+
+    const pre = page.locator("#the-doc pre.folio-code");
+    await expect(pre).toBeVisible();
+    await expect(pre.locator("code")).toHaveText("const x = 1;\nconst y = 2;");
+    await expect(pre).toHaveAttribute("data-lang", "js");
+
+    await page.locator("#btn-markdown").click();
+    const source = await page.locator("#editor").inputValue();
+    expect(source).toContain("```js\nconst x = 1;\nconst y = 2;\n```");
+  });
+
+  test("the code button converts the caret's block to a code block and back", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await page.locator(codeBtn).click();
+    const pre = page.locator("#the-doc pre.folio-code");
+    await expect(pre).toBeVisible();
+    await expect(pre.locator("code")).toContainText("Revenue recovered");
+    await expect(page.locator(codeBtn)).toHaveClass(/active/);
+
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain("```\n");
+
+    await page.locator("#btn-view").click();
+    await pre.click();
+    await page.locator(codeBtn).click();
+    await expect(
+      page.locator("folio-doc p", { hasText: "Revenue recovered" }),
+    ).toBeVisible();
+  });
+
+  test("Enter inside a code block inserts a newline, not a block split", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await page.locator("#editor").fill("# T\n\n```\nalpha beta\n```\n");
+    await page.locator("#btn-view").click();
+
+    const pre = page.locator("#the-doc pre.folio-code");
+    await pre.click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("gamma");
+
+    const rendered = await pre
+      .locator("code")
+      .evaluate((el) => (el as HTMLElement).innerText);
+    expect(rendered).toMatch(/alpha beta\n+gamma/);
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toMatch(
+      /alpha beta\n+gamma/,
+    );
+  });
+});
