@@ -39,7 +39,9 @@ Opens the demo host app: the sample document rendered as a polished
 report — headings, prose, a live table (edit a cell and every
 formula and the figure recalculate), and a chart generated from a
 query over the table. Toggle to **Markdown** to see and edit the
-source; switch back to re-parse. **Download .md** exports the doc.
+source with code-editor highlighting; switch back to re-parse.
+**Download .md** exports the doc. **☰ Sections** toggles the
+section browser sidebar.
 
 What works in this first build:
 - Document parse/serialize with lossless round-trip (golden-tested)
@@ -47,7 +49,7 @@ What works in this first build:
 - Charts as queries over tables (SVG, publication-oriented)
 - Theme from document frontmatter (closed schema; no style literals
   ever live in the document)
-- `<folio-doc>` web component: embed it anywhere (ADR-0006)
+- `<folio-doc>` web component: embed it anywhere (ADR-0006)- Section browser: a Word-style sidebar listing every section;  click to zoom to it, collapsible from the toolbar- Markdown source view with VS Code-style syntax highlighting  (frontmatter, headings, emphasis, code, table/chart directives)
 
 ## Status
 

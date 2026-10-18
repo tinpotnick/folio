@@ -6,6 +6,7 @@
 import "./component.js";
 import type { FolioDoc } from "./component.js";
 import { parseDoc, serializeDoc } from "./engine/doc.js";
+import { highlightMarkdown } from "./render/highlight.js";
 
 function requireEl<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -19,12 +20,18 @@ const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
 const btnDl = requireEl<HTMLButtonElement>("#btn-download");
 const status = requireEl<HTMLElement>("#status");
+const sidebar = requireEl<HTMLElement>("#sidebar");
+const outlineBox = requireEl<HTMLElement>("#outline");
+const mdWrap = requireEl<HTMLElement>("#md-wrap");
+const mdGutter = requireEl<HTMLElement>("#md-gutter");
+const mdView = requireEl<HTMLElement>("#md-view");
 
 async function boot(): Promise<void> {
   const res = await fetch("/demo/sample-document.md");
   const text = await res.text();
-  el.load(text);
+  await el.load(text);
   editor.value = text;
+  refreshOutline();
 }
 
 function flash(msg: string): void {
@@ -32,6 +39,34 @@ function flash(msg: string): void {
   status.classList.add("show");
   setTimeout(() => status.classList.remove("show"), 1200);
 }
+
+function renderHighlight(): void {
+  const lines = highlightMarkdown(editor.value);
+  editor.style.height = "auto";
+  editor.style.height = `${String(editor.scrollHeight)}px`;
+  mdView.textContent = "";
+  lines.forEach((line) => {
+    const ln = document.createElement("span");
+    ln.className = "ln";
+    if (line.tokens.length === 0) {
+      ln.textContent = "\u00a0";
+    } else {
+      for (const tok of line.tokens) {
+        const span = document.createElement("span");
+        span.className = `tk-${tok.kind}`;
+        span.textContent = tok.text;
+        ln.appendChild(span);
+      }
+    }
+    mdView.appendChild(ln);
+  });
+  mdGutter.textContent = "";
+  lines.forEach((_, i) => {
+    mdGutter.appendChild(document.createTextNode(`${String(i + 1)}\n`));
+  });
+}
+
+editor.addEventListener("input", renderHighlight);
 
 btnView.addEventListener("click", () => {
   if (!editor.hidden) {
@@ -45,16 +80,20 @@ btnView.addEventListener("click", () => {
     }
   }
   editor.hidden = true;
+  mdWrap.hidden = true;
   el.hidden = false;
   btnView.classList.add("active");
   btnMd.classList.remove("active");
+  refreshOutline();
 });
 
 btnMd.addEventListener("click", () => {
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
-  editor.hidden = false;
   el.hidden = true;
+  editor.hidden = false;
+  mdWrap.hidden = false;
+  renderHighlight();
   btnMd.classList.add("active");
   btnView.classList.remove("active");
 });
@@ -171,3 +210,62 @@ el.onChange(() => {
 });
 
 boot();
+
+/* --- Section browser (left sidebar) --- */
+
+function refreshOutline(): void {
+  const outline = el.getOutline();
+  outlineBox.textContent = "";
+  if (outline.length === 0) {
+    sidebar.hidden = true;
+    return;
+  }
+  for (const entry of outline) {
+    const btn = document.createElement("button");
+    btn.className = `l${String(entry.level)}`;
+    btn.textContent = entry.text || "(untitled)";
+    btn.title = entry.text;
+    btn.dataset.blockIndex = String(entry.blockIndex);
+    btn.addEventListener("click", () => {
+      if (!editor.hidden) {
+        try {
+          el.load(serializeDoc(parseDoc(editor.value)));
+        } catch {
+          flash("Fix parse errors first");
+          return;
+        }
+        editor.hidden = true;
+        mdWrap.hidden = true;
+        el.hidden = false;
+        btnView.classList.add("active");
+        btnMd.classList.remove("active");
+      }
+      el.revealBlock(entry.blockIndex);
+    });
+    outlineBox.appendChild(btn);
+  }
+  reflectActiveSection();
+}
+
+function reflectActiveSection(): void {
+  if (!editor.hidden) return;
+  const first = el.firstVisibleBlockIndex();
+  const outline = el.getOutline();
+  let activeIdx = -1;
+  outline.forEach((entry, i) => {
+    if (entry.blockIndex <= first) activeIdx = i;
+  });
+  outlineBox.querySelectorAll("button").forEach((btn, i) => {
+    btn.classList.toggle("active", i === activeIdx);
+  });
+}
+
+window.addEventListener("scroll", reflectActiveSection, { passive: true });
+window.addEventListener("resize", reflectActiveSection, { passive: true });
+
+const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
+btnSidebar.addEventListener("click", () => {
+  sidebar.hidden = !sidebar.hidden;
+});
+
+refreshOutline();
