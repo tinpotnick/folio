@@ -45,10 +45,28 @@ section browser sidebar.
 
 ### Desktop app (Tauri)
 
-The same UI as a native window with Open…/Save… file dialogs:
+The same UI as a native window with Open…/Save… file dialogs.
 
+Prerequisites (one-time):
+
+```bash
+# Linux (Debian/Ubuntu) — the webview stack Tauri links against
+sudo apt install libwebkit2gtk-4.1-dev build-essential \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev \
+  librsvg2-dev pkg-config
+
+# macOS — Xcode Command Line Tools (webview is built into macOS)
+xcode-select --install
+
+# Windows — Visual Studio C++ Build Tools (WebView2 is built into Windows 11;
+# on Windows 10 install the WebView2 runtime from Microsoft)
 ```
-npm run dev:desktop    # requires the webview libs in apps/desktop/README.md
+
+Then run:
+
+```bash
+npm install
+npm run dev:desktop    # opens the folio window with dev tools
 npm run build:desktop  # bundles the installable app
 ```
 
