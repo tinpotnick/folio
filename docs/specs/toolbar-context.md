@@ -13,17 +13,28 @@ view, and the buttons were inert in Markdown view.
 
 - **Document view (state):** on caret/selection change, the block
   button matching the caret's block element (H1/H2/P) and the inline
-  buttons matching the selection (`queryCommandState`, `PRE` for
-  code) get the `active` class. `index.html` styles `.fmt
-  button.active` (dark chip, like the view switch).
-  - The real selection anchor comes from
-    `el.shadowRoot.getSelection()` — `document.getSelection()` is
-    adjusted to the light DOM when the caret is inside the shadow
-    root, which made the old reflection code see nothing.
+  buttons matching the selection get the `active` class. `index.html`
+  styles `.fmt button.active` (dark chip, like the view switch).
+  - Inline detection is **semantic**: the caret's ancestors are
+    walked for `STRONG`/`EM`/`CODE`. `queryCommandState` is NOT used:
+    it reports rendered boldness (headings render bold — which lit B
+    on H1 lines) and differs between engines (Chromium vs WebKit,
+    i.e. web vs desktop).
+  - The selection anchor is resolved robustly across engines:
+    `shadowRoot.getSelection()` first, falling back to
+    `document.getSelection()`; whichever actually anchors inside the
+    article wins (Chromium adjusts the document-level selection to
+    the light DOM).
+  - **Inline buttons disable on complete block formats:** when the
+    caret's block is a heading (H1–H6) or a code block (`PRE`), the
+    B/I/code buttons are disabled — the markdown carries no inline
+    emphasis inside them, so they neither light up nor act there.
 - **Markdown view (state):** the block buttons reflect the current
   line's prefix (`# ` → H1, `## ` → H2, otherwise P); the inline
   buttons reflect the token kind at the caret via
-  `highlightMarkdown` (bold / italic / code).
+  `highlightMarkdown` (bold / italic / code). Inline buttons are
+  disabled on lines starting with `#` — the same rule as document
+  view.
 - **Markdown view (actions):** mousedown on the toolbar acts on the
   source at the caret:
   - H1/H2/P sets or removes the line's heading prefix.

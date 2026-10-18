@@ -108,6 +108,24 @@ type ShadowRootWithSelection = ShadowRoot & {
   getSelection?: () => Selection | null;
 };
 
+/**
+ * The caret anchor inside the document article, robust across
+ * engines: Chromium's document-level selection is adjusted to the
+ * light DOM when the caret is in the shadow root, while WebKit's
+ * shadow selection may be missing. Take whichever source actually
+ * anchors inside the article.
+ */
+function docSelectionAnchor(host: HTMLElement): Node | null {
+  const inside = (sel: Selection | null | undefined): Node | null => {
+    const n = sel?.anchorNode ?? null;
+    return n !== null && host.contains(n) ? n : null;
+  };
+  const shadowSel = (
+    el.shadowRoot as ShadowRootWithSelection | null
+  )?.getSelection?.();
+  return inside(shadowSel) ?? inside(window.getSelection());
+}
+
 const blockBar = requireEl<HTMLElement>("#block-bar");
 blockBar.addEventListener("mousedown", (ev) => {
   const btn = (ev.target as HTMLElement).closest("button");
@@ -155,21 +173,28 @@ function reflectToolbarState(): void {
   const fmtButtons = fmtBar.querySelectorAll("button");
   if (!inDoc && !inMd) {
     blockButtons.forEach((b) => b.classList.remove("active"));
-    fmtButtons.forEach((b) => b.classList.remove("active"));
+    fmtButtons.forEach((b) => {
+      b.classList.remove("active");
+      b.disabled = false;
+    });
     return;
   }
   if (inDoc) {
-    // document.getSelection() is adjusted to the light DOM when the
-    // caret is inside the component's shadow root; the real anchor
-    // comes from the shadow root's own selection.
-    const shadowSel = (
-      el.shadowRoot as ShadowRootWithSelection | null
-    )?.getSelection?.();
-    const sel = shadowSel ?? window.getSelection();
-    let node: Node | null = sel?.anchorNode ?? null;
     const root = el.shadowRoot;
-    const host = root?.querySelector("article.folio-doc") ?? null;
+    const host = root?.querySelector<HTMLElement>("article.folio-doc") ?? null;
+    let node: Node | null = host ? docSelectionAnchor(host) : null;
+    // Semantic, markdown-true inline detection: walk the ancestors for
+    // STRONG/EM/CODE. queryCommandState reports rendered boldness
+    // (headings render bold), which lit B on H1 lines and differs
+    // between engines.
+    let inline: string | null = null;
     while (node && node.parentNode && node.parentNode !== host) {
+      if (!inline) {
+        const name = node.nodeName;
+        if (name === "STRONG") inline = "bold";
+        else if (name === "EM") inline = "italic";
+        else if (name === "CODE") inline = "code";
+      }
       node = node.parentNode;
     }
     const tag = node instanceof HTMLElement ? node.tagName : "";
@@ -178,20 +203,18 @@ function reflectToolbarState(): void {
         b.dataset.block === "p" ? "P" : (b.dataset.block ?? "").toUpperCase();
       b.classList.toggle("active", tag === want);
     });
+    // Headings and code blocks are complete block formats: the
+    // markdown carries no inline emphasis inside them, so the inline
+    // buttons neither light up nor act there.
+    const noInline = /^H[1-6]$/.test(tag) || tag === "PRE";
     fmtButtons.forEach((b) => {
       const cmd = b.dataset.cmd ?? "";
-      if (cmd === "code") {
-        b.classList.toggle(
-          "active",
-          node instanceof HTMLElement ? node.tagName === "PRE" : false,
-        );
-      } else {
-        try {
-          b.classList.toggle("active", document.queryCommandState(cmd));
-        } catch {
-          b.classList.remove("active");
-        }
-      }
+      const active =
+        cmd === "code"
+          ? tag === "PRE" || (!noInline && inline === "code")
+          : !noInline && cmd === inline;
+      b.disabled = noInline;
+      b.classList.toggle("active", active);
     });
     return;
   }
@@ -220,11 +243,13 @@ function reflectToolbarState(): void {
     }
     acc = tokEnd;
   }
+  // Inline toggles do not apply on heading lines — same rule as in
+  // document view.
+  const noInline = line.startsWith("#");
   fmtButtons.forEach((b) => {
-    b.classList.toggle(
-      "active",
-      (b.dataset.cmd ?? "") !== "" && b.dataset.cmd === fmt,
-    );
+    const cmd = b.dataset.cmd ?? "";
+    b.disabled = noInline;
+    b.classList.toggle("active", !noInline && cmd !== "" && cmd === fmt);
   });
 }
 

@@ -12,9 +12,12 @@ steps:
   - Select a word in the source and click B twice.
 expected:
   - In document view, the H1/P button lights up for the block at the
-    caret; B lights up inside bold text.
+    caret; B lights up inside bold text — but NOT on a heading line,
+    where B is disabled (headings render bold yet carry no bold in
+    the markdown).
   - In Markdown view, the same buttons light up for the line prefix
-    and the token at the caret.
+    and the token at the caret; inline buttons are disabled on
+    lines starting with "#".
   - In Markdown view, H1 prefixes the line with "# " and P removes
     it; B wraps the word in "**" and the second click removes it.
   - The rendered view reflects the edits after switching back.

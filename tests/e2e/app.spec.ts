@@ -244,10 +244,17 @@ test.describe("toolbar context state and actions", () => {
       .click();
     await expect(page.locator(h1Btn)).toHaveClass(/active/);
     await expect(page.locator(pBtn)).not.toHaveClass(/active/);
+    // Markdown-true: a heading carries no inline emphasis, so B is
+    // neither lit nor available there — even though headings render
+    // in a bold face.
+    await expect(page.locator(boldBtn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeDisabled();
 
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
     await expect(page.locator(pBtn)).toHaveClass(/active/);
     await expect(page.locator(h1Btn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeEnabled();
+    await expect(page.locator(boldBtn)).not.toHaveClass(/active/);
 
     await page.locator("folio-doc strong", { hasText: "Midlands" }).click();
     await expect(page.locator(boldBtn)).toHaveClass(/active/);
@@ -261,10 +268,13 @@ test.describe("toolbar context state and actions", () => {
 
     await caretIn(page, "# Q3 Field Operations Review", 3);
     await expect(page.locator(h1Btn)).toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeDisabled();
 
     await caretIn(page, "Revenue recovered", 3);
     await expect(page.locator(pBtn)).toHaveClass(/active/);
     await expect(page.locator(h1Btn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeEnabled();
 
     await caretIn(page, "**Midlands**", 5);
     await expect(page.locator(boldBtn)).toHaveClass(/active/);
