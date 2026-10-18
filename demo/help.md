@@ -43,6 +43,12 @@ document — written in the same renderer you are working with.
 
 - The table button (grid icon in the toolbar) inserts a typed table
   at the cursor.
+- Click a cell and type. Press Tab (or Enter) to finish the cell:
+  formulas and charts recalculate the moment you leave it, and the
+  Markdown source always contains what you typed. In the browser,
+  Tab/Enter also move the caret to the next cell and grow the table
+  at the last row; in the desktop app they commit the cell — click
+  the next cell to continue.
 - Charts are not widgets — they are queries over a table. Edit the
   table and the figure updates on the next render. There is no run
   button anywhere in folio, and no execution state.

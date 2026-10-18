@@ -21,6 +21,7 @@ export class FolioDoc extends HTMLElement {
   private doc: Doc | null = null;
   private listeners: ((doc: Doc) => void)[] = [];
   private menu: HTMLElement | null = null;
+  private lastCell: HTMLTableCellElement | null = null;
 
   constructor() {
     super();
@@ -239,6 +240,14 @@ export class FolioDoc extends HTMLElement {
             td.classList.add("num");
           }
           td.textContent = String(v ?? "");
+          // Nested editable, focusable leaf: the cell (not the
+          // article) holds focus while it is edited, so blur-based
+          // commits and Tab/Enter navigation are real. Without
+          // tabindex the browser keeps focus on the article, cell
+          // edits never commit, and Tab escapes to the host page
+          // toolbar.
+          td.contentEditable = "true";
+          td.tabIndex = -1;
         }
         td.addEventListener("blur", this.handleCellBlur, true);
         tr.appendChild(td);
@@ -246,6 +255,51 @@ export class FolioDoc extends HTMLElement {
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
+    // Browsers hand click focus to the article (the outer editing
+    // host), so cell commits and Tab/Enter navigation would never see
+    // a focused cell. Focus the clicked data cell ourselves: record
+    // on mousedown, focus on mouseup, and restore the caret at the
+    // click position (unless the mouse was dragged, which means the
+    // user was selecting text - leave the selection alone).
+    table.addEventListener("focusin", (ev) => {
+      const cell = (ev.target as HTMLElement).closest(
+        "td[data-row-index]",
+      ) as HTMLTableCellElement | null;
+      if (cell) this.lastCell = cell;
+    });
+    let cellClick: {
+      cell: HTMLTableCellElement;
+      x: number;
+      y: number;
+    } | null = null;
+    table.addEventListener("mousedown", (ev) => {
+      const cell = (ev.target as HTMLElement).closest(
+        "td[data-row-index]",
+      ) as HTMLTableCellElement | null;
+      if (cell && cell.contentEditable === "true") {
+        cellClick = { cell, x: ev.clientX, y: ev.clientY };
+      }
+    });
+    table.addEventListener("mouseup", (ev) => {
+      const pending = cellClick;
+      cellClick = null;
+      if (!pending) return;
+      const dragged =
+        Math.hypot(ev.clientX - pending.x, ev.clientY - pending.y) > 3;
+      pending.cell.focus();
+      if (!dragged) {
+        const range = document.caretRangeFromPoint(pending.x, pending.y);
+        if (range && pending.cell.contains(range.startContainer)) {
+          const sel = window.getSelection();
+          sel?.setBaseAndExtent(
+            range.startContainer,
+            range.startOffset,
+            range.startContainer,
+            range.startOffset,
+          );
+        }
+      }
+    });
     figure.appendChild(table);
     if (block.table.caption) {
       const cap = document.createElement("figcaption");
@@ -325,6 +379,19 @@ export class FolioDoc extends HTMLElement {
     const idx = Number(figure?.dataset.blockIndex ?? -1);
     const block = this.doc.blocks[idx];
     if (!block || block.kind !== "table") return;
+    this.commitCell(td, block);
+  }
+
+  /**
+   * Write the cell's text into the model. Idempotent, and surgical:
+   * the edited cell is the live DOM, so committing must not re-render
+   * the table (that would destroy the caret mid-typing). Only the
+   * row's formula cells and the charts are refreshed in place.
+   */
+  private commitCell(
+    td: HTMLTableCellElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
     const r = Number(td.dataset.rowIndex);
     const c = Number(td.dataset.colIndex);
     const col = block.table.columns[c];
@@ -334,9 +401,79 @@ export class FolioDoc extends HTMLElement {
       ? parseFloat(text)
       : text;
     const row = block.table.rows[r];
-    if (row) row[c] = value;
-    this.refreshTableBlock(figure, block);
+    if (!row) return;
+    if (row[c] === value) return;
+    row[c] = value;
+    this.updateRowCalculations(td.closest("figure"), block, r);
     this.emitChange();
+  }
+
+  /** Refresh the row's formula cells and dependent charts in place. */
+  private updateRowCalculations(
+    figure: HTMLElement | null,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    r: number,
+  ): void {
+    const recalced = recalcTable(block.table);
+    block.table.columns.forEach((col, c) => {
+      if (col.type !== "formula") return;
+      const cell = figure?.querySelector(
+        `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
+      );
+      if (!cell) return;
+      const v = recalced.rows[r]?.[c];
+      cell.textContent =
+        col.format === "percent" && typeof v === "number"
+          ? `${(v * 100).toFixed(1)}%`
+          : String(v ?? "");
+      cell.classList.toggle("num", typeof v === "number");
+    });
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const chartFigures = Array.from(
+      host?.querySelectorAll<HTMLElement>("[data-chart-source]") ?? [],
+    );
+    for (const cf of chartFigures) {
+      this.drawChart(cf);
+    }
+  }
+
+  /**
+   * The cell a keyboard event applies to. Engines move focus to the
+   * article when text is typed into a nested editable cell (the
+   * caret stays in the cell), so the event target is often the
+   * article: resolve in order - the event target, the caret (via the
+   * shadow root's selection, Chromium), then the last focused cell
+   * while focus is still inside this component (WebKitGTK has no
+   * pierceable selection API at all).
+   */
+  private resolveCell(target: EventTarget | null): HTMLTableCellElement | null {
+    if (target instanceof Element) {
+      const td = target.closest(
+        "td[data-row-index]",
+      ) as HTMLTableCellElement | null;
+      if (td) return td;
+    }
+    const root = this.shadowRoot as
+      | (ShadowRoot & {
+          getSelection?: () => Selection | null;
+        })
+      | null;
+    const sel = root?.getSelection?.();
+    let n: Node | null = sel?.anchorNode ?? null;
+    while (n !== null && !(n instanceof HTMLTableCellElement)) {
+      n = n.parentNode;
+    }
+    if (n instanceof HTMLTableCellElement && n.dataset.rowIndex !== undefined) {
+      return n;
+    }
+    if (
+      this.lastCell !== null &&
+      this.shadowRoot?.contains(this.lastCell) === true &&
+      this.shadowRoot?.activeElement !== null
+    ) {
+      return this.lastCell;
+    }
+    return null;
   }
 
   private refreshTableBlock(
@@ -390,7 +527,38 @@ export class FolioDoc extends HTMLElement {
   }
 
   private handleKeydown(ev: KeyboardEvent): void {
-    if (ev.key !== "Enter" || !this.doc) return;
+    if (!this.doc) return;
+    const cell = this.resolveCell(ev.target);
+    if (cell) {
+      // Ctrl/Cmd+A with the caret in a cell selects the CELL, not the
+      // whole article: the article is the browser's editing host, and
+      // a document-wide select-all from a cell risks replacing the
+      // entire document with the next keystroke.
+      if (ev.key.toLowerCase() === "a" && (ev.ctrlKey || ev.metaKey)) {
+        // Select the cell via the shadow root's selection only: the
+        // document-level selection cannot write ranges inside the
+        // shadow tree, and on WebKitGTK doing so corrupts the caret
+        // and sends typed text into the light DOM. Where no shadow
+        // selection exists, select-all stays inert rather than
+        // destructive.
+        ev.preventDefault();
+        const root = this.shadowRoot as
+          | (ShadowRoot & {
+              getSelection?: () => Selection | null;
+            })
+          | null;
+        const sel = root?.getSelection?.();
+        if (sel) {
+          const range = document.createRange();
+          range.selectNodeContents(cell);
+          sel.removeAllRanges();
+          sel.addRange(range);
+        }
+      }
+      this.handleTableNav(ev, cell);
+      return;
+    }
+    if (ev.key !== "Enter") return;
     const el = (ev.target as HTMLElement).closest(
       "[data-block-index]",
     ) as HTMLElement | null;
@@ -427,6 +595,111 @@ export class FolioDoc extends HTMLElement {
       sel?.removeAllRanges();
       sel?.addRange(range);
     }
+  }
+
+  /**
+   * Keyboard navigation inside tables (spec: docs/specs/
+   * table-keyboard.md): Tab/Shift+Tab move across editable cells
+   * (formula columns are skipped), Enter moves down a row; both grow
+   * the table when moving past the last row. Commits the current
+   * cell (and recalculates formulas) before moving.
+   */
+  private handleTableNav(ev: KeyboardEvent, td: HTMLTableCellElement): void {
+    if (ev.key !== "Tab" && ev.key !== "Enter") return;
+    const figure = td.closest("figure") as HTMLElement | null;
+    if (!figure) return;
+    const idx = Number(figure.dataset.blockIndex ?? -1);
+    const block = this.doc?.blocks[idx];
+    if (!block || block.kind !== "table") return;
+    const cols = block.table.columns;
+    const editable = cols
+      .map((c, i) => (c.type !== "formula" ? i : -1))
+      .filter((i) => i >= 0);
+    if (editable.length === 0) return;
+    ev.preventDefault();
+    this.commitCell(td, block);
+    let r = Number(td.dataset.rowIndex);
+    let c = Number(td.dataset.colIndex);
+    let needsRender = false;
+    if (ev.key === "Enter") {
+      if (ev.shiftKey) {
+        r = Math.max(0, r - 1);
+      } else {
+        r += 1;
+        if (r >= block.table.rows.length) {
+          block.table.rows.push(cols.map(() => ""));
+          needsRender = true;
+        }
+      }
+    } else if (ev.shiftKey) {
+      const prev = editable.filter((i) => i < c);
+      if (prev.length > 0) {
+        c = prev[prev.length - 1] ?? 0;
+      } else {
+        const prevRow = r - 1;
+        if (prevRow < 0) return; // leave focus movement to the browser
+        r = prevRow;
+        c = editable[editable.length - 1] ?? 0;
+      }
+    } else {
+      const next = editable.filter((i) => i > c);
+      if (next.length > 0) {
+        c = next[0] ?? 0;
+      } else {
+        const nextRow = r + 1;
+        if (nextRow >= block.table.rows.length) {
+          block.table.rows.push(cols.map(() => ""));
+          needsRender = true;
+        }
+        r = nextRow;
+        c = editable[0] ?? 0;
+      }
+    }
+    if (needsRender) {
+      const host = figure.parentElement;
+      this.refreshTableBlock(
+        (host?.querySelector(
+          `figure[data-block-index="${String(idx)}"]`,
+        ) as HTMLElement | null) ?? null,
+        block,
+      );
+      this.emitChange();
+    }
+    if (!this.caretFollowsFocus()) {
+      // WebKitGTK: JavaScript cannot move the caret into a cell - no
+      // selection API pierces the shadow root and focus does not
+      // carry the caret. Tab/Enter commit the cell (recalculating
+      // formulas, growing the table at the edges) and keep the caret
+      // in place; the user clicks the next cell. Moving focus without
+      // the caret would send typed text into the wrong cell or
+      // nowhere at all.
+      return;
+    }
+    this.focusCell(idx, r, c);
+  }
+
+  /**
+   * Whether focusing a cell also moves the caret into it (so typing
+   * after Tab/Enter lands in the focused cell). True in Chromium;
+   * false in WebKitGTK.
+   */
+  private caretFollowsFocus(): boolean {
+    return (
+      typeof (
+        ShadowRoot.prototype as unknown as {
+          getSelection?: unknown;
+        }
+      ).getSelection === "function"
+    );
+  }
+
+  private focusCell(idx: number, r: number, c: number): void {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const figure = host?.children[idx] as HTMLElement | undefined;
+    const cell = figure?.querySelector(
+      `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
+    ) as HTMLTableCellElement | null;
+    cell?.focus();
   }
 
   private caretOffsetIn(el: HTMLElement): number {

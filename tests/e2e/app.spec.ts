@@ -334,3 +334,75 @@ test.describe("toolbar context state and actions", () => {
     expect(source).toContain("Midlands");
   });
 });
+
+test.describe("table editing and keyboard navigation", () => {
+  const td = (r: number, c: number) =>
+    `#the-doc td[data-row-index="${r}"][data-col-index="${c}"]`;
+
+  function focusedCell(page: Page): Promise<string> {
+    return page.evaluate(() => {
+      const a = document.querySelector("folio-doc")?.shadowRoot?.activeElement;
+      const el = a as HTMLElement;
+      return `${el.dataset.rowIndex ?? "?"}:${el.dataset.colIndex ?? "?"}`;
+    });
+  }
+
+  test("cell edits commit, formulas recalculate, data survives the Markdown view", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await page.locator(td(0, 1)).click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("400");
+    await page.keyboard.press("Tab");
+
+    // Tab moved to the next editable cell (q3), not the toolbar.
+    expect(await focusedCell(page)).toBe("0:2");
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("500");
+    await page.keyboard.press("Tab");
+
+    // From q3 (last editable col) Tab wraps to the next row's first cell.
+    expect(await focusedCell(page)).toBe("1:0");
+
+    // The formula column recalculated for the edited row.
+    await expect(page.locator(td(0, 3))).toHaveText("25.0%");
+    await expect(
+      page.locator("folio-doc figure svg[role='img']").first(),
+    ).toBeVisible();
+
+    // Nothing is lost on the Markdown round-trip.
+    await page.locator("#btn-markdown").click();
+    const source = await page.locator("#editor").inputValue();
+    expect(source).toContain("[North, 400, 500]");
+    expect(source).not.toContain("412");
+  });
+
+  test("Tab past the last row grows the table", async ({ page }) => {
+    await waitForDocument(page);
+
+    const before = await page.locator("#the-doc tbody tr").count();
+    await page.locator(td(2, 2)).click();
+    await page.keyboard.press("Tab");
+
+    expect(await focusedCell(page)).toBe("3:0");
+    await expect(page.locator("#the-doc tbody tr")).toHaveCount(before + 1);
+  });
+
+  test("Enter moves down a column and grows the table at the bottom", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await page.locator(td(0, 0)).click();
+    await page.keyboard.press("Enter");
+    expect(await focusedCell(page)).toBe("1:0");
+
+    const before = await page.locator("#the-doc tbody tr").count();
+    await page.locator(td(2, 1)).click();
+    await page.keyboard.press("Enter");
+    expect(await focusedCell(page)).toBe("3:1");
+    await expect(page.locator("#the-doc tbody tr")).toHaveCount(before + 1);
+  });
+});
