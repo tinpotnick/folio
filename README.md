@@ -43,6 +43,23 @@ source with code-editor highlighting; switch back to re-parse.
 **Download .md** exports the doc. **☰ Sections** toggles the
 section browser sidebar.
 
+## Tests
+
+```bash
+just test        # engine + render unit tests (vitest)
+just test-e2e    # Playwright end-to-end tests of the host page
+just lint        # eslint + prettier
+just build       # type-check + production web build
+```
+
+The Playwright suite (`tests/e2e/`) drives the demo host page in a
+real browser: document rendering (table, chart), the Markdown source
+view and its parse round-trip, the section browser, toolbar actions,
+Download .md export, and the web degradation of the desktop-only
+Open/Save buttons. It starts its own Vite dev server on port 5173
+(`npx playwright test`); Chromium is installed via
+`npx playwright install chromium`.
+
 ### Desktop app (Tauri)
 
 The same UI as a native window with Open…/Save… file dialogs.

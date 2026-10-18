@@ -1,10 +1,8 @@
-/**
- * folio desktop host — Tauri v2 (ADR-0006: our apps are hosts of the
- * <folio-doc> web component). The web UI is the same demo host page;
- * this shell adds native Open/Save so documents are real local files.
- * No engine logic lives here (ADR-0001): the document stays the
- * single source of truth, read and written as plain Markdown text.
- */
+//! folio desktop host — Tauri v2 (ADR-0006: our apps are hosts of the
+//! `<folio-doc>` web component). The web UI is the same demo host page;
+//! this shell adds native Open/Save so documents are real local files.
+//! No engine logic lives here (ADR-0001): the document stays the
+//! single source of truth, read and written as plain Markdown text.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri_plugin_dialog::DialogExt;
