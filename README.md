@@ -56,9 +56,9 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential \
   libxdo-dev libssl-dev libayatana-appindicator3-dev \
   librsvg2-dev pkg-config
 # Fedora:
-sudo dnf install webkit2gtk4.1-devel gcc gcc-c++ \
-  libxdo-devel openssl-devel libappindicator-gtk3-devel \
-  librsvg2-devel pkgconf-pkg-config
+sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
+  libappindicator-gtk3-devel librsvg2-devel libxdo-devel \
+  gcc gcc-c++ pkgconf-pkg-config
 
 # macOS — Xcode Command Line Tools (webview is built into macOS)
 xcode-select --install
