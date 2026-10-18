@@ -108,22 +108,57 @@ type ShadowRootWithSelection = ShadowRoot & {
   getSelection?: () => Selection | null;
 };
 
+type SelectionWithComposedRanges = Selection & {
+  getComposedRanges?: () => { startContainer: Node }[];
+};
+
 /**
  * The caret anchor inside the document article, robust across
- * engines: Chromium's document-level selection is adjusted to the
- * light DOM when the caret is in the shadow root, while WebKit's
- * shadow selection may be missing. Take whichever source actually
- * anchors inside the article.
+ * engines. Chromium's document-level selection is adjusted to the
+ * light DOM when the caret is in the shadow root; WebKit exposes the
+ * inner anchor differently by version. Try each source and take the
+ * first one that actually anchors inside the article; as a last
+ * resort resolve the caret from the pointer position.
  */
-function docSelectionAnchor(host: HTMLElement): Node | null {
-  const inside = (sel: Selection | null | undefined): Node | null => {
-    const n = sel?.anchorNode ?? null;
-    return n !== null && host.contains(n) ? n : null;
-  };
+function docSelectionAnchor(
+  host: HTMLElement,
+  point?: { x: number; y: number },
+): Node | null {
+  const inside = (n: Node | null): Node | null =>
+    n !== null && host.contains(n) ? n : null;
   const shadowSel = (
     el.shadowRoot as ShadowRootWithSelection | null
   )?.getSelection?.();
-  return inside(shadowSel) ?? inside(window.getSelection());
+  const shadowAnchor = inside(shadowSel?.anchorNode ?? null);
+  if (shadowAnchor !== null) return shadowAnchor;
+  const docSel = document.getSelection();
+  const docAnchor = inside(docSel?.anchorNode ?? null);
+  if (docAnchor !== null) return docAnchor;
+  // Selection.getComposedRanges() pierces shadow roots where present.
+  for (const r of (
+    docSel as SelectionWithComposedRanges | null
+  )?.getComposedRanges?.() ?? []) {
+    const n = inside(r.startContainer);
+    if (n !== null) return n;
+  }
+  if (point) {
+    const n = inside(nodeAtPoint(point.x, point.y));
+    if (n !== null) return n;
+  }
+  return null;
+}
+
+/**
+ * Hit-test caret resolution for engines whose selection APIs only
+ * expose retargeted (shadow-boundary) positions: caretRangeFromPoint
+ * and caretPositionFromPoint resolve through the flat tree, so they
+ * can see inside the open shadow root.
+ */
+function nodeAtPoint(x: number, y: number): Node | null {
+  const range = document.caretRangeFromPoint(x, y);
+  if (range) return range.startContainer;
+  const caret = document.caretPositionFromPoint(x, y);
+  return caret ? caret.offsetNode : null;
 }
 
 const blockBar = requireEl<HTMLElement>("#block-bar");
@@ -166,7 +201,7 @@ fmtBar.addEventListener("mousedown", (ev) => {
   }
 });
 
-function reflectToolbarState(): void {
+function reflectToolbarState(point?: { x: number; y: number }): void {
   const inDoc = currentEditable() !== null;
   const inMd = document.activeElement === editor;
   const blockButtons = blockBar.querySelectorAll("button");
@@ -182,7 +217,7 @@ function reflectToolbarState(): void {
   if (inDoc) {
     const root = el.shadowRoot;
     const host = root?.querySelector<HTMLElement>("article.folio-doc") ?? null;
-    let node: Node | null = host ? docSelectionAnchor(host) : null;
+    let node: Node | null = host ? docSelectionAnchor(host, point) : null;
     // Semantic, markdown-true inline detection: walk the ancestors for
     // STRONG/EM/CODE. queryCommandState reports rendered boldness
     // (headings render bold), which lit B on H1 lines and differs
@@ -259,7 +294,13 @@ document.addEventListener("selectionchange", () => {
     setTimeout(reflectToolbarState, 0);
   }
 });
-el.addEventListener("pointerup", () => setTimeout(reflectToolbarState, 0));
+el.addEventListener("pointerup", (ev) =>
+  setTimeout(() => {
+    const p =
+      ev instanceof PointerEvent ? { x: ev.clientX, y: ev.clientY } : undefined;
+    reflectToolbarState(p);
+  }, 0),
+);
 el.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
 editor.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
 editor.addEventListener("click", () => setTimeout(reflectToolbarState, 0));

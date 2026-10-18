@@ -20,11 +20,14 @@ view, and the buttons were inert in Markdown view.
     it reports rendered boldness (headings render bold — which lit B
     on H1 lines) and differs between engines (Chromium vs WebKit,
     i.e. web vs desktop).
-  - The selection anchor is resolved robustly across engines:
-    `shadowRoot.getSelection()` first, falling back to
-    `document.getSelection()`; whichever actually anchors inside the
-    article wins (Chromium adjusts the document-level selection to
-    the light DOM).
+  - The selection anchor is resolved robustly across engines, in
+    order: `shadowRoot.getSelection()`, `document.getSelection()`
+    (Chromium adjusts it to the light DOM when the caret is in the
+    shadow root), `Selection.getComposedRanges()` where present, and
+    — for pointer-driven updates — the caret at the pointer position
+    via `caretRangeFromPoint`/`caretPositionFromPoint`, which resolve
+    through the flat tree and see inside the open shadow root.
+    Whichever source actually anchors inside the article wins.
   - **Inline buttons disable on complete block formats:** when the
     caret's block is a heading (H1–H6) or a code block (`PRE`), the
     B/I/code buttons are disabled — the markdown carries no inline
