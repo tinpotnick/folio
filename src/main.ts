@@ -7,6 +7,7 @@ import "./component.js";
 import type { FolioDoc } from "./component.js";
 import { parseDoc, serializeDoc } from "./engine/doc.js";
 import { highlightMarkdown } from "./render/highlight.js";
+import { isDesktop, openDocument, saveDocument } from "./desktop.js";
 
 function requireEl<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -266,6 +267,33 @@ window.addEventListener("resize", reflectActiveSection, { passive: true });
 const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
 btnSidebar.addEventListener("click", () => {
   sidebar.hidden = !sidebar.hidden;
+});
+
+/* --- Desktop (Tauri) bridge: native Open/Save (ADR-0006) --- */
+
+const btnOpen = requireEl<HTMLButtonElement>("#btn-open");
+const btnSave = requireEl<HTMLButtonElement>("#btn-save");
+
+if (isDesktop()) {
+  btnOpen.hidden = false;
+  btnSave.hidden = false;
+  btnDl.hidden = true;
+}
+
+btnOpen.addEventListener("click", async () => {
+  const text = await openDocument();
+  if (text === null) return;
+  await el.load(text);
+  editor.value = text;
+  refreshOutline();
+  flash("Opened document");
+});
+
+btnSave.addEventListener("click", async () => {
+  const md = el.getMarkdown();
+  if (md === null) return;
+  const path = await saveDocument(md);
+  if (path !== null) flash(`Saved ${path}`);
 });
 
 refreshOutline();

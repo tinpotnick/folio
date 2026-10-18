@@ -43,13 +43,22 @@ source with code-editor highlighting; switch back to re-parse.
 **Download .md** exports the doc. **☰ Sections** toggles the
 section browser sidebar.
 
+### Desktop app (Tauri)
+
+The same UI as a native window with Open…/Save… file dialogs:
+
+```
+npm run dev:desktop    # requires the webview libs in apps/desktop/README.md
+npm run build:desktop  # bundles the installable app
+```
+
 What works in this first build:
 - Document parse/serialize with lossless round-trip (golden-tested)
 - Typed tables with formula columns (recalc on every edit)
 - Charts as queries over tables (SVG, publication-oriented)
 - Theme from document frontmatter (closed schema; no style literals
   ever live in the document)
-- `<folio-doc>` web component: embed it anywhere (ADR-0006)- Section browser: a Word-style sidebar listing every section;  click to zoom to it, collapsible from the toolbar- Markdown source view with VS Code-style syntax highlighting  (frontmatter, headings, emphasis, code, table/chart directives)
+- `<folio-doc>` web component: embed it anywhere (ADR-0006)- Section browser: a Word-style sidebar listing every section;  click to zoom to it, collapsible from the toolbar- Markdown source view with VS Code-style syntax highlighting  (frontmatter, headings, emphasis, code, table/chart directives)- Desktop app: a Tauri v2 host with native Open/Save (ADR-0006)
 
 ## Status
 
