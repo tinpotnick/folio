@@ -176,10 +176,21 @@ fmtBar.addEventListener("mousedown", (ev) => {
   if (!(btn instanceof HTMLButtonElement)) return;
   ev.preventDefault();
   const cmd = btn.dataset.cmd ?? "";
-  const mark = cmd === "bold" ? "**" : cmd === "italic" ? "*" : "`";
+  const mark =
+    cmd === "bold"
+      ? "**"
+      : cmd === "italic"
+        ? "*"
+        : cmd === "strike"
+          ? "~~"
+          : cmd === "underline"
+            ? "++"
+            : "`";
   if (currentEditable()) {
     if (cmd === "code") {
       document.execCommand("formatBlock", false, "pre");
+    } else if (cmd === "strike") {
+      document.execCommand("strikeThrough");
     } else {
       document.execCommand(cmd);
     }
@@ -223,6 +234,8 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
         if (name === "STRONG") inline = "bold";
         else if (name === "EM") inline = "italic";
         else if (name === "CODE") inline = "code";
+        else if (name === "DEL") inline = "strike";
+        else if (name === "INS") inline = "underline";
       }
       node = node.parentNode;
     }
@@ -265,7 +278,13 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
   for (const tok of mdLine?.tokens ?? []) {
     const tokEnd = acc + tok.text.length;
     if (col >= acc && col <= tokEnd) {
-      if (tok.kind === "bold" || tok.kind === "italic" || tok.kind === "code") {
+      if (
+        tok.kind === "bold" ||
+        tok.kind === "italic" ||
+        tok.kind === "code" ||
+        tok.kind === "strike" ||
+        tok.kind === "underline"
+      ) {
         fmt = tok.kind;
       }
       break;
@@ -403,7 +422,7 @@ function applyMdLinePrefix(prefix: string): void {
 
 function wordRangeAt(v: string, pos: number): [number, number] {
   const edge = (c: string | undefined): boolean =>
-    c !== undefined && /\S/.test(c) && c !== "*" && c !== "`";
+    c !== undefined && /[\w'-]/.test(c);
   let s = pos;
   let e = pos;
   while (edge(v[s - 1])) s -= 1;

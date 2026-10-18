@@ -18,3 +18,18 @@ describe("inlineMarkdownToHtml", () => {
     expect(inlineMarkdownToHtml("just words")).toBe("just words");
   });
 });
+
+// @vitest-environment happy-dom
+describe("inlineMarkdownToHtml markdown+ formats", () => {
+  it("converts strikethrough and underline", () => {
+    expect(inlineMarkdownToHtml("~~gone~~ ++added++")).toBe(
+      "<del>gone</del> <ins>added</ins>",
+    );
+  });
+
+  it("round-trips strikethrough and underline through the HTML seam", async () => {
+    const { htmlToInlineMarkdown } = await import("@folio/render/inline");
+    const html = inlineMarkdownToHtml("~~gone~~ ++added++");
+    expect(htmlToInlineMarkdown(html)).toBe("~~gone~~ ++added++");
+  });
+});

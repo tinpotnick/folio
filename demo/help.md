@@ -17,6 +17,9 @@ document — written in the same renderer you are working with.
 
 - **Document view** is the rendered report. Click into any text and
   type; table formulas recalculate as you edit.
+- Inline formats follow GitHub Markdown plus a few documented
+  additions: **bold**, *italic*, `code`, ~~strikethrough~~, and
+  ++underline++ (GitHub has no underline, so folio uses `++`).
 - The block and format buttons (H1, H2, P, B, I, code) always show
   where you are: the button for the block or format at your caret
   lights up — in Document view and in Markdown view alike. On
