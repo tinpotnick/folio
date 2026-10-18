@@ -187,10 +187,16 @@ fmtBar.addEventListener("mousedown", (ev) => {
             ? "++"
             : "`";
   if (currentEditable()) {
-    if (cmd === "strike") {
-      document.execCommand("strikeThrough");
-    } else {
-      document.execCommand(cmd);
+    const tag =
+      cmd === "bold"
+        ? "strong"
+        : cmd === "italic"
+          ? "em"
+          : cmd === "strike"
+            ? "del"
+            : "ins";
+    if (!el.applyInlineFormat(tag)) {
+      flash("Select some text first");
     }
   } else if (document.activeElement === editor) {
     toggleMdWrap(mark);
@@ -295,8 +301,11 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
         if (name === "STRONG") inline = "bold";
         else if (name === "EM") inline = "italic";
         else if (name === "CODE") inline = "code";
-        else if (name === "DEL") inline = "strike";
-        else if (name === "INS") inline = "underline";
+        // execCommand writes <s>/<u>, pasted or re-rendered content
+        // carries <del>/<ins> - both map to the same semantic format.
+        else if (name === "DEL" || name === "S" || name === "STRIKE")
+          inline = "strike";
+        else if (name === "INS" || name === "U") inline = "underline";
       }
       node = node.parentNode;
     }

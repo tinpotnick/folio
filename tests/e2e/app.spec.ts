@@ -622,3 +622,102 @@ test.describe("insert group", () => {
     await expect(page.locator("#btn-code")).toHaveClass(/active/);
   });
 });
+
+async function selectWord(page: Page, word: string): Promise<void> {
+  await page.evaluate((needle) => {
+    const root = document.querySelector("folio-doc")?.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection }) | undefined;
+    const p = root?.querySelector("p");
+    if (!root || !p) return;
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const idx = node.textContent?.indexOf(needle) ?? -1;
+      if (idx >= 0) {
+        root
+          .getSelection?.()
+          ?.setBaseAndExtent(node, idx, node, idx + needle.length);
+        return;
+      }
+      node = walker.nextNode();
+    }
+  }, word);
+}
+
+test.describe("editor fixes", () => {
+  test("Enter at the end of a paragraph appends a new block below it", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("tail text");
+
+    const order = await page.evaluate(() => {
+      const root = document.querySelector("folio-doc")?.shadowRoot;
+      const ps = Array.from(root?.querySelectorAll("p") ?? []).map(
+        (p) => p.textContent ?? "",
+      );
+      return ps.filter((t) => t.includes("Revenue") || t.includes("tail"));
+    });
+    expect(order[0]).toContain("Revenue recovered");
+    expect(order[1]).toBe("tail text");
+  });
+
+  test("applying strikethrough/underline in document view renders and lights the buttons", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await selectWord(page, "Revenue");
+    await page.locator('#fmt-bar button[data-cmd="strike"]').click();
+    await expect(
+      page.locator("folio-doc p del", { hasText: "Revenue" }),
+    ).toBeVisible();
+    await page.locator("folio-doc p del", { hasText: "Revenue" }).click();
+    await expect(
+      page.locator('#fmt-bar button[data-cmd="strike"]'),
+    ).toHaveClass(/active/);
+
+    await selectWord(page, "outage");
+    await page.locator('#fmt-bar button[data-cmd="underline"]').click();
+    await expect(
+      page.locator("folio-doc p ins", { hasText: "outage" }),
+    ).toBeVisible();
+    await page.locator("folio-doc p ins", { hasText: "outage" }).click();
+    await expect(
+      page.locator('#fmt-bar button[data-cmd="underline"]'),
+    ).toHaveClass(/active/);
+
+    // And the semantics survive the round-trip.
+    await page.locator("#btn-markdown").click();
+    const source = await page.locator("#editor").inputValue();
+    expect(source).toMatch(/~~Revenue~~/);
+    expect(source).toMatch(/\+\+outage\+\+/);
+  });
+
+  test("a selected diagram is deleted with Backspace", async ({ page }) => {
+    await waitForDocument(page);
+
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await page.locator("#btn-diagram").click();
+    const figure = page.locator("#the-doc figure.folio-diagram");
+    await expect(figure).toBeVisible();
+
+    await figure.click();
+    await page.keyboard.press("Backspace");
+    await expect(figure).toHaveCount(0);
+    const kinds = await page.evaluate(() =>
+      (
+        document.querySelector("folio-doc") as unknown as {
+          getDoc: () => { blocks: { kind: string }[] };
+        }
+      )
+        .getDoc()
+        .blocks.map((b) => b.kind),
+    );
+    expect(kinds).not.toContain("diagram");
+  });
+});

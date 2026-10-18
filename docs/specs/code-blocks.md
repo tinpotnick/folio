@@ -32,6 +32,12 @@ flattened back to prose - nothing durable happened.
   fences the caret's whole paragraph (blank-line delimited). The
   inline format bar keeps only inline formats; inline code is typed
   as backticks in the source.
+- **Caret offsets**: `caretOffsetIn` reads the caret from the
+  shadow root's selection - the document-level selection is
+  retargeted to the light DOM, which made Enter mis-split blocks
+  (it split even at the end of a paragraph). Where no selection is
+  pierceable (WebKitGTK) it assumes the end of the block so Enter
+  appends instead of splitting wrongly.
 - **Caret resolution**: the block at the caret resolves from the
   event target, the shadow selection, or the last clicked block
   (shadow-root hit testing) - the same engine-aware chain as the

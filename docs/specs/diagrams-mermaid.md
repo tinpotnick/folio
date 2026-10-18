@@ -25,6 +25,10 @@ styling, no HTML in the body (Mermaid runs at securityLevel
 - **Engine** (`src/engine/doc.ts`): `kind: "diagram"`, `diagram:
   { id, text }` - pure parse/serialize, unterminated diagrams are
   parse errors, round-trip identity holds.
+- **Selection & deletion**: diagram figures are selectable
+  (`tabindex="-1"`, focus outline + solid border on selection);
+  Backspace or Delete on a selected diagram removes the block from
+  the model (click a diagram, press Backspace).
 - **Component**: renders `figure.folio-diagram` (non-editable) with
   the raw text as fallback content, then swaps in the rendered SVG
   asynchronously. Mermaid is dynamically imported only when a
