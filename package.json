@@ -23,14 +23,16 @@
     "lint": "eslint src tests && prettier --check src tests",
     "format": "prettier --write src tests",
     "build": "tsc --noEmit && vite build",
-    "ci": "npm run lint && npm test && npm run build"
+    "ci": "npm run lint && npm test && npm run build",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2",
     "@eslint/js": "^9.14.0",
+    "@playwright/test": "^1.64.1",
+    "@tauri-apps/cli": "^2",
     "@types/node": "^26.6.5",
     "eslint": "^9.14.0",
     "happy-dom": "^21.0.3",
