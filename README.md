@@ -40,9 +40,9 @@ report — headings, prose, a live table (edit a cell and every
 formula and the figure recalculate), and a chart generated from a
 query over the table. Toggle to **Markdown** to see and edit the
 source with code-editor highlighting; switch back to re-parse.
-**Download .md** exports the doc. **☰ Sections** toggles the
-section browser sidebar. **? Help** (also the `?` key or `F1`) opens
-the built-in help — which is itself a folio document.
+**☰ Sections** (top left) toggles the section browser sidebar.
+**?** (also the `?` key or `F1`) opens the built-in help — which is
+itself a folio document.
 
 ## Tests
 
@@ -56,7 +56,7 @@ just build       # type-check + production web build
 The Playwright suite (`tests/e2e/`) drives the demo host page in a
 real browser: document rendering (table, chart), the Markdown source
 view and its parse round-trip, the section browser, toolbar actions,
-Download .md export, and the web degradation of the desktop-only
+the in-app help window, and the web degradation of the desktop-only
 Open/Save buttons. It starts its own Vite dev server on port 5173
 (`npx playwright test`); Chromium is installed via
 `npx playwright install chromium`.

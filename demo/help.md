@@ -26,9 +26,10 @@ document — written in the same renderer you are working with.
 
 ## Opening and saving
 
-- **Web:** Download .md saves a copy of the current document.
 - **Desktop app:** Open… loads a .md file from disk; Save… writes
   the current document to a file you choose.
+- **Web:** switch to Markdown view and copy the source — the plain
+  Markdown text is the document.
 
 ## Tables and charts
 

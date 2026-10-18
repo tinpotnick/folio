@@ -19,7 +19,6 @@ const el = requireEl<FolioDoc>("#the-doc");
 const editor = requireEl<HTMLTextAreaElement>("#editor");
 const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
-const btnDl = requireEl<HTMLButtonElement>("#btn-download");
 const status = requireEl<HTMLElement>("#status");
 const sidebar = requireEl<HTMLElement>("#sidebar");
 const outlineBox = requireEl<HTMLElement>("#outline");
@@ -193,18 +192,6 @@ btnTable.addEventListener("click", () => {
   flash("Table inserted");
 });
 
-btnDl.addEventListener("click", () => {
-  const md = el.getMarkdown();
-  if (md === null) return;
-  const blob = new Blob([md], { type: "text/markdown" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "document.md";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  flash("Downloaded document.md");
-});
-
 el.onChange(() => {
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
@@ -277,7 +264,6 @@ const btnSave = requireEl<HTMLButtonElement>("#btn-save");
 if (isDesktop()) {
   btnOpen.hidden = false;
   btnSave.hidden = false;
-  btnDl.hidden = true;
 }
 
 btnOpen.addEventListener("click", async () => {

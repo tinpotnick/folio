@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -26,30 +25,11 @@ test.describe("document view", () => {
     await expect(doc.locator("figure svg[role='img']").first()).toBeVisible();
   });
 
-  test("web degradation: native Open/Save stay hidden, Download is offered", async ({
-    page,
-  }) => {
+  test("web degradation: native Open/Save stay hidden", async ({ page }) => {
     await waitForDocument(page);
     await expect(page.locator("#btn-open")).toBeHidden();
     await expect(page.locator("#btn-save")).toBeHidden();
-    await expect(page.locator("#btn-download")).toBeVisible();
-  });
-
-  test("Download .md exports the current document as Markdown", async ({
-    page,
-  }) => {
-    await waitForDocument(page);
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      page.locator("#btn-download").click(),
-    ]);
-    expect(download.suggestedFilename()).toBe("document.md");
-    const path = await download.path();
-    expect(path).not.toBeNull();
-    if (path === null) return;
-    const text = await readFile(path, "utf8");
-    expect(text).toContain("# Q3 Field Operations Review");
-    expect(text).toContain("::: table {#regional-data}");
+    await expect(page.locator("#btn-help")).toBeVisible();
   });
 
   test("+ Table inserts a table block and confirms via status", async ({
@@ -198,7 +178,7 @@ test.describe("in-app help", () => {
     ).toBeVisible();
     await expect(page.locator("#help-doc figure table").first()).toBeVisible();
     await expect(
-      page.locator("#help-doc p", { hasText: "Download .md" }),
+      page.locator("#help-doc p", { hasText: "copy the source" }),
     ).toBeVisible();
 
     await page.locator("#btn-help-close").click();

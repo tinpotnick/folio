@@ -4,7 +4,7 @@ feature: in-app-help
 steps:
   - Start the demo host with the sample document.
   - Without instructions, look for a way to learn the app.
-  - Click the visible " ? Help" toolbar button.
+  - Click the visible "?" toolbar button.
   - Read how to open and save documents; close the help window.
   - Press the ? key with nothing focused; close with Esc.
 expected:

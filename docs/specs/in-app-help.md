@@ -11,7 +11,7 @@ ADR-0003) and renders it through the same `<folio-doc>` component
 
 ## Contract
 
-- Host: a `? Help` toolbar button and a native `<dialog
+- Host: a `?` toolbar button and a native `<dialog
   id="help-modal">` overlay containing `<folio-doc src="/demo/help.md">`.
 - Shortcuts: `?` and `F1` open help when the user is not typing;
   `Esc` closes it (native dialog behavior). The typing guard pierces
