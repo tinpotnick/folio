@@ -16,7 +16,8 @@ export type DocBlock =
   | { kind: "prose"; text: string }
   | { kind: "code"; lang?: string; text: string }
   | { kind: "table"; table: Table }
-  | { kind: "chart"; chart: Chart };
+  | { kind: "chart"; chart: Chart }
+  | { kind: "diagram"; diagram: { id: string; text: string } };
 
 export interface Doc {
   frontmatter: Frontmatter;
@@ -24,6 +25,7 @@ export interface Doc {
 }
 
 const DIRECTIVE_RE = /^::: (table|chart) \{#([^}]+)\}$/;
+const MERMAID_RE = /^::: mermaid \{#([^}]+)\}$/;
 
 export class ParseError extends Error {
   constructor(
@@ -46,6 +48,22 @@ export function parseDoc(text: string): Doc {
     const line = lines[i] ?? "";
     if (line.trim() === "") {
       i++;
+      continue;
+    }
+    const mm = MERMAID_RE.exec(line.trim());
+    if (mm) {
+      const end = findDirectiveEnd(lines, i + 1);
+      doc.blocks.push({
+        kind: "diagram",
+        diagram: {
+          id: mm[1] ?? "",
+          text: lines
+            .slice(i + 1, end)
+            .join("\n")
+            .trim(),
+        },
+      });
+      i = end + 1;
       continue;
     }
     const m = DIRECTIVE_RE.exec(line);
@@ -288,6 +306,13 @@ function collectProse(lines: string[], start: number): number {
   return i;
 }
 
+function findDirectiveEnd(lines: string[], start: number): number {
+  for (let i = start; i < lines.length; i++) {
+    if ((lines[i] ?? "").trim() === ":::") return i;
+  }
+  throw new ParseError("Unterminated diagram block", start);
+}
+
 function findFenceEnd(lines: string[], start: number): number {
   for (let i = start; i < lines.length; i++) {
     if (/^`{3,}$/.test((lines[i] ?? "").trim())) return i;
@@ -336,6 +361,8 @@ function serializeBlock(block: DocBlock): string {
       return serializeTable(block.table);
     case "chart":
       return serializeChart(block.chart);
+    case "diagram":
+      return `::: mermaid {#${block.diagram.id}}\n${block.diagram.text}\n:::`;
   }
 }
 

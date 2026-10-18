@@ -111,6 +111,8 @@ What works in this first build:
   strikethrough, plus `++underline++` (docs/specs/inline-syntax.md)
 - Fenced code blocks with language tags; the toolbar code button
   converts blocks in place (docs/specs/code-blocks.md)
+- Mermaid diagrams as semantic blocks, rendered offline
+  (docs/specs/diagrams-mermaid.md, ADR-0010)
 - In-app help: a `?` button and `?` / `F1` shortcuts opening
   help as a folio document (docs/specs/in-app-help.md)
 - Context toolbar: H1/H2/P/B/I/code reflect the caret's block and

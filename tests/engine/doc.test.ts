@@ -100,3 +100,19 @@ describe("fenced code blocks", () => {
     expect(() => parseDoc("```\nno end")).toThrow(ParseError);
   });
 });
+
+describe("mermaid diagram blocks", () => {
+  it("parses and round-trips a mermaid directive", () => {
+    const src = "::: mermaid {#flow}\ngraph TD\n  A --> B\n:::\n";
+    const doc = parseDoc(src);
+    expect(doc.blocks[0]).toEqual({
+      kind: "diagram",
+      diagram: { id: "flow", text: "graph TD\n  A --> B" },
+    });
+    expect(serializeDoc(doc)).toBe(src);
+  });
+
+  it("throws on an unterminated diagram", () => {
+    expect(() => parseDoc("::: mermaid {#flow}\ngraph TD")).toThrow(ParseError);
+  });
+});

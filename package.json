@@ -27,7 +27,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2"
+    "@tauri-apps/api": "^2",
+    "mermaid": "^12.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",

@@ -189,6 +189,20 @@ export class FolioDoc extends HTMLElement {
       case "table": {
         return this.renderTable(block, idx);
       }
+      case "diagram": {
+        const figure = document.createElement("figure");
+        figure.className = "folio-diagram";
+        figure.dataset.blockIndex = String(idx);
+        figure.dataset.diagramId = block.diagram.id;
+        // Diagrams are generated output, not editable prose.
+        figure.contentEditable = "false";
+        const holder = document.createElement("div");
+        holder.className = "diagram-holder";
+        holder.textContent = block.diagram.text;
+        figure.appendChild(holder);
+        this.drawDiagram(figure);
+        return figure;
+      }
       case "chart": {
         const figure = document.createElement("figure");
         figure.dataset.blockIndex = String(idx);
@@ -353,6 +367,36 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
+  /**
+   * Render a diagram block with Mermaid (ADR-0010). The library is
+   * loaded lazily via dynamic import so documents without diagrams
+   * never pay for it; it is bundled, so rendering is offline.
+   */
+  private async drawDiagram(figure: HTMLElement): Promise<void> {
+    if (!this.doc) return;
+    const id = figure.dataset.diagramId;
+    const block = this.doc.blocks.find(
+      (b) => b.kind === "diagram" && b.diagram.id === id,
+    );
+    const holder = figure.querySelector<HTMLElement>(".diagram-holder");
+    if (!block || block.kind !== "diagram" || !holder) return;
+    try {
+      const mermaid = (await import("mermaid")).default;
+      mermaid.initialize({ securityLevel: "strict", startOnLoad: false });
+      const { svg } = await mermaid.render(
+        `folio-diagram-${id}`,
+        block.diagram.text,
+      );
+      if (figure.isConnected) holder.innerHTML = svg;
+    } catch (e) {
+      if (figure.isConnected) {
+        holder.textContent = `Diagram error: ${
+          e instanceof Error ? e.message : String(e)
+        }`;
+      }
+    }
+  }
+
   private syncFromDom(): void {
     if (!this.doc) return;
     const host = this.shadowRoot?.querySelector("article.folio-doc");
@@ -362,7 +406,14 @@ export class FolioDoc extends HTMLElement {
       const blocks = this.doc?.blocks;
       if (!blocks) return;
       const block = blocks[idx];
-      if (!block || block.kind === "table" || block.kind === "chart") return;
+      if (
+        !block ||
+        block.kind === "table" ||
+        block.kind === "chart" ||
+        block.kind === "diagram"
+      ) {
+        return;
+      }
       if (block.kind === "code") {
         // innerText keeps rendered line breaks (<br>, wrapped lines
         // only where the DOM actually breaks them).
