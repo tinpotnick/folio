@@ -96,6 +96,8 @@ npm run build:desktop  # bundles the installable app
 What works in this first build:
 - Document parse/serialize with lossless round-trip (golden-tested)
 - Typed tables with formula columns (recalc on every edit)
+- Table entry: click a cell to type; Tab/Enter finish the cell,
+  navigate, and grow the table (docs/specs/table-keyboard.md)
 - Charts as queries over tables (SVG, publication-oriented)
 - Theme from document frontmatter (closed schema; no style literals
   ever live in the document)
