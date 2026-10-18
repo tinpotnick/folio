@@ -14,6 +14,7 @@ export interface Frontmatter {
 export type DocBlock =
   | { kind: "heading"; level: number; text: string }
   | { kind: "prose"; text: string }
+  | { kind: "code"; lang?: string; text: string }
   | { kind: "table"; table: Table }
   | { kind: "chart"; chart: Chart };
 
@@ -54,6 +55,17 @@ export function parseDoc(text: string): Doc {
       if (m[1] === "table") doc.blocks.push(parseTableDirective(body, id));
       else doc.blocks.push(parseChartDirective(body, id));
       i = body.endLine + 1;
+      continue;
+    }
+    const fence = /^`{3,}(\S*)$/.exec(line.trim());
+    if (fence) {
+      const end = findFenceEnd(lines, i + 1);
+      doc.blocks.push({
+        kind: "code",
+        ...(fence[1] ? { lang: fence[1] } : {}),
+        text: lines.slice(i + 1, end).join("\n"),
+      });
+      i = end + 1;
       continue;
     }
     const heading = /^(#{1,6}) (.+)$/.exec(line);
@@ -263,12 +275,24 @@ function collectProse(lines: string[], start: number): number {
   let i = start;
   while (i < lines.length) {
     const line = lines[i] ?? "";
-    if (line.trim() === "" || DIRECTIVE_RE.test(line) || line.startsWith("#")) {
+    if (
+      line.trim() === "" ||
+      DIRECTIVE_RE.test(line) ||
+      line.startsWith("#") ||
+      /^`{3,}/.test(line.trim())
+    ) {
       break;
     }
     i++;
   }
   return i;
+}
+
+function findFenceEnd(lines: string[], start: number): number {
+  for (let i = start; i < lines.length; i++) {
+    if (/^`{3,}$/.test((lines[i] ?? "").trim())) return i;
+  }
+  throw new ParseError("Unterminated code block", start);
 }
 
 function unquote(s: string): string {
@@ -306,6 +330,8 @@ function serializeBlock(block: DocBlock): string {
       return `${"#".repeat(block.level)} ${block.text}`;
     case "prose":
       return block.text;
+    case "code":
+      return "```" + (block.lang ?? "") + "\n" + block.text + "\n```";
     case "table":
       return serializeTable(block.table);
     case "chart":

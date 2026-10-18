@@ -6,6 +6,7 @@
  * transparent-textarea overlay keeps editing native.
  */
 export type MdTokenKind =
+  | "fence"
   | "frontmatter-delim"
   | "frontmatter-key"
   | "heading"
@@ -34,9 +35,20 @@ export function highlightMarkdown(src: string): MdLine[] {
   let inFrontmatter = false;
   let frontmatterSeen = false;
   let directiveDepth = 0;
+  let inFence = false;
   return lines.map((line) => {
     let tokens: MdToken[];
-    if (inFrontmatter) {
+    if (inFence) {
+      if (/^`{3,}$/.test(line.trim())) {
+        inFence = false;
+        tokens = [{ kind: "fence", text: line }];
+      } else {
+        tokens = [{ kind: "code", text: line }];
+      }
+    } else if (/^`{3,}\S*$/.test(line.trim())) {
+      inFence = true;
+      tokens = [{ kind: "fence", text: line }];
+    } else if (inFrontmatter) {
       if (line.trim() === "---") {
         inFrontmatter = false;
         frontmatterSeen = true;

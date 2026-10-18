@@ -46,6 +46,11 @@ document — written in the same renderer you are working with.
 
 - The table button (grid icon in the toolbar) inserts a typed table
   at the cursor.
+- Code blocks use GitHub-style fences (``` with an optional
+  language). In Document view the code button converts the block you
+  are in to a code block and back; Enter adds lines inside it. In
+  Markdown view the code button wraps the selection in backticks
+  (inline code).
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,

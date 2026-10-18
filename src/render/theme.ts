@@ -105,6 +105,22 @@ export function themeCss(theme: Theme): string {
       color: #57606a;
       cursor: default;
     }
+    pre.folio-code {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.9em;
+      background: #f6f8fa;
+      border: 1px solid #e6e8eb;
+      border-radius: 6px;
+      padding: 12px 14px;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      margin: 0.9em 0;
+    }
+    pre.folio-code code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
     code {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 0.9em;
