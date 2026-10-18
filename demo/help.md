@@ -51,7 +51,9 @@ document — written in the same renderer you are working with.
   fences the paragraph you are in).
 - Diagrams are Mermaid blocks: `::: mermaid {#id}` ... `:::` with
   the diagram source in between. They render as figures; edit the
-  source in the Markdown view and switch back to re-render.
+  source in the Markdown view and switch back to re-render. Click a
+  diagram to select it (it gets an outline) and press Backspace or
+  Delete to remove it.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
   splitting it.

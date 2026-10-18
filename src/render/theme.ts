@@ -121,6 +121,17 @@ export function themeCss(theme: Theme): string {
       padding: 0;
       border-radius: 0;
     }
+    figure.folio-diagram {
+      margin: 0.9em 0;
+      padding: 12px;
+      border: 1px dashed #d0d7de;
+      border-radius: 6px;
+      background: #fafbfc;
+    }
+    figure.folio-diagram:focus {
+      outline: 2px solid #1f3fbf;
+      border-style: solid;
+    }
     code {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 0.9em;

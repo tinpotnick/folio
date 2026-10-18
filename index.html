@@ -351,7 +351,9 @@
   </head>
   <body>
     <header>
-      <button id="btn-sidebar" class="plain" title="Toggle the section browser">☰ Sections</button>
+      <button id="btn-sidebar" class="plain" title="Toggle the section browser">
+        ☰ Sections
+      </button>
       <h1>folio</h1>
       <span class="tag">document-first workspace</span>
       <div class="toolbar">
@@ -379,7 +381,10 @@
               stroke-width="1.5"
             >
               <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-              <path d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7" stroke-linecap="round" />
+              <path
+                d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7"
+                stroke-linecap="round"
+              />
             </svg>
           </button>
           <button
@@ -409,7 +414,11 @@
               stroke="currentColor"
               stroke-width="1.5"
             >
-              <path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4" stroke-linecap="round" stroke-linejoin="round" />
+              <path
+                d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
             </svg>
           </button>
         </div>
@@ -462,12 +471,9 @@
             stroke="currentColor"
             stroke-width="1.5"
           >
-            <path d="M2.5 10v3.5h11V10" stroke-linejoin="round" />
-            <path
-              d="M8 1.5V10M4.5 6.5L8 10l3.5-3.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
+            <path d="M2.5 13.5v-11h8.5l2.5 2.5v8.5z" stroke-linejoin="round" />
+            <path d="M5 13.5V9.5h6v4" stroke-linejoin="round" />
+            <path d="M5 2.5v3h4.5v-3" stroke-linejoin="round" />
           </svg>
         </button>
         <button id="btn-help" class="plain" title="Help (?)">?</button>
@@ -482,15 +488,17 @@
         <folio-doc id="the-doc"></folio-doc>
         <div class="md-wrap" id="md-wrap" hidden>
           <div class="md-gutter" id="md-gutter" aria-hidden="true"></div>
-          <pre class="md-view" id="md-view" aria-hidden="true"></pre
-          ><textarea id="editor" class="editor" spellcheck="false"></textarea>
+          <pre class="md-view" id="md-view" aria-hidden="true"></pre>
+          <textarea id="editor" class="editor" spellcheck="false"></textarea>
         </div>
       </main>
     </div>
     <dialog id="help-modal" aria-label="Help">
       <div class="help-head">
         <h2>Help</h2>
-        <button id="btn-help-close" class="plain" title="Close help (Esc)">Close</button>
+        <button id="btn-help-close" class="plain" title="Close help (Esc)">
+          Close
+        </button>
       </div>
       <folio-doc id="help-doc" src="/demo/help.md"></folio-doc>
     </dialog>

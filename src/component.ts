@@ -194,8 +194,12 @@ export class FolioDoc extends HTMLElement {
         figure.className = "folio-diagram";
         figure.dataset.blockIndex = String(idx);
         figure.dataset.diagramId = block.diagram.id;
-        // Diagrams are generated output, not editable prose.
+        // Diagrams are generated output, not editable prose, but
+        // they are selectable (tabindex) so Backspace/Delete on a
+        // selected diagram removes the block.
         figure.contentEditable = "false";
+        figure.tabIndex = -1;
+        figure.title = "Diagram - Backspace or Delete removes it";
         const holder = document.createElement("div");
         holder.className = "diagram-holder";
         holder.textContent = block.diagram.text;
@@ -590,6 +594,66 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * Apply (or remove) an inline semantic format around the current
+   * selection (the toolbar's inline format buttons in document
+   * view). execCommand cannot act on a selection inside the shadow
+   * tree, so this wraps the selection range with the semantic
+   * element directly - or unwraps the matching ancestor when the
+   * selection already carries the format. Returns false when there
+   * is nothing usable to format.
+   */
+  applyInlineFormat(tag: "strong" | "em" | "del" | "ins"): boolean {
+    const root = this.shadowRoot as
+      | (ShadowRoot & {
+          getSelection?: () => Selection | null;
+        })
+      | null;
+    const sel = root?.getSelection?.();
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return false;
+    const anchorEl =
+      sel.anchorNode instanceof Element
+        ? sel.anchorNode
+        : (sel.anchorNode?.parentElement ?? null);
+    const block = anchorEl?.closest("[data-block-index]") as HTMLElement | null;
+    if (!block || block.tagName !== "P") return false;
+
+    const synonyms: Record<string, string[]> = {
+      strong: ["STRONG", "B"],
+      em: ["EM", "I"],
+      del: ["DEL", "S", "STRIKE"],
+      ins: ["INS", "U"],
+    };
+    const tags = synonyms[tag] ?? [];
+    let n: Node | null = sel.anchorNode ?? null;
+    while (n && n !== block) {
+      if (n instanceof Element && tags.includes(n.tagName)) {
+        // Toggle off: unwrap the existing format element.
+        n.replaceWith(...Array.from(n.childNodes));
+        this.syncFromDom();
+        this.emitChange();
+        return true;
+      }
+      n = n.parentNode;
+    }
+    const wrap = document.createElement(tag);
+    try {
+      wrap.appendChild(range.extractContents());
+      range.insertNode(wrap);
+      const after = document.createRange();
+      after.selectNodeContents(wrap);
+      sel.removeAllRanges();
+      sel.addRange(after);
+    } catch {
+      return false;
+    }
+    this.syncFromDom();
+    this.emitChange();
+    return true;
+  }
+
+  /**
    * Toggle the caret's block between prose and a fenced code block
    * (the toolbar's code button in document view).
    */
@@ -684,6 +748,24 @@ export class FolioDoc extends HTMLElement {
 
   private handleKeydown(ev: KeyboardEvent): void {
     if (!this.doc) return;
+    const diagram =
+      ev.target instanceof Element
+        ? (ev.target.closest("figure.folio-diagram") as HTMLElement | null)
+        : null;
+    if (
+      diagram &&
+      (ev.key === "Backspace" || ev.key === "Delete") &&
+      this.doc
+    ) {
+      ev.preventDefault();
+      const idx = Number(diagram.dataset.blockIndex ?? -1);
+      if (idx >= 0) {
+        this.doc.blocks.splice(idx, 1);
+        this.render();
+        this.emitChange();
+      }
+      return;
+    }
     const cell = this.resolveCell(ev.target);
     if (cell) {
       // Ctrl/Cmd+A with the caret in a cell selects the CELL, not the
@@ -875,13 +957,30 @@ export class FolioDoc extends HTMLElement {
   }
 
   private caretOffsetIn(el: HTMLElement): number {
-    const sel = window.getSelection();
-    if (sel === null || sel.rangeCount === 0) return 0;
-    const range = sel.getRangeAt(0).cloneRange();
-    const pre = range.cloneRange();
-    pre.selectNodeContents(el);
-    pre.setEnd(range.endContainer, range.endOffset);
-    return pre.toString().length;
+    // The document-level selection is retargeted to the light DOM
+    // when the caret is inside the shadow tree (Chromium), which
+    // made this return garbage and mis-split blocks on Enter. Read
+    // the caret from the shadow root's selection; if the selection
+    // is not usable/pierceable (WebKitGTK), assume the end of the
+    // block so Enter appends instead of splitting.
+    const root = this.shadowRoot as
+      | (ShadowRoot & {
+          getSelection?: () => Selection | null;
+        })
+      | null;
+    const sel = root?.getSelection?.() ?? window.getSelection();
+    const fallback = el.textContent?.length ?? 0;
+    if (sel === null || sel.rangeCount === 0) return fallback;
+    try {
+      const range = sel.getRangeAt(0).cloneRange();
+      if (!el.contains(range.endContainer)) return fallback;
+      const pre = range.cloneRange();
+      pre.selectNodeContents(el);
+      pre.setEnd(range.endContainer, range.endOffset);
+      return pre.toString().length;
+    } catch {
+      return fallback;
+    }
   }
 
   private handleContextMenu(ev: MouseEvent): void {

@@ -18,6 +18,13 @@ GitHub renders natively, plus folio additions.
 | Underline | `++text++` | `<ins>` | markdown+ (GFM has no underline; `++` follows the markdown-it `ins` convention) |
 | Inline code | `` `text` `` | `<code>` | GFM |
 
+Document-view toolbar buttons apply formats with the Range API
+(`applyInlineFormat` on the component): `execCommand` cannot act on
+a selection inside the shadow tree, so the old path silently did
+nothing. The wrap is semantic (`strong`/`em`/`del`/`ins`), toggles
+off by unwrapping, and the reflection recognizes both the semantic
+tags and their legacy synonyms (`b`, `i`, `s`, `strike`, `u`).
+
 Round-trip: `inlineMarkdownToHtml` / `htmlToInlineMarkdown` in
 `src/render/inline.ts` are inverse across all five formats
 (`<s>`/`<u>` from external pastes map to `~~`/`++` as well).
