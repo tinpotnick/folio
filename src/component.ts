@@ -571,6 +571,25 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * Insert an empty Mermaid diagram block after the caret's block
+   * (the toolbar's diagram button).
+   */
+  insertDiagram(): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
+    this.doc.blocks.splice(at, 0, {
+      kind: "diagram",
+      diagram: {
+        id: `diagram-${Date.now().toString(36)}`,
+        text: "graph TD\n  A --> B",
+      },
+    });
+    this.render();
+    this.emitChange();
+  }
+
+  /**
    * Toggle the caret's block between prose and a fenced code block
    * (the toolbar's code button in document view).
    */

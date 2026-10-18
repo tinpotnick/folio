@@ -31,6 +31,9 @@ styling, no HTML in the body (Mermaid runs at securityLevel
   document contains a diagram - documents without diagrams never
   load it, and it is bundled, so rendering is fully offline
   (ADR-0005).
+- **Toolbar**: the insert group's diagram button inserts a starter
+  `::: mermaid` block (after the caret's block in document view;
+  around the caret's paragraph in Markdown view).
 - **Highlighter**: `::: mermaid` delimiters as directive tokens;
   body lines as code tokens.
 - Broken diagrams show a `Diagram error: ...` message in place -

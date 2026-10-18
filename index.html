@@ -365,19 +365,54 @@
           <button data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
           <button data-cmd="strike" title="Strikethrough"><s>S</s></button>
           <button data-cmd="underline" title="Underline"><u>U</u></button>
-          <button data-cmd="code" title="Code">&#9003;</button>
         </div>
-        <button
-          id="btn-table"
-          class="plain"
-          title="Insert a table"
-          aria-label="Insert a table"
-        >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-            <path d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7" stroke-linecap="round" />
-          </svg>
-        </button>
+        <div class="fmt" id="insert-bar">
+          <button
+            id="btn-table"
+            title="Insert a table"
+            aria-label="Insert a table"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+              <path d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button
+            id="btn-diagram"
+            title="Insert a Mermaid diagram"
+            aria-label="Insert a Mermaid diagram"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <circle cx="4" cy="4" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <path d="M5.4 5.4l5.2 5.2" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button
+            id="btn-code"
+            title="Code block"
+            aria-label="Toggle a code block"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
         <div class="seg" id="view-switch">
           <button id="btn-view" class="active" title="Document view">
             <svg

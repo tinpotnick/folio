@@ -98,6 +98,8 @@ What works in this first build:
 - Typed tables with formula columns (recalc on every edit)
 - Table entry: click a cell to type; Tab/Enter finish the cell,
   navigate, and grow the table (docs/specs/table-keyboard.md)
+- Insert group: table, Mermaid diagram, and code-block builders in
+  the toolbar
 - Charts as queries over tables (SVG, publication-oriented)
 - Theme from document frontmatter (closed schema; no style literals
   ever live in the document)
