@@ -32,7 +32,7 @@ test.describe("document view", () => {
     await expect(page.locator("#btn-help")).toBeVisible();
   });
 
-  test("+ Table inserts a table block and confirms via status", async ({
+  test("Table button inserts a table block and confirms via status", async ({
     page,
   }) => {
     await waitForDocument(page);

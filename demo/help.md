@@ -26,14 +26,16 @@ document — written in the same renderer you are working with.
 
 ## Opening and saving
 
-- **Desktop app:** Open… loads a .md file from disk; Save… writes
-  the current document to a file you choose.
+- **Desktop app:** the Open button (folder icon) loads a .md file
+  from disk; Save (arrow-down icon) writes the current document to
+  a file you choose.
 - **Web:** switch to Markdown view and copy the source — the plain
   Markdown text is the document.
 
 ## Tables and charts
 
-- **+ Table** inserts a typed table at the cursor.
+- The table button (grid icon in the toolbar) inserts a typed table
+  at the cursor.
 - Charts are not widgets — they are queries over a table. Edit the
   table and the figure updates on the next render. There is no run
   button anywhere in folio, and no execution state.
