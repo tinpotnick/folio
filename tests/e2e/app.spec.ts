@@ -215,3 +215,122 @@ test.describe("in-app help", () => {
     await expect(modal).toBeHidden();
   });
 });
+
+test.describe("toolbar context state and actions", () => {
+  const h1Btn = '#block-bar button[data-block="h1"]';
+  const pBtn = '#block-bar button[data-block="p"]';
+  const boldBtn = '#fmt-bar button[data-cmd="bold"]';
+
+  function caretIn(page: Page, needle: string, offset = 1): Promise<void> {
+    return page.evaluate(
+      ({ n, o }) => {
+        const ta = document.querySelector("#editor") as HTMLTextAreaElement;
+        const idx = ta.value.indexOf(n);
+        ta.focus();
+        ta.setSelectionRange(idx + o, idx + o);
+        ta.dispatchEvent(new Event("click", { bubbles: true }));
+      },
+      { n: needle, o: offset },
+    );
+  }
+
+  test("document view: buttons reflect the block and inline format at the caret", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await page
+      .locator("folio-doc h1", { hasText: "Q3 Field Operations Review" })
+      .click();
+    await expect(page.locator(h1Btn)).toHaveClass(/active/);
+    await expect(page.locator(pBtn)).not.toHaveClass(/active/);
+    // Markdown-true: a heading carries no inline emphasis, so B is
+    // neither lit nor available there — even though headings render
+    // in a bold face.
+    await expect(page.locator(boldBtn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeDisabled();
+
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await expect(page.locator(pBtn)).toHaveClass(/active/);
+    await expect(page.locator(h1Btn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeEnabled();
+    await expect(page.locator(boldBtn)).not.toHaveClass(/active/);
+
+    await page.locator("folio-doc strong", { hasText: "Midlands" }).click();
+    await expect(page.locator(boldBtn)).toHaveClass(/active/);
+  });
+
+  test("arrow keys move the reflected block with the caret", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    // Click near the top of the first paragraph line, then walk up to
+    // the heading and back down.
+    await page
+      .locator("folio-doc p", { hasText: "Revenue recovered" })
+      .click({ position: { x: 10, y: 4 } });
+    await expect(page.locator(pBtn)).toHaveClass(/active/);
+
+    await page.keyboard.press("ArrowUp");
+    await expect(page.locator(h1Btn)).toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeDisabled();
+
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator(pBtn)).toHaveClass(/active/);
+    await expect(page.locator(h1Btn)).not.toHaveClass(/active/);
+  });
+
+  test("markdown view: buttons reflect the line prefix and inline token at the caret", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+
+    await caretIn(page, "# Q3 Field Operations Review", 3);
+    await expect(page.locator(h1Btn)).toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeDisabled();
+
+    await caretIn(page, "Revenue recovered", 3);
+    await expect(page.locator(pBtn)).toHaveClass(/active/);
+    await expect(page.locator(h1Btn)).not.toHaveClass(/active/);
+    await expect(page.locator(boldBtn)).toBeEnabled();
+
+    await caretIn(page, "**Midlands**", 5);
+    await expect(page.locator(boldBtn)).toHaveClass(/active/);
+  });
+
+  test("markdown view: H1/P buttons rewrite the line prefix", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+
+    await caretIn(page, "Revenue recovered", 3);
+    await page.locator(h1Btn).click();
+    let source = await page.locator("#editor").inputValue();
+    expect(source).toContain("# Revenue recovered");
+
+    await page.locator(pBtn).click();
+    source = await page.locator("#editor").inputValue();
+    expect(source).toContain("\nRevenue recovered");
+    expect(source).not.toContain("# Revenue recovered");
+  });
+
+  test("markdown view: B toggles ** around the selection", async ({ page }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+
+    await caretIn(page, "Midlands", 2);
+    await page.locator(boldBtn).click();
+    let source = await page.locator("#editor").inputValue();
+    expect(source).toContain("**Midlands**");
+
+    await caretIn(page, "**Midlands**", 5);
+    await page.locator(boldBtn).click();
+    source = await page.locator("#editor").inputValue();
+    expect(source).not.toContain("**Midlands**");
+    expect(source).toContain("Midlands");
+  });
+});

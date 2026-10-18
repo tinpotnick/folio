@@ -66,8 +66,6 @@ function renderHighlight(): void {
   });
 }
 
-editor.addEventListener("input", renderHighlight);
-
 btnView.addEventListener("click", () => {
   if (!editor.hidden) {
     try {
@@ -106,19 +104,70 @@ function currentEditable(): HTMLElement | null {
   return host.contains(root.activeElement) ? host : null;
 }
 
+type ShadowRootWithSelection = ShadowRoot & {
+  getSelection?: () => Selection | null;
+};
+
+type SelectionWithComposedRanges = Selection & {
+  getComposedRanges?: () => { startContainer: Node }[];
+};
+
+/**
+ * The caret anchor inside the document article, robust across
+ * engines. Chromium's document-level selection is adjusted to the
+ * light DOM when the caret is in the shadow root, and WebKitGTK
+ * exposes NO selection or caret API that pierces the shadow
+ * boundary at all (shadowRoot.getSelection is missing there;
+ * getComposedRanges, caretRangeFromPoint, and caretPositionFromPoint
+ * all return shadow-boundary-retargeted nodes — verified against
+ * WebKitGTK 2.54, the Tauri engine). What does pierce in WebKit is
+ * the shadow root's own hit testing, so for pointer-driven updates
+ * elementFromPoint on the shadow root resolves the inner element.
+ */
+function docSelectionAnchor(
+  host: HTMLElement,
+  point?: { x: number; y: number },
+): Node | null {
+  const inside = (n: Node | null): Node | null =>
+    n !== null && host.contains(n) ? n : null;
+  const root = el.shadowRoot as ShadowRootWithSelection | null;
+  const shadowSel = root?.getSelection?.();
+  const shadowAnchor = inside(shadowSel?.anchorNode ?? null);
+  if (shadowAnchor !== null) return shadowAnchor;
+  const docSel = document.getSelection();
+  const docAnchor = inside(docSel?.anchorNode ?? null);
+  if (docAnchor !== null) return docAnchor;
+  // Selection.getComposedRanges() pierces shadow roots where present.
+  for (const r of (
+    docSel as SelectionWithComposedRanges | null
+  )?.getComposedRanges?.() ?? []) {
+    const n = inside(r.startContainer);
+    if (n !== null) return n;
+  }
+  if (point) {
+    const hit = inside(root?.elementFromPoint(point.x, point.y) ?? null);
+    if (hit !== null) return hit;
+  }
+  return null;
+}
+
 const blockBar = requireEl<HTMLElement>("#block-bar");
 blockBar.addEventListener("mousedown", (ev) => {
   const btn = (ev.target as HTMLElement).closest("button");
   if (!(btn instanceof HTMLButtonElement)) return;
   ev.preventDefault();
-  if (!currentEditable()) {
+  if (currentEditable()) {
+    if (btn.dataset.block) {
+      document.execCommand("formatBlock", false, `<${btn.dataset.block}>`);
+    }
+    el.dispatchEvent(new Event("input"));
+  } else if (document.activeElement === editor) {
+    applyMdLinePrefix(
+      btn.dataset.block === "h1" ? "#" : btn.dataset.block === "h2" ? "##" : "",
+    );
+  } else {
     flash("Click into the text first");
-    return;
   }
-  if (btn.dataset.block) {
-    document.execCommand("formatBlock", false, `<${btn.dataset.block}>`);
-  }
-  el.dispatchEvent(new Event("input"));
 });
 
 const fmtBar = requireEl<HTMLElement>("#fmt-bar");
@@ -126,65 +175,265 @@ fmtBar.addEventListener("mousedown", (ev) => {
   const btn = (ev.target as HTMLElement).closest("button");
   if (!(btn instanceof HTMLButtonElement)) return;
   ev.preventDefault();
-  if (!currentEditable()) {
-    flash("Click into the text first");
-    return;
-  }
-  if (btn.dataset.cmd === "code") {
-    document.execCommand("formatBlock", false, "pre");
+  const cmd = btn.dataset.cmd ?? "";
+  const mark = cmd === "bold" ? "**" : cmd === "italic" ? "*" : "`";
+  if (currentEditable()) {
+    if (cmd === "code") {
+      document.execCommand("formatBlock", false, "pre");
+    } else {
+      document.execCommand(cmd);
+    }
+    el.dispatchEvent(new Event("input"));
+  } else if (document.activeElement === editor) {
+    toggleMdWrap(mark);
   } else {
-    document.execCommand(btn.dataset.cmd ?? "");
+    flash("Click into the text first");
   }
-  el.dispatchEvent(new Event("input"));
 });
 
-function reflectToolbarState(): void {
+function reflectToolbarState(point?: { x: number; y: number }): void {
   const inDoc = currentEditable() !== null;
+  const inMd = document.activeElement === editor;
   const blockButtons = blockBar.querySelectorAll("button");
   const fmtButtons = fmtBar.querySelectorAll("button");
-  if (!inDoc) {
+  if (!inDoc && !inMd) {
     blockButtons.forEach((b) => b.classList.remove("active"));
-    fmtButtons.forEach((b) => b.classList.remove("active"));
+    fmtButtons.forEach((b) => {
+      b.classList.remove("active");
+      b.disabled = false;
+    });
     return;
   }
-  const sel = window.getSelection();
-  let node: Node | null = sel?.anchorNode ?? null;
-  const root = el.shadowRoot;
-  const host = root?.querySelector("article.folio-doc") ?? null;
-  while (node && node.parentNode && node.parentNode !== host) {
-    node = node.parentNode;
+  if (inDoc) {
+    const root = el.shadowRoot;
+    const host = root?.querySelector<HTMLElement>("article.folio-doc") ?? null;
+    let node: Node | null = host ? docSelectionAnchor(host, point) : null;
+    // Engines that cannot resolve the inner caret at all (WebKitGTK,
+    // on keyboard navigation) keep the last shown state rather than
+    // blanking the toolbar.
+    if (node === null) return;
+    // Semantic, markdown-true inline detection: walk the ancestors for
+    // STRONG/EM/CODE. queryCommandState reports rendered boldness
+    // (headings render bold), which lit B on H1 lines and differs
+    // between engines.
+    let inline: string | null = null;
+    while (node && node.parentNode && node.parentNode !== host) {
+      if (!inline) {
+        const name = node.nodeName;
+        if (name === "STRONG") inline = "bold";
+        else if (name === "EM") inline = "italic";
+        else if (name === "CODE") inline = "code";
+      }
+      node = node.parentNode;
+    }
+    const tag = node instanceof HTMLElement ? node.tagName : "";
+    blockButtons.forEach((b) => {
+      const want =
+        b.dataset.block === "p" ? "P" : (b.dataset.block ?? "").toUpperCase();
+      b.classList.toggle("active", tag === want);
+    });
+    // Headings and code blocks are complete block formats: the
+    // markdown carries no inline emphasis inside them, so the inline
+    // buttons neither light up nor act there.
+    const noInline = /^H[1-6]$/.test(tag) || tag === "PRE";
+    fmtButtons.forEach((b) => {
+      const cmd = b.dataset.cmd ?? "";
+      const active =
+        cmd === "code"
+          ? tag === "PRE" || (!noInline && inline === "code")
+          : !noInline && cmd === inline;
+      b.disabled = noInline;
+      b.classList.toggle("active", active);
+    });
+    return;
   }
-  const tag = node instanceof HTMLElement ? node.tagName : "";
-  blockButtons.forEach((b) => {
-    const want =
-      b.dataset.block === "p" ? "P" : (b.dataset.block ?? "").toUpperCase();
-    b.classList.toggle("active", tag === want);
-  });
+  // Markdown source view: derive state from the caret position.
+  const v = editor.value;
+  const pos = editor.selectionStart;
+  const [lineStart, lineEnd] = mdLineBounds(pos);
+  const line = v.slice(lineStart, lineEnd);
+  const col = pos - lineStart;
+  let block = "p";
+  if (line.startsWith("## ")) block = "h2";
+  else if (line.startsWith("# ")) block = "h1";
+  blockButtons.forEach((b) =>
+    b.classList.toggle("active", b.dataset.block === block),
+  );
+  const mdLine = highlightMarkdown(line)[0];
+  let fmt: string | null = null;
+  let acc = 0;
+  for (const tok of mdLine?.tokens ?? []) {
+    const tokEnd = acc + tok.text.length;
+    if (col >= acc && col <= tokEnd) {
+      if (tok.kind === "bold" || tok.kind === "italic" || tok.kind === "code") {
+        fmt = tok.kind;
+      }
+      break;
+    }
+    acc = tokEnd;
+  }
+  // Inline toggles do not apply on heading lines — same rule as in
+  // document view.
+  const noInline = line.startsWith("#");
   fmtButtons.forEach((b) => {
     const cmd = b.dataset.cmd ?? "";
-    if (cmd === "code") {
-      b.classList.toggle(
-        "active",
-        node instanceof HTMLElement ? node.tagName === "PRE" : false,
-      );
-    } else {
-      try {
-        b.classList.toggle("active", document.queryCommandState(cmd));
-      } catch {
-        b.classList.remove("active");
-      }
-    }
+    b.disabled = noInline;
+    b.classList.toggle("active", !noInline && cmd !== "" && cmd === fmt);
   });
+}
+
+/* --- Caret hint: arrow-key tracking for engines without a pierceable
+   selection API (WebKitGTK). Clicks resolve the block exactly; arrows
+   move across the article's block elements using their own geometry
+   (block rects and the first line box are readable through the open
+   shadow root, unlike the caret itself). Chromium ignores the hint —
+   its shadow selection is read directly. --- */
+
+let caretHint: { x: number; y: number } | null = null;
+let caretBlock: HTMLElement | null = null;
+
+function blockAtPoint(x: number, y: number): HTMLElement | null {
+  const root = el.shadowRoot;
+  const article = root?.querySelector<HTMLElement>("article.folio-doc") ?? null;
+  const hit = root?.elementFromPoint(x, y) ?? null;
+  if (!article || !hit) return null;
+  let node: Node | null = hit;
+  while (node && node.parentNode !== article) node = node.parentNode;
+  return node instanceof HTMLElement ? node : null;
+}
+
+function firstLineHeight(block: HTMLElement): number {
+  const range = document.createRange();
+  range.selectNodeContents(block);
+  const rect = range.getClientRects()[0];
+  return rect ? rect.height : 20;
 }
 
 document.addEventListener("selectionchange", () => {
   const root = el.shadowRoot;
   if (root?.activeElement?.tagName === "ARTICLE") {
-    setTimeout(reflectToolbarState, 0);
+    setTimeout(() => reflectToolbarState(caretHint ?? undefined), 0);
   }
 });
-el.addEventListener("pointerup", () => setTimeout(reflectToolbarState, 0));
-el.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
+el.addEventListener("pointerup", (ev) =>
+  setTimeout(() => {
+    const p =
+      ev instanceof PointerEvent ? { x: ev.clientX, y: ev.clientY } : undefined;
+    caretHint = p ?? caretHint;
+    if (p) caretBlock = blockAtPoint(p.x, p.y);
+    reflectToolbarState(p);
+  }, 0),
+);
+el.addEventListener("keyup", (ev) =>
+  setTimeout(() => {
+    if (
+      ev instanceof KeyboardEvent &&
+      (ev.key === "ArrowUp" || ev.key === "ArrowDown") &&
+      caretHint !== null
+    ) {
+      if (caretBlock === null) {
+        caretBlock = blockAtPoint(caretHint.x, caretHint.y);
+      }
+      if (caretBlock !== null) {
+        const lh = firstLineHeight(caretBlock);
+        const rect = caretBlock.getBoundingClientRect();
+        const onFirstLine = caretHint.y - rect.top <= lh;
+        const onLastLine = rect.bottom - caretHint.y <= lh;
+        if (ev.key === "ArrowUp" && onFirstLine) {
+          const prev = caretBlock.previousElementSibling;
+          if (prev instanceof HTMLElement) {
+            caretBlock = prev;
+            caretHint = {
+              x: caretHint.x,
+              y: prev.getBoundingClientRect().bottom - 6,
+            };
+          }
+        } else if (ev.key === "ArrowDown" && onLastLine) {
+          const next = caretBlock.nextElementSibling;
+          if (next instanceof HTMLElement) {
+            caretBlock = next;
+            caretHint = {
+              x: caretHint.x,
+              y: next.getBoundingClientRect().top + 6,
+            };
+          }
+        } else {
+          const step = Math.max(lh, 8);
+          caretHint = {
+            x: caretHint.x,
+            y:
+              ev.key === "ArrowUp"
+                ? Math.max(rect.top + 4, caretHint.y - step)
+                : Math.min(rect.bottom - 4, caretHint.y + step),
+          };
+        }
+      }
+    }
+    reflectToolbarState(caretHint ?? undefined);
+  }, 0),
+);
+editor.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
+editor.addEventListener("click", () => setTimeout(reflectToolbarState, 0));
+editor.addEventListener("input", () => {
+  renderHighlight();
+  reflectToolbarState();
+});
+
+/* --- Markdown-view toolbar actions (spec: docs/specs/toolbar-context.md) --- */
+
+function mdLineBounds(pos: number): [number, number] {
+  const v = editor.value;
+  const start = v.lastIndexOf("\n", Math.max(0, pos - 1)) + 1;
+  const nl = v.indexOf("\n", start);
+  return [start, nl < 0 ? v.length : nl];
+}
+
+function applyMdLinePrefix(prefix: string): void {
+  const v = editor.value;
+  const caret = editor.selectionStart;
+  const [start, end] = mdLineBounds(caret);
+  const stripped = v.slice(start, end).replace(/^#{1,6}\s+/, "");
+  const line = prefix === "" ? stripped : `${prefix} ${stripped}`;
+  editor.value = v.slice(0, start) + line + v.slice(end);
+  const delta = line.length - (end - start);
+  editor.setSelectionRange(caret + delta, caret + delta);
+  renderHighlight();
+  reflectToolbarState();
+}
+
+function wordRangeAt(v: string, pos: number): [number, number] {
+  const edge = (c: string | undefined): boolean =>
+    c !== undefined && /\S/.test(c) && c !== "*" && c !== "`";
+  let s = pos;
+  let e = pos;
+  while (edge(v[s - 1])) s -= 1;
+  while (edge(v[e])) e += 1;
+  return [s, e];
+}
+
+function toggleMdWrap(mark: string): void {
+  const v = editor.value;
+  let s = editor.selectionStart;
+  let e = editor.selectionEnd;
+  if (s === e) {
+    const [ws, we] = wordRangeAt(v, s);
+    if (ws === we) return;
+    s = ws;
+    e = we;
+  }
+  const len = mark.length;
+  const wrapped =
+    v.slice(Math.max(0, s - len), s) === mark && v.slice(e, e + len) === mark;
+  if (wrapped) {
+    editor.value = v.slice(0, s - len) + v.slice(s, e) + v.slice(e + len);
+    editor.setSelectionRange(s - len, e - len);
+  } else {
+    editor.value = v.slice(0, s) + mark + v.slice(s, e) + mark + v.slice(e);
+    editor.setSelectionRange(s + len, e + len);
+  }
+  renderHighlight();
+  reflectToolbarState();
+}
 
 const btnTable = requireEl<HTMLButtonElement>("#btn-table");
 btnTable.addEventListener("click", () => {
