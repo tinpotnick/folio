@@ -24,12 +24,14 @@ flattened back to prose - nothing durable happened.
   `innerText` (rendered line breaks become model newlines). Enter
   inside a code block inserts a line break instead of splitting the
   block.
-- **Toolbar**: in document view the code button toggles the caret's
-  block between prose and a code block (model-level; the caret is
-  restored to the block after the re-render). It stays available
-  inside code blocks - it is the way back - while the pure inline
-  formats stay disabled there. In Markdown view the code button
-  keeps its inline meaning: backticks around the selection.
+- **Toolbar**: the code-block button lives in the insert group
+  (table / diagram / code) with a `</>` icon. In document view it
+  toggles the caret's block between prose and a code block
+  (model-level; the caret is restored to the block after the
+  re-render) and reflects the caret's block. In Markdown view it
+  fences the caret's whole paragraph (blank-line delimited). The
+  inline format bar keeps only inline formats; inline code is typed
+  as backticks in the source.
 - **Caret resolution**: the block at the caret resolves from the
   event target, the shadow selection, or the last clicked block
   (shadow-root hit testing) - the same engine-aware chain as the

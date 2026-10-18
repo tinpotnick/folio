@@ -44,16 +44,17 @@ document — written in the same renderer you are working with.
 
 ## Tables and charts
 
-- The table button (grid icon in the toolbar) inserts a typed table
-  at the cursor.
+- The insert group (three icons after the format buttons) holds the
+  block builders: table, Mermaid diagram, and code block. The
+  diagram button inserts a starter diagram; the code button converts
+  the block you are in to a code block and back (in Markdown view it
+  fences the paragraph you are in).
 - Diagrams are Mermaid blocks: `::: mermaid {#id}` ... `:::` with
   the diagram source in between. They render as figures; edit the
   source in the Markdown view and switch back to re-render.
 - Code blocks use GitHub-style fences (``` with an optional
-  language). In Document view the code button converts the block you
-  are in to a code block and back; Enter adds lines inside it. In
-  Markdown view the code button wraps the selection in backticks
-  (inline code).
+  language). Enter adds lines inside a code block instead of
+  splitting it.
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,

@@ -187,12 +187,7 @@ fmtBar.addEventListener("mousedown", (ev) => {
             ? "++"
             : "`";
   if (currentEditable()) {
-    if (cmd === "code") {
-      // Document view: the code button toggles the caret's block
-      // between prose and a fenced code block (model-level, not a
-      // bare <pre> the model would flatten back to prose).
-      el.toggleCodeBlock();
-    } else if (cmd === "strike") {
+    if (cmd === "strike") {
       document.execCommand("strikeThrough");
     } else {
       document.execCommand(cmd);
@@ -203,6 +198,70 @@ fmtBar.addEventListener("mousedown", (ev) => {
     flash("Click into the text first");
   }
 });
+
+/* --- Insert group: table, diagram, code block --- */
+
+const btnDiagram = requireEl<HTMLButtonElement>("#btn-diagram");
+// mousedown (like the format buttons) so the button press never
+// steals focus from the document before the action runs.
+btnDiagram.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  if (currentEditable()) {
+    el.insertDiagram();
+    flash("Diagram inserted");
+    return;
+  }
+  if (document.activeElement !== editor) {
+    flash("Click into the text first");
+    return;
+  }
+  wrapMdLines("::: mermaid {#diagram-new}\n", "\n:::");
+  flash("Diagram inserted");
+});
+
+const btnCodeBlock = requireEl<HTMLButtonElement>("#btn-code");
+btnCodeBlock.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  if (currentEditable()) {
+    el.toggleCodeBlock();
+    return;
+  }
+  if (document.activeElement !== editor) {
+    flash("Click into the text first");
+    return;
+  }
+  wrapMdLines("```\n", "\n```");
+});
+
+/**
+ * Fence the caret's whole paragraph (blank-line delimited) with the
+ * given open/close markers - a physical line alone can split a
+ * wrapped prose block.
+ */
+function wrapMdLines(open: string, close: string): void {
+  const v = editor.value;
+  const caret = editor.selectionStart;
+  const [start0, end0] = mdLineBounds(caret);
+  const lineEmpty = (s: number, e: number): boolean =>
+    v.slice(s, e).trim() === "";
+  let start = start0;
+  while (start > 0) {
+    const prev = mdLineBounds(start - 1);
+    if (lineEmpty(prev[0], prev[1])) break;
+    start = prev[0];
+  }
+  let end = end0;
+  while (end < v.length) {
+    const next = mdLineBounds(end + 1);
+    if (lineEmpty(next[0], next[1])) break;
+    end = next[1];
+  }
+  editor.value =
+    v.slice(0, start) + open + v.slice(start, end) + close + v.slice(end);
+  editor.setSelectionRange(start + open.length, start + open.length);
+  renderHighlight();
+  reflectToolbarState();
+}
 
 function reflectToolbarState(point?: { x: number; y: number }): void {
   const inDoc = currentEditable() !== null;
@@ -253,17 +312,10 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
     const noInline = /^H[1-6]$/.test(tag) || tag === "PRE";
     fmtButtons.forEach((b) => {
       const cmd = b.dataset.cmd ?? "";
-      // In document view the code button toggles the whole block
-      // between prose and a code block, so it stays available even
-      // where inline formats do not apply.
-      const isBlockToggle = cmd === "code";
-      const active =
-        cmd === "code"
-          ? tag === "PRE" || (!noInline && inline === "code")
-          : !noInline && cmd === inline;
-      b.disabled = noInline && !isBlockToggle;
-      b.classList.toggle("active", active);
+      b.disabled = noInline;
+      b.classList.toggle("active", !noInline && cmd === inline);
     });
+    btnCodeBlock.classList.toggle("active", tag === "PRE");
     return;
   }
   // Markdown source view: derive state from the caret position.
@@ -287,7 +339,6 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
       if (
         tok.kind === "bold" ||
         tok.kind === "italic" ||
-        tok.kind === "code" ||
         tok.kind === "strike" ||
         tok.kind === "underline"
       ) {
@@ -300,6 +351,15 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
   // Inline toggles do not apply on heading lines — same rule as in
   // document view.
   const noInline = line.startsWith("#");
+  // The code-block button reflects fence state at the caret.
+  let fenceCount = 0;
+  for (let i = 0; i < lineStart; i++) {
+    if (v[i] === "`" && v[i + 1] === "`" && v[i + 2] === "`") {
+      fenceCount += 1;
+      i += 2;
+    }
+  }
+  btnCodeBlock.classList.toggle("active", fenceCount % 2 === 1);
   fmtButtons.forEach((b) => {
     const cmd = b.dataset.cmd ?? "";
     b.disabled = noInline;

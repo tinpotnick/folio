@@ -469,7 +469,7 @@ test.describe("markdown+ inline formats", () => {
 });
 
 test.describe("code blocks", () => {
-  const codeBtn = '#fmt-bar button[data-cmd="code"]';
+  const codeBtn = "#btn-code";
 
   test("fences in the source render as a code block and round-trip", async ({
     page,
@@ -572,5 +572,53 @@ test.describe("mermaid diagrams", () => {
 
     const figure = page.locator("#the-doc figure.folio-diagram");
     await expect(figure).toContainText("Diagram error", { timeout: 10_000 });
+  });
+});
+
+test.describe("insert group", () => {
+  test("the diagram button inserts a Mermaid block in both views", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await page.locator("#btn-diagram").click();
+    const figure = page.locator("#the-doc figure.folio-diagram");
+    await expect(figure).toBeVisible();
+    await expect(figure.locator(".diagram-holder svg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      page.locator("#status", { hasText: "Diagram inserted" }),
+    ).toBeVisible();
+
+    await page.locator("#btn-markdown").click();
+    const source = await page.locator("#editor").inputValue();
+    expect(source).toContain("::: mermaid {#diagram-");
+
+    // Markdown view: the button wraps the caret's line in a directive.
+    await caretIn(page, "Revenue recovered", 3);
+    await page.locator("#btn-diagram").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "::: mermaid {#diagram-new}",
+    );
+  });
+
+  test("the code button fences the caret's line in Markdown view", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+
+    await caretIn(page, "Revenue recovered", 3);
+    await page.locator("#btn-code").click();
+    // The whole (blank-line delimited) paragraph is fenced.
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "```\nRevenue recovered after the service outage, with the North region\nleading for the second consecutive quarter.\n```",
+    );
+
+    // Inside the fence the button lights up.
+    await caretIn(page, "```\nRevenue recovered", 5);
+    await expect(page.locator("#btn-code")).toHaveClass(/active/);
   });
 });
