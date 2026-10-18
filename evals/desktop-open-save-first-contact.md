@@ -10,7 +10,7 @@ steps:
   - Click "Save…" and choose a location.
 expected:
   - The window shows the same UI as the browser demo, with Open… and
-    Save… buttons instead of Download .md.
+    Save… buttons (no file affordances on plain web).
   - Opening a file loads and renders it, including tables and charts.
   - Saving writes a .md file that re-opens identically (round-trip).
 ---

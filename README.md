@@ -40,8 +40,9 @@ report — headings, prose, a live table (edit a cell and every
 formula and the figure recalculate), and a chart generated from a
 query over the table. Toggle to **Markdown** to see and edit the
 source with code-editor highlighting; switch back to re-parse.
-**Download .md** exports the doc. **☰ Sections** toggles the
-section browser sidebar.
+**☰ Sections** (top left) toggles the section browser sidebar.
+**?** (also the `?` key or `F1`) opens the built-in help — which is
+itself a folio document.
 
 ## Tests
 
@@ -55,7 +56,7 @@ just build       # type-check + production web build
 The Playwright suite (`tests/e2e/`) drives the demo host page in a
 real browser: document rendering (table, chart), the Markdown source
 view and its parse round-trip, the section browser, toolbar actions,
-Download .md export, and the web degradation of the desktop-only
+the in-app help window, and the web degradation of the desktop-only
 Open/Save buttons. It starts its own Vite dev server on port 5173
 (`npx playwright test`); Chromium is installed via
 `npx playwright install chromium`.
@@ -98,7 +99,14 @@ What works in this first build:
 - Charts as queries over tables (SVG, publication-oriented)
 - Theme from document frontmatter (closed schema; no style literals
   ever live in the document)
-- `<folio-doc>` web component: embed it anywhere (ADR-0006)- Section browser: a Word-style sidebar listing every section;  click to zoom to it, collapsible from the toolbar- Markdown source view with VS Code-style syntax highlighting  (frontmatter, headings, emphasis, code, table/chart directives)- Desktop app: a Tauri v2 host with native Open/Save (ADR-0006)
+- `<folio-doc>` web component: embed it anywhere (ADR-0006)
+- Section browser: a Word-style sidebar listing every section;
+  click to zoom to it, collapsible from the toolbar
+- Markdown source view with VS Code-style syntax highlighting
+  (frontmatter, headings, emphasis, code, table/chart directives)
+- Desktop app: a Tauri v2 host with native Open/Save (ADR-0006)
+- In-app help: a `? Help` button and `?` / `F1` shortcuts opening
+  help as a folio document (docs/specs/in-app-help.md)
 
 ## Status
 

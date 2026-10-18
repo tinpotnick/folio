@@ -19,7 +19,6 @@ const el = requireEl<FolioDoc>("#the-doc");
 const editor = requireEl<HTMLTextAreaElement>("#editor");
 const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
-const btnDl = requireEl<HTMLButtonElement>("#btn-download");
 const status = requireEl<HTMLElement>("#status");
 const sidebar = requireEl<HTMLElement>("#sidebar");
 const outlineBox = requireEl<HTMLElement>("#outline");
@@ -193,18 +192,6 @@ btnTable.addEventListener("click", () => {
   flash("Table inserted");
 });
 
-btnDl.addEventListener("click", () => {
-  const md = el.getMarkdown();
-  if (md === null) return;
-  const blob = new Blob([md], { type: "text/markdown" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "document.md";
-  a.click();
-  URL.revokeObjectURL(a.href);
-  flash("Downloaded document.md");
-});
-
 el.onChange(() => {
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
@@ -277,7 +264,6 @@ const btnSave = requireEl<HTMLButtonElement>("#btn-save");
 if (isDesktop()) {
   btnOpen.hidden = false;
   btnSave.hidden = false;
-  btnDl.hidden = true;
 }
 
 btnOpen.addEventListener("click", async () => {
@@ -294,6 +280,38 @@ btnSave.addEventListener("click", async () => {
   if (md === null) return;
   const path = await saveDocument(md);
   if (path !== null) flash(`Saved ${path}`);
+});
+
+/* --- In-app help (spec: docs/specs/in-app-help.md) --- */
+
+const btnHelp = requireEl<HTMLButtonElement>("#btn-help");
+const helpModal = requireEl<HTMLDialogElement>("#help-modal");
+
+function openHelp(): void {
+  if (!helpModal.open) helpModal.showModal();
+}
+
+btnHelp.addEventListener("click", openHelp);
+requireEl<HTMLButtonElement>("#btn-help-close").addEventListener(
+  "click",
+  () => {
+    helpModal.close();
+  },
+);
+
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "?" && ev.key !== "F1") return;
+  const a = document.activeElement;
+  const editable = (node: Element | null | undefined): boolean =>
+    node instanceof HTMLElement &&
+    (node.isContentEditable ||
+      node.tagName === "TEXTAREA" ||
+      node.tagName === "INPUT");
+  // The document's editable surface lives in the component's shadow
+  // root; activeElement then resolves to the host, so pierce it.
+  if (editable(a) || editable(a?.shadowRoot?.activeElement)) return;
+  ev.preventDefault();
+  openHelp();
 });
 
 refreshOutline();

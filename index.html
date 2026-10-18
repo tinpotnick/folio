@@ -291,10 +291,43 @@
       #status.show {
         opacity: 0.9;
       }
+      #help-modal {
+        width: min(860px, calc(100vw - 48px));
+        height: min(80vh, 860px);
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
+        overflow: hidden;
+      }
+      #help-modal::backdrop {
+        background: rgba(31, 35, 40, 0.4);
+      }
+      #help-modal .help-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border-bottom: 1px solid #e6e8eb;
+        background: #fff;
+      }
+      #help-modal .help-head h2 {
+        margin: 0;
+        font-size: 15px;
+      }
+      #help-modal .help-head button {
+        margin-left: auto;
+      }
+      #help-modal folio-doc {
+        padding: 0 28px 28px;
+        height: calc(100% - 50px);
+        overflow-y: auto;
+      }
     </style>
   </head>
   <body>
     <header>
+      <button id="btn-sidebar" class="plain" title="Toggle the section browser">☰ Sections</button>
       <h1>folio</h1>
       <span class="tag">document-first workspace</span>
       <div class="toolbar">
@@ -309,7 +342,6 @@
           <button data-cmd="code" title="Code">&#9003;</button>
         </div>
         <button id="btn-table" class="plain" title="Insert a table">+ Table</button>
-        <button id="btn-sidebar" class="plain" title="Toggle the section browser">☰ Sections</button>
         <div class="seg" id="view-switch">
           <button id="btn-view" class="active" title="Document view">
             <svg
@@ -332,7 +364,7 @@
         </div>
         <button id="btn-open" class="plain" hidden title="Open a .md file">Open…</button>
         <button id="btn-save" class="plain" hidden title="Save to a .md file">Save…</button>
-        <button id="btn-download" class="plain">Download .md</button>
+        <button id="btn-help" class="plain" title="Help (?)">?</button>
       </div>
     </header>
     <div class="layout">
@@ -349,6 +381,13 @@
         </div>
       </main>
     </div>
+    <dialog id="help-modal" aria-label="Help">
+      <div class="help-head">
+        <h2>Help</h2>
+        <button id="btn-help-close" class="plain" title="Close help (Esc)">Close</button>
+      </div>
+      <folio-doc id="help-doc" src="/demo/help.md"></folio-doc>
+    </dialog>
     <div id="status">Saved</div>
     <script type="module" src="/src/main.ts"></script>
   </body>

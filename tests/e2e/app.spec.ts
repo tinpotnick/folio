@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -26,30 +25,11 @@ test.describe("document view", () => {
     await expect(doc.locator("figure svg[role='img']").first()).toBeVisible();
   });
 
-  test("web degradation: native Open/Save stay hidden, Download is offered", async ({
-    page,
-  }) => {
+  test("web degradation: native Open/Save stay hidden", async ({ page }) => {
     await waitForDocument(page);
     await expect(page.locator("#btn-open")).toBeHidden();
     await expect(page.locator("#btn-save")).toBeHidden();
-    await expect(page.locator("#btn-download")).toBeVisible();
-  });
-
-  test("Download .md exports the current document as Markdown", async ({
-    page,
-  }) => {
-    await waitForDocument(page);
-    const [download] = await Promise.all([
-      page.waitForEvent("download"),
-      page.locator("#btn-download").click(),
-    ]);
-    expect(download.suggestedFilename()).toBe("document.md");
-    const path = await download.path();
-    expect(path).not.toBeNull();
-    if (path === null) return;
-    const text = await readFile(path, "utf8");
-    expect(text).toContain("# Q3 Field Operations Review");
-    expect(text).toContain("::: table {#regional-data}");
+    await expect(page.locator("#btn-help")).toBeVisible();
   });
 
   test("+ Table inserts a table block and confirms via status", async ({
@@ -74,7 +54,7 @@ test.describe("markdown source view", () => {
     await waitForDocument(page);
     await page.locator("#btn-markdown").click();
     await expect(page.locator("#editor")).toBeVisible();
-    await expect(page.locator("folio-doc")).toBeHidden();
+    await expect(page.locator("#the-doc")).toBeHidden();
 
     const source = await page.locator("#editor").inputValue();
     expect(source).toContain("# Q3 Field Operations Review");
@@ -128,7 +108,7 @@ test.describe("markdown source view", () => {
 
     await expect(page.locator("#status")).toContainText("Parse error");
     await expect(page.locator("#editor")).toBeVisible();
-    await expect(page.locator("folio-doc")).toBeHidden();
+    await expect(page.locator("#the-doc")).toBeHidden();
   });
 });
 
@@ -181,5 +161,57 @@ test.describe("edits keep the document the single source of truth", () => {
     await page.locator("#btn-markdown").click();
     const source = await page.locator("#editor").inputValue();
     expect(source).toContain("(updated)");
+  });
+});
+
+test.describe("in-app help", () => {
+  test("Help button opens the help document; Close dismisses it", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-help").click();
+
+    const modal = page.locator("#help-modal");
+    await expect(modal).toBeVisible();
+    await expect(
+      page.locator("#help-doc h1", { hasText: "folio help" }),
+    ).toBeVisible();
+    await expect(page.locator("#help-doc figure table").first()).toBeVisible();
+    await expect(
+      page.locator("#help-doc p", { hasText: "copy the source" }),
+    ).toBeVisible();
+
+    await page.locator("#btn-help-close").click();
+    await expect(modal).toBeHidden();
+  });
+
+  test("Esc closes the help window", async ({ page }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-help").click();
+    await expect(page.locator("#help-modal")).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#help-modal")).toBeHidden();
+  });
+
+  test("? and F1 open help; not while typing in the source editor", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const modal = page.locator("#help-modal");
+
+    await page.keyboard.press("?");
+    await expect(modal).toBeVisible();
+    await page.keyboard.press("Escape");
+
+    await page.keyboard.press("F1");
+    await expect(modal).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(modal).toBeHidden();
+
+    await page.locator("#btn-markdown").click();
+    await page.locator("#editor").click();
+    await page.keyboard.press("?");
+    await expect(modal).toBeHidden();
   });
 });
