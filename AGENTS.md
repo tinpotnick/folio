@@ -25,6 +25,10 @@ affordances, ever.
 - Every user-visible change ships a first-contact eval that passes
   (ADR-0009): an agent playing a new user completes the core task
   using only visible affordances
+- Every new user-visible action is a command-palette entry and an
+  in-app-help entry, in the SAME commit — the palette is the menu;
+  a feature that cannot be found by searching for words the user
+  already knows is not done
 - Behavior changed? The corresponding doc (spec/README/help) is
   updated in the SAME commit — doc drift makes the change incomplete
 - Every bug fix adds a test that fails before the fix

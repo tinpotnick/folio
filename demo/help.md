@@ -105,10 +105,17 @@ Chart colors come from the document's style header:
 ### Table formulas
 
 A formula column computes from other columns, cell by cell. The
-grammar is column arithmetic: column names, numbers, `+ - * /`, and
-parentheses — for example `expr: "(q3 - q2) / q2"` with
-`format: percent`. Formulas recalculate the moment a cell they
-depend on changes; formula cells are never editable by hand.
+expression language is **Jexl**: numeric columns by name, `+ - * /`,
+parentheses, comparisons (`>`, `<`, `==`), logic (`and`, `or`,
+`not`), and ternaries — for example
+`q3 > 400 ? "up" : "down"`, or `expr: "(q3 - q2) / q2"` with
+`format: percent`. Transforms apply with a pipe — the pipe binds
+tighter than arithmetic, so parenthesize its operand:
+`((q3 - q2) / q2 * 100) | round(1)` — available transforms are
+`round`, `floor`, `ceil`, `abs`, `min`, `max`. Only numeric
+columns can be referenced; division by zero yields 0 rather than
+an error. Formulas recalculate the moment a cell they depend on
+changes; formula cells are never editable by hand.
 
 ## Search
 

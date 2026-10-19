@@ -1,59 +1,61 @@
 /**
- * Formula recalculation over typed tables (ADR-0003, ADR-0005).
- * Automatic and invisible: no execution affordances; editing a cell
- * updates every dependent formula. Formula columns reference other
- * columns by name.
+ * Formula recalculation over typed tables (ADR-0003, ADR-0005,
+ * ADR-0012). Automatic and invisible: no execution affordances;
+ * editing a cell updates every dependent formula. Formula columns
+ * reference other columns by name and are written in Jexl: column
+ * arithmetic plus comparisons, logic, string operations, and the
+ * transforms registered below.
  */
+import jexl from "jexl";
 import type { Cell, Table } from "./index.js";
 
-export type AstNode =
-  | { kind: "column"; name: string }
-  | { kind: "number"; value: number }
-  | { kind: "bin"; op: "+" | "-" | "*" | "/"; l: AstNode; r: AstNode };
+// The reporting contract predates Jexl: a division by zero is a
+// blank fact, not an error - the formula yields 0 rather than
+// Infinity, so documents with empty denominators keep rendering.
+// Registered at Jexl's default precedence for '/' (40) - a wrong
+// precedence silently regroups every expression.
+jexl.addBinaryOp("/", 40, (l: unknown, r: unknown): number => {
+  const a = Number(l);
+  const b = Number(r);
+  return b === 0 ? 0 : a / b;
+});
+
+// A small, documented transform set (called with the pipe syntax,
+// e.g. "growth * 100 | round()").
+jexl.addTransform("round", (v: unknown, ...args: unknown[]): number =>
+  Number(Number(v).toFixed(Number(args[0] ?? 0))),
+);
+jexl.addTransform("floor", (v: unknown): number => Math.floor(Number(v)));
+jexl.addTransform("ceil", (v: unknown): number => Math.ceil(Number(v)));
+jexl.addTransform("abs", (v: unknown): number => Math.abs(Number(v)));
+jexl.addTransform("min", (a: unknown, ...args: unknown[]): number =>
+  Math.min(Number(a), Number(args[0])),
+);
+jexl.addTransform("max", (a: unknown, ...args: unknown[]): number =>
+  Math.max(Number(a), Number(args[0])),
+);
+
+const TRANSFORMS = new Set(["round", "floor", "ceil", "abs", "min", "max"]);
+const KEYWORDS = new Set(["true", "false", "null", "and", "or", "not", "in"]);
 
 /**
- * Supported grammar (v0): column arithmetic with +, -, *, / and
- * parentheses, e.g. "(q3 - q2) / q2". Whitespace-insensitive.
- * Errors are thrown with context so agents can write precise tests.
+ * Identifiers an expression references. Jexl resolves unknown
+ * context keys to undefined (and then NaN), which would silently
+ * blank the cell; the contract wants a visible error naming the
+ * unknown or non-numeric column, so the references are validated
+ * before evaluation.
  */
-export function parseFormula(expr: string): AstNode {
-  const tokens = tokenize(expr);
-  let pos = 0;
-  const peek = (): string | undefined => tokens[pos];
-  const next = (): string | undefined => tokens[pos++];
-
-  function parseExpr(): AstNode {
-    let left = parseTerm();
-    while (peek() === "+" || peek() === "-") {
-      const op = next() as "+" | "-";
-      left = { kind: "bin", op, l: left, r: parseTerm() };
-    }
-    return left;
+function referencedColumns(expr: string): string[] {
+  const out = new Set<string>();
+  // Scan identifiers outside string literals.
+  const stripped = expr.replace(/'[^']*'|"[^"]*"/g, "");
+  const re = /[A-Za-z_][A-Za-z0-9_]*/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stripped)) !== null) {
+    const name = m[0] ?? "";
+    if (!KEYWORDS.has(name) && !TRANSFORMS.has(name)) out.add(name);
   }
-  function parseTerm(): AstNode {
-    let left = parseFactor();
-    while (peek() === "*" || peek() === "/") {
-      const op = next() as "*" | "/";
-      left = { kind: "bin", op, l: left, r: parseFactor() };
-    }
-    return left;
-  }
-  function parseFactor(): AstNode {
-    const t = next();
-    if (t === undefined) throw new Error("Unexpected end of formula");
-    if (t === "(") {
-      const e = parseExpr();
-      if (next() !== ")") throw new Error("Expected ) in formula");
-      return e;
-    }
-    if (/^[0-9.]+$/.test(t)) return { kind: "number", value: parseFloat(t) };
-    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(t)) return { kind: "column", name: t };
-    throw new Error(`Unexpected token in formula: '${t}'`);
-  }
-
-  const result = parseExpr();
-  if (pos !== tokens.length) throw new Error("Trailing tokens in formula");
-  return result;
+  return Array.from(out);
 }
 
 export function recalcTable(table: Table): Table {
@@ -64,69 +66,42 @@ export function recalcTable(table: Table): Table {
 
   const rows: Cell[][] = table.rows.map((row) => row.slice());
   for (const { col, index } of formulaIndexes) {
-    const ast = parseFormula(col.expr ?? "");
+    const expr = col.expr ?? "";
+    const numeric = new Set(
+      table.columns.filter((c) => c.type === "number").map((c) => c.name),
+    );
+    for (const name of referencedColumns(expr)) {
+      if (!numeric.has(name)) {
+        throw new Error(
+          `Formula '${col.name}' in table '${table.id}': unknown or non-numeric column '${name}'`,
+        );
+      }
+    }
     table.rows.forEach((row, r) => {
       const ctx: Record<string, number> = {};
-      const available = new Set<string>();
-      table.columns.forEach((c, i) => {
+      for (const c of table.columns) {
+        if (c.type !== "number") continue;
+        const i = table.columns.indexOf(c);
         const cell = row[i];
-        if (c.type === "number") {
-          available.add(c.name);
-          ctx[c.name] = typeof cell === "number" ? cell : Number.NaN;
-        }
-      });
+        ctx[c.name] = typeof cell === "number" ? cell : Number.NaN;
+      }
       const src = rows[r] ?? [];
       const out: Cell[] = table.columns.map((_, i) => src[i] ?? "");
-      const result = evalAst(ast, ctx, available, table.id, col.name);
-      out[index] = Number.isNaN(result) ? "" : result;
+      let result: Cell;
+      try {
+        const v = jexl.evalSync(expr, ctx) as Cell;
+        result =
+          typeof v === "number" ? (Number.isFinite(v) ? v : "") : (v ?? "");
+      } catch (e) {
+        throw new Error(
+          `Formula '${col.name}' in table '${table.id}': ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+        );
+      }
+      out[index] = result;
       rows[r] = out;
     });
   }
   return { ...table, rows };
-}
-
-function evalAst(
-  node: AstNode,
-  ctx: Record<string, number>,
-  available: Set<string>,
-  tableId: string,
-  colName: string,
-): number {
-  switch (node.kind) {
-    case "column": {
-      if (!available.has(node.name)) {
-        throw new Error(
-          `Formula '${colName}' in table '${tableId}': unknown or non-numeric column '${node.name}'`,
-        );
-      }
-      return ctx[node.name] ?? Number.NaN;
-    }
-    case "number":
-      return node.value;
-    case "bin": {
-      const l = evalAst(node.l, ctx, available, tableId, colName);
-      const r = evalAst(node.r, ctx, available, tableId, colName);
-      switch (node.op) {
-        case "+":
-          return l + r;
-        case "-":
-          return l - r;
-        case "*":
-          return l * r;
-        case "/":
-          return r === 0 ? 0 : l / r;
-      }
-    }
-  }
-}
-
-function tokenize(expr: string): string[] {
-  const out: string[] = [];
-  const re = /(\s+|[0-9.]+|[A-Za-z_][A-Za-z0-9_]*|.)/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(expr)) !== null) {
-    const tok = (m[0] ?? "").trim();
-    if (tok.length > 0) out.push(tok);
-  }
-  return out;
 }

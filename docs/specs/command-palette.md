@@ -16,6 +16,9 @@ magnifier button in the toolbar.
   result list. Esc closes (native dialog behavior); ↑/↓ move the
   selection; Enter runs the highlighted entry; click runs any entry.
   Each entry shows a group tag: Command, Section, or Help.
+- **Discoverability**: the toolbar's search button carries a
+  visible `Ctrl K` keyboard hint (not just a tooltip) - a new
+  user must see that search exists without hovering anything.
 - **Entries** are rebuilt on every open, so the view command
   reflects the current state and the sections/help topics reflect
   the current documents:
