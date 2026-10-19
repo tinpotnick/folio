@@ -76,6 +76,22 @@ export function themeCss(theme: Theme): string {
       line-height: 1.25;
       margin: 1.8em 0 0.5em;
     }
+    /* Right-to-left scripts (Arabic, Hebrew, ...) follow their own
+       direction: each block's direction and justification derive
+       from its first strong character (unicode-bidi: plaintext),
+       so an Arabic paragraph right-aligns while the surrounding
+       English document is untouched. A direction is typography,
+       not content - it lives in the theme, never in the document
+       (AGENTS.md #1). */
+    article.folio-doc h1,
+    article.folio-doc h2,
+    article.folio-doc p,
+    article.folio-doc figcaption,
+    article.folio-doc td,
+    article.folio-doc th {
+      unicode-bidi: plaintext;
+      text-align: start;
+    }
     figure {
       margin: 1.6em 0;
     }
