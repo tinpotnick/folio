@@ -208,6 +208,61 @@ fmtBar.addEventListener("mousedown", (ev) => {
   }
 });
 
+/* --- Links (spec: docs/specs/links.md) --- */
+
+const btnLink = requireEl<HTMLButtonElement>("#btn-link");
+btnLink.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  if (currentEditable()) {
+    if (!el.linkButtonAction()) flash("Click into the text first");
+    return;
+  }
+  if (document.activeElement !== editor) {
+    flash("Click into the text first");
+    return;
+  }
+  // Markdown view: wrap the selection (or insert a template).
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  const sel = editor.value.slice(start, end) || "link text";
+  const md = `[${sel}](url)`;
+  editor.setRangeText(md, start, end, "end");
+  editor.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+/**
+ * Follow a document link: .md paths load in place (the same path
+ * the examples use); anything with a protocol opens in a new tab.
+ * A failed fetch is a visible message, never a broken document.
+ */
+async function openLinkedDocument(href: string): Promise<void> {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(href)) {
+    window.open(href, "_blank", "noopener");
+    return;
+  }
+  try {
+    const url = new URL(href, window.location.href);
+    if (!url.pathname.endsWith(".md")) {
+      window.open(href, "_blank", "noopener");
+      return;
+    }
+    const res = await fetch(url.pathname);
+    if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
+    const text = await res.text();
+    await el.load(text);
+    editor.value = text;
+    refreshOutline();
+    flash("Opened linked document");
+  } catch {
+    flash(`Could not open ${href}`);
+  }
+}
+
+el.addEventListener("folio-link", (ev) => {
+  const href = (ev as CustomEvent<{ href: string }>).detail?.href;
+  if (href) void openLinkedDocument(href);
+});
+
 /* --- Insert group: table, diagram, code block --- */
 
 const btnDiagram = requireEl<HTMLButtonElement>("#btn-diagram");

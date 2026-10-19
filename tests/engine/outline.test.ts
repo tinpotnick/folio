@@ -19,6 +19,7 @@ describe("outlineOf", () => {
       { blockIndex: 0, level: 1, text: "Q3 Field Operations Review" },
       { blockIndex: 2, level: 2, text: "Regional summary" },
       { blockIndex: 8, level: 2, text: "Cumulative view" },
+      { blockIndex: 18, level: 2, text: "More examples" },
     ]);
     for (const entry of outline) {
       expect(doc.blocks[entry.blockIndex]?.kind).toBe("heading");

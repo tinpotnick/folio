@@ -64,6 +64,15 @@ document — written in the same renderer you are working with.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
   splitting it.
+- **Links** are standard inline Markdown: `[label](url)` in a
+  paragraph. Clicking a link follows it - a `.md` path opens
+  that document in place (the sample's "More examples" section
+  links all the shipped examples); anything with a protocol
+  opens in a new tab. To create or edit one, select text (or
+  click into a link) and press the chain-icon button: a small
+  bar under the link edits the label and URL, or removes the
+  link. Keep links in paragraphs - headings carry plain text
+  only.
 - **Images** embed in the document as data URIs - a folio document
   is one file that renders fully offline. Pick a picture with the
   image button (or the command palette); the file name seeds the

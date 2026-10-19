@@ -173,6 +173,24 @@ export class FolioDoc extends HTMLElement {
     host.setAttribute("contenteditable", "true");
     host.spellcheck = true;
     host.addEventListener("keydown", this.handleKeydown);
+    // Clicking a link FOLLOWS it - never places the caret for
+    // editing. The host hears the composed event and opens the
+    // target (document links load in place; external URLs open in
+    // a new tab). Editing lives on the toolbar's link button.
+    host.addEventListener("click", (ev) => {
+      const a = (ev.target as Element).closest?.(
+        "a[href]",
+      ) as HTMLAnchorElement | null;
+      if (!a) return;
+      ev.preventDefault();
+      this.dispatchEvent(
+        new CustomEvent("folio-link", {
+          detail: { href: a.getAttribute("href") ?? "" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    });
     host.addEventListener(
       "mousedown",
       (ev: MouseEvent) => {
@@ -2732,6 +2750,140 @@ export class FolioDoc extends HTMLElement {
       `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
     ) as HTMLTableCellElement | null;
     cell?.focus();
+  }
+
+  /**
+   * The toolbar's link button (spec: docs/specs/links.md). With
+   * the caret in a link it opens the link menu to CHANGE it; with
+   * a selection it links that text (the menu follows, to set the
+   * URL); with a bare caret it inserts a link template. Returns
+   * false when there is no prose context (the host flashes).
+   */
+  linkButtonAction(): boolean {
+    if (!this.doc) return false;
+    const root = this.shadowRoot as
+      | (ShadowRoot & {
+          getSelection?: () => Selection | null;
+        })
+      | null;
+    const sel = root?.getSelection?.();
+    let range: Range | null = null;
+    if (sel && sel.rangeCount > 0 && sel.anchorNode !== null) {
+      range = sel.getRangeAt(0);
+    } else if (
+      this.dragRange !== null &&
+      this.dragRange.startContainer.isConnected
+    ) {
+      range = this.dragRange.cloneRange();
+    }
+    if (range === null) return false;
+    const n = this.firstPositionNodeInRange(range) ?? range.startContainer;
+    const el = n instanceof Element ? n : (n?.parentElement ?? null);
+    const block = el?.closest("[data-block-index]") as HTMLElement | null;
+    if (!block || block.tagName !== "P" || !block.isConnected) return false;
+    const existing = (el as Element).closest?.(
+      "a[href]",
+    ) as HTMLAnchorElement | null;
+    if (existing) {
+      this.openLinkMenu(existing);
+      return true;
+    }
+    // Wrap the selection (or insert a template) as a link.
+    const anchor = document.createElement("a");
+    anchor.setAttribute("href", "url");
+    if (range.collapsed) {
+      anchor.textContent = "link text";
+      range.insertNode(anchor);
+    } else {
+      try {
+        range.surroundContents(anchor);
+      } catch {
+        anchor.textContent = String(range);
+        range.insertNode(anchor);
+      }
+    }
+    this.syncFromDom();
+    this.emitChange();
+    this.openLinkMenu(anchor);
+    return true;
+  }
+
+  /**
+   * The link control (spec: docs/specs/links.md): a floating bar
+   * anchored under the link - label and URL editable, Apply writes
+   * the DOM (then structural sync derives the source), Remove
+   * unwraps. Any click outside (or Esc) closes it.
+   */
+  private openLinkMenu(anchor: HTMLAnchorElement): void {
+    this.closeMenu();
+    const root = this.shadowRoot;
+    if (!root || !anchor.isConnected) return;
+    const menu = document.createElement("div");
+    menu.className = "folio-menu folio-link-menu";
+    menu.contentEditable = "false";
+
+    const labelInp = document.createElement("input");
+    labelInp.className = "link-label";
+    labelInp.type = "text";
+    labelInp.placeholder = "link text";
+    labelInp.value = anchor.textContent ?? "";
+    const urlInp = document.createElement("input");
+    urlInp.className = "link-url";
+    urlInp.type = "text";
+    urlInp.placeholder = "url or document path";
+    urlInp.value = anchor.getAttribute("href") ?? "";
+
+    const apply = (): void => {
+      const href = urlInp.value.trim();
+      if (href !== "") anchor.setAttribute("href", href);
+      const label = labelInp.value;
+      if (label !== (anchor.textContent ?? "")) {
+        anchor.textContent = label;
+      }
+      this.syncFromDom();
+      this.emitChange();
+      this.closeMenu();
+    };
+    for (const inp of [labelInp, urlInp]) {
+      inp.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          apply();
+        } else if (ev.key === "Escape") {
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.closeMenu();
+        }
+      });
+    }
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "link-remove";
+    remove.textContent = "Remove link";
+    remove.addEventListener("click", () => {
+      anchor.replaceWith(...Array.from(anchor.childNodes));
+      this.syncFromDom();
+      this.emitChange();
+      this.closeMenu();
+    });
+
+    const done = document.createElement("button");
+    done.type = "button";
+    done.className = "link-apply";
+    done.textContent = "Apply";
+    done.addEventListener("click", apply);
+
+    menu.append(labelInp, urlInp, remove, done);
+    root.appendChild(menu);
+    this.menu = menu;
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${rect.left + window.scrollX}px`;
+    menu.style.top = `${rect.bottom + 6 + window.scrollY}px`;
+    document.addEventListener("pointerdown", this.menuCloser, {
+      once: true,
+    });
+    (labelInp.value === "" ? urlInp : labelInp).focus();
   }
 
   private handleContextMenu(ev: MouseEvent): void {
