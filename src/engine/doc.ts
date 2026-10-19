@@ -47,7 +47,23 @@ export function parseDoc(text: string): Doc {
   while (i < lines.length) {
     const line = lines[i] ?? "";
     if (line.trim() === "") {
-      i++;
+      let blanks = 0;
+      while (i < lines.length && (lines[i] ?? "").trim() === "") {
+        blanks++;
+        i++;
+      }
+      // Between content, a run of k blank lines encodes floor(k/2)
+      // empty paragraphs: the serializer joins blocks with a blank
+      // line, so n empty blocks emit 2n blank lines. Leading and
+      // trailing runs are plain separators (they cannot round-trip).
+      // A hand-typed odd run canonicalizes down on the next
+      // serialization.
+      if (i < lines.length && doc.blocks.length > 0) {
+        const empties = Math.floor(blanks / 2);
+        for (let e = 0; e < empties; e++) {
+          doc.blocks.push({ kind: "prose", text: "" });
+        }
+      }
       continue;
     }
     const mm = MERMAID_RE.exec(line.trim());

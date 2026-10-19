@@ -57,6 +57,30 @@ describe("property: round-trip is stable (idempotence)", () => {
     expect(once.startsWith("# T")).toBe(true);
     expect(serializeDoc(parseDoc(once))).toBe(once);
   });
+
+  it("empty paragraphs between content round-trip byte-identically", () => {
+    // The serializer joins blocks with a blank line, so n empty
+    // prose blocks emit 2n blank lines and parse back to n empties.
+    const one = "# T\n\na\n\n\n\n## U\n";
+    const two = "# T\n\na\n\n\n\n\n\n## U\n";
+    expect(serializeDoc(parseDoc(one))).toBe(one);
+    expect(serializeDoc(parseDoc(two))).toBe(two);
+    const doc = parseDoc(two);
+    const empties = doc.blocks.filter(
+      (b) => b.kind === "prose" && b.text === "",
+    );
+    expect(empties.length).toBe(2);
+  });
+
+  it("leading and trailing blank runs stay separators, not empty blocks", () => {
+    const text = "\n\n# T\n\nSome prose.\n\n\n";
+    const once = serializeDoc(parseDoc(text));
+    expect(once.startsWith("# T")).toBe(true);
+    expect(
+      parseDoc(once).blocks.filter((b) => b.kind === "prose" && b.text === "")
+        .length,
+    ).toBe(0);
+  });
 });
 
 describe("error contracts", () => {

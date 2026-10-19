@@ -10,11 +10,17 @@ steps:
   - With the caret on a plain source line, click the H1 button, then
     the P button.
   - Select a word in the source and click B twice.
+  - Switch back to document view. Click into a normal paragraph and
+    click the H1 button, then the P button. Press Enter at the end
+    of the paragraph, type a line, and click the H2 button.
 expected:
   - In document view, the H1/P button lights up for the block at the
     caret; B lights up inside bold text — but NOT on a heading line,
     where B is disabled (headings render bold yet carry no bold in
     the markdown).
+  - In document view, the H1/P/H2 buttons CONVERT the caret's block
+    (text preserved, outline updates); this works on a fresh
+    Enter-created line too, not only pre-rendered blocks.
   - In Markdown view, the same buttons light up for the line prefix
     and the token at the caret; inline buttons are disabled on
     lines starting with "#".

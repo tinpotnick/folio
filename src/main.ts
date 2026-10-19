@@ -158,9 +158,10 @@ blockBar.addEventListener("mousedown", (ev) => {
   ev.preventDefault();
   if (currentEditable()) {
     if (btn.dataset.block) {
-      document.execCommand("formatBlock", false, `<${btn.dataset.block}>`);
+      // Model-level conversion: execCommand cannot act inside the
+      // shadow tree.
+      el.setBlockKind(btn.dataset.block as "h1" | "h2" | "p");
     }
-    el.dispatchEvent(new Event("input"));
   } else if (document.activeElement === editor) {
     applyMdLinePrefix(
       btn.dataset.block === "h1" ? "#" : btn.dataset.block === "h2" ? "##" : "",
@@ -538,6 +539,7 @@ btnTable.addEventListener("click", () => {
 el.onChange(() => {
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
+  refreshOutline();
 });
 
 boot();

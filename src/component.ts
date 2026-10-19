@@ -452,12 +452,41 @@ export class FolioDoc extends HTMLElement {
       const md = htmlToInlineMarkdown(el.innerHTML).replace(/\n+$/, "");
       next.push({ kind: "prose", text: md });
     }
+    // Native structural edits (Enter splits) create elements without
+    // a block index; re-stamp positionally so index-based lookups
+    // (setBlockKind, toggleCodeBlock, caret tracking) keep working
+    // between renders. Only when the child count matches the rebuilt
+    // model - otherwise the DOM is not 1:1 and stamping would lie.
+    if (next.length === host.children.length) {
+      Array.from(host.children).forEach((child, i) => {
+        (child as HTMLElement).dataset.blockIndex = String(i);
+      });
+    }
     this.doc.blocks = next;
   }
 
   private handleInput(): void {
     this.syncFromDom();
+    this.commitCaretCell();
     this.emitChange();
+  }
+
+  /**
+   * Commit the cell the caret is in, if any. Typing steals focus
+   * from the cell to the article after the first keystroke, so
+   * blur-based commits alone left everything after the first
+   * character dangling in the DOM. Committing per keystroke is
+   * idempotent and keeps formulas and the Markdown source live.
+   */
+  private commitCaretCell(): void {
+    if (!this.doc) return;
+    const cell = this.resolveCell(null);
+    if (!cell) return;
+    const figure = cell.closest("figure");
+    const idx = Number(figure?.dataset.blockIndex ?? -1);
+    const block = this.doc.blocks[idx];
+    if (!block || block.kind !== "table") return;
+    this.commitCell(cell, block);
   }
 
   private handleCellBlur(ev: FocusEvent): void {
@@ -539,7 +568,10 @@ export class FolioDoc extends HTMLElement {
       const td = target.closest(
         "td[data-row-index]",
       ) as HTMLTableCellElement | null;
-      if (td) return td;
+      if (td) {
+        this.lastCell = td;
+        return td;
+      }
     }
     const root = this.shadowRoot as
       | (ShadowRoot & {
@@ -547,13 +579,28 @@ export class FolioDoc extends HTMLElement {
         })
       | null;
     const sel = root?.getSelection?.();
-    let n: Node | null = sel?.anchorNode ?? null;
-    while (n !== null && !(n instanceof HTMLTableCellElement)) {
-      n = n.parentNode;
+    if (sel && sel.anchorNode !== null) {
+      let n: Node | null = sel.anchorNode;
+      while (n !== null && !(n instanceof HTMLTableCellElement)) {
+        n = n.parentNode;
+      }
+      if (
+        n instanceof HTMLTableCellElement &&
+        n.dataset.rowIndex !== undefined
+      ) {
+        this.lastCell = n;
+        return n;
+      }
+      // The caret is resolvable and NOT in a cell: it is
+      // authoritative. A stale lastCell must not win here, or Enter
+      // in a paragraph after using a table adds a table row instead
+      // of splitting the paragraph.
+      this.lastCell = null;
+      return null;
     }
-    if (n instanceof HTMLTableCellElement && n.dataset.rowIndex !== undefined) {
-      return n;
-    }
+    // No pierceable selection (WebKitGTK typing in a cell steals
+    // focus to the article): the last focused cell is the best
+    // available context.
     if (
       this.lastCell !== null &&
       this.shadowRoot?.contains(this.lastCell) === true &&
@@ -579,6 +626,39 @@ export class FolioDoc extends HTMLElement {
       host.querySelectorAll<HTMLElement>("[data-chart-source]"),
     );
     for (const cf of chartFigures) this.drawChart(cf);
+  }
+
+  /**
+   * Convert the caret's block to a heading level or a paragraph
+   * (the toolbar's H1/H2/P buttons in document view). execCommand
+   * cannot act inside the shadow tree, so the conversion is
+   * model-level.
+   */
+  setBlockKind(kind: "h1" | "h2" | "p"): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    if (idx < 0) return;
+    const block = this.doc.blocks[idx];
+    if (
+      !block ||
+      block.kind === "table" ||
+      block.kind === "chart" ||
+      block.kind === "diagram"
+    ) {
+      return;
+    }
+    const text = block.text;
+    if (kind === "p") {
+      if (block.kind === "prose") return;
+      this.doc.blocks[idx] = { kind: "prose", text };
+    } else {
+      const level = kind === "h1" ? 1 : 2;
+      if (block.kind === "heading" && block.level === level) return;
+      this.doc.blocks[idx] = { kind: "heading", level, text };
+    }
+    this.render();
+    this.emitChange();
+    this.focusBlockStart(idx);
   }
 
   /**
@@ -618,7 +698,6 @@ export class FolioDoc extends HTMLElement {
     const sel = root?.getSelection?.();
     if (!sel || sel.rangeCount === 0) return false;
     const range = sel.getRangeAt(0);
-    if (range.collapsed) return false;
     const anchorEl =
       sel.anchorNode instanceof Element
         ? sel.anchorNode
@@ -644,6 +723,7 @@ export class FolioDoc extends HTMLElement {
       }
       n = n.parentNode;
     }
+    if (range.collapsed) return false;
     const wrap = document.createElement(tag);
     try {
       wrap.appendChild(range.extractContents());

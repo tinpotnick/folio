@@ -32,6 +32,18 @@ table at the edges.
   selection exists (WebKitGTK) it stays inert rather than
   destructive — the document-level selection cannot write ranges
   inside the shadow tree and doing so corrupts the caret there.
+- **Per-keystroke commits:** cell text commits to the model on
+  every input event, not only on blur/navigation — Chromium moves
+  DOM focus to the article on the first keystroke, so blur-based
+  commits alone lost everything typed after the first character.
+  Committing is idempotent and surgical (formula cells and charts
+  refresh in place; the table is never re-rendered mid-typing).
+- **Caret context beats history:** when a resolvable caret exists
+  and sits OUTSIDE any cell (e.g. the user clicked into a paragraph
+  after using the table), Enter acts on the caret's block — the
+  last-used cell is only a fallback for engines with no pierceable
+  selection (WebKitGTK). Otherwise a stale cell hijacked Enter and
+  grew the table from a paragraph.
 - **Navigation**: Tab/Shift+Tab move across editable cells (formula
   columns are skipped, wrapping across rows); Enter/Shift+Enter
   move down/up a column. Tab or Enter past the last row appends a
