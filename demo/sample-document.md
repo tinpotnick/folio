@@ -103,3 +103,17 @@ src: data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zd
 alt: "Q3 Field Operations cover slide"
 caption: "The review deck cover - a folio image block (SVG, embedded as a data URI)"
 :::
+
+## More examples
+
+Every genre ships with the app - each link opens that document
+in place:
+
+- [A pure-prose poem](demo/examples/poem.md) - typography only,
+  no data at all.
+- [Management accounts](demo/examples/accounts.md) - tables,
+  formulas, and a chart that shows a decline.
+- [A technical paper](demo/examples/technical.md) - equations,
+  code, and diagrams.
+- [An imported-data report](demo/examples/report.md) - a 72-row
+  import with running formulas and line charts.

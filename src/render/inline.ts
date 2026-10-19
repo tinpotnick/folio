@@ -10,12 +10,21 @@ export function inlineMarkdownToHtml(text: string): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
-  return escaped
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-    .replace(/~~([^~]+)~~/g, "<del>$1</del>")
-    .replace(/\+\+([^+]+)\+\+/g, "<ins>$1</ins>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>");
+  return (
+    escaped
+      // Links first: the label then still gets the inline format
+      // rules applied INSIDE the anchor (bold link text works).
+      .replace(
+        /(!?)\[([^\]]+)\]\(([^)\s"]+)\)/g,
+        (m, bang: string, label: string, url: string) =>
+          bang === "!" ? m : `<a href="${url}">${label}</a>`,
+      )
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+      .replace(/~~([^~]+)~~/g, "<del>$1</del>")
+      .replace(/\+\+([^+]+)\+\+/g, "<ins>$1</ins>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+  );
 }
 
 export function htmlToInlineMarkdown(html: string): string {
@@ -52,6 +61,9 @@ function nodesToMarkdown(root: Node): string {
       case "INS":
       case "U":
         out += `++${nodesToMarkdown(el)}++`;
+        break;
+      case "A":
+        out += `[${nodesToMarkdown(el)}](${el.getAttribute("href") ?? ""})`;
         break;
       case "BR":
         out += "\n";

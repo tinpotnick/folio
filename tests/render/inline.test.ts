@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { inlineMarkdownToHtml } from "@folio/render/inline";
+import {
+  htmlToInlineMarkdown,
+  inlineMarkdownToHtml,
+} from "@folio/render/inline";
 
 describe("inlineMarkdownToHtml", () => {
   it("converts bold, italic, code", () => {
@@ -31,5 +34,38 @@ describe("inlineMarkdownToHtml markdown+ formats", () => {
     const { htmlToInlineMarkdown } = await import("@folio/render/inline");
     const html = inlineMarkdownToHtml("~~gone~~ ++added++");
     expect(htmlToInlineMarkdown(html)).toBe("~~gone~~ ++added++");
+  });
+});
+
+describe("links", () => {
+  it("renders and round-trips a link", () => {
+    const html = inlineMarkdownToHtml(
+      "See [the docs](demo/examples/poem.md) here",
+    );
+    expect(html).toContain('<a href="demo/examples/poem.md">the docs</a>');
+    expect(htmlToInlineMarkdown(html)).toBe(
+      "See [the docs](demo/examples/poem.md) here",
+    );
+  });
+
+  it("formatting inside the link label round-trips", () => {
+    const md = "[**bold** label](a.md)";
+    expect(htmlToInlineMarkdown(inlineMarkdownToHtml(md))).toBe(md);
+  });
+
+  it("escapes angle brackets in the label but keeps the URL intact", () => {
+    const html = inlineMarkdownToHtml("[a <b> tag](u.md)");
+    expect(html).toContain("&lt;b&gt;");
+    expect(htmlToInlineMarkdown(html)).toBe("[a <b> tag](u.md)");
+  });
+});
+
+describe("link edge cases", () => {
+  it("image syntax ![alt](url) is not a link", () => {
+    const html = inlineMarkdownToHtml(
+      "an ![alt](https://example.com/cat.png) image",
+    );
+    expect(html).not.toContain("<a ");
+    expect(html).toContain("![alt]");
   });
 });

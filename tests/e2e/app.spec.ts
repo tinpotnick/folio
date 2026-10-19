@@ -137,10 +137,11 @@ test.describe("section browser", () => {
     await expect(sidebar).toBeVisible();
 
     const outline = page.locator("#outline button");
-    await expect(outline).toHaveCount(3);
+    await expect(outline).toHaveCount(4);
     await expect(outline.first()).toHaveText("Q3 Field Operations Review");
     await expect(outline.nth(1)).toHaveText("Regional summary");
     await expect(outline.nth(2)).toHaveText("Cumulative view");
+    await expect(outline.nth(3)).toHaveText("More examples");
 
     await outline.nth(1).click();
     const focused = await page.evaluate(() => {

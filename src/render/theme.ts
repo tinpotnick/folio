@@ -474,6 +474,45 @@ export function themeCss(theme: Theme): string {
       content: "…";
       color: #b0b8c1;
     }
+    article.folio-doc a {
+      color: #1f3fbf;
+      text-decoration: underline;
+      text-decoration-color: rgba(31, 63, 191, 0.4);
+      text-underline-offset: 2px;
+      cursor: pointer;
+    }
+    article.folio-doc a:hover { text-decoration-color: #1f3fbf; }
+    .folio-link-menu {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .folio-link-menu input {
+      font: inherit;
+      font-size: 13px;
+      padding: 3px 6px;
+      border: 1px solid #d0d7de;
+      border-radius: 5px;
+      background: #fff;
+      color: #1f2328;
+    }
+    .folio-link-menu .link-url {
+      width: 240px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .folio-link-menu button {
+      font: inherit;
+      font-size: 12px;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      border-radius: 5px;
+      padding: 3px 8px;
+      cursor: pointer;
+      color: #1f2328;
+      white-space: nowrap;
+    }
+    .folio-link-menu button:hover { background: #f3f4f6; }
+    .folio-link-menu .link-remove { color: #9a3131; }
     td[contenteditable]:hover { background: rgba(76, 110, 245, 0.05); }
     td[contenteditable]:focus {
       outline: none;
