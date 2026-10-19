@@ -160,7 +160,7 @@ blockBar.addEventListener("mousedown", (ev) => {
     if (btn.dataset.block) {
       // Model-level conversion: execCommand cannot act inside the
       // shadow tree.
-      el.setBlockKind(btn.dataset.block as "h1" | "h2" | "p");
+      el.setBlockKind(btn.dataset.block as "h1" | "h2" | "h3" | "p");
     }
   } else if (document.activeElement === editor) {
     applyMdLinePrefix(
@@ -224,6 +224,24 @@ btnDiagram.addEventListener("mousedown", (ev) => {
   }
   wrapMdLines("::: mermaid {#diagram-new}\n", "\n:::");
   flash("Diagram inserted");
+});
+
+const btnEquation = requireEl<HTMLButtonElement>("#btn-equation");
+// mousedown (like the other insert buttons) so the press never
+// steals focus from the document before the action runs.
+btnEquation.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  if (currentEditable()) {
+    el.insertMath();
+    flash("Equation inserted");
+    return;
+  }
+  if (document.activeElement !== editor) {
+    flash("Click into the text first");
+    return;
+  }
+  wrapMdLines("$$\n", "\n$$");
+  flash("Equation inserted");
 });
 
 const btnCodeBlock = requireEl<HTMLButtonElement>("#btn-code");
@@ -726,6 +744,17 @@ function paletteEntries(): PaletteEntry[] {
     action: () => btnCodeBlock.click(),
   });
   entries.push({
+    title: "Insert an equation",
+    group: "Command",
+    keywords: "equation math latex formula insert",
+    // Without a caret the equation appends at the document end -
+    // the palette must not depend on prior document focus.
+    action: () => {
+      el.insertMath();
+      flash("Equation inserted");
+    },
+  });
+  entries.push({
     title: "Toggle the section browser",
     group: "Command",
     keywords: "sections sidebar outline toggle navigation",
@@ -926,6 +955,7 @@ const setH1Font = requireEl<HTMLSelectElement>("#set-h1-font");
 const setBodySize = requireEl<HTMLInputElement>("#set-body-size");
 const setH1Size = requireEl<HTMLInputElement>("#set-h1-size");
 const setH2Size = requireEl<HTMLInputElement>("#set-h2-size");
+const setH3Size = requireEl<HTMLInputElement>("#set-h3-size");
 const setTableStyle = requireEl<HTMLSelectElement>("#set-table-style");
 const setPalette = requireEl<HTMLSelectElement>("#set-palette");
 const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
@@ -1004,6 +1034,7 @@ settingsForm.addEventListener("submit", (ev) => {
       "body.font.size": setBodySize.value.trim(),
       "h1.font.size": setH1Size.value.trim(),
       "h2.font.size": setH2Size.value.trim(),
+      "h3.font.size": setH3Size.value.trim(),
       "table.style": setTableStyle.value,
       "chart.palette": setPalette.value,
       "pagebreak.h1": setPbH1.value,

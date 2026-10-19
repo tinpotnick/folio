@@ -11,6 +11,7 @@ export interface Theme {
   h1Font: string;
   h1Size: string;
   h2Size: string;
+  h3Size: string;
   tableStyle: string;
   palette: string[];
   pageBreakH1: boolean;
@@ -28,6 +29,7 @@ const DEFAULT_THEME: Theme = {
   h1Font: "Source Serif 4, Georgia, serif",
   h1Size: "28pt",
   h2Size: "20pt",
+  h3Size: "16pt",
   tableStyle: "booktabs",
   palette: PALETTES["muted"] ?? ["#4c6ef5"],
   pageBreakH1: false,
@@ -46,6 +48,7 @@ export function themeFromDoc(doc: Doc): Theme {
       : DEFAULT_THEME.h1Font,
     h1Size: style.get("h1.font.size") ?? DEFAULT_THEME.h1Size,
     h2Size: style.get("h2.font.size") ?? DEFAULT_THEME.h2Size,
+    h3Size: style.get("h3.font.size") ?? DEFAULT_THEME.h3Size,
     tableStyle: style.get("table.style") ?? DEFAULT_THEME.tableStyle,
     palette:
       PALETTES[style.get("chart.palette") ?? "muted"] ?? DEFAULT_THEME.palette,
@@ -80,6 +83,11 @@ export function themeCss(theme: Theme): string {
       font-size: ${theme.h2Size};
       line-height: 1.25;
       margin: 1.8em 0 0.5em;
+    }
+    h3 {
+      font-size: ${theme.h3Size};
+      line-height: 1.3;
+      margin: 1.5em 0 0.4em;
     }
     /* Right-to-left scripts (Arabic, Hebrew, ...) follow their own
        direction: each block's direction and justification derive
@@ -132,6 +140,7 @@ export function themeCss(theme: Theme): string {
     table.folio-table thead th { border-bottom: 1px solid #d0d7de; }
     table.folio-table thead th .unit {
       font-weight: 400;
+      font-style: italic;
       font-size: 0.8em;
       color: #57606a;
     }
@@ -209,10 +218,47 @@ export function themeCss(theme: Theme): string {
       min-width: 80px;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
     }
+    .folio-inspector .insp-unit {
+      font-style: italic;
+      width: 5em;
+    }
+    .folio-inspector .insp-source-text {
+      flex: 1;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      resize: vertical;
+      min-height: 3em;
+      box-sizing: border-box;
+    }
+    .folio-inspector .insp-select,
+    .folio-inspector .insp-filter,
+    .folio-inspector .insp-caption {
+      flex: 1;
+      min-width: 60px;
+    }
     .folio-inspector .insp-fx {
       font-style: italic;
       color: #57606a;
       flex: none;
+    }
+    .folio-inspector .insp-fx {
+      font-style: italic;
+      color: #57606a;
+      flex: none;
+    }
+    .folio-inspector .insp-close {
+      flex: none;
+      margin-left: auto;
+      border: none;
+      background: transparent;
+      font-size: 15px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #57606a;
+    }
+    .folio-inspector .insp-close:hover {
+      background: #e6e8eb;
     }
     figure.folio-math {
       margin: 1.2em 0;

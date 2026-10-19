@@ -13,10 +13,10 @@ import {
 } from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable, type TablePool } from "@folio/engine/recalc";
-import type { Table } from "@folio/engine/index.js";
+import type { Chart, Table } from "@folio/engine/index.js";
 import { executeQuery } from "@folio/engine/query";
 import { themeFromDoc, themeCss } from "./render/theme.js";
-import { renderBarChart } from "./render/chart.js";
+import { renderBarChart, renderLineChart } from "./render/chart.js";
 import { inlineMarkdownToHtml, htmlToInlineMarkdown } from "./render/inline.js";
 
 export class FolioDoc extends HTMLElement {
@@ -164,17 +164,23 @@ export class FolioDoc extends HTMLElement {
         const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
         const block = el?.closest("[data-block-index]") as HTMLElement | null;
         if (block) this.lastBlock = block;
-        // Clicking away from a table closes its inspector: the
-        // bar belongs to the table being worked on.
-        const hitFigure = el?.closest(
-          "figure[data-table-id]",
-        ) as HTMLElement | null;
+        // Clicking another figure switches inspectors; clicking
+        // a TABLE cell switches its bar off (cell context);
+        // clicking plain content leaves figure bars open - they
+        // are editors with possibly unapplied work, not context.
+        const hitFigure = el?.closest("figure") as HTMLElement | null;
         for (const bar of Array.from(
           this.shadowRoot?.querySelectorAll<HTMLElement>(
             ".folio-inspector:not([hidden])",
           ) ?? [],
         )) {
-          if (bar.closest("figure") !== hitFigure) bar.hidden = true;
+          if (hitFigure !== null) {
+            // Another figure was clicked: show only its bar.
+            if (bar.closest("figure") !== hitFigure) bar.hidden = true;
+          } else if (!bar.classList.contains("figure-inspector")) {
+            // Table bars follow the click (cell context).
+            bar.hidden = true;
+          }
         }
       },
       true,
@@ -249,6 +255,7 @@ export class FolioDoc extends HTMLElement {
         figure.contentEditable = "false";
         figure.tabIndex = -1;
         figure.title = "Diagram - Backspace or Delete removes it";
+        figure.appendChild(this.buildTextInspector(figure, idx, "diagram"));
         const holder = document.createElement("div");
         holder.className = "diagram-holder";
         holder.textContent = block.diagram.text;
@@ -261,6 +268,7 @@ export class FolioDoc extends HTMLElement {
         figure.className = "folio-math";
         figure.dataset.blockIndex = String(idx);
         figure.contentEditable = "false";
+        figure.appendChild(this.buildTextInspector(figure, idx, "math"));
         const holder = document.createElement("div");
         holder.className = "math-holder";
         figure.appendChild(holder);
@@ -271,6 +279,10 @@ export class FolioDoc extends HTMLElement {
         const figure = document.createElement("figure");
         figure.dataset.blockIndex = String(idx);
         figure.dataset.chartSource = block.chart.source;
+        // Generated output: the SVG and caption never swallow
+        // typed text; the inspector inputs are their own region.
+        figure.contentEditable = "false";
+        figure.appendChild(this.buildChartInspector(figure, block));
         const holder = document.createElement("div");
         holder.className = "chart-holder";
         figure.appendChild(holder);
@@ -317,6 +329,11 @@ export class FolioDoc extends HTMLElement {
     figure.appendChild(inspector);
     const table = document.createElement("table");
     table.className = "folio-table";
+    // Only data cells edit (they set contenteditable themselves):
+    // the header, rows, and caption are generated output - typing
+    // into them silently diverged from the model (the header was
+    // editable by inheritance from the article).
+    table.contentEditable = "false";
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
     block.table.columns.forEach((col, ci) => {
@@ -397,7 +414,18 @@ export class FolioDoc extends HTMLElement {
       const cell = (ev.target as HTMLElement).closest(
         "td[data-row-index]",
       ) as HTMLTableCellElement | null;
-      if (!cell) return;
+      if (!cell) {
+        // Clicking a column heading opens that column in the
+        // inspector (its unit is a separate field there - the
+        // heading itself is never edited in place).
+        const th = (ev.target as HTMLElement).closest(
+          "th[data-col-index]",
+        ) as HTMLElement | null;
+        if (th) {
+          this.showInspector(figure, block, Number(th.dataset.colIndex));
+        }
+        return;
+      }
       // Any cell click focuses its column in the inspector bar -
       // formula cells especially: they are read-only in the table
       // but their expression is the bar's whole point.
@@ -429,6 +457,7 @@ export class FolioDoc extends HTMLElement {
     figure.appendChild(table);
     if (block.table.caption) {
       const cap = document.createElement("figcaption");
+      cap.contentEditable = "false";
       cap.textContent = block.table.caption;
       figure.appendChild(cap);
     }
@@ -539,7 +568,268 @@ export class FolioDoc extends HTMLElement {
       }
     });
 
-    bar.append(colSel, typeSel, unitInp, fmtSel, fx, exprInp);
+    const capInp = document.createElement("input");
+    capInp.className = "insp-caption";
+    capInp.type = "text";
+    capInp.placeholder = "caption";
+    capInp.title = "Table caption (empty removes it)";
+    const capPatch = (): void => {
+      const v = capInp.value.trim();
+      if (v) block.table.caption = v;
+      else delete block.table.caption;
+      const cap = figure.querySelector("figcaption");
+      if (v && cap) cap.textContent = v;
+      else if (v && !cap) {
+        const el = document.createElement("figcaption");
+        el.contentEditable = "false";
+        el.textContent = v;
+        figure.appendChild(el);
+      } else if (!v && cap) {
+        cap.remove();
+      }
+      this.emitChange();
+    };
+    capInp.addEventListener("change", capPatch);
+    capInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        capPatch();
+      }
+    });
+
+    bar.append(colSel, typeSel, unitInp, fmtSel, fx, exprInp, capInp);
+    return bar;
+  }
+
+  /**
+   * A figure inspector bar: shown by clicking its figure, hidden
+   * by clicking elsewhere (the shared .folio-inspector hide logic
+   * in the article's mousedown). All figure inspectors follow the
+   * table inspector contract - edits are model writes that reach
+   * the Markdown source; the figure re-renders in place.
+   */
+  private figureBar(): HTMLElement {
+    const bar = document.createElement("div");
+    // "figure-inspector" bars PERSIST across clicks outside their
+    // figure: they are editing surfaces, and clicking away to
+    // check something must not discard unapplied work. They close
+    // on the × button, Esc, or when another figure is clicked.
+    bar.className = "folio-inspector figure-inspector";
+    bar.contentEditable = "false";
+    bar.hidden = true;
+    bar.addEventListener("mousedown", (ev) => {
+      // Clicks on the bar must not hide it (the figure check in
+      // the article handler covers this, but keep the bar's own
+      // clicks from reaching figure-level handlers).
+      ev.stopPropagation();
+    });
+    bar.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.stopPropagation();
+        bar.hidden = true;
+      }
+    });
+    const close = document.createElement("button");
+    close.className = "insp-close";
+    close.title = "Close inspector (Esc)";
+    close.textContent = "\u00d7";
+    close.addEventListener("mousedown", (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      bar.hidden = true;
+    });
+    bar.appendChild(close);
+    return bar;
+  }
+
+  /**
+   * The chart inspector (spec: docs/specs/figure-inspectors.md):
+   * source table, type, selected columns, Jexl filter, sort, and
+   * caption - the whole chart directive editable in the document
+   * view. Apply redraws the chart in place.
+   */
+  private buildChartInspector(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "chart" }>,
+  ): HTMLElement {
+    const bar = this.figureBar();
+    const patch = (): void => {
+      const chart = block.chart;
+      chart.source = srcSel.value;
+      chart.type = typeSel.value as Chart["type"];
+      chart.query.select = selInp.value
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s !== "");
+      if (filterInp.value.trim() === "") delete chart.query.filter;
+      else chart.query.filter = filterInp.value.trim();
+      const by = sortInp.value.trim();
+      if (by === "") delete chart.query.sort;
+      else
+        chart.query.sort = {
+          by,
+          order: orderSel.value === "desc" ? "desc" : "asc",
+        };
+      if (capInp.value.trim() === "") delete chart.caption;
+      else chart.caption = capInp.value.trim();
+      figure.dataset.chartSource = chart.source;
+      const cap = figure.querySelector("figcaption");
+      if (cap) cap.textContent = chart.caption ?? "";
+      this.drawChart(figure);
+      this.emitChange();
+    };
+
+    const srcSel = document.createElement("select");
+    srcSel.className = "insp-source";
+    srcSel.title = "Source table";
+    for (const b of this.doc?.blocks ?? []) {
+      if (b.kind !== "table") continue;
+      const o = document.createElement("option");
+      o.value = b.table.id;
+      o.textContent = `@${b.table.id}`;
+      srcSel.appendChild(o);
+    }
+    srcSel.addEventListener("change", patch);
+
+    const typeSel = document.createElement("select");
+    typeSel.className = "insp-type";
+    typeSel.title = "Chart type";
+    for (const t of ["bar", "line"] as const) {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t;
+      typeSel.appendChild(o);
+    }
+    typeSel.addEventListener("change", patch);
+
+    const selInp = document.createElement("input");
+    selInp.className = "insp-select";
+    selInp.type = "text";
+    selInp.placeholder = "select: col, col";
+    const selPatch = (): void => patch();
+    selInp.addEventListener("change", selPatch);
+    selInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        selPatch();
+      }
+    });
+
+    const filterInp = document.createElement("input");
+    filterInp.className = "insp-filter";
+    filterInp.type = "text";
+    filterInp.placeholder = "filter: Jexl expression";
+    const filterPatch = (): void => patch();
+    filterInp.addEventListener("change", filterPatch);
+    filterInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        filterPatch();
+      }
+    });
+
+    const sortInp = document.createElement("input");
+    sortInp.className = "insp-sort";
+    sortInp.type = "text";
+    sortInp.placeholder = "sort by";
+    const sortPatch = (): void => patch();
+    sortInp.addEventListener("change", sortPatch);
+    sortInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        sortPatch();
+      }
+    });
+
+    const orderSel = document.createElement("select");
+    orderSel.className = "insp-order";
+    for (const t of ["asc", "desc"] as const) {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t;
+      orderSel.appendChild(o);
+    }
+    orderSel.addEventListener("change", patch);
+
+    const capInp = document.createElement("input");
+    capInp.className = "insp-caption";
+    capInp.type = "text";
+    capInp.placeholder = "caption";
+    const capPatch = (): void => patch();
+    capInp.addEventListener("change", capPatch);
+    capInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        capPatch();
+      }
+    });
+
+    const show = (): void => {
+      srcSel.value = block.chart.source;
+      typeSel.value = block.chart.type === "line" ? "line" : "bar";
+      selInp.value = block.chart.query.select.join(", ");
+      filterInp.value =
+        typeof block.chart.query.filter === "string"
+          ? block.chart.query.filter
+          : "";
+      sortInp.value = block.chart.query.sort?.by ?? "";
+      orderSel.value = block.chart.query.sort?.order ?? "asc";
+      capInp.value = block.chart.caption ?? "";
+      bar.hidden = false;
+    };
+    figure.addEventListener("mousedown", () => show());
+
+    bar.append(srcSel, typeSel, selInp, filterInp, sortInp, orderSel, capInp);
+    return bar;
+  }
+
+  /**
+   * The math/diagram inspector: a textarea with the block's
+   * source (LaTeX / Mermaid) - the whole point of the bar is not
+   * dropping to the Markdown view to edit generated figures.
+   */
+  private buildTextInspector(
+    figure: HTMLElement,
+    idx: number,
+    kind: "math" | "diagram",
+  ): HTMLElement {
+    const bar = this.figureBar();
+    const ta = document.createElement("textarea");
+    ta.className = "insp-source-text";
+    ta.rows = 3;
+    ta.placeholder = kind === "math" ? "LaTeX source" : "Mermaid source";
+    ta.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        apply();
+      }
+    });
+    ta.addEventListener("change", () => apply());
+
+    const apply = (): void => {
+      const block = this.doc?.blocks[idx];
+      if (!block) return;
+      if (kind === "math" && block.kind === "math") {
+        block.text = ta.value;
+        void this.drawMath(figure);
+      } else if (kind === "diagram" && block.kind === "diagram") {
+        block.diagram.text = ta.value;
+        void this.drawDiagram(figure);
+      }
+      this.emitChange();
+    };
+
+    const show = (): void => {
+      const block = this.doc?.blocks[idx];
+      if (!block) return;
+      if (kind === "math" && block.kind === "math") ta.value = block.text;
+      if (kind === "diagram" && block.kind === "diagram")
+        ta.value = block.diagram.text;
+      bar.hidden = false;
+    };
+    figure.addEventListener("mousedown", () => show());
+
+    bar.appendChild(ta);
     return bar;
   }
 
@@ -577,6 +867,8 @@ export class FolioDoc extends HTMLElement {
     }
     const fx = bar.querySelector<HTMLElement>(".insp-fx");
     if (fx) fx.hidden = col.type !== "formula";
+    const capInp = bar.querySelector<HTMLInputElement>(".insp-caption");
+    if (capInp) capInp.value = block.table.caption ?? "";
     bar.hidden = false;
   }
 
@@ -634,7 +926,10 @@ export class FolioDoc extends HTMLElement {
       }
       const recalced = recalcTable(tableBlock.table, this.tablePool());
       const result = executeQuery(recalced, block.chart);
-      holder.innerHTML = renderBarChart(result).svg;
+      holder.innerHTML =
+        block.chart.type === "line"
+          ? renderLineChart(result).svg
+          : renderBarChart(result).svg;
     } catch (e) {
       holder.textContent = `Chart error: ${e instanceof Error ? e.message : String(e)}`;
     }
@@ -993,7 +1288,7 @@ export class FolioDoc extends HTMLElement {
    * cannot act inside the shadow tree, so the conversion is
    * model-level.
    */
-  setBlockKind(kind: "h1" | "h2" | "p"): void {
+  setBlockKind(kind: "h1" | "h2" | "h3" | "p"): void {
     if (!this.doc) return;
     const idx = this.blockIndexAtCaret();
     if (idx < 0) return;
@@ -1002,7 +1297,8 @@ export class FolioDoc extends HTMLElement {
       !block ||
       block.kind === "table" ||
       block.kind === "chart" ||
-      block.kind === "diagram"
+      block.kind === "diagram" ||
+      block.kind === "math"
     ) {
       return;
     }
@@ -1011,7 +1307,7 @@ export class FolioDoc extends HTMLElement {
       if (block.kind === "prose") return;
       this.doc.blocks[idx] = { kind: "prose", text };
     } else {
-      const level = kind === "h1" ? 1 : 2;
+      const level = kind === "h1" ? 1 : kind === "h2" ? 2 : 3;
       if (block.kind === "heading" && block.level === level) return;
       this.doc.blocks[idx] = { kind: "heading", level, text };
     }
@@ -1287,6 +1583,22 @@ export class FolioDoc extends HTMLElement {
     this.syncFromDom();
     this.emitChange();
     return true;
+  }
+
+  /**
+   * Insert an empty equation block after the caret's block (the
+   * insert group's equation button).
+   */
+  insertMath(): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
+    this.doc.blocks.splice(at, 0, {
+      kind: "math",
+      text: "E = mc^2",
+    });
+    this.render();
+    this.emitChange();
   }
 
   /**

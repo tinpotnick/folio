@@ -34,8 +34,18 @@ see.
 - **Safety**: switching a column's type to formula with no
   expression seeds `expr: "0"` - an empty expression breaks
   recalc; emptying the ƒx input falls back to "0".
-- **Units in headers**: `th` renders "name (unit)" with the unit
-  in a muted span; the sample document's "£k" is finally visible.
+- **Units in headers**: `th` renders "name (unit)" — the unit in a
+  muted, italic span (metadata, visually distinct from the
+  name); the sample document's "£k" is finally visible.
+- **Generated output is never editable in place**: the table
+  element is contenteditable=false — headers, rows, and the
+  caption inherit it — so only data cells are editable leaves.
+  Before this, clicking a header let you type into it: the DOM
+  diverged from the model and the edit silently vanished on the
+  next render. The caption is edited through the inspector (new
+  field; empty removes it), exactly like the chart inspector's
+  caption. Chart figures are contenteditable=false for the same
+  reason (their SVG must never swallow typed text).
 
 ## Acceptance
 
