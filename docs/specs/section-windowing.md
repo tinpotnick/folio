@@ -35,6 +35,14 @@ proportionally, and generated figures dominate.
 3. **Do nothing until a real document is slow**: render cost is
    linear and unmeasured; the current sample renders instantly.
 
+## Update (2026-10-18)
+
+Table scale is no longer a render problem: the table viewport
+and the dataset browser (docs/specs/dataset-browser.md) cap the
+in-flow DOM cost at the window regardless of row count. This
+spec's remaining subject is TEXT-scale documents (many sections
+and figures), unchanged below.
+
 ## Recommendation
 
 Do Stage 2 (lazy figures) first - it is small, safe, and

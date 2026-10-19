@@ -13,8 +13,8 @@ import {
 } from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable, type TablePool } from "@folio/engine/recalc";
-import type { Chart, Image, Table } from "@folio/engine/index.js";
-import { executeQuery } from "@folio/engine/query";
+import type { Cell, Chart, Image, Table } from "@folio/engine/index.js";
+import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import { themeFromDoc, themeCss } from "./render/theme.js";
 import {
   renderAreaChart,
@@ -35,6 +35,13 @@ export class FolioDoc extends HTMLElement {
   private menu: HTMLElement | null = null;
   private lastCell: HTMLTableCellElement | null = null;
   private lastHeaderName: HTMLElement | null = null;
+  /** The dataset browser overlay (a singleton in the shadow root). */
+  private dsBrowser: HTMLElement | null = null;
+  private dsState: {
+    filter: string;
+    sortBy: string | null;
+    sortDir: "asc" | "desc";
+  } = { filter: "", sortBy: null, sortDir: "asc" };
   private lastBlock: HTMLElement | null = null;
   /**
    * The last mouse-drag text selection, built from the two caret
@@ -80,6 +87,8 @@ export class FolioDoc extends HTMLElement {
         text = await res.text();
       }
       this.doc = parseDoc(text);
+      // A new document invalidates any open dataset browser.
+      this.closeDataset();
       this.render();
     } catch (e) {
       this.renderError(e instanceof Error ? e.message : String(e));
@@ -394,7 +403,14 @@ export class FolioDoc extends HTMLElement {
     thead.appendChild(headRow);
     table.appendChild(thead);
     const tbody = document.createElement("tbody");
-    recalced.rows.forEach((row, r) => {
+    // The viewport: a table longer than the theme's window shows
+    // its head rows in flow. The model holds every row - charts,
+    // formulas, and queries always see the full dataset - and the
+    // status line opens the dataset browser for full-scale work.
+    const rowsWindow = this.tableRowsWindow();
+    const totalRows = recalced.rows.length;
+    const shownRows = Math.min(totalRows, rowsWindow);
+    recalced.rows.slice(0, shownRows).forEach((row, r) => {
       const tr = document.createElement("tr");
       tr.dataset.rowIndex = String(r);
       block.table.columns.forEach((col, c) => {
@@ -530,6 +546,27 @@ export class FolioDoc extends HTMLElement {
       }
     });
     figure.appendChild(table);
+    if (shownRows < totalRows) {
+      const more = document.createElement("div");
+      more.className = "folio-table-more";
+      more.contentEditable = "false";
+      more.textContent = `${totalRows} rows × ${block.table.columns.length} columns — showing first ${shownRows}`;
+      const open = document.createElement("button");
+      open.className = "ds-open";
+      open.type = "button";
+      open.textContent = "Open dataset";
+      open.addEventListener("mousedown", (ev) => {
+        // The document must not steal focus before the overlay
+        // opens (the insert-group buttons' rule).
+        ev.preventDefault();
+        ev.stopPropagation();
+      });
+      open.addEventListener("click", () => {
+        this.openDataset(block.table.id);
+      });
+      more.appendChild(open);
+      figure.appendChild(more);
+    }
     if (block.table.caption) {
       const cap = document.createElement("figcaption");
       cap.contentEditable = "false";
@@ -680,7 +717,19 @@ export class FolioDoc extends HTMLElement {
       }
     });
 
-    bar.append(colSel, typeSel, unitInp, fmtSel, fx, exprInp, capInp);
+    const dsBtn = document.createElement("button");
+    dsBtn.className = "insp-dataset";
+    dsBtn.type = "button";
+    dsBtn.title = "Open the dataset browser (all rows)";
+    dsBtn.textContent = "▦";
+    dsBtn.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+    dsBtn.addEventListener("click", () => {
+      this.openDataset(block.table.id);
+    });
+    bar.append(dsBtn, colSel, typeSel, unitInp, fmtSel, fx, exprInp, capInp);
     return bar;
   }
 
@@ -1132,6 +1181,364 @@ export class FolioDoc extends HTMLElement {
     this.doc.blocks.splice(at, 0, { kind: "image", image });
     this.render();
     this.emitChange();
+  }
+
+  /** The theme's in-flow row window (table.rows.show, default 50). */
+  private tableRowsWindow(): number {
+    if (!this.doc) return 50;
+    return themeFromDoc(this.doc).tableRowsShow;
+  }
+
+  /**
+   * The dataset browser (spec: docs/specs/dataset-browser.md): a
+   * dedicated, viewport-owning surface for a table of any size.
+   * The in-flow figure shows a head window; this overlay is where
+   * the full dataset is browsed - continuous virtualized scrolling,
+   * a Jexl filter (the charts' language), click-header sorting,
+   * and cell editing. It is a model projection like every
+   * inspector: edits are model writes; the browser never becomes
+   * a source of truth. Esc or Done closes it.
+   */
+  openDataset(tableId: string): void {
+    if (!this.doc) return;
+    const block = this.doc.blocks.find(
+      (b) => b.kind === "table" && b.table.id === tableId,
+    );
+    if (!block || block.kind !== "table") return;
+    let overlay = this.dsBrowser;
+    if (overlay === null || this.shadowRoot?.contains(overlay) !== true) {
+      overlay = this.buildDatasetBrowser();
+      this.dsBrowser = overlay;
+      this.shadowRoot?.appendChild(overlay);
+    }
+    overlay.dataset.tableId = tableId;
+    this.dsState = { filter: "", sortBy: null, sortDir: "asc" };
+    const filter = overlay.querySelector<HTMLInputElement>(".folio-ds-filter");
+    if (filter) filter.value = "";
+    overlay.hidden = false;
+    this.refreshDatasetBrowser();
+    filter?.focus();
+  }
+
+  private closeDataset(): void {
+    if (this.dsBrowser) this.dsBrowser.hidden = true;
+  }
+
+  private buildDatasetBrowser(): HTMLElement {
+    const overlay = document.createElement("div");
+    overlay.className = "folio-ds-overlay";
+    overlay.hidden = true;
+    overlay.contentEditable = "false";
+    overlay.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        this.closeDataset();
+      }
+    });
+
+    const panel = document.createElement("div");
+    panel.className = "folio-ds-panel";
+
+    const head = document.createElement("div");
+    head.className = "folio-ds-head";
+    const title = document.createElement("span");
+    title.className = "folio-ds-title";
+    const filter = document.createElement("input");
+    filter.className = "folio-ds-filter";
+    filter.type = "text";
+    filter.placeholder = 'filter (Jexl), e.g. v > 100 && region != "South"';
+    filter.addEventListener("input", () => {
+      this.dsState.filter = filter.value.trim();
+      this.refreshDatasetBrowser();
+    });
+    const count = document.createElement("span");
+    count.className = "folio-ds-count";
+    const done = document.createElement("button");
+    done.className = "folio-ds-done";
+    done.type = "button";
+    done.textContent = "Done";
+    done.addEventListener("click", () => this.closeDataset());
+    head.append(title, filter, count, done);
+
+    const grid = document.createElement("div");
+    grid.className = "folio-ds-grid";
+    // Focusable so Esc keeps working after a cell editor closes
+    // (removing the focused input would strand focus on the body).
+    grid.tabIndex = -1;
+    const canvas = document.createElement("div");
+    canvas.className = "folio-ds-canvas";
+    grid.appendChild(canvas);
+    grid.addEventListener("scroll", () => {
+      this.renderDatasetRows();
+    });
+
+    panel.append(head, grid);
+    overlay.appendChild(panel);
+    return overlay;
+  }
+
+  /** The model row indexes currently displayed (filter, then sort). */
+  private datasetDisplayIndexes(): {
+    indexes: number[];
+    error: string | null;
+  } {
+    const overlay = this.dsBrowser;
+    const tableId = overlay?.dataset.tableId;
+    const block = this.doc?.blocks.find(
+      (b) => b.kind === "table" && b.table.id === tableId,
+    );
+    if (!block || block.kind !== "table") {
+      return { indexes: [], error: "table not found" };
+    }
+    let recalced: Table;
+    try {
+      recalced = recalcTable(block.table, this.tablePool());
+    } catch (e) {
+      return {
+        indexes: [],
+        error: `Table error: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
+    let indexes: number[];
+    try {
+      indexes =
+        this.dsState.filter === ""
+          ? recalced.rows.map((_, i) => i)
+          : filterIndexes(recalced, this.dsState.filter);
+    } catch (e) {
+      return {
+        indexes: [],
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+    if (this.dsState.sortBy !== null) {
+      // Sort the FILTERED subset: sort all rows, keep only the
+      // filtered indexes, in the sorted order.
+      const keep = new Set(indexes);
+      const by = this.dsState.sortBy;
+      const dir = this.dsState.sortDir;
+      indexes = sortIndexes(recalced, by, dir).filter((i) => keep.has(i));
+    }
+    return { indexes, error: null };
+  }
+
+  /** Recompute the display and redraw the visible window. */
+  private refreshDatasetBrowser(): void {
+    const overlay = this.dsBrowser;
+    if (!overlay || overlay.hidden) return;
+    const tableId = overlay.dataset.tableId;
+    const block = this.doc?.blocks.find(
+      (b) => b.kind === "table" && b.table.id === tableId,
+    );
+    if (!block || block.kind !== "table") return;
+    const title = overlay.querySelector<HTMLElement>(".folio-ds-title");
+    if (title) title.textContent = `@${block.table.id}`;
+    const { indexes, error } = this.datasetDisplayIndexes();
+    const count = overlay.querySelector<HTMLElement>(".folio-ds-count");
+    if (count) {
+      const filtered =
+        this.dsState.filter === ""
+          ? ""
+          : ` of ${block.table.rows.length} · filtered`;
+      const sorted =
+        this.dsState.sortBy === null
+          ? ""
+          : ` · sorted by ${this.dsState.sortBy} ${this.dsState.sortDir}`;
+      count.textContent =
+        error === null ? `${indexes.length} rows${filtered}${sorted}` : error;
+    }
+    const grid = overlay.querySelector<HTMLElement>(".folio-ds-grid");
+    const canvas = overlay.querySelector<HTMLElement>(".folio-ds-canvas");
+    if (!grid || !canvas) return;
+    canvas.style.height = `${indexes.length * 32 + 32}px`;
+    this.renderDatasetHeader();
+    this.renderDatasetRows();
+  }
+
+  private renderDatasetHeader(): void {
+    const overlay = this.dsBrowser;
+    const tableId = overlay?.dataset.tableId;
+    const block = this.doc?.blocks.find(
+      (b) => b.kind === "table" && b.table.id === tableId,
+    );
+    const canvas = overlay?.querySelector<HTMLElement>(".folio-ds-canvas");
+    if (!overlay || !canvas || !block || block.kind !== "table") return;
+    let header = canvas.querySelector<HTMLElement>(".folio-ds-header");
+    if (header === null) {
+      header = document.createElement("div");
+      header.className = "folio-ds-header";
+      canvas.appendChild(header);
+    }
+    header.textContent = "";
+    const cols = block.table.columns
+      .map((c) => c.name)
+      .map((n) => `${n}`)
+      .join(" ");
+    header.style.gridTemplateColumns = `repeat(${
+      block.table.columns.length
+    }, minmax(110px, 1fr))`;
+    block.table.columns.forEach((col) => {
+      const cell = document.createElement("div");
+      cell.className = "folio-ds-hcell";
+      cell.textContent = col.name;
+      if (this.dsState.sortBy === col.name) {
+        cell.classList.add("sorted");
+        cell.textContent =
+          this.dsState.sortDir === "asc" ? `${col.name} ▲` : `${col.name} ▼`;
+      }
+      cell.title = `Sort by ${col.name}`;
+      cell.addEventListener("click", () => {
+        if (this.dsState.sortBy === col.name) {
+          this.dsState.sortDir =
+            this.dsState.sortDir === "asc" ? "desc" : "asc";
+        } else {
+          this.dsState.sortBy = col.name;
+          this.dsState.sortDir = "asc";
+        }
+        this.refreshDatasetBrowser();
+      });
+      header.appendChild(cell);
+    });
+    void cols;
+  }
+
+  /** Draw the visible slice of the (filtered, sorted) row window. */
+  private renderDatasetRows(): void {
+    const overlay = this.dsBrowser;
+    if (!overlay || overlay.hidden) return;
+    const tableId = overlay.dataset.tableId;
+    const block = this.doc?.blocks.find(
+      (b) => b.kind === "table" && b.table.id === tableId,
+    );
+    const grid = overlay.querySelector<HTMLElement>(".folio-ds-grid");
+    const canvas = overlay.querySelector<HTMLElement>(".folio-ds-canvas");
+    if (!grid || !canvas || !block || block.kind !== "table") return;
+    let recalced: Table;
+    try {
+      recalced = recalcTable(block.table, this.tablePool());
+    } catch {
+      return; // the head already shows the guarded error line
+    }
+    const { indexes } = this.datasetDisplayIndexes();
+    const first = Math.max(0, Math.floor(grid.scrollTop / 32) - 2);
+    const count = Math.ceil(grid.clientHeight / 32) + 4;
+    const slice = indexes.slice(first, first + count);
+    for (const el of Array.from(
+      canvas.querySelectorAll<HTMLElement>(".folio-ds-row"),
+    )) {
+      el.remove();
+    }
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const figure = host?.querySelector(
+      `figure[data-table-id="${block.table.id}"]`,
+    ) as HTMLElement | null;
+    slice.forEach((modelRow, displayPos) => {
+      const row = document.createElement("div");
+      row.className = "folio-ds-row";
+      row.style.top = `${(first + displayPos) * 32 + 32}px`;
+      row.style.gridTemplateColumns = `repeat(${
+        block.table.columns.length
+      }, minmax(110px, 1fr))`;
+      row.dataset.modelRow = String(modelRow);
+      block.table.columns.forEach((col, c) => {
+        const cell = document.createElement("div");
+        cell.className = "folio-ds-cell";
+        cell.dataset.col = String(c);
+        const v = recalced.rows[modelRow]?.[c];
+        if (col.type === "formula") {
+          cell.classList.add("computed");
+          cell.textContent =
+            col.format === "percent" && typeof v === "number"
+              ? `${(v * 100).toFixed(1)}%`
+              : String(v ?? "");
+        } else {
+          if (typeof v === "number") cell.classList.add("num");
+          cell.textContent = String(v ?? "");
+          cell.addEventListener("click", () => {
+            const active =
+              canvas.querySelector<HTMLInputElement>(".folio-ds-edit");
+            if (active !== null) return; // one editor at a time
+            this.openDatasetCellEditor(row, cell, modelRow, c, block);
+          });
+        }
+        row.appendChild(cell);
+      });
+      void figure;
+      canvas.appendChild(row);
+    });
+  }
+
+  /**
+   * Edit one cell in the browser: an input over the cell, commit on
+   * Enter/blur (a model write rippling through formulas, the
+   * in-flow figure, and charts), Escape reverts.
+   */
+  private openDatasetCellEditor(
+    row: HTMLElement,
+    cell: HTMLElement,
+    modelRow: number,
+    c: number,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    const input = document.createElement("input");
+    input.className = "folio-ds-edit";
+    input.type = "text";
+    input.value = String(block.table.rows[modelRow]?.[c] ?? "");
+    cell.textContent = "";
+    cell.appendChild(input);
+    input.focus();
+    const commit = (): void => {
+      const text = input.value.trim();
+      const value: Cell = /^-?[0-9]+(\.[0-9]+)?$/.test(text)
+        ? parseFloat(text)
+        : text;
+      const target = block.table.rows[modelRow];
+      if (target && target[c] !== value) {
+        target[c] = value;
+        const host = this.shadowRoot?.querySelector("article.folio-doc");
+        const figure = host?.querySelector(
+          `figure[data-table-id="${block.table.id}"]`,
+        ) as HTMLElement | null;
+        // The in-flow figure's edited cell must not go stale: the
+        // browser's edit is not its DOM, so refresh the rendered
+        // cell (if it is inside the head window) like a blur commit
+        // would have.
+        const td = figure?.querySelector(
+          `td[data-row-index="${String(modelRow)}"][data-col-index="${String(c)}"]`,
+        );
+        if (td) td.textContent = String(value);
+        try {
+          this.updateRowCalculations(figure, block);
+        } catch {
+          if (figure) this.refreshTableBlock(figure, block);
+        }
+        this.emitChange();
+      }
+      this.refreshDatasetBrowser();
+      const grid = this.dsBrowser?.querySelector<HTMLElement>(".folio-ds-grid");
+      grid?.focus();
+    };
+    input.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        commit();
+      } else if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.refreshDatasetBrowser();
+      } else if (ev.key === "Tab") {
+        ev.preventDefault();
+        commit();
+        const cells = Array.from(
+          row.querySelectorAll<HTMLElement>(".folio-ds-cell"),
+        );
+        const next = cells
+          .slice(c + 1)
+          .find((el) => !el.classList.contains("computed"));
+        if (next) (next as HTMLElement).click();
+      }
+    });
+    input.addEventListener("blur", commit);
   }
 
   private drawChart(figure: HTMLElement): void {

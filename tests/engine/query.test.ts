@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { executeQuery } from "@folio/engine/query";
+import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import type { Chart, Table } from "@folio/engine";
 
 const table: Table = {
@@ -126,4 +126,63 @@ describe("executeQuery", () => {
       ),
     ).toThrow(/Unknown column/);
   });
+});
+
+describe("filterIndexes / sortIndexes (dataset browser primitives)", () => {
+  const table: Table = {
+    id: "t",
+    columns: [
+      { name: "region", type: "text" },
+      { name: "v", type: "number" },
+    ],
+    rows: [
+      ["North", 10],
+      ["South", 40],
+      ["North", 20],
+    ],
+  };
+
+  it("filterIndexes returns MODEL row indexes, not rows", () => {
+    expect(filterIndexes(table, "region == 'North'")).toEqual([0, 2]);
+    expect(filterIndexes(table, "v > 15")).toEqual([1, 2]);
+  });
+
+  it("filterIndexes throws on an unknown column", () => {
+    expect(() => filterIndexes(table, "nope > 1")).toThrow(/unknown column/);
+  });
+
+  it("sortIndexes sorts indexes without touching the model", () => {
+    expect(sortIndexes(table, "v", "desc")).toEqual([1, 2, 0]);
+    expect(sortIndexes(table, "v", "asc")).toEqual([0, 2, 1]);
+    expect(table.rows[0]).toEqual(["North", 10]);
+  });
+});
+
+it("filter and sort compose: sorting never resurrects filtered rows", () => {
+  const out = executeQuery(
+    {
+      id: "t",
+      columns: [
+        { name: "region", type: "text" },
+        { name: "q2", type: "number" },
+        { name: "growth", type: "number" },
+      ],
+      rows: [
+        ["North", 412, 0.21],
+        ["South", 388, 0.015],
+        ["Midlands", 301, 0.179],
+      ],
+    },
+    {
+      id: "c",
+      source: "t",
+      query: {
+        select: ["region", "growth"],
+        filter: "q2 > 400",
+        sort: { by: "growth", order: "desc" },
+      },
+      type: "bar",
+    },
+  );
+  expect(out.rows).toEqual([["North", 0.21]]);
 });
