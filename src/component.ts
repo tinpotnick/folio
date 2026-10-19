@@ -606,7 +606,7 @@ export class FolioDoc extends HTMLElement {
     if (!row) return;
     if (row[c] === value) return;
     row[c] = value;
-    this.updateRowCalculations(td.closest("figure"), block, r);
+    this.updateRowCalculations(td.closest("figure"), block);
     this.emitChange();
   }
 
@@ -614,21 +614,26 @@ export class FolioDoc extends HTMLElement {
   private updateRowCalculations(
     figure: HTMLElement | null,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
-    r: number,
   ): void {
     const recalced = recalcTable(block.table);
+    // Formulas may reference other rows (_prev, name:row), so an
+    // edit ripples through every formula cell of the table, not
+    // just the edited row. Text-only updates: no structural
+    // re-render, the caret in the edited cell is untouched.
     block.table.columns.forEach((col, c) => {
       if (col.type !== "formula") return;
-      const cell = figure?.querySelector(
-        `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
-      );
-      if (!cell) return;
-      const v = recalced.rows[r]?.[c];
-      cell.textContent =
-        col.format === "percent" && typeof v === "number"
-          ? `${(v * 100).toFixed(1)}%`
-          : String(v ?? "");
-      cell.classList.toggle("num", typeof v === "number");
+      for (let row = 0; row < block.table.rows.length; row++) {
+        const cell = figure?.querySelector(
+          `td[data-row-index="${String(row)}"][data-col-index="${String(c)}"]`,
+        );
+        if (!cell) continue;
+        const v = recalced.rows[row]?.[c];
+        cell.textContent =
+          col.format === "percent" && typeof v === "number"
+            ? `${(v * 100).toFixed(1)}%`
+            : String(v ?? "");
+        cell.classList.toggle("num", typeof v === "number");
+      }
     });
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     const chartFigures = Array.from(

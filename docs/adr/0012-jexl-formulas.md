@@ -50,7 +50,12 @@ Added (documented in the in-app help): comparisons and ternaries
   grammar is now someone else's spec to maintain.
 - `parseFormula`/`AstNode` are removed from the public API - the
   expression language is Jexl, not an AST contract.
-- Chained formulas (a formula referencing another formula column)
-  remain rejected, as before.
+- Update (2026-10-18, same day): the cross-row reference language
+  (docs/specs/formulas.md) supersedes the original "chained
+  formulas remain rejected" consequence - a formula may now
+  reference formula columns to its LEFT, and the row context
+  carries `_prev`/`_row`/`_r<N>`. Still plain Jexl plus context
+  objects - no grammar extension. Everything else here is
+  unchanged.
 - The engine stays UI-free (ADR-0001) and fully testable
   headlessly; recalc is synchronous (`jexl.evalSync`).

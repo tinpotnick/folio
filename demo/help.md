@@ -104,18 +104,36 @@ Chart colors come from the document's style header:
 
 ### Table formulas
 
-A formula column computes from other columns, cell by cell. The
-expression language is **Jexl**: numeric columns by name, `+ - * /`,
+A formula column computes from other columns. The expression
+language is **Jexl**: numeric columns by name, `+ - * /`,
 parentheses, comparisons (`>`, `<`, `==`), logic (`and`, `or`,
 `not`), and ternaries — for example
 `q3 > 400 ? "up" : "down"`, or `expr: "(q3 - q2) / q2"` with
 `format: percent`. Transforms apply with a pipe — the pipe binds
 tighter than arithmetic, so parenthesize its operand:
 `((q3 - q2) / q2 * 100) | round(1)` — available transforms are
-`round`, `floor`, `ceil`, `abs`, `min`, `max`. Only numeric
-columns can be referenced; division by zero yields 0 rather than
-an error. Formulas recalculate the moment a cell they depend on
-changes; formula cells are never editable by hand.
+`round`, `floor`, `ceil`, `abs`, `min`, `max`.
+
+Formulas may reference other rows through the row context —
+plain Jexl context objects, no special syntax (rows count from 1,
+like a spreadsheet's, but addressed by NAME):
+
+- `_r4.q2` — row 4's value of column `q2`. Rows beyond the data
+  read as empty.
+- `_prev.q2` — the previous row's value; `_prev` may read any
+  column, including the formula's own, which is how running
+  totals work: `q2 + (_row == 1 ? 0 : _prev.total)`.
+- `_row` — the current row number (1-based).
+- `_prev` and `_rN` may read text columns too (comparisons);
+  plain names stay numeric-only.
+
+A formula may reference formula columns to its LEFT (they compute
+first); referencing a later formula column is an error, and a
+plain reference to its own column points you at `_prev`. Only
+numeric columns are referenceable in formulas (except through
+`_prev`); division by zero yields 0 rather than an error. Formulas
+recalculate the moment any cell they depend on changes — including
+rows they reference; formula cells are never editable by hand.
 
 ## Search
 
