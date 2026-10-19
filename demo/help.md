@@ -73,15 +73,11 @@ document — written in the same renderer you are working with.
   format, the table's caption, and — for formula columns — the
   ƒx expression, editable in place (the same edit as changing
   the source by hand). Units show in the column headers ("q2
-  (£k)") — the header itself is never edited in place; that is
-  what the inspector is for.
-- Clicking any cell or column heading reveals the **table
-  inspector** above the table: the column's name, type, unit,
-  format, the table's caption, and — for formula columns — the
-  ƒx expression, editable in place (the same edit as changing
-  the source by hand). Units show in the column headers ("q2
-  (£k)") — the header itself is never edited in place; that is
-  what the inspector is for.
+  (£k)") in a separate italic span. The header's **name** is
+  editable directly: click it and type to rename the column —
+  Enter commits (and drops into the column's first cell), Tab
+  moves to the next header, Escape reverts. The unit itself is
+  read-only; that is what the inspector is for.
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,

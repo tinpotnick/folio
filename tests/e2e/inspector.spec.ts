@@ -151,11 +151,16 @@ test.describe("table inspector", () => {
       .locator("figcaption")
       .evaluate((el) => (el as HTMLElement).contentEditable);
     expect(capEditable).toBe("false");
-    // The real user contract: clicking a header and typing never
-    // changes the generated header text.
-    await table.locator('th[data-col-index="1"]').click();
-    await page.keyboard.type("X");
-    await expect(table.locator('th[data-col-index="1"]')).toHaveText("q2 (£k)");
+    // The header's NAME is the one editable leaf (the in-place
+    // rename); the unit span and the th itself are not.
+    const nameEditable = await table
+      .locator('th[data-col-index="1"] .name')
+      .evaluate((el) => (el as HTMLElement).isContentEditable);
+    expect(nameEditable).toBe(true);
+    const unitEditable = await table
+      .locator('th[data-col-index="1"] .unit')
+      .evaluate((el) => (el as HTMLElement).isContentEditable);
+    expect(unitEditable).toBe(false);
     const chartEditable = await page
       .locator('#the-doc figure[data-chart-source="regional-data"]')
       .evaluate((el) => (el as HTMLElement).contentEditable);
@@ -209,5 +214,127 @@ test.describe("table inspector", () => {
         '#the-doc figure[data-table-id="regional-data"] td[data-row-index="0"][data-col-index="3"]',
       ),
     ).toHaveText(/0\.21601/);
+  });
+
+  test("renaming a column in place updates the header, source, and charts", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    await table.locator('th[data-col-index="0"] .name').click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("area");
+    await page.keyboard.press("Enter");
+    await expect(table.locator('th[data-col-index="0"]')).toHaveText("area");
+    await page.locator("#btn-markdown").click();
+    const src = await page.locator("#editor").inputValue();
+    expect(src).toContain("{name: area, type: text");
+    // The chart selecting the old name follows the rename.
+    expect(src).toContain("select: [area, growth]");
+  });
+
+  test("a header rename commits on blur as well as Enter", async ({ page }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    await table.locator('th[data-col-index="0"] .name').click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("area");
+    await page
+      .locator("folio-doc p", { hasText: "Growth was strongest" })
+      .click();
+    await expect(table.locator('th[data-col-index="0"]')).toHaveText("area");
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "{name: area, type: text",
+    );
+  });
+
+  test("renaming a column a formula references shows an error, not a crash", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    await table.locator('th[data-col-index="1"] .name').click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("q2b");
+    await page.keyboard.press("Enter");
+    // The guarded render: the recalc error is shown in place.
+    await expect(table.locator(".folio-table-error")).toBeVisible();
+    await expect(table.locator(".folio-table-error")).toContainText("q2");
+    // The rename still committed to the source, and the app is
+    // alive: a paragraph takes typing as normal.
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "{name: q2b, type: number",
+    );
+    await page.locator("#btn-view").click();
+    await page
+      .locator("folio-doc p", { hasText: "Growth was strongest" })
+      .click();
+    await page.keyboard.type(" still");
+    await expect(
+      page.locator("folio-doc p", { hasText: "Growth was strongest" }),
+    ).toContainText("still");
+  });
+
+  test("Escape reverts an in-progress header rename", async ({ page }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    await table.locator('th[data-col-index="0"] .name').click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("zzz");
+    await page.keyboard.press("Escape");
+    await expect(table.locator('th[data-col-index="0"]')).toHaveText("region");
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "{name: region, type: text",
+    );
+  });
+
+  test("clearing a header name reverts it - a column always keeps a name", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    await table.locator('th[data-col-index="0"] .name').click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Enter");
+    await expect(table.locator('th[data-col-index="0"]')).toHaveText("region");
+  });
+
+  test("Tab moves across headers; Enter drops into the column's first cell", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    const active = (): Promise<string> =>
+      page.locator("#the-doc").evaluate((el) => {
+        const a = (el.shadowRoot as ShadowRoot | null)
+          ?.activeElement as HTMLElement | null;
+        if (a === null) return "none";
+        if (a.tagName === "TD") {
+          return `TD:${a.dataset.colIndex ?? ""}:${a.dataset.rowIndex ?? ""}`;
+        }
+        const th = a.closest("th") as HTMLElement | null;
+        return th === null ? "OTHER" : `SPAN:${th.dataset.colIndex ?? ""}`;
+      });
+    await table.locator('th[data-col-index="0"] .name').click();
+    await page.keyboard.press("Tab");
+    await expect.poll(active).toBe("SPAN:1");
+    await page.keyboard.press("Enter");
+    await expect.poll(active).toBe("TD:1:0");
   });
 });
