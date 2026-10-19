@@ -666,6 +666,24 @@ const paletteInput = requireEl<HTMLInputElement>("#palette-input");
 const paletteList = requireEl<HTMLElement>("#palette-list");
 const helpDoc = requireEl<FolioDoc>("#help-doc");
 
+const EXAMPLES: { id: string; file: string; blurb: string }[] = [
+  {
+    id: "poem",
+    file: "/demo/examples/poem.md",
+    blurb: "pure prose and poetry",
+  },
+  {
+    id: "accounts",
+    file: "/demo/examples/accounts.md",
+    blurb: "accounts running totals budget negative growth",
+  },
+  {
+    id: "technical",
+    file: "/demo/examples/technical.md",
+    blurb: "technical code equations benchmarks",
+  },
+];
+
 interface PaletteEntry {
   title: string;
   group: "Command" | "Help" | "Section";
@@ -731,6 +749,23 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "print pdf export paper",
     action: () => window.print(),
   });
+  for (const ex of EXAMPLES) {
+    entries.push({
+      title: `Open example: ${ex.id}`,
+      group: "Command",
+      keywords: `example demo document open load ${ex.id} ${ex.blurb}`,
+      action: () => {
+        void (async (): Promise<void> => {
+          const res = await fetch(ex.file);
+          const text = await res.text();
+          await el.load(text);
+          editor.value = text;
+          refreshOutline();
+          flash(`Opened ${ex.id}`);
+        })();
+      },
+    });
+  }
   if (!fileBar.hidden) {
     entries.push({
       title: "Open a document",
@@ -945,10 +980,6 @@ function openSettings(): void {
 requireEl<HTMLButtonElement>("#btn-settings").addEventListener(
   "click",
   openSettings,
-);
-requireEl<HTMLButtonElement>("#btn-settings-close").addEventListener(
-  "click",
-  () => settingsModal.close(),
 );
 requireEl<HTMLButtonElement>("#btn-settings-cancel").addEventListener(
   "click",

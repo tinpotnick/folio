@@ -137,9 +137,10 @@ test.describe("section browser", () => {
     await expect(sidebar).toBeVisible();
 
     const outline = page.locator("#outline button");
-    await expect(outline).toHaveCount(2);
+    await expect(outline).toHaveCount(3);
     await expect(outline.first()).toHaveText("Q3 Field Operations Review");
     await expect(outline.nth(1)).toHaveText("Regional summary");
+    await expect(outline.nth(2)).toHaveText("Cumulative view");
 
     await outline.nth(1).click();
     const focused = await page.evaluate(() => {
@@ -338,7 +339,7 @@ test.describe("toolbar context state and actions", () => {
 
 test.describe("table editing and keyboard navigation", () => {
   const td = (r: number, c: number) =>
-    `#the-doc td[data-row-index="${r}"][data-col-index="${c}"]`;
+    `#the-doc figure[data-table-id="regional-data"] td[data-row-index="${r}"][data-col-index="${c}"]`;
 
   function focusedCell(page: Page): Promise<string> {
     return page.evaluate(() => {
@@ -383,12 +384,16 @@ test.describe("table editing and keyboard navigation", () => {
   test("Tab past the last row grows the table", async ({ page }) => {
     await waitForDocument(page);
 
-    const before = await page.locator("#the-doc tbody tr").count();
+    const before = await page
+      .locator('#the-doc figure[data-table-id="regional-data"] tbody tr')
+      .count();
     await page.locator(td(2, 2)).click();
     await page.keyboard.press("Tab");
 
     expect(await focusedCell(page)).toBe("3:0");
-    await expect(page.locator("#the-doc tbody tr")).toHaveCount(before + 1);
+    await expect(
+      page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr'),
+    ).toHaveCount(before + 1);
   });
 
   test("Enter moves down a column and grows the table at the bottom", async ({
@@ -400,11 +405,15 @@ test.describe("table editing and keyboard navigation", () => {
     await page.keyboard.press("Enter");
     expect(await focusedCell(page)).toBe("1:0");
 
-    const before = await page.locator("#the-doc tbody tr").count();
+    const before = await page
+      .locator('#the-doc figure[data-table-id="regional-data"] tbody tr')
+      .count();
     await page.locator(td(2, 1)).click();
     await page.keyboard.press("Enter");
     expect(await focusedCell(page)).toBe("3:1");
-    await expect(page.locator("#the-doc tbody tr")).toHaveCount(before + 1);
+    await expect(
+      page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr'),
+    ).toHaveCount(before + 1);
   });
 });
 
