@@ -134,6 +134,62 @@ test.describe("table inspector", () => {
     );
   });
 
+  test("headers, captions, and charts are not editable surfaces", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    // The table element carries the explicit no-editing flag; the
+    // header (no attribute of its own) inherits it.
+    const tableEditable = await table
+      .locator("table")
+      .evaluate((el) => (el as HTMLElement).contentEditable);
+    expect(tableEditable).toBe("false");
+    const capEditable = await table
+      .locator("figcaption")
+      .evaluate((el) => (el as HTMLElement).contentEditable);
+    expect(capEditable).toBe("false");
+    // The real user contract: clicking a header and typing never
+    // changes the generated header text.
+    await table.locator('th[data-col-index="1"]').click();
+    await page.keyboard.type("X");
+    await expect(table.locator('th[data-col-index="1"]')).toHaveText("q2 (£k)");
+    const chartEditable = await page
+      .locator('#the-doc figure[data-chart-source="regional-data"]')
+      .evaluate((el) => (el as HTMLElement).contentEditable);
+    expect(chartEditable).toBe("false");
+    // Data cells remain the editable leaves.
+    const tdEditable = await table
+      .locator('td[data-row-index="0"][data-col-index="1"]')
+      .evaluate((el) => (el as HTMLElement).contentEditable);
+    expect(tdEditable).toBe("true");
+  });
+
+  test("the caption is edited through the inspector, not in place", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const table = page.locator(
+      '#the-doc figure[data-table-id="regional-data"]',
+    );
+    await table.locator('td[data-row-index="0"][data-col-index="1"]').click();
+    const insp = table.locator(".folio-inspector");
+    await expect(insp.locator(".insp-caption")).toHaveValue(
+      "Q3 revenue by region (GBP thousands)",
+    );
+    await insp.locator(".insp-caption").fill("Q3 revenue by region");
+    await insp.locator(".insp-caption").press("Enter");
+    await expect(table.locator("figcaption")).toHaveText(
+      "Q3 revenue by region",
+    );
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      'caption: "Q3 revenue by region"',
+    );
+  });
+
   test("the format select drives percent rendering", async ({ page }) => {
     await waitForDocument(page);
     await page

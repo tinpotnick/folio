@@ -279,6 +279,9 @@ export class FolioDoc extends HTMLElement {
         const figure = document.createElement("figure");
         figure.dataset.blockIndex = String(idx);
         figure.dataset.chartSource = block.chart.source;
+        // Generated output: the SVG and caption never swallow
+        // typed text; the inspector inputs are their own region.
+        figure.contentEditable = "false";
         figure.appendChild(this.buildChartInspector(figure, block));
         const holder = document.createElement("div");
         holder.className = "chart-holder";
@@ -326,6 +329,11 @@ export class FolioDoc extends HTMLElement {
     figure.appendChild(inspector);
     const table = document.createElement("table");
     table.className = "folio-table";
+    // Only data cells edit (they set contenteditable themselves):
+    // the header, rows, and caption are generated output - typing
+    // into them silently diverged from the model (the header was
+    // editable by inheritance from the article).
+    table.contentEditable = "false";
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
     block.table.columns.forEach((col, ci) => {
@@ -449,6 +457,7 @@ export class FolioDoc extends HTMLElement {
     figure.appendChild(table);
     if (block.table.caption) {
       const cap = document.createElement("figcaption");
+      cap.contentEditable = "false";
       cap.textContent = block.table.caption;
       figure.appendChild(cap);
     }
@@ -559,7 +568,36 @@ export class FolioDoc extends HTMLElement {
       }
     });
 
-    bar.append(colSel, typeSel, unitInp, fmtSel, fx, exprInp);
+    const capInp = document.createElement("input");
+    capInp.className = "insp-caption";
+    capInp.type = "text";
+    capInp.placeholder = "caption";
+    capInp.title = "Table caption (empty removes it)";
+    const capPatch = (): void => {
+      const v = capInp.value.trim();
+      if (v) block.table.caption = v;
+      else delete block.table.caption;
+      const cap = figure.querySelector("figcaption");
+      if (v && cap) cap.textContent = v;
+      else if (v && !cap) {
+        const el = document.createElement("figcaption");
+        el.contentEditable = "false";
+        el.textContent = v;
+        figure.appendChild(el);
+      } else if (!v && cap) {
+        cap.remove();
+      }
+      this.emitChange();
+    };
+    capInp.addEventListener("change", capPatch);
+    capInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        capPatch();
+      }
+    });
+
+    bar.append(colSel, typeSel, unitInp, fmtSel, fx, exprInp, capInp);
     return bar;
   }
 
@@ -829,6 +867,8 @@ export class FolioDoc extends HTMLElement {
     }
     const fx = bar.querySelector<HTMLElement>(".insp-fx");
     if (fx) fx.hidden = col.type !== "formula";
+    const capInp = bar.querySelector<HTMLInputElement>(".insp-caption");
+    if (capInp) capInp.value = block.table.caption ?? "";
     bar.hidden = false;
   }
 
