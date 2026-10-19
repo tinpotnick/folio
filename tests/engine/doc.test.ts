@@ -58,6 +58,36 @@ describe("property: round-trip is stable (idempotence)", () => {
     expect(serializeDoc(parseDoc(once))).toBe(once);
   });
 
+  it("a chart with a Jexl expression filter round-trips byte-identically", () => {
+    const text =
+      "# T\n\n::: chart {#c}\nsource: @t\nquery: {select: [region, q3], filter: \"q2 > 350 and region != 'South'\"}\ntype: bar\n:::\n";
+    const once = serializeDoc(parseDoc(text));
+    expect(once).toBe(text);
+    expect(serializeDoc(parseDoc(once))).toBe(once);
+    const chart = parseDoc(text).blocks.find((b) => b.kind === "chart");
+    expect(
+      chart && chart.kind === "chart" ? chart.chart.query.filter : null,
+    ).toBe("q2 > 350 and region != 'South'");
+  });
+
+  it("a chart with the legacy triple filter round-trips as the triple", () => {
+    const text =
+      "# T\n\n::: chart {#c}\nsource: @t\nquery: {select: [region, q3], filter: {column: q2, op: gt, value: 400}}\ntype: bar\n:::\n";
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  it("a chart filter string with escaped double quotes round-trips", () => {
+    const doc = parseDoc(
+      "# T\n\n::: chart {#c}\nsource: @t\nquery: {select: [region]}\ntype: bar\n:::\n",
+    );
+    const chart = doc.blocks.find((b) => b.kind === "chart");
+    if (chart?.kind !== "chart") throw new Error("no chart");
+    chart.chart.query.filter = 'region == "North"';
+    const out = serializeDoc(doc);
+    expect(out).toContain('filter: "region == \\"North\\""');
+    expect(serializeDoc(parseDoc(out))).toBe(out);
+  });
+
   it("empty paragraphs between content round-trip byte-identically", () => {
     // The serializer joins blocks with a blank line, so n empty
     // prose blocks emit 2n blank lines and parse back to n empties.

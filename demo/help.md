@@ -91,8 +91,11 @@ caption: "Quarter-on-quarter growth by region"
 - **query** has three parts, all optional except `select`:
   - `select: [column, column]` — the columns to plot. The first
     selected column labels the bars; the last is the value.
-  - `filter: {column: q2, op: gt, value: 0}` — keep rows where the
-    column passes. Operators: `eq`, `gt`, `lt`.
+  - `filter: "q2 > 350 && region != 'South'"` — a **Jexl expression**
+    over the table's columns (the same language as table
+    formulas; text columns included). The legacy form
+    `filter: {column: q2, op: gt, value: 0}` (operators `eq`, `gt`,
+    `lt`) still works.
   - `sort: {by: growth, order: desc}` — sort by a column, `asc` or
     `desc`.
 - **type** is `bar` (the rendered type; `line` and `scatter` are
@@ -106,26 +109,35 @@ Chart colors come from the document's style header:
 
 A formula column computes from other columns. The expression
 language is **Jexl**: numeric columns by name, `+ - * /`,
-parentheses, comparisons (`>`, `<`, `==`), logic (`and`, `or`,
-`not`), and ternaries — for example
+parentheses, comparisons (`>`, `<`, `==`), logic (`&&`,
+`||`, `!`), and ternaries — for example
 `q3 > 400 ? "up" : "down"`, or `expr: "(q3 - q2) / q2"` with
 `format: percent`. Transforms apply with a pipe — the pipe binds
 tighter than arithmetic, so parenthesize its operand:
 `((q3 - q2) / q2 * 100) | round(1)` — available transforms are
 `round`, `floor`, `ceil`, `abs`, `min`, `max`.
 
-Formulas may reference other rows through the row context —
-plain Jexl context objects, no special syntax (rows count from 1,
-like a spreadsheet's, but addressed by NAME):
+Formulas may reference other rows and other tables, all through
+the same namespaced references (plain Jexl context objects - rows
+count from 1 like a spreadsheet's, but addressed by NAME):
 
-- `_r4.q2` — row 4's value of column `q2`. Rows beyond the data
-  read as empty.
-- `_prev.q2` — the previous row's value; `_prev` may read any
-  column, including the formula's own, which is how running
-  totals work: `q2 + (_row == 1 ? 0 : _prev.total)`.
-- `_row` — the current row number (1-based).
-- `_prev` and `_rN` may read text columns too (comparisons);
-  plain names stay numeric-only.
+- `self.row` — the current row number (1-based).
+- `self.prev.q2` — the previous row's value; may read ANY column,
+  including the formula's own, which is how running totals work:
+  `q2 + (self.row == 1 ? 0 : self.prev.total)`.
+- `self.prev2.q2`, `self.prev3.q2`, … — two rows back, three rows
+  back: `q2 - self.prev2.q2`. Before the first row they read as
+  empty.
+- `self.r4.q2` — row 4 of this table. Rows past the data read as
+  empty.
+- `@budget.r3.q2` — row 3 of the table with id `budget` (the `@`
+  matches how charts name their source; the bare form
+  `budget.r3.q2` works too). `@budget.prev.q2` is that table's
+  LAST row - a table has no current row inside another table's
+  formula. Referenced table ids must be valid identifiers - no
+  hyphens.
+- Row-context references (`self.*`, `@table.*`) may read text
+  columns too (comparisons); plain names stay numeric-only.
 
 A formula may reference formula columns to its LEFT (they compute
 first); referencing a later formula column is an error, and a

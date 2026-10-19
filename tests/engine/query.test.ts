@@ -87,6 +87,34 @@ describe("executeQuery", () => {
     );
   });
 
+  it("filters with a Jexl expression (and + text comparison)", () => {
+    const out = executeQuery(
+      table,
+      chart({
+        select: ["region", "q3"],
+        filter: "q2 > 300 && region != 'South'",
+      }),
+    );
+    expect(out.rows.map((r) => r[0])).toEqual(["North", "Midlands"]);
+  });
+
+  it("the legacy {column, op, value} filter still works", () => {
+    const out = executeQuery(
+      table,
+      chart({
+        select: ["region", "q3"],
+        filter: { column: "q2", op: "gt", value: 400 },
+      }),
+    );
+    expect(out.rows.map((r) => r[0])).toEqual(["North"]);
+  });
+
+  it("an expression filter with an unknown column is a visible error", () => {
+    expect(() =>
+      executeQuery(table, chart({ select: ["region"], filter: "missing > 1" })),
+    ).toThrow(/Filter error: unknown column 'missing'/);
+  });
+
   it("throws on unknown filter column", () => {
     expect(() =>
       executeQuery(

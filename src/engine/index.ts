@@ -44,7 +44,9 @@ export interface Chart {
   source: string; // table id
   query: {
     select: string[];
-    filter?: { column: string; op: string; value: Cell };
+    // A Jexl boolean expression per row ("q2 > 400 and region == 'North'")
+    // or the legacy {column, op, value} triple - both round-trip.
+    filter?: string | { column: string; op: string; value: Cell };
     sort?: { by: string; order: "asc" | "desc" };
   };
   type: "bar" | "line" | "scatter";
