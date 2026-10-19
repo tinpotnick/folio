@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>folio — document-first workspace</title>
     <style>
+      /* Author display rules beat the UA's [hidden] mapping. */
+      [hidden] {
+        display: none !important;
+      }
       body {
         margin: 0;
         font-family: system-ui, sans-serif;
@@ -351,8 +355,13 @@
   </head>
   <body>
     <header>
-      <button id="btn-sidebar" class="plain" title="Toggle the section browser">
-        ☰ Sections
+      <button
+        id="btn-sidebar"
+        class="plain"
+        title="Sections"
+        aria-label="Toggle the section browser"
+      >
+        ☰
       </button>
       <h1>folio</h1>
       <span class="tag">document-first workspace</span>
@@ -442,40 +451,30 @@
             </svg>
           </button>
         </div>
-        <button
-          id="btn-open"
-          class="plain"
-          hidden
-          title="Open"
-          aria-label="Open"
-        >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M1.5 12.5v-9h4L7 5h6.5v7.5z" stroke-linejoin="round" />
-          </svg>
-        </button>
-        <button
-          id="btn-save"
-          class="plain"
-          hidden
-          title="Save"
-          aria-label="Save"
-        >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-          >
-            <path d="M2.5 13.5v-11h8.5l2.5 2.5v8.5z" stroke-linejoin="round" />
-            <path d="M5 13.5V9.5h6v4" stroke-linejoin="round" />
-            <path d="M5 2.5v3h4.5v-3" stroke-linejoin="round" />
-          </svg>
-        </button>
+        <div class="seg" id="file-bar" hidden>
+          <button id="btn-open" title="Open" aria-label="Open">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M1.5 12.5v-9h4L7 5h6.5v7.5z" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button id="btn-save" title="Save" aria-label="Save">
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M2.5 13.5v-11h8.5l2.5 2.5v8.5z" stroke-linejoin="round" />
+              <path d="M5 13.5V9.5h6v4" stroke-linejoin="round" />
+              <path d="M5 2.5v3h4.5v-3" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
         <button id="btn-help" class="plain" title="Help (?)">?</button>
       </div>
     </header>

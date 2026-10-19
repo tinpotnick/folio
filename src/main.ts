@@ -603,12 +603,12 @@ btnSidebar.addEventListener("click", () => {
 
 /* --- Desktop (Tauri) bridge: native Open/Save (ADR-0006) --- */
 
+const fileBar = requireEl<HTMLElement>("#file-bar");
 const btnOpen = requireEl<HTMLButtonElement>("#btn-open");
 const btnSave = requireEl<HTMLButtonElement>("#btn-save");
 
 if (isDesktop()) {
-  btnOpen.hidden = false;
-  btnSave.hidden = false;
+  fileBar.hidden = false;
 }
 
 btnOpen.addEventListener("click", async () => {
