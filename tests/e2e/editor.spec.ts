@@ -515,7 +515,7 @@ test.describe("inline formats (document view)", () => {
 
 test.describe("tables", () => {
   const td = (r: number, c: number) =>
-    `#the-doc td[data-row-index="${r}"][data-col-index="${c}"]`;
+    `#the-doc figure[data-table-id="regional-data"] td[data-row-index="${r}"][data-col-index="${c}"]`;
 
   test("Enter in a paragraph after using a table cell splits the paragraph, not the table", async ({
     page,
@@ -537,7 +537,9 @@ test.describe("tables", () => {
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(texts[idx + 1]).toContain("after-table");
     // The table must NOT have grown.
-    const rows = await page.locator("#the-doc tbody tr").count();
+    const rows = await page
+      .locator('#the-doc figure[data-table-id="regional-data"] tbody tr')
+      .count();
     expect(rows).toBe(3);
   });
 
@@ -563,7 +565,9 @@ test.describe("tables", () => {
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await page.keyboard.type("tail");
-    const rows = await page.locator("#the-doc tbody tr").count();
+    const rows = await page
+      .locator('#the-doc figure[data-table-id="regional-data"] tbody tr')
+      .count();
     expect(rows).toBe(3);
     const texts = await proseTexts(page);
     const idx = texts.findIndex((t) => t.includes("Numbers are pulled live"));
@@ -633,10 +637,14 @@ test.describe("tables", () => {
     page,
   }) => {
     await waitForDocument(page);
-    const before = await page.locator("#the-doc tbody tr").count();
+    const before = await page
+      .locator('#the-doc figure[data-table-id="regional-data"] tbody tr')
+      .count();
     await page.locator(td(2, 2)).click();
     await page.keyboard.press("Tab");
-    await expect(page.locator("#the-doc tbody tr")).toHaveCount(before + 1);
+    await expect(
+      page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr'),
+    ).toHaveCount(before + 1);
   });
 
   test("running totals (self.prev) render and recalculate on edit", async ({
@@ -664,23 +672,33 @@ test.describe("tables", () => {
       );
     await page.locator("#btn-view").click();
     await expect(
-      page.locator('#the-doc td[data-row-index="0"][data-col-index="2"]'),
+      page.locator(
+        '#the-doc figure[data-table-id="rt"] td[data-row-index="0"][data-col-index="2"]',
+      ),
     ).toHaveText("10");
     await expect(
-      page.locator('#the-doc td[data-row-index="1"][data-col-index="2"]'),
+      page.locator(
+        '#the-doc figure[data-table-id="rt"] td[data-row-index="1"][data-col-index="2"]',
+      ),
     ).toHaveText("30");
     // Editing the first row ripples through the whole column.
     await page
-      .locator('#the-doc td[data-row-index="0"][data-col-index="1"]')
+      .locator(
+        '#the-doc figure[data-table-id="rt"] td[data-row-index="0"][data-col-index="1"]',
+      )
       .click();
     await page.keyboard.press("Control+a");
     await page.keyboard.type("100");
     await page.keyboard.press("Tab");
     await expect(
-      page.locator('#the-doc td[data-row-index="0"][data-col-index="2"]'),
+      page.locator(
+        '#the-doc figure[data-table-id="rt"] td[data-row-index="0"][data-col-index="2"]',
+      ),
     ).toHaveText("100");
     await expect(
-      page.locator('#the-doc td[data-row-index="1"][data-col-index="2"]'),
+      page.locator(
+        '#the-doc figure[data-table-id="rt"] td[data-row-index="1"][data-col-index="2"]',
+      ),
     ).toHaveText("120");
   });
 
@@ -707,7 +725,7 @@ test.describe("tables", () => {
       );
     await page.locator("#btn-view").click();
     const deltas = await page
-      .locator('#the-doc td[data-col-index="1"]')
+      .locator('#the-doc figure[data-table-id="refs"] td[data-col-index="1"]')
       .allTextContents();
     expect(deltas).toEqual(["10", "0", "-10"]);
   });
@@ -1013,7 +1031,9 @@ test.describe("toolbar reflection", () => {
   test("clicking a table cell lights no block button", async ({ page }) => {
     await waitForDocument(page);
     await page
-      .locator('#the-doc td[data-row-index="0"][data-col-index="0"]')
+      .locator(
+        '#the-doc figure[data-table-id="regional-data"] td[data-row-index="0"][data-col-index="0"]',
+      )
       .click();
     const active = await page.locator("#block-bar button.active").count();
     expect(active).toBe(0);
@@ -1280,7 +1300,7 @@ test.describe("block boundaries", () => {
 
 test.describe("table navigation extras", () => {
   const td = (r: number, c: number) =>
-    `#the-doc td[data-row-index="${r}"][data-col-index="${c}"]`;
+    `#the-doc figure[data-table-id="regional-data"] td[data-row-index="${r}"][data-col-index="${c}"]`;
 
   async function focusedCell(page: Page): Promise<string | null> {
     return page.evaluate(() => {
@@ -1323,7 +1343,7 @@ test.describe("table navigation extras", () => {
     await page.keyboard.type("400");
     await page.keyboard.press("Tab");
     await expect(
-      page.locator("#the-doc figure[data-chart-source] svg"),
+      page.locator('#the-doc figure[data-chart-source="regional-data"] svg'),
     ).toContainText("0.25");
   });
 });

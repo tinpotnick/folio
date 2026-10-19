@@ -27,12 +27,12 @@ async function openSettings(page: Page): Promise<void> {
 }
 
 test.describe("document settings", () => {
-  test("the gear button opens the dialog; Close and Esc close it", async ({
+  test("the gear button opens the dialog; Cancel and Esc close it", async ({
     page,
   }) => {
     await waitForDocument(page);
     await openSettings(page);
-    await page.locator("#btn-settings-close").click();
+    await page.locator("#btn-settings-cancel").click();
     await expect(page.locator("#settings-modal")).toBeHidden();
     await openSettings(page);
     await page.keyboard.press("Escape");

@@ -42,3 +42,58 @@ caption: "Quarter-on-quarter growth by region"
 
 *Figure 1* is generated from the table; if the table edits, the
 figure updates on next render. No run button. No execution state.
+
+## Cumulative view
+
+Running totals and cross-table lookups - the same document, more
+machinery.
+
+::: table {#cumulative}
+caption: "Cumulative revenue by month (GBP thousands)"
+columns:
+  - {name: month, type: text, width: 30}
+  - {name: revenue, type: number, unit: "£k", align: right}
+  - {name: total, type: formula, unit: "£k", align: right, expr: "revenue + (self.row == 1 ? 0 : self.prev.total)"}
+data:
+  - [Jul, 182]
+  - [Aug, 205]
+  - [Sep, 241]
+:::
+
+The running total adds each month's revenue to the row above
+(`self.prev.total`).
+
+::: table {#budget}
+caption: "Quarterly budget (GBP thousands)"
+columns:
+  - {name: quarter, type: text}
+  - {name: target, type: number, unit: "£k", align: right}
+data:
+  - [Q3, 600]
+:::
+
+::: table {#variance}
+caption: "Month variance against budget (GBP thousands)"
+columns:
+  - {name: month, type: text, width: 30}
+  - {name: revenue, type: number, unit: "£k", align: right}
+  - {name: vs_budget, type: formula, unit: "£k", align: right, expr: "revenue - @budget.prev.target / 3"}
+data:
+  - [Jul, 182]
+  - [Aug, 205]
+  - [Sep, 241]
+:::
+
+Each month is compared with a third of the quarter's target,
+read from the budget table's last row (`@budget.prev.target`) -
+tables reference tables by name, like charts do.
+
+::: chart {#cumulative-chart}
+source: @cumulative
+query: {select: [month, total], filter: "revenue > 190"}
+type: bar
+caption: "Cumulative revenue, months with revenue above 190"
+:::
+
+*Figure 2* filters with a Jexl expression - the same language as
+table formulas.

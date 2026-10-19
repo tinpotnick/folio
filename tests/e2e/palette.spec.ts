@@ -48,6 +48,7 @@ test.describe("command palette", () => {
 
   test("typing a command word and pressing Enter runs it", async ({ page }) => {
     await waitForDocument(page);
+    const base = await page.locator("#the-doc figure").count();
     await openPalette(page);
     await page.locator("#palette-input").fill("insert table");
     await expect(
@@ -55,7 +56,7 @@ test.describe("command palette", () => {
     ).toContainText("Insert a table");
     await page.keyboard.press("Enter");
     await expect(page.locator("#palette-modal")).toBeHidden();
-    await expect(page.locator("#the-doc figure")).toHaveCount(3);
+    await expect(page.locator("#the-doc figure")).toHaveCount(base + 1);
     await expect(
       page.locator("#the-doc figure table", { hasText: "item" }),
     ).toBeVisible();
@@ -152,5 +153,59 @@ test.describe("command palette", () => {
     ).toContainText("Switch to Document view");
     await page.keyboard.press("Enter");
     await expect(page.locator("#editor")).toBeHidden();
+  });
+});
+
+test.describe("example documents", () => {
+  test("Open example: poem loads a pure-prose document", async ({ page }) => {
+    await waitForDocument(page);
+    await openPalette(page);
+    await page.locator("#palette-input").fill("poem");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("folio-doc h1", { hasText: "Ozymandias" }),
+    ).toBeVisible();
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "lone and level sands",
+    );
+  });
+
+  test("Open example: accounts shows a negative bar below the zero line", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await openPalette(page);
+    await page.locator("#palette-input").fill("accounts");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("folio-doc h1", {
+        hasText: "Half-year management accounts",
+      }),
+    ).toBeVisible();
+    // East declined: its bar hangs below the zero baseline.
+    const svg = await page
+      .locator('figure[data-chart-source="pl"] svg')
+      .textContent();
+    expect(svg).toContain("-0.15");
+  });
+
+  test("Open example: technical renders code, math, and a diagram", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await openPalette(page);
+    await page.locator("#palette-input").fill("technical");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("folio-doc h1", { hasText: "Compiling expressions" }),
+    ).toBeVisible();
+    await expect(page.locator("#the-doc pre.folio-code")).toBeVisible();
+    await expect(page.locator("#the-doc figure.folio-math .katex")).toBeVisible(
+      { timeout: 10_000 },
+    );
+    await expect(page.locator("#the-doc figure.folio-diagram svg")).toBeVisible(
+      { timeout: 10_000 },
+    );
   });
 });

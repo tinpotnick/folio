@@ -57,6 +57,11 @@ export function themeFromDoc(doc: Doc): Theme {
 export function themeCss(theme: Theme): string {
   return `
     :host { display: block; }
+    /* Author display rules beat the UA's [hidden] mapping, and the
+       host page's guard does not pierce the shadow boundary. */
+    [hidden] {
+      display: none !important;
+    }
     article.folio-doc {
       max-width: 720px;
       margin: 0 auto;
@@ -125,6 +130,11 @@ export function themeCss(theme: Theme): string {
       theme.tableStyle === "plain"
         ? `table.folio-table thead tr { border-top: 1px solid #d0d7de; }
     table.folio-table thead th { border-bottom: 1px solid #d0d7de; }
+    table.folio-table thead th .unit {
+      font-weight: 400;
+      font-size: 0.8em;
+      color: #57606a;
+    }
     table.folio-table tbody tr:last-child td { border-bottom: 1px solid #d0d7de; }
     table.folio-table td, table.folio-table th { border: 1px solid #e6e8eb; }`
         : ""
@@ -171,6 +181,38 @@ export function themeCss(theme: Theme): string {
     figure.folio-diagram:focus {
       outline: 2px solid #1f3fbf;
       border-style: solid;
+    }
+    .folio-inspector {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding: 6px 8px;
+      margin-bottom: 8px;
+      border: 1px solid #e6e8eb;
+      border-radius: 6px;
+      background: #fafbfc;
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+    }
+    .folio-inspector select,
+    .folio-inspector input {
+      font: inherit;
+      font-size: 12px;
+      padding: 3px 6px;
+      border: 1px solid #d0d7de;
+      border-radius: 5px;
+      background: #fff;
+      color: #1f2328;
+    }
+    .folio-inspector .insp-expr {
+      flex: 1;
+      min-width: 80px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .folio-inspector .insp-fx {
+      font-style: italic;
+      color: #57606a;
+      flex: none;
     }
     figure.folio-math {
       margin: 1.2em 0;

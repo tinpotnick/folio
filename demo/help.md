@@ -61,6 +61,16 @@ document — written in the same renderer you are working with.
   LaTeX source, then a closing `$$` line. They render typeset
   (KaTeX). Edit the LaTeX in the Markdown view; a bad equation
   shows its error inline instead of breaking the document.
+- Clicking any cell reveals the **table inspector** above the
+  table: the column's name, type, unit, format, and — for
+  formula columns — the ƒx expression, editable in place (the
+  same edit as changing the source by hand). Units show in the
+  column headers ("q2 (£k)").
+- Clicking any cell reveals the **table inspector** above the
+  table: the column's name, type, unit, format, and — for
+  formula columns — the ƒx expression, editable in place (the
+  same edit as changing the source by hand). Units show in the
+  column headers ("q2 (£k)").
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,
@@ -153,6 +163,16 @@ rows they reference; formula cells are never editable by hand.
   the search box. Type words you know — "insert table", "regional
   summary", "keyboard shortcuts" — and Enter runs the top result.
   It searches commands, help topics, and the document's sections.
+- **Open example: poem / accounts / technical** in the palette
+  loads example documents of different genres — pure prose and
+  poetry, management accounts (running totals, budget lookups,
+  negative growth), and a technical paper (code, equations,
+  diagrams).
+- **Open example: poem / accounts / technical** in the palette
+  loads example documents of different genres — pure prose and
+  poetry, management accounts (running totals, budget lookups,
+  negative growth), and a technical paper (code, equations,
+  diagrams).
 
 ## Document settings
 

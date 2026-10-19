@@ -434,18 +434,25 @@
         width: min(520px, calc(100vw - 48px));
         border: none;
         border-radius: 12px;
-        padding: 0;
+        padding: 0 0 8px;
         box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
         overflow: hidden;
       }
       #settings-modal::backdrop {
         background: rgba(31, 35, 40, 0.4);
       }
+      #settings-modal .settings-head {
+        padding: 16px 20px 10px;
+      }
+      #settings-modal .settings-head h2 {
+        margin: 0;
+        font-size: 15px;
+      }
       #settings-form {
         display: grid;
         grid-template-columns: max-content 1fr;
         gap: 12px 16px;
-        padding: 16px;
+        padding: 4px 20px 12px;
         align-items: center;
       }
       #settings-form label {
@@ -469,7 +476,9 @@
         display: flex;
         justify-content: flex-end;
         gap: 8px;
-        margin-top: 4px;
+        padding-top: 12px;
+        margin-top: 8px;
+        border-top: 1px solid #e6e8eb;
       }
       /* Printing (and PDF via the OS print dialog) shows the
          document, not the app chrome. */
@@ -698,11 +707,8 @@
       </div>
     </dialog>
     <dialog id="settings-modal" aria-label="Document settings">
-      <div class="help-head">
+      <div class="settings-head">
         <h2>Document settings</h2>
-        <button id="btn-settings-close" class="plain" title="Close (Esc)">
-          Close
-        </button>
       </div>
       <form id="settings-form">
         <label for="set-body-font">Body font</label>

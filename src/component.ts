@@ -164,6 +164,18 @@ export class FolioDoc extends HTMLElement {
         const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
         const block = el?.closest("[data-block-index]") as HTMLElement | null;
         if (block) this.lastBlock = block;
+        // Clicking away from a table closes its inspector: the
+        // bar belongs to the table being worked on.
+        const hitFigure = el?.closest(
+          "figure[data-table-id]",
+        ) as HTMLElement | null;
+        for (const bar of Array.from(
+          this.shadowRoot?.querySelectorAll<HTMLElement>(
+            ".folio-inspector:not([hidden])",
+          ) ?? [],
+        )) {
+          if (bar.closest("figure") !== hitFigure) bar.hidden = true;
+        }
       },
       true,
     );
@@ -301,6 +313,8 @@ export class FolioDoc extends HTMLElement {
     const figure = document.createElement("figure");
     figure.dataset.blockIndex = String(idx);
     figure.dataset.tableId = block.table.id;
+    const inspector = this.buildInspector(figure, block);
+    figure.appendChild(inspector);
     const table = document.createElement("table");
     table.className = "folio-table";
     const thead = document.createElement("thead");
@@ -308,9 +322,15 @@ export class FolioDoc extends HTMLElement {
     block.table.columns.forEach((col, ci) => {
       const th = document.createElement("th");
       th.dataset.colIndex = String(ci);
-      th.textContent = col.name;
+      th.appendChild(document.createTextNode(col.name));
       if (col.unit !== undefined) {
         th.title = col.unit;
+        // Units are data, not decoration: the reader should see
+        // "q2 (£k)" without hovering anything.
+        const unit = document.createElement("span");
+        unit.className = "unit";
+        unit.textContent = ` (${col.unit})`;
+        th.appendChild(unit);
       }
       if (col.type === "number" || col.type === "formula") {
         th.classList.add("num");
@@ -377,7 +397,12 @@ export class FolioDoc extends HTMLElement {
       const cell = (ev.target as HTMLElement).closest(
         "td[data-row-index]",
       ) as HTMLTableCellElement | null;
-      if (cell && cell.contentEditable === "true") {
+      if (!cell) return;
+      // Any cell click focuses its column in the inspector bar -
+      // formula cells especially: they are read-only in the table
+      // but their expression is the bar's whole point.
+      this.showInspector(figure, block, Number(cell.dataset.colIndex));
+      if (cell.contentEditable === "true") {
         cellClick = { cell, x: ev.clientX, y: ev.clientY };
       }
     });
@@ -408,6 +433,187 @@ export class FolioDoc extends HTMLElement {
       figure.appendChild(cap);
     }
     return figure;
+  }
+
+  /**
+   * The table inspector (spec: docs/specs/table-inspector.md):
+   * an Excel-style bar at the top of a table figure. Clicking a
+   * cell shows the clicked column's properties - type, unit,
+   * format, and for formula columns the expression (the ƒx field
+   * Excel users look for) - all editable in place. Edits write to
+   * the model and re-render the table; the document stays the
+   * source of truth exactly as if the YAML was edited by hand.
+   */
+  private buildInspector(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): HTMLElement {
+    const bar = document.createElement("div");
+    bar.className = "folio-inspector";
+    // A real editable region inside the contenteditable article
+    // would swallow keystrokes; inputs here must own them.
+    bar.contentEditable = "false";
+    bar.hidden = true;
+
+    const colSel = document.createElement("select");
+    colSel.className = "insp-col";
+    colSel.addEventListener("change", () => {
+      this.showInspector(figure, block, Math.max(colSel.selectedIndex, 0));
+    });
+
+    const typeSel = document.createElement("select");
+    typeSel.className = "insp-type";
+    typeSel.title = "Column type";
+    for (const t of ["text", "number", "formula"]) {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t;
+      typeSel.appendChild(o);
+    }
+    typeSel.addEventListener("change", () => {
+      const type = typeSel.value as "text" | "number" | "formula";
+      const c = Math.max(colSel.selectedIndex, 0);
+      const patch: Record<string, unknown> = { type };
+      // A formula column with an empty expression breaks recalc;
+      // a fresh formula starts at a constant 0.
+      if (type === "formula" && !block.table.columns[c]?.expr) {
+        patch.expr = "0";
+      }
+      this.patchColumn(figure, block, c, patch);
+    });
+
+    const unitInp = document.createElement("input");
+    unitInp.className = "insp-unit";
+    unitInp.type = "text";
+    unitInp.placeholder = "unit";
+    unitInp.title = "Unit, shown in the column header";
+    const unitPatch = (): void => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      const v = unitInp.value.trim();
+      this.patchColumn(figure, block, c, v ? { unit: v } : { unit: undefined });
+    };
+    unitInp.addEventListener("change", unitPatch);
+    unitInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        unitPatch();
+      }
+    });
+
+    const fmtSel = document.createElement("select");
+    fmtSel.className = "insp-format";
+    fmtSel.title = "Value format";
+    const fmtNone = document.createElement("option");
+    fmtNone.value = "default";
+    fmtNone.textContent = "plain";
+    fmtSel.appendChild(fmtNone);
+    const fmtPct = document.createElement("option");
+    fmtPct.value = "percent";
+    fmtPct.textContent = "percent";
+    fmtSel.appendChild(fmtPct);
+    fmtSel.addEventListener("change", () => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      this.patchColumn(figure, block, c, {
+        format: fmtSel.value === "percent" ? "percent" : undefined,
+      });
+    });
+
+    const fx = document.createElement("span");
+    fx.className = "insp-fx";
+    fx.textContent = "ƒx";
+
+    const exprInp = document.createElement("input");
+    exprInp.className = "insp-expr";
+    exprInp.type = "text";
+    exprInp.placeholder = "formula (Jexl)";
+    const exprPatch = (): void => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      const v = exprInp.value.trim();
+      this.patchColumn(figure, block, c, { expr: v === "" ? "0" : v });
+    };
+    exprInp.addEventListener("change", exprPatch);
+    exprInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        exprPatch();
+      }
+    });
+
+    bar.append(colSel, typeSel, unitInp, fmtSel, fx, exprInp);
+    return bar;
+  }
+
+  /** Populate and reveal the inspector for one column. */
+  private showInspector(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    c: number,
+  ): void {
+    const bar = figure.querySelector<HTMLElement>(".folio-inspector");
+    const col = block.table.columns[c];
+    if (!bar || !col) return;
+    const colSel = bar.querySelector<HTMLSelectElement>(".insp-col");
+    if (colSel) {
+      colSel.textContent = "";
+      block.table.columns.forEach((cc, i) => {
+        const o = document.createElement("option");
+        o.value = String(i);
+        o.textContent = cc.name;
+        colSel.appendChild(o);
+      });
+      colSel.selectedIndex = c;
+    }
+    const typeSel = bar.querySelector<HTMLSelectElement>(".insp-type");
+    if (typeSel) typeSel.value = col.type;
+    const unitInp = bar.querySelector<HTMLInputElement>(".insp-unit");
+    if (unitInp) unitInp.value = col.unit ?? "";
+    const fmtSel = bar.querySelector<HTMLSelectElement>(".insp-format");
+    if (fmtSel) fmtSel.value = col.format === "percent" ? "percent" : "default";
+    const exprInp = bar.querySelector<HTMLInputElement>(".insp-expr");
+    if (exprInp) {
+      exprInp.value = col.expr ?? "";
+      exprInp.disabled = col.type !== "formula";
+      exprInp.hidden = col.type !== "formula";
+    }
+    const fx = bar.querySelector<HTMLElement>(".insp-fx");
+    if (fx) fx.hidden = col.type !== "formula";
+    bar.hidden = false;
+  }
+
+  /** Apply a column patch: model write, table re-render, re-show. */
+  private patchColumn(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    c: number,
+    patch: {
+      type?: "text" | "number" | "formula";
+      unit?: string | undefined;
+      format?: "percent" | undefined;
+      expr?: string;
+    },
+  ): void {
+    const col = block.table.columns[c];
+    if (!col) return;
+    // An undefined value removes the key so the default applies.
+    if ("type" in patch) col.type = patch.type ?? col.type;
+    if ("unit" in patch) {
+      if (patch.unit) col.unit = patch.unit;
+      else delete col.unit;
+    }
+    if ("format" in patch) {
+      if (patch.format) col.format = patch.format;
+      else delete col.format;
+    }
+    if ("expr" in patch) col.expr = patch.expr;
+    const host = figure.parentElement;
+    this.refreshTableBlock(figure, block);
+    if (host) {
+      const fresh = host.querySelector(
+        `figure[data-table-id="${block.table.id}"]`,
+      ) as HTMLElement | null;
+      if (fresh) this.showInspector(fresh, block, c);
+    }
+    this.emitChange();
   }
 
   private drawChart(figure: HTMLElement): void {
@@ -566,7 +772,13 @@ export class FolioDoc extends HTMLElement {
     this.doc.blocks = next;
   }
 
-  private handleInput(): void {
+  private handleInput(ev?: Event): void {
+    if (
+      ev?.target instanceof Element &&
+      ev.target.closest(".folio-inspector")
+    ) {
+      return;
+    }
     this.syncFromDom();
     this.commitCaretCell();
     this.emitChange();
@@ -1172,6 +1384,10 @@ export class FolioDoc extends HTMLElement {
 
   private handleKeydown(ev: KeyboardEvent): void {
     if (!this.doc) return;
+    // The inspector's inputs own their keystrokes.
+    if (ev.target instanceof Element && ev.target.closest(".folio-inspector")) {
+      return;
+    }
     const diagram =
       ev.target instanceof Element
         ? (ev.target.closest("figure.folio-diagram") as HTMLElement | null)
