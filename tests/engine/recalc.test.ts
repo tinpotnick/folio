@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFormula, recalcTable } from "@folio/engine/recalc";
+import { recalcTable } from "@folio/engine/recalc";
 import type { Table } from "@folio/engine";
 
 function sampleTable(): Table {
@@ -23,31 +23,6 @@ function sampleTable(): Table {
     ],
   };
 }
-
-describe("parseFormula", () => {
-  it("parses column arithmetic with precedence", () => {
-    const ast = parseFormula("(q3 - q2) / q2");
-    expect(ast).toEqual({
-      kind: "bin",
-      op: "/",
-      l: {
-        kind: "bin",
-        op: "-",
-        l: { kind: "column", name: "q3" },
-        r: { kind: "column", name: "q2" },
-      },
-      r: { kind: "column", name: "q2" },
-    });
-  });
-
-  it("rejects trailing tokens", () => {
-    expect(() => parseFormula("q2 5")).toThrow();
-  });
-
-  it("rejects unbalanced parens", () => {
-    expect(() => parseFormula("(q2")).toThrow();
-  });
-});
 
 describe("recalcTable", () => {
   it("fills formula cells for every row (sample document values)", () => {
@@ -105,6 +80,19 @@ describe("recalcTable", () => {
     expect(() => recalcTable(t)).toThrow(/unknown or non-numeric column/);
   });
 
+  it("rejects text columns as formula references", () => {
+    const t: Table = {
+      id: "bad",
+      columns: [
+        { name: "name", type: "text" },
+        { name: "a", type: "number" },
+        { name: "f", type: "formula", expr: "a * 2 + name" },
+      ],
+      rows: [["x", 1]],
+    };
+    expect(() => recalcTable(t)).toThrow(/non-numeric column 'name'/);
+  });
+
   it("treats division by zero as 0, not an error (reporting contract)", () => {
     const t: Table = {
       id: "div",
@@ -116,5 +104,62 @@ describe("recalcTable", () => {
       rows: [[1, 0]],
     };
     expect(recalcTable(t).rows[0]?.[2]).toBe(0);
+  });
+
+  it("supports Jexl comparisons and ternaries in formulas", () => {
+    const t: Table = {
+      id: "jexl",
+      columns: [
+        { name: "q3", type: "number" },
+        { name: "trend", type: "formula", expr: 'q3 > 400 ? "up" : "down"' },
+      ],
+      rows: [[501], [394]],
+    };
+    const out = recalcTable(t);
+    expect(out.rows[0]?.[1]).toBe("up");
+    expect(out.rows[1]?.[1]).toBe("down");
+  });
+
+  it("supports transforms", () => {
+    const t: Table = {
+      id: "jexl2",
+      columns: [
+        { name: "q2", type: "number" },
+        { name: "q3", type: "number" },
+        {
+          name: "r",
+          type: "formula",
+          expr: "((q3 - q2) / q2 * 100) | round(1)",
+        },
+      ],
+      rows: [[301, 355]],
+    };
+    const out = recalcTable(t);
+    expect(out.rows[0]?.[2]).toBe(17.9);
+  });
+
+  it("wraps syntax errors with the table and column context", () => {
+    const t: Table = {
+      id: "syn",
+      columns: [
+        { name: "a", type: "number" },
+        { name: "f", type: "formula", expr: "a +" },
+      ],
+      rows: [[1]],
+    };
+    expect(() => recalcTable(t)).toThrow(/Formula 'f' in table 'syn'/);
+  });
+
+  it("rejects formulas referencing other formula columns (v0 contract)", () => {
+    const t: Table = {
+      id: "chain",
+      columns: [
+        { name: "a", type: "number" },
+        { name: "b", type: "formula", expr: "a * 2" },
+        { name: "c", type: "formula", expr: "b + 1" },
+      ],
+      rows: [[2]],
+    };
+    expect(() => recalcTable(t)).toThrow(/non-numeric column 'b'/);
   });
 });
