@@ -99,7 +99,10 @@ document — written in the same renderer you are working with.
   the document), and click-to-edit cells. Esc closes it; the
   grid button on the table's inspector bar opens it too.
 - **Import data**: the command palette (Ctrl+K) has "Import data
-  from a file (CSV or JSON)". The file becomes a typed table in
+  from a file (CSV or JSON)" - or try it instantly with
+  "Import the demo dataset", a shipped 72-row CSV (and a JSON one
+  at `demo/data/site-metrics.json`). The "Open example: report"
+  entry shows what a finished imported-data report looks like. The file becomes a typed table in
   the document - numeric columns are inferred, the header names
   become formula-usable column names, and `import: "file.csv"` in
   the source records where the data came from. It is a snapshot,

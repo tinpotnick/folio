@@ -798,6 +798,11 @@ const EXAMPLES: { id: string; file: string; blurb: string }[] = [
     blurb: "accounts running totals budget negative growth",
   },
   {
+    id: "report",
+    file: "/demo/examples/report.md",
+    blurb: "data report import windowed table running formulas line charts",
+  },
+  {
     id: "technical",
     file: "/demo/examples/technical.md",
     blurb: "technical code equations benchmarks",
@@ -854,6 +859,36 @@ function paletteEntries(): PaletteEntry[] {
     action: () => {
       el.insertMath();
       flash("Equation inserted");
+    },
+  });
+  entries.push({
+    title: "Import the demo dataset (monthly-sales.csv)",
+    group: "Command",
+    keywords: "demo dataset sample data import csv try test data",
+    action: () => {
+      void (async (): Promise<void> => {
+        const res = await fetch("/demo/data/monthly-sales.csv");
+        if (!res.ok) {
+          flash("Demo dataset not found");
+          return;
+        }
+        const text = await res.text();
+        let table: Table;
+        try {
+          table = importedTable(
+            tableIdFromFileName("monthly-sales.csv", el.getDoc()),
+            parseImport(text, "csv"),
+            "monthly-sales.csv",
+          );
+        } catch (e) {
+          flash(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+          return;
+        }
+        el.insertImportedTable(table);
+        flash(
+          `Imported ${table.rows.length.toLocaleString()} rows into @${table.id}`,
+        );
+      })();
     },
   });
   entries.push({

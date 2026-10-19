@@ -1,0 +1,122 @@
+[
+  {
+    "date": "2024-01",
+    "visitors": 8637,
+    "signups": 267
+  },
+  {
+    "date": "2024-02",
+    "visitors": 8735,
+    "signups": 270
+  },
+  {
+    "date": "2024-03",
+    "visitors": 8924,
+    "signups": 298
+  },
+  {
+    "date": "2024-04",
+    "visitors": 9047,
+    "signups": 303
+  },
+  {
+    "date": "2024-05",
+    "visitors": 9313,
+    "signups": 288
+  },
+  {
+    "date": "2024-06",
+    "visitors": 9459,
+    "signups": 293
+  },
+  {
+    "date": "2024-07",
+    "visitors": 9553,
+    "signups": 296
+  },
+  {
+    "date": "2024-08",
+    "visitors": 9642,
+    "signups": 298
+  },
+  {
+    "date": "2024-09",
+    "visitors": 9823,
+    "signups": 304
+  },
+  {
+    "date": "2024-10",
+    "visitors": 9920,
+    "signups": 307
+  },
+  {
+    "date": "2024-11",
+    "visitors": 10113,
+    "signups": 313
+  },
+  {
+    "date": "2024-12",
+    "visitors": 10405,
+    "signups": 322
+  },
+  {
+    "date": "2025-01",
+    "visitors": 10550,
+    "signups": 327
+  },
+  {
+    "date": "2025-02",
+    "visitors": 10640,
+    "signups": 329
+  },
+  {
+    "date": "2025-03",
+    "visitors": 10979,
+    "signups": 367
+  },
+  {
+    "date": "2025-04",
+    "visitors": 11168,
+    "signups": 374
+  },
+  {
+    "date": "2025-05",
+    "visitors": 11220,
+    "signups": 347
+  },
+  {
+    "date": "2025-06",
+    "visitors": 11258,
+    "signups": 348
+  },
+  {
+    "date": "2025-07",
+    "visitors": 11317,
+    "signups": 350
+  },
+  {
+    "date": "2025-08",
+    "visitors": 11552,
+    "signups": 358
+  },
+  {
+    "date": "2025-09",
+    "visitors": 11849,
+    "signups": 367
+  },
+  {
+    "date": "2025-10",
+    "visitors": 12022,
+    "signups": 372
+  },
+  {
+    "date": "2025-11",
+    "visitors": 12068,
+    "signups": 374
+  },
+  {
+    "date": "2025-12",
+    "visitors": 12230,
+    "signups": 379
+  }
+]

@@ -97,7 +97,7 @@ test.describe("data import", () => {
   test("the palette finds the import command", async ({ page }) => {
     await waitForDocument(page);
     await page.keyboard.press("Control+k");
-    await page.locator("#palette-input").fill("import csv");
+    await page.locator("#palette-input").fill("import data from a file");
     await expect(
       page.locator("#palette-list .palette-item").first(),
     ).toContainText("Import data from a file");
