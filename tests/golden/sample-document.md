@@ -97,3 +97,9 @@ caption: "Cumulative revenue, months with revenue above 190"
 
 *Figure 2* filters with a Jexl expression - the same language as
 table formulas.
+
+::: image {#ops-cover}
+src: data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0ODAiIGhlaWdodD0iMTYwIj48cmVjdCB3aWR0aD0iNDgwIiBoZWlnaHQ9IjE2MCIgZmlsbD0iIzFmMjMyOCIvPjxyZWN0IHg9IjE4IiB5PSIxOCIgd2lkdGg9IjQ0NCIgaGVpZ2h0PSIxMjQiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRjNmVmNSIgc3Ryb2tlLXdpZHRoPSIyIi8+PHRleHQgeD0iMjQwIiB5PSI3NiIgZm9udC1zaXplPSIzNCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2ZmZmZmZiIgZm9udC1mYW1pbHk9Ikdlb3JnaWEsIHNlcmlmIj5RMyBGaWVsZCBPcGVyYXRpb25zPC90ZXh0Pjx0ZXh0IHg9IjI0MCIgeT0iMTEyIiBmb250LXNpemU9IjE2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjOGI5NDllIiBmb250LWZhbWlseT0iR2VvcmdpYSwgc2VyaWYiPnJldmlldyBkZWNrIGNvdmVyLCBPY3RvYmVyPC90ZXh0Pjwvc3ZnPg==
+alt: "Q3 Field Operations cover slide"
+caption: "The review deck cover - a folio image block (SVG, embedded as a data URI)"
+:::

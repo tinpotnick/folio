@@ -13,7 +13,7 @@ import {
 } from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable, type TablePool } from "@folio/engine/recalc";
-import type { Chart, Table } from "@folio/engine/index.js";
+import type { Chart, Image, Table } from "@folio/engine/index.js";
 import { executeQuery } from "@folio/engine/query";
 import { themeFromDoc, themeCss } from "./render/theme.js";
 import {
@@ -276,6 +276,9 @@ export class FolioDoc extends HTMLElement {
         figure.appendChild(holder);
         void this.drawMath(figure);
         return figure;
+      }
+      case "image": {
+        return this.renderImage(block, idx);
       }
       case "chart": {
         const figure = document.createElement("figure");
@@ -985,6 +988,152 @@ export class FolioDoc extends HTMLElement {
     this.emitChange();
   }
 
+  /**
+   * An image block (spec: docs/specs/images.md): generated output
+   * like every figure - the img and caption are never editable in
+   * place; the inspector owns alt, caption, and file replacement.
+   */
+  private renderImage(
+    block: Extract<Doc["blocks"][number], { kind: "image" }>,
+    idx: number,
+  ): HTMLElement {
+    const figure = document.createElement("figure");
+    figure.className = "folio-image";
+    figure.dataset.blockIndex = String(idx);
+    figure.dataset.imageId = block.image.id;
+    // Selectable (tabindex) so Backspace/Delete on a selected
+    // image removes the block - the diagram affordance.
+    figure.contentEditable = "false";
+    figure.tabIndex = -1;
+    figure.title = "Image - Backspace or Delete removes it";
+    figure.appendChild(this.buildImageInspector(figure, block));
+    const img = document.createElement("img");
+    img.src = block.image.src;
+    img.alt = block.image.alt ?? "";
+    figure.appendChild(img);
+    if (block.image.caption) {
+      const cap = document.createElement("figcaption");
+      cap.textContent = block.image.caption;
+      figure.appendChild(cap);
+    }
+    return figure;
+  }
+
+  /**
+   * The image inspector: alt text, caption, and a replace-file
+   * control - the whole image directive editable from the document
+   * view, on the uniform bar contract.
+   */
+  private buildImageInspector(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "image" }>,
+  ): HTMLElement {
+    const bar = this.figureBar();
+    const image = block.image;
+
+    const altInp = document.createElement("input");
+    altInp.className = "insp-alt";
+    altInp.type = "text";
+    altInp.placeholder = "alt text";
+    altInp.title = "Alt text - what the image shows (empty removes it)";
+    const altPatch = (): void => {
+      const v = altInp.value.trim();
+      if (v) image.alt = v;
+      else delete image.alt;
+      const img = figure.querySelector("img");
+      if (img) img.alt = v;
+      this.emitChange();
+    };
+    altInp.addEventListener("change", altPatch);
+    altInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        altInp.blur();
+      }
+    });
+
+    const capInp = document.createElement("input");
+    capInp.className = "insp-caption";
+    capInp.type = "text";
+    capInp.placeholder = "caption";
+    capInp.title = "Figure caption (empty removes it)";
+    const capPatch = (): void => {
+      const v = capInp.value.trim();
+      if (v) image.caption = v;
+      else delete image.caption;
+      const cap = figure.querySelector("figcaption");
+      if (v && cap) cap.textContent = v;
+      else if (v && !cap) {
+        const el = document.createElement("figcaption");
+        el.textContent = v;
+        figure.appendChild(el);
+      } else if (!v && cap) {
+        cap.remove();
+      }
+      this.emitChange();
+    };
+    capInp.addEventListener("change", capPatch);
+    capInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        capInp.blur();
+      }
+    });
+
+    const fileInp = document.createElement("input");
+    fileInp.className = "insp-file";
+    fileInp.type = "file";
+    fileInp.accept = "image/*";
+    fileInp.title = "Replace the image file";
+    fileInp.addEventListener("change", () => {
+      const f = fileInp.files?.[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = (): void => {
+        if (typeof reader.result !== "string") return;
+        image.src = reader.result;
+        const img = figure.querySelector("img");
+        if (img) img.src = image.src;
+        this.emitChange();
+      };
+      reader.readAsDataURL(f);
+      fileInp.value = "";
+    });
+
+    const show = (): void => {
+      altInp.value = image.alt ?? "";
+      capInp.value = image.caption ?? "";
+      bar.hidden = false;
+    };
+    figure.addEventListener("mousedown", () => show());
+    bar.append(altInp, capInp, fileInp);
+    return bar;
+  }
+
+  /**
+   * Insert an image block after the caret's block (the toolbar's
+   * image button in document view). src is a data URI from the
+   * host's file picker, or any URL. Ids count per document, like
+   * the parser's hand-typed form.
+   */
+  insertImage(src: string, alt?: string): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
+    let n = 0;
+    for (const b of this.doc.blocks) {
+      if (b.kind === "image") n += 1;
+    }
+    const image: Image = {
+      id: `image-${n + 1}`,
+      src,
+      ...(alt ? { alt } : {}),
+    };
+    this.doc.blocks.splice(at, 0, { kind: "image", image });
+    this.render();
+    this.emitChange();
+  }
+
   private drawChart(figure: HTMLElement): void {
     if (!this.doc) return;
     const source = figure.dataset.chartSource;
@@ -1107,7 +1256,8 @@ export class FolioDoc extends HTMLElement {
         b.kind === "table" ||
         b.kind === "chart" ||
         b.kind === "diagram" ||
-        b.kind === "math",
+        b.kind === "math" ||
+        b.kind === "image",
     );
     let gi = 0;
     const next: DocBlock[] = [];
@@ -1383,7 +1533,8 @@ export class FolioDoc extends HTMLElement {
       block.kind === "table" ||
       block.kind === "chart" ||
       block.kind === "diagram" ||
-      block.kind === "math"
+      block.kind === "math" ||
+      block.kind === "image"
     ) {
       return;
     }
@@ -1785,17 +1936,19 @@ export class FolioDoc extends HTMLElement {
     if (ev.target instanceof Element && ev.target.closest(".folio-inspector")) {
       return;
     }
-    const diagram =
+    const removableFigure =
       ev.target instanceof Element
-        ? (ev.target.closest("figure.folio-diagram") as HTMLElement | null)
+        ? (ev.target.closest(
+            "figure.folio-diagram, figure.folio-image",
+          ) as HTMLElement | null)
         : null;
     if (
-      diagram &&
+      removableFigure &&
       (ev.key === "Backspace" || ev.key === "Delete") &&
       this.doc
     ) {
       ev.preventDefault();
-      const idx = Number(diagram.dataset.blockIndex ?? -1);
+      const idx = Number(removableFigure.dataset.blockIndex ?? -1);
       if (idx >= 0) {
         this.doc.blocks.splice(idx, 1);
         this.render();

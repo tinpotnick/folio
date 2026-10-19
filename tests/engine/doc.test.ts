@@ -191,3 +191,56 @@ describe("mermaid diagram blocks", () => {
     expect(() => parseDoc("::: mermaid {#flow}\ngraph TD")).toThrow(ParseError);
   });
 });
+
+describe("image blocks", () => {
+  it("round-trips the image directive byte-identically", () => {
+    const md =
+      "::: image {#ops-photo}\n" +
+      "src: data:image/png;base64,iVBORw0KGgo=\n" +
+      'alt: "The ops team, Q3 all-hands"\n' +
+      'caption: "Q3 all-hands"\n' +
+      ":::\n";
+    expect(serializeDoc(parseDoc(md))).toBe(md);
+  });
+
+  it("parses a standard Markdown image line and canonicalizes it", () => {
+    const doc = parseDoc("![A cat](https://example.com/cat.png)");
+    expect(doc.blocks[0]).toEqual({
+      kind: "image",
+      image: {
+        id: "image-1",
+        src: "https://example.com/cat.png",
+        alt: "A cat",
+      },
+    });
+    expect(serializeDoc(doc)).toBe(
+      "::: image {#image-1}\n" +
+        "src: https://example.com/cat.png\n" +
+        'alt: "A cat"\n' +
+        ":::\n",
+    );
+  });
+
+  it("an image inside a prose line stays prose", () => {
+    const doc = parseDoc("See ![a](b) for details.");
+    expect(doc.blocks[0]?.kind).toBe("prose");
+  });
+
+  it("image ids count per document", () => {
+    const doc = parseDoc("![a](b)\n\n![c](d)");
+    const ids = doc.blocks
+      .filter((b) => b.kind === "image")
+      .map((b) => (b.kind === "image" ? b.image.id : ""));
+    expect(ids).toEqual(["image-1", "image-2"]);
+  });
+
+  it("rejects an image directive without src", () => {
+    expect(() => parseDoc('::: image {#x}\nalt: "nope"\n:::')).toThrow(/src/);
+  });
+
+  it("rejects unknown image directive keys", () => {
+    expect(() =>
+      parseDoc("::: image {#x}\nsrc: data:image/png;base64,A\nflip: yes\n:::"),
+    ).toThrow(/Unknown image key/);
+  });
+});
