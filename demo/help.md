@@ -44,16 +44,23 @@ document — written in the same renderer you are working with.
 
 ## Tables and charts
 
-- The insert group (three icons after the format buttons) holds the
-  block builders: table, Mermaid diagram, and code block. The
-  diagram button inserts a starter diagram; the code button converts
-  the block you are in to a code block and back (in Markdown view it
-  fences the paragraph you are in).
+- The insert group (four icons after the format buttons) holds the
+  block builders: table, Mermaid diagram, equation, and code
+  block. The
+  diagram button inserts a starter diagram; the equation button
+  inserts a typeset `$$` block; the code button converts the block
+  you are in to a code block and back (in Markdown view it fences
+  the paragraph you are in).
 - Diagrams are Mermaid blocks: `::: mermaid {#id}` ... `:::` with
   the diagram source in between. They render as figures; edit the
   source in the Markdown view and switch back to re-render. Click a
   diagram to select it (it gets an outline) and press Backspace or
-  Delete to remove it.
+  Delete to remove it. Clicking a diagram, chart, or equation also
+  opens its **inspector bar** - the Mermaid source, the chart's
+  source/type/filter/sort/caption, or the LaTeX - editable in
+  place, so you rarely need to drop to the Markdown view.
+- Headings come in three toolbar levels, H1-H3; H3's size is a
+  document setting alongside H1 and H2.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
   splitting it.
