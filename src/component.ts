@@ -28,6 +28,15 @@ export class FolioDoc extends HTMLElement {
   private menu: HTMLElement | null = null;
   private lastCell: HTMLTableCellElement | null = null;
   private lastBlock: HTMLElement | null = null;
+  /**
+   * The last mouse-drag text selection, built from the two caret
+   * points (document.caretRangeFromPoint pierces the shadow tree
+   * in every engine). WebKitGTK exposes no selection API that
+   * pierces the shadow root, so without this the inline format
+   * buttons could not resolve any selection there at all.
+   */
+  private dragRange: Range | null = null;
+  private dragStart: { x: number; y: number } | null = null;
 
   constructor() {
     super();
@@ -150,9 +159,25 @@ export class FolioDoc extends HTMLElement {
     host.addEventListener(
       "mousedown",
       (ev: MouseEvent) => {
+        this.dragStart = { x: ev.clientX, y: ev.clientY };
         const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
         const block = el?.closest("[data-block-index]") as HTMLElement | null;
         if (block) this.lastBlock = block;
+      },
+      true,
+    );
+    host.addEventListener(
+      "mouseup",
+      (ev: MouseEvent) => {
+        const start = this.dragStart;
+        this.dragStart = null;
+        if (!start) return;
+        this.dragRange = this.rangeBetweenPoints(
+          start.x,
+          start.y,
+          ev.clientX,
+          ev.clientY,
+        );
       },
       true,
     );
@@ -735,13 +760,141 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * The caret position at a point inside a paragraph of this
+   * component's tree, computed geometrically. Every document-level
+   * caret API (caretRangeFromPoint, caretPositionFromPoint,
+   * getComposedRanges) retargets to the shadow host in WebKitGTK
+   * (verified against 2.54, the Tauri engine), so the only pierce
+   * is the shadow root's own hit testing. We resolve the paragraph
+   * with elementFromPoint, then find the caret offset whose rect
+   * is nearest the point by walking the paragraph's text nodes.
+   */
+  private caretFromPointIn(
+    p: HTMLElement,
+    x: number,
+    y: number,
+  ): { node: Node; offset: number } | null {
+    let best: { node: Node; offset: number } | null = null;
+    let bestDist = Infinity;
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    let node: Node | null = walker.nextNode();
+    while (node !== null) {
+      const len = node.textContent?.length ?? 0;
+      for (let i = 0; i <= len; i++) {
+        range.setStart(node, i);
+        range.collapse(true);
+        const rect = range.getClientRects()[0];
+        if (rect) {
+          const caretX = i === len ? rect.right : rect.left;
+          const dx = Math.abs(caretX - x);
+          const dy = Math.abs((rect.top + rect.bottom) / 2 - y);
+          // The vertical term dominates: the right line first,
+          // then the nearest horizontal position.
+          const dist = dy * 4 + dx;
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = { node, offset: i };
+          }
+        }
+      }
+      node = walker.nextNode();
+    }
+    return best;
+  }
+
+  /**
+   * The text Range between two caret points, or null when the two
+   * points do not describe a usable non-collapsed selection inside
+   * one prose block. Chromium's caretRangeFromPoint pierces the
+   * shadow tree; WebKitGTK's does not, so there the paragraph is
+   * resolved with the shadow root's elementFromPoint (which does
+   * pierce) and the caret offset is computed geometrically.
+   */
+  private rangeBetweenPoints(
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+  ): Range | null {
+    if (Math.hypot(x1 - x0, y1 - y0) <= 3) return null;
+    const root = this.shadowRoot;
+    if (!root) return null;
+    const el0 = root.elementFromPoint(x0, y0);
+    const el1 = root.elementFromPoint(x1, y1);
+    const p0 = el0?.closest("p[data-block-index]") as HTMLElement | null;
+    const p1 = el1?.closest("p[data-block-index]") as HTMLElement | null;
+    if (!p0 || p0 !== p1) return null;
+    let c0: { node: Node; offset: number } | null = null;
+    let c1: { node: Node; offset: number } | null = null;
+    const pierced = document.caretRangeFromPoint(x0, y0);
+    if (pierced && p0.contains(pierced.startContainer)) {
+      c0 = { node: pierced.startContainer, offset: pierced.startOffset };
+      const other = document.caretRangeFromPoint(x1, y1);
+      if (other && p0.contains(other.startContainer)) {
+        c1 = { node: other.startContainer, offset: other.startOffset };
+      }
+    }
+    if (c0 === null) c0 = this.caretFromPointIn(p0, x0, y0);
+    if (c1 === null) c1 = this.caretFromPointIn(p0, x1, y1);
+    if (!c0 || !c1) return null;
+    const range = document.createRange();
+    const forward =
+      c0.node === c1.node
+        ? c0.offset <= c1.offset
+        : (() => {
+            // Compare document order of the two caret nodes.
+            const pos = c0.node.compareDocumentPosition(c1.node);
+            return (pos & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+          })();
+    const [start, end] = forward ? [c0, c1] : [c1, c0];
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    return range.collapsed ? null : range;
+  }
+
+  /**
+   * The first text position inside the range, for the "what you
+   * see is what you toggle" rule. A selection that begins exactly
+   * at a format boundary (the caret before a <strong> and the
+   * caret at its first text position are the same visual point)
+   * must still toggle the format its first visible character
+   * carries - starting the ancestor walk at the range's raw start
+   * container would miss the element and wrap instead.
+   */
+  private firstPositionNodeInRange(range: Range): Node | null {
+    const startNode = range.startContainer;
+    const startLen = startNode.textContent?.length ?? 0;
+    if (startNode.nodeType === Node.TEXT_NODE && range.startOffset < startLen) {
+      return startNode;
+    }
+    const walker = document.createTreeWalker(
+      range.commonAncestorContainer,
+      NodeFilter.SHOW_TEXT,
+    );
+    let n: Node | null = null;
+    while ((n = walker.nextNode()) !== null) {
+      if (n === startNode) {
+        if (range.startOffset < (n.textContent?.length ?? 0)) return n;
+        continue;
+      }
+      if (range.intersectsNode(n)) return n;
+    }
+    return null;
+  }
+
+  /**
    * Apply (or remove) an inline semantic format around the current
    * selection (the toolbar's inline format buttons in document
    * view). execCommand cannot act on a selection inside the shadow
    * tree, so this wraps the selection range with the semantic
    * element directly - or unwraps the matching ancestor when the
-   * selection already carries the format. Returns false when there
-   * is nothing usable to format.
+   * selection already carries the format. The selection resolves
+   * in order: the shadow root's selection (Chromium), then the
+   * last mouse-drag range (WebKitGTK, which exposes no pierceable
+   * selection API - without the fallback every click reported
+   * "Select some text first"). Returns false when there is nothing
+   * usable to format.
    */
   applyInlineFormat(tag: "strong" | "em" | "del" | "ins"): boolean {
     const root = this.shadowRoot as
@@ -750,14 +903,26 @@ export class FolioDoc extends HTMLElement {
         })
       | null;
     const sel = root?.getSelection?.();
-    if (!sel || sel.rangeCount === 0) return false;
-    const range = sel.getRangeAt(0);
+    let range: Range;
+    let anchorNode: Node | null;
+    if (sel && sel.rangeCount > 0 && sel.anchorNode !== null) {
+      range = sel.getRangeAt(0);
+      anchorNode = sel.anchorNode;
+    } else if (
+      this.dragRange !== null &&
+      this.dragRange.startContainer.isConnected
+    ) {
+      range = this.dragRange.cloneRange();
+      anchorNode = range.startContainer;
+    } else {
+      return false;
+    }
     const anchorEl =
-      sel.anchorNode instanceof Element
-        ? sel.anchorNode
-        : (sel.anchorNode?.parentElement ?? null);
+      anchorNode instanceof Element
+        ? anchorNode
+        : (anchorNode?.parentElement ?? null);
     const block = anchorEl?.closest("[data-block-index]") as HTMLElement | null;
-    if (!block || block.tagName !== "P") return false;
+    if (!block || block.tagName !== "P" || !block.isConnected) return false;
 
     const synonyms: Record<string, string[]> = {
       strong: ["STRONG", "B"],
@@ -766,7 +931,8 @@ export class FolioDoc extends HTMLElement {
       ins: ["INS", "U"],
     };
     const tags = synonyms[tag] ?? [];
-    let n: Node | null = sel.anchorNode ?? null;
+    let n: Node | null =
+      this.firstPositionNodeInRange(range) ?? anchorNode ?? null;
     while (n && n !== block) {
       if (n instanceof Element && tags.includes(n.tagName)) {
         // Toggle off: unwrap the existing format element.
@@ -782,10 +948,12 @@ export class FolioDoc extends HTMLElement {
     try {
       wrap.appendChild(range.extractContents());
       range.insertNode(wrap);
-      const after = document.createRange();
-      after.selectNodeContents(wrap);
-      sel.removeAllRanges();
-      sel.addRange(after);
+      if (sel) {
+        const after = document.createRange();
+        after.selectNodeContents(wrap);
+        sel.removeAllRanges();
+        sel.addRange(after);
+      }
     } catch {
       return false;
     }
