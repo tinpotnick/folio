@@ -550,7 +550,7 @@ export class FolioDoc extends HTMLElement {
       const more = document.createElement("div");
       more.className = "folio-table-more";
       more.contentEditable = "false";
-      more.textContent = `${totalRows} rows × ${block.table.columns.length} columns — showing first ${shownRows}`;
+      more.textContent = `${totalRows.toLocaleString()} rows × ${block.table.columns.length} columns — showing first ${shownRows}`;
       const open = document.createElement("button");
       open.className = "ds-open";
       open.type = "button";
@@ -1160,6 +1160,21 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * Insert a ready-made table block after the caret's block (or at
+   * the end without a caret). The host uses this for imports: the
+   * parsed data is already a model table - the import SNAPSHOT
+   * (ADR-0005) - with its provenance in table.import.
+   */
+  insertImportedTable(table: Table): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
+    this.doc.blocks.splice(at, 0, { kind: "table", table });
+    this.render();
+    this.emitChange();
+  }
+
+  /**
    * Insert an image block after the caret's block (the toolbar's
    * image button in document view). src is a data URI from the
    * host's file picker, or any URL. Ids count per document, like
@@ -1339,13 +1354,15 @@ export class FolioDoc extends HTMLElement {
       const filtered =
         this.dsState.filter === ""
           ? ""
-          : ` of ${block.table.rows.length} · filtered`;
+          : ` of ${block.table.rows.length.toLocaleString()} · filtered`;
       const sorted =
         this.dsState.sortBy === null
           ? ""
           : ` · sorted by ${this.dsState.sortBy} ${this.dsState.sortDir}`;
       count.textContent =
-        error === null ? `${indexes.length} rows${filtered}${sorted}` : error;
+        error === null
+          ? `${indexes.length.toLocaleString()} rows${filtered}${sorted}`
+          : error;
     }
     const grid = overlay.querySelector<HTMLElement>(".folio-ds-grid");
     const canvas = overlay.querySelector<HTMLElement>(".folio-ds-canvas");

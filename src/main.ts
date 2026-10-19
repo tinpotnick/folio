@@ -6,6 +6,8 @@
 import "./component.js";
 import type { FolioDoc } from "./component.js";
 import { parseDoc, serializeDoc } from "./engine/doc.js";
+import { importedTable, parseImport } from "./engine/ingest.js";
+import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
 import { isDesktop, openDocument, saveDocument } from "./desktop.js";
 
@@ -277,6 +279,71 @@ imageFile.addEventListener("change", () => {
     flash("Image inserted");
   };
   reader.readAsDataURL(f);
+});
+
+/* --- Import data from a file (CSV / JSON) --- */
+
+const importFile = requireEl<HTMLInputElement>("#import-file");
+const IMPORT_MAX_BYTES = 8 * 1024 * 1024;
+
+/**
+ * A file name becomes a table id: identifier-legal so formulas and
+ * cross-table references can use it, and unique within the
+ * document.
+ */
+function tableIdFromFileName(
+  name: string,
+  doc: ReturnType<typeof el.getDoc>,
+): string {
+  const base = name
+    .replace(/\.[^.]+$/, "")
+    .trim()
+    .replace(/[^A-Za-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const stem = base === "" || /^[0-9]/.test(base) ? `imported_${base}` : base;
+  const ids = new Set(
+    (doc?.blocks ?? [])
+      .filter((b) => b.kind === "table")
+      .map((b) => (b.kind === "table" ? b.table.id : "")),
+  );
+  let id = stem;
+  let n = 2;
+  while (ids.has(id)) {
+    id = `${stem}_${String(n)}`;
+    n += 1;
+  }
+  return id;
+}
+
+importFile.addEventListener("change", () => {
+  const f = importFile.files?.[0];
+  importFile.value = "";
+  if (!f) return;
+  if (f.size > IMPORT_MAX_BYTES) {
+    flash("File too large (over 8 MB) - the document stays one file");
+    return;
+  }
+  const format = f.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+  const reader = new FileReader();
+  reader.onload = (): void => {
+    if (typeof reader.result !== "string") return;
+    let table: Table;
+    try {
+      table = importedTable(
+        tableIdFromFileName(f.name, el.getDoc()),
+        parseImport(reader.result, format),
+        f.name,
+      );
+    } catch (e) {
+      flash(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    el.insertImportedTable(table);
+    flash(
+      `Imported ${table.rows.length.toLocaleString()} rows into @${table.id}`,
+    );
+  };
+  reader.readAsText(f);
 });
 
 const btnCodeBlock = requireEl<HTMLButtonElement>("#btn-code");
@@ -788,6 +855,14 @@ function paletteEntries(): PaletteEntry[] {
       el.insertMath();
       flash("Equation inserted");
     },
+  });
+  entries.push({
+    title: "Import data from a file (CSV or JSON)",
+    group: "Command",
+    keywords: "import data csv json file table dataset load",
+    // No prior document focus needed: without a caret the imported
+    // table appends at the document end.
+    action: () => importFile.click(),
   });
   entries.push({
     title: "Insert an image",

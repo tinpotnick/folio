@@ -23,6 +23,10 @@ export type Cell = string | number;
 export interface Table {
   id: string;
   caption?: string;
+  // Import provenance (ADR-0005: snapshot + metadata): the file a
+  // past import materialized this table's data from. Never a
+  // live binding.
+  import?: string;
   columns: Column[];
   rows: Cell[][];
 }
