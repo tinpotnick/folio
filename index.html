@@ -525,6 +525,7 @@
         <div class="fmt" id="block-bar">
           <button data-block="h1" title="Heading 1">H1</button>
           <button data-block="h2" title="Heading 2">H2</button>
+          <button data-block="h3" title="Heading 3">H3</button>
           <button data-block="p" title="Paragraph">P</button>
         </div>
         <div class="fmt" id="fmt-bar">
@@ -566,6 +567,23 @@
               <circle cx="4" cy="4" r="2" />
               <circle cx="12" cy="12" r="2" />
               <path d="M5.4 5.4l5.2 5.2" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button
+            id="btn-equation"
+            title="Insert an equation"
+            aria-label="Insert an equation"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M2.5 10.5h5M2.5 12.5h5M9 3l-3.5 10M10.5 3h4M10.5 13h4"
+                stroke-linecap="round"
+              />
             </svg>
           </button>
           <button
@@ -721,6 +739,8 @@
         <input id="set-h1-size" type="text" placeholder="28pt" />
         <label for="set-h2-size">H2 size</label>
         <input id="set-h2-size" type="text" placeholder="20pt" />
+        <label for="set-h3-size">H3 size</label>
+        <input id="set-h3-size" type="text" placeholder="16pt" />
         <label for="set-table-style">Table style</label>
         <select id="set-table-style">
           <option value="default">Default (booktabs)</option>
