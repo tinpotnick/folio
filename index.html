@@ -114,6 +114,20 @@
         font-size: 13px;
         cursor: pointer;
       }
+      button.plain {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+      }
+      .kbd-hint {
+        font-size: 11px;
+        color: #57606a;
+        border: 1px solid #d0d7de;
+        border-radius: 5px;
+        padding: 1px 5px;
+        background: #f6f8fa;
+        line-height: 1.3;
+      }
       button.plain:hover {
         background: #f3f4f6;
       }
@@ -612,7 +626,7 @@
           id="btn-search"
           class="plain"
           title="Search commands, help, and sections (Ctrl+K)"
-          aria-label="Search commands, help, and sections"
+          aria-label="Search commands, help, and sections (Ctrl+K)"
         >
           <svg
             viewBox="0 0 16 16"
@@ -623,6 +637,7 @@
             <circle cx="7" cy="7" r="4.5" />
             <path d="M10.5 10.5L14 14" stroke-linecap="round" />
           </svg>
+          <span class="kbd-hint">Ctrl K</span>
         </button>
         <button
           id="btn-settings"

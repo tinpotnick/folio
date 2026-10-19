@@ -172,6 +172,12 @@ export class FolioDoc extends HTMLElement {
         const start = this.dragStart;
         this.dragStart = null;
         if (!start) return;
+        if (ev.detail >= 2) {
+          // Double/triple click: the browser selected a word (or
+          // line) natively; no drag ran, so mirror the word.
+          this.dragRange = this.wordRangeAt(ev.clientX, ev.clientY);
+          return;
+        }
         this.dragRange = this.rangeBetweenPoints(
           start.x,
           start.y,
@@ -760,20 +766,23 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
-   * The caret position at a point inside a paragraph of this
-   * component's tree, computed geometrically. Every document-level
-   * caret API (caretRangeFromPoint, caretPositionFromPoint,
-   * getComposedRanges) retargets to the shadow host in WebKitGTK
-   * (verified against 2.54, the Tauri engine), so the only pierce
-   * is the shadow root's own hit testing. We resolve the paragraph
-   * with elementFromPoint, then find the caret offset whose rect
-   * is nearest the point by walking the paragraph's text nodes.
+   * The caret position nearest a point inside one paragraph of
+   * this component's tree, computed geometrically. Every
+   * document-level caret API (caretRangeFromPoint,
+   * caretPositionFromPoint, getComposedRanges) retargets to the
+   * shadow host in WebKitGTK (verified against 2.54, the Tauri
+   * engine), so the only pierce is the shadow root's own hit
+   * testing - and even that resolves the block, not the offset.
+   * The offset is found by walking the paragraph's text nodes and
+   * measuring caret rects. The vertical term dominates: the right
+   * line first, then the nearest horizontal position - real
+   * users release drags a few pixels off the line.
    */
   private caretFromPointIn(
     p: HTMLElement,
     x: number,
     y: number,
-  ): { node: Node; offset: number } | null {
+  ): { node: Node; offset: number; dist: number } | null {
     let best: { node: Node; offset: number } | null = null;
     let bestDist = Infinity;
     const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
@@ -789,8 +798,6 @@ export class FolioDoc extends HTMLElement {
           const caretX = i === len ? rect.right : rect.left;
           const dx = Math.abs(caretX - x);
           const dy = Math.abs((rect.top + rect.bottom) / 2 - y);
-          // The vertical term dominates: the right line first,
-          // then the nearest horizontal position.
           const dist = dy * 4 + dx;
           if (dist < bestDist) {
             bestDist = dist;
@@ -800,16 +807,50 @@ export class FolioDoc extends HTMLElement {
       }
       node = walker.nextNode();
     }
+    return best ? { ...best, dist: bestDist } : null;
+  }
+
+  /**
+   * The caret position nearest a point anywhere in the article's
+   * prose, for engines where caretRangeFromPoint does not pierce
+   * (WebKitGTK): the best geometric position across every prose
+   * paragraph. Chromium's caretRangeFromPoint pierces and handles
+   * pointer slop natively, so it is the fast path there.
+   */
+  private caretOverParagraphs(
+    x: number,
+    y: number,
+  ): { node: Node; offset: number; p: HTMLElement } | null {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return null;
+    const pierced = document.caretRangeFromPoint(x, y);
+    if (pierced) {
+      const n = pierced.startContainer;
+      const p = (n instanceof Element ? n : (n.parentElement ?? null))?.closest(
+        "p[data-block-index]",
+      ) as HTMLElement | null;
+      if (p) return { node: n, offset: pierced.startOffset, p };
+    }
+    let best: { node: Node; offset: number; p: HTMLElement } | null = null;
+    let bestDist = Infinity;
+    for (const p of Array.from(
+      host.querySelectorAll<HTMLElement>("p[data-block-index]"),
+    )) {
+      const c = this.caretFromPointIn(p, x, y);
+      if (c && c.dist < bestDist) {
+        bestDist = c.dist;
+        best = { node: c.node, offset: c.offset, p };
+      }
+    }
     return best;
   }
 
   /**
    * The text Range between two caret points, or null when the two
-   * points do not describe a usable non-collapsed selection inside
-   * one prose block. Chromium's caretRangeFromPoint pierces the
-   * shadow tree; WebKitGTK's does not, so there the paragraph is
-   * resolved with the shadow root's elementFromPoint (which does
-   * pierce) and the caret offset is computed geometrically.
+   * points do not describe a usable non-collapsed prose selection.
+   * The endpoints may sit in different paragraphs, but only in
+   * ADJACENT ones - a selection spanning a heading or a generated
+   * block between the endpoints would wrap non-prose content.
    */
   private rangeBetweenPoints(
     x0: number,
@@ -818,39 +859,51 @@ export class FolioDoc extends HTMLElement {
     y1: number,
   ): Range | null {
     if (Math.hypot(x1 - x0, y1 - y0) <= 3) return null;
-    const root = this.shadowRoot;
-    if (!root) return null;
-    const el0 = root.elementFromPoint(x0, y0);
-    const el1 = root.elementFromPoint(x1, y1);
-    const p0 = el0?.closest("p[data-block-index]") as HTMLElement | null;
-    const p1 = el1?.closest("p[data-block-index]") as HTMLElement | null;
-    if (!p0 || p0 !== p1) return null;
-    let c0: { node: Node; offset: number } | null = null;
-    let c1: { node: Node; offset: number } | null = null;
-    const pierced = document.caretRangeFromPoint(x0, y0);
-    if (pierced && p0.contains(pierced.startContainer)) {
-      c0 = { node: pierced.startContainer, offset: pierced.startOffset };
-      const other = document.caretRangeFromPoint(x1, y1);
-      if (other && p0.contains(other.startContainer)) {
-        c1 = { node: other.startContainer, offset: other.startOffset };
-      }
-    }
-    if (c0 === null) c0 = this.caretFromPointIn(p0, x0, y0);
-    if (c1 === null) c1 = this.caretFromPointIn(p0, x1, y1);
+    const c0 = this.caretOverParagraphs(x0, y0);
+    const c1 = this.caretOverParagraphs(x1, y1);
     if (!c0 || !c1) return null;
+    const adjacent =
+      c0.p === c1.p ||
+      c0.p.nextElementSibling === c1.p ||
+      c1.p.nextElementSibling === c0.p;
+    if (!adjacent) return null;
     const range = document.createRange();
     const forward =
       c0.node === c1.node
         ? c0.offset <= c1.offset
-        : (() => {
-            // Compare document order of the two caret nodes.
-            const pos = c0.node.compareDocumentPosition(c1.node);
-            return (pos & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
-          })();
+        : (c0.node.compareDocumentPosition(c1.node) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+          0;
     const [start, end] = forward ? [c0, c1] : [c1, c0];
     range.setStart(start.node, start.offset);
     range.setEnd(end.node, end.offset);
     return range.collapsed ? null : range;
+  }
+
+  /**
+   * The word around a point, mirroring the browser's double-click
+   * word selection. A drag never runs for a double click, so
+   * without this the fallback had nothing to format after the
+   * most common selection gesture of all.
+   */
+  private wordRangeAt(x: number, y: number): Range | null {
+    const c = this.caretOverParagraphs(x, y);
+    if (!c || c.node.nodeType !== Node.TEXT_NODE) return null;
+    const text = c.node.textContent ?? "";
+    const isWord = (ch: string | undefined): boolean =>
+      ch !== undefined && /[\w]/.test(ch);
+    if (!isWord(text[c.offset]) && !isWord(text[c.offset - 1])) {
+      return null;
+    }
+    let s = c.offset;
+    let e = c.offset;
+    while (s > 0 && isWord(text[s - 1])) s--;
+    while (e < text.length && isWord(text[e])) e++;
+    if (e <= s) return null;
+    const range = document.createRange();
+    range.setStart(c.node, s);
+    range.setEnd(c.node, e);
+    return range;
   }
 
   /**

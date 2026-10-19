@@ -355,48 +355,57 @@ test.describe("inline formats (document view)", () => {
   // caret points. Synthetic mouse events create no native
   // selection even in Chromium, which makes the fallback path
   // testable in CI.
-  async function syntheticDragSelect(page: Page, word: string): Promise<void> {
-    await page.evaluate((needle) => {
-      const root = document.querySelector("folio-doc")?.shadowRoot;
-      const host = root?.querySelector("article.folio-doc") as
-        HTMLElement | undefined;
-      if (!root || !host) return;
-      const p = Array.from(root.querySelectorAll("p")).find((el) =>
-        el.textContent?.includes(needle),
-      );
-      if (!p) return;
-      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
-      let node = walker.nextNode();
-      let rect: DOMRect | null = null;
-      while (node) {
-        const idx = node.textContent?.indexOf(needle) ?? -1;
-        if (idx >= 0) {
-          const r = document.createRange();
-          r.setStart(node, idx);
-          r.setEnd(node, idx + needle.length);
-          rect = r.getClientRects()[0] ?? null;
-          break;
+  async function syntheticDragSelect(
+    page: Page,
+    word: string,
+    opts: { detail?: number; dy?: number } = {},
+  ): Promise<void> {
+    await page.evaluate(
+      ({ needle, detail, dy }) => {
+        const root = document.querySelector("folio-doc")?.shadowRoot;
+        const host = root?.querySelector("article.folio-doc") as
+          HTMLElement | undefined;
+        if (!root || !host) return;
+        const p = Array.from(root.querySelectorAll("p")).find((el) =>
+          el.textContent?.includes(needle),
+        );
+        if (!p) return;
+        const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        let rect: DOMRect | null = null;
+        while (node) {
+          const idx = node.textContent?.indexOf(needle) ?? -1;
+          if (idx >= 0) {
+            const r = document.createRange();
+            r.setStart(node, idx);
+            r.setEnd(node, idx + needle.length);
+            rect = r.getClientRects()[0] ?? null;
+            break;
+          }
+          node = walker.nextNode();
         }
-        node = walker.nextNode();
-      }
-      if (!rect) return;
-      // A real click focuses the article; synthetic events do not.
-      host.focus();
-      host.dispatchEvent(
-        new MouseEvent("mousedown", {
-          bubbles: true,
-          clientX: rect.x + 2,
-          clientY: rect.y + rect.height / 2,
-        }),
-      );
-      host.dispatchEvent(
-        new MouseEvent("mouseup", {
-          bubbles: true,
-          clientX: rect.x + rect.width - 2,
-          clientY: rect.y + rect.height / 2,
-        }),
-      );
-    }, word);
+        if (!rect) return;
+        // A real click focuses the article; synthetic events do not.
+        host.focus();
+        host.dispatchEvent(
+          new MouseEvent("mousedown", {
+            bubbles: true,
+            detail,
+            clientX: rect.x + 2,
+            clientY: rect.y + rect.height / 2,
+          }),
+        );
+        host.dispatchEvent(
+          new MouseEvent("mouseup", {
+            bubbles: true,
+            detail,
+            clientX: rect.x + rect.width - 2,
+            clientY: rect.y + rect.height / 2 + dy,
+          }),
+        );
+      },
+      { needle: word, detail: opts.detail ?? 1, dy: opts.dy ?? 0 },
+    );
   }
 
   async function pressFormatButton(page: Page, cmd: string): Promise<void> {
@@ -453,6 +462,50 @@ test.describe("inline formats (document view)", () => {
     await expect(
       page.locator("folio-doc p strong", { hasText: "outage" }),
     ).toHaveCount(0);
+  });
+
+  test("a double-click word selection applies a format (WebKit path)", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.evaluate(() => {
+      delete (
+        ShadowRoot.prototype as unknown as {
+          getSelection?: unknown;
+        }
+      ).getSelection;
+    });
+    // A double click selects no drag: the second mouseup carries
+    // detail >= 2 and no usable drag range exists.
+    await syntheticDragSelect(page, "outage", { detail: 2 });
+    await pressFormatButton(page, "bold");
+    await expect(
+      page.locator("folio-doc p strong", { hasText: "outage" }),
+    ).toBeVisible();
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toMatch(
+      /\*\*outage\*\*/,
+    );
+  });
+
+  test("a drag released below the line still selects the word (WebKit path)", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.evaluate(() => {
+      delete (
+        ShadowRoot.prototype as unknown as {
+          getSelection?: unknown;
+        }
+      ).getSelection;
+    });
+    // Real users release drags with vertical slop; the geometric
+    // caret search snaps to the nearest line.
+    await syntheticDragSelect(page, "outage", { dy: 8 });
+    await pressFormatButton(page, "bold");
+    await expect(
+      page.locator("folio-doc p strong", { hasText: "outage" }),
+    ).toBeVisible();
   });
 });
 

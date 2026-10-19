@@ -22,6 +22,9 @@ test.describe("command palette", () => {
     page,
   }) => {
     await waitForDocument(page);
+    // The shortcut is visible on the toolbar, not hidden in a
+    // tooltip: the search button carries a keyboard hint.
+    await expect(page.locator("#btn-search .kbd-hint")).toHaveText("Ctrl K");
     await openPalette(page);
     await expect(page.locator("#palette-modal")).toBeVisible();
     await page.keyboard.press("Escape");
