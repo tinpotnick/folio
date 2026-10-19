@@ -20,12 +20,12 @@ the source to change a filter or fix a Mermaid typo.
   WITHOUT prior document focus - it appends at the document end
   (button mousedown requires an editable, the palette must not).
 - **Chart inspector** (click the chart): source table select
-  (`@id` options), type (bar / line - line renders as a polyline
-  with markers over the same negative-capable axis), selected
-  columns (comma text), Jexl filter (empty removes), sort by +
-  order (empty by removes the sort), caption (empty removes).
-  Apply redraws the chart in place and syncs the source; chart
-  errors (bad filter column, unknown sort) surface as the chart's
+  (`@id` options), type (bar / line / area / pie / donut /
+  scatter), selected columns (comma text), Jexl filter (empty
+  removes), sort by + order (empty by removes the sort), caption
+  (empty removes). Apply redraws the chart in place and syncs
+  the source; chart errors (bad filter column, unknown sort,
+  non-negative-only data in a pie) surface as the chart's
   visible error text - the error contract, not a broken render.
 - **Math / diagram inspectors** (click the figure): a textarea
   with the block's source (LaTeX / Mermaid); Enter or blur applies
@@ -33,14 +33,16 @@ the source to change a filter or fix a Mermaid typo.
 - **Shared bar mechanics**: contenteditable="false" so inputs own
   keystrokes; `figure[data-chart-source]` follows the edited
   source so charts of the same table stay addressable.
-- **Persistence (the difference from the table inspector)**:
-  figure bars are EDITING SURFACES, not click context. Clicking
-  anywhere outside the figure leaves them open with their
-  unapplied input intact; they close on the × button, Esc inside
-  the bar, or when ANOTHER figure is clicked (one bar at a
-  time). The table inspector keeps its context semantics: it
-  follows the click (any cell click re-targets it; leaving the
-  table closes it).
+- **Dismissal is uniform - the table inspector's contract, not a
+  special case**: every bar (table, chart, math, diagram) reveals
+  on a click inside its figure and hides on any click outside
+  it; Esc inside a bar dismisses early. There is no close
+  button: the earlier × was an inconsistent second dismissal
+  path, and the brief "figure bars persist across outside
+  clicks" experiment made the two bar families behave
+  differently for no user-visible gain. Any NEW inspector must
+  follow this same rule - it is checked in review
+  (see AGENTS.md Working rules).
 
 ## Also in this change
 

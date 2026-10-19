@@ -16,7 +16,13 @@ import { recalcTable, type TablePool } from "@folio/engine/recalc";
 import type { Chart, Table } from "@folio/engine/index.js";
 import { executeQuery } from "@folio/engine/query";
 import { themeFromDoc, themeCss } from "./render/theme.js";
-import { renderBarChart, renderLineChart } from "./render/chart.js";
+import {
+  renderAreaChart,
+  renderBarChart,
+  renderLineChart,
+  renderPieChart,
+  renderScatterChart,
+} from "./render/chart.js";
 import { inlineMarkdownToHtml, htmlToInlineMarkdown } from "./render/inline.js";
 
 export class FolioDoc extends HTMLElement {
@@ -165,23 +171,18 @@ export class FolioDoc extends HTMLElement {
         const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
         const block = el?.closest("[data-block-index]") as HTMLElement | null;
         if (block) this.lastBlock = block;
-        // Clicking another figure switches inspectors; clicking
-        // a TABLE cell switches its bar off (cell context);
-        // clicking plain content leaves figure bars open - they
-        // are editors with possibly unapplied work, not context.
+        // One inspector contract for every figure (spec: docs/
+        // specs/figure-inspectors.md): bars reveal on a click
+        // inside their figure and hide on any click outside it -
+        // the table inspector's behavior. No close buttons: they
+        // were an inconsistent second way to dismiss.
         const hitFigure = el?.closest("figure") as HTMLElement | null;
         for (const bar of Array.from(
           this.shadowRoot?.querySelectorAll<HTMLElement>(
             ".folio-inspector:not([hidden])",
           ) ?? [],
         )) {
-          if (hitFigure !== null) {
-            // Another figure was clicked: show only its bar.
-            if (bar.closest("figure") !== hitFigure) bar.hidden = true;
-          } else if (!bar.classList.contains("figure-inspector")) {
-            // Table bars follow the click (cell context).
-            bar.hidden = true;
-          }
+          if (bar.closest("figure") !== hitFigure) bar.hidden = true;
         }
       },
       true,
@@ -363,7 +364,13 @@ export class FolioDoc extends HTMLElement {
       name.textContent = col.name;
       name.contentEditable = "true";
       name.tabIndex = -1;
+      // While the name is the edit target the th is all name: the
+      // unit hides and the span fills the cell, so the rename
+      // feels like editing any other cell instead of a sliver of
+      // text bolted next to a read-only annotation.
+      name.addEventListener("focus", () => th.classList.add("editing"));
       name.addEventListener("blur", () => {
+        th.classList.remove("editing");
         this.commitHeaderRename(name, figure, block, ci);
       });
       th.appendChild(name);
@@ -441,11 +448,6 @@ export class FolioDoc extends HTMLElement {
       x: number;
       y: number;
     } | null = null;
-    let headerClick: {
-      span: HTMLElement;
-      x: number;
-      y: number;
-    } | null = null;
     table.addEventListener("mousedown", (ev) => {
       const cell = (ev.target as HTMLElement).closest(
         "td[data-row-index]",
@@ -458,15 +460,40 @@ export class FolioDoc extends HTMLElement {
           "th[data-col-index]",
         ) as HTMLElement | null;
         if (th) {
-          this.showInspector(figure, block, Number(th.dataset.colIndex));
-          // The header name is a nested editable: focus it on click
-          // like a data cell (engines hand focus to the article).
-          const nameSpan = (ev.target as HTMLElement).closest(
-            "thead th .name",
-          ) as HTMLElement | null;
-          if (nameSpan) {
-            headerClick = { span: nameSpan, x: ev.clientX, y: ev.clientY };
+          // The name is a nested editable: focus it on MOUSEDOWN,
+          // before the inspector bar reveals and shifts the table
+          // under the pointer (a mouseup-based focus lands on the
+          // bar, never the table). The whole th is the name's
+          // target - except the unit span, which opens the column
+          // in the inspector and nothing more.
+          const onUnit =
+            (ev.target as HTMLElement).closest("thead th .unit") !== null;
+          if (!onUnit) {
+            // Cancel the native default: clicking a non-editable
+            // region of the article hands focus to the article
+            // (the editing host) AFTER our focus(), undoing it.
+            ev.preventDefault();
+            const nameSpan = th.querySelector(
+              "span.name",
+            ) as HTMLElement | null;
+            if (nameSpan) {
+              nameSpan.focus();
+              const range = document.caretRangeFromPoint(
+                ev.clientX,
+                ev.clientY,
+              );
+              if (range && nameSpan.contains(range.startContainer)) {
+                const sel = window.getSelection();
+                sel?.setBaseAndExtent(
+                  range.startContainer,
+                  range.startOffset,
+                  range.startContainer,
+                  range.startOffset,
+                );
+              }
+            }
           }
+          this.showInspector(figure, block, Number(th.dataset.colIndex));
         }
         return;
       }
@@ -481,8 +508,6 @@ export class FolioDoc extends HTMLElement {
     table.addEventListener("mouseup", (ev) => {
       const pending = cellClick;
       cellClick = null;
-      const pendingHead = headerClick;
-      headerClick = null;
       if (pending) {
         const dragged =
           Math.hypot(ev.clientX - pending.x, ev.clientY - pending.y) > 3;
@@ -490,27 +515,6 @@ export class FolioDoc extends HTMLElement {
         if (!dragged) {
           const range = document.caretRangeFromPoint(pending.x, pending.y);
           if (range && pending.cell.contains(range.startContainer)) {
-            const sel = window.getSelection();
-            sel?.setBaseAndExtent(
-              range.startContainer,
-              range.startOffset,
-              range.startContainer,
-              range.startOffset,
-            );
-          }
-        }
-      }
-      if (pendingHead) {
-        const dragged =
-          Math.hypot(ev.clientX - pendingHead.x, ev.clientY - pendingHead.y) >
-          3;
-        pendingHead.span.focus();
-        if (!dragged) {
-          const range = document.caretRangeFromPoint(
-            pendingHead.x,
-            pendingHead.y,
-          );
-          if (range && pendingHead.span.contains(range.startContainer)) {
             const sel = window.getSelection();
             sel?.setBaseAndExtent(
               range.startContainer,
@@ -551,6 +555,14 @@ export class FolioDoc extends HTMLElement {
     // would swallow keystrokes; inputs here must own them.
     bar.contentEditable = "false";
     bar.hidden = true;
+    // The shared inspector contract: Esc inside the bar dismisses
+    // early; a click outside the figure dismisses otherwise.
+    bar.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.stopPropagation();
+        bar.hidden = true;
+      }
+    });
 
     const colSel = document.createElement("select");
     colSel.className = "insp-col";
@@ -678,10 +690,10 @@ export class FolioDoc extends HTMLElement {
    */
   private figureBar(): HTMLElement {
     const bar = document.createElement("div");
-    // "figure-inspector" bars PERSIST across clicks outside their
-    // figure: they are editing surfaces, and clicking away to
-    // check something must not discard unapplied work. They close
-    // on the × button, Esc, or when another figure is clicked.
+    // Same contract as the table inspector (spec: docs/specs/
+    // figure-inspectors.md): reveal on a click inside the figure,
+    // hide on any click outside it. Esc inside the bar dismisses
+    // early - no close button, there is nothing else to click.
     bar.className = "folio-inspector figure-inspector";
     bar.contentEditable = "false";
     bar.hidden = true;
@@ -697,16 +709,6 @@ export class FolioDoc extends HTMLElement {
         bar.hidden = true;
       }
     });
-    const close = document.createElement("button");
-    close.className = "insp-close";
-    close.title = "Close inspector (Esc)";
-    close.textContent = "\u00d7";
-    close.addEventListener("mousedown", (ev) => {
-      ev.stopPropagation();
-      ev.preventDefault();
-      bar.hidden = true;
-    });
-    bar.appendChild(close);
     return bar;
   }
 
@@ -762,7 +764,14 @@ export class FolioDoc extends HTMLElement {
     const typeSel = document.createElement("select");
     typeSel.className = "insp-type";
     typeSel.title = "Chart type";
-    for (const t of ["bar", "line"] as const) {
+    for (const t of [
+      "bar",
+      "line",
+      "area",
+      "pie",
+      "donut",
+      "scatter",
+    ] as const) {
       const o = document.createElement("option");
       o.value = t;
       o.textContent = t;
@@ -834,7 +843,7 @@ export class FolioDoc extends HTMLElement {
 
     const show = (): void => {
       srcSel.value = block.chart.source;
-      typeSel.value = block.chart.type === "line" ? "line" : "bar";
+      typeSel.value = block.chart.type;
       selInp.value = block.chart.query.select.join(", ");
       filterInp.value =
         typeof block.chart.query.filter === "string"
@@ -997,7 +1006,15 @@ export class FolioDoc extends HTMLElement {
       holder.innerHTML =
         block.chart.type === "line"
           ? renderLineChart(result).svg
-          : renderBarChart(result).svg;
+          : block.chart.type === "area"
+            ? renderAreaChart(result).svg
+            : block.chart.type === "scatter"
+              ? renderScatterChart(result).svg
+              : block.chart.type === "pie"
+                ? renderPieChart(result).svg
+                : block.chart.type === "donut"
+                  ? renderPieChart(result, true).svg
+                  : renderBarChart(result).svg;
     } catch (e) {
       holder.textContent = `Chart error: ${e instanceof Error ? e.message : String(e)}`;
     }

@@ -115,8 +115,12 @@ caption: "Quarter-on-quarter growth by region"
     `lt`) still works.
   - `sort: {by: growth, order: desc}` — sort by a column, `asc` or
     `desc`.
-- **type** is `bar` (the rendered type; `line` and `scatter` are
-  accepted by the parser but not yet drawn).
+- **type** is `bar`, `line`, `area`, `pie`, `donut`, or
+  `scatter`. Bar/line/area plot the first selected column as
+  the category label and the last as the value; pie and donut
+  slice by the value (non-negative data only — a negative shows
+  as the chart's error text); scatter plots the first selected
+  column as x and the last as y, both numeric.
 - **caption** is the figure caption.
 
 Chart colors come from the document's style header:
