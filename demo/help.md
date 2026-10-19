@@ -31,8 +31,8 @@ document — written in the same renderer you are working with.
   highlighting. Switch back to Document to re-parse. If a parse
   error appears, fix the reported line — folio stays in source view
   until the Markdown is valid.
-- **☰ Sections** toggles the outline sidebar. Click a section to
-  jump straight to it.
+- The **☰** button (tooltip "Sections") toggles the outline
+  sidebar. Click a section to jump straight to it.
 
 ## Opening and saving
 
@@ -57,6 +57,10 @@ document — written in the same renderer you are working with.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
   splitting it.
+- **Equations** are fenced `$$` blocks: a line with only `$$`, the
+  LaTeX source, then a closing `$$` line. They render typeset
+  (KaTeX). Edit the LaTeX in the Markdown view; a bad equation
+  shows its error inline instead of breaking the document.
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,
@@ -66,6 +70,71 @@ document — written in the same renderer you are working with.
 - Charts are not widgets — they are queries over a table. Edit the
   table and the figure updates on the next render. There is no run
   button anywhere in folio, and no execution state.
+
+## Charts and the query language
+
+A chart is a **query over a table**, written in the Markdown source.
+The figure renders from the table's current data — edit the table
+and the chart updates on the next render. The directive looks like
+this:
+
+```
+::: chart {#growth-chart}
+source: @regional-data
+query: {select: [region, growth], sort: {by: growth, order: desc}}
+type: bar
+caption: "Quarter-on-quarter growth by region"
+:::
+```
+
+- **source** points at a table by its anchor id (`@regional-data`).
+- **query** has three parts, all optional except `select`:
+  - `select: [column, column]` — the columns to plot. The first
+    selected column labels the bars; the last is the value.
+  - `filter: {column: q2, op: gt, value: 0}` — keep rows where the
+    column passes. Operators: `eq`, `gt`, `lt`.
+  - `sort: {by: growth, order: desc}` — sort by a column, `asc` or
+    `desc`.
+- **type** is `bar` (the rendered type; `line` and `scatter` are
+  accepted by the parser but not yet drawn).
+- **caption** is the figure caption.
+
+Chart colors come from the document's style header:
+`chart.palette: "muted"` or `"corporate"`.
+
+### Table formulas
+
+A formula column computes from other columns, cell by cell. The
+grammar is column arithmetic: column names, numbers, `+ - * /`, and
+parentheses — for example `expr: "(q3 - q2) / q2"` with
+`format: percent`. Formulas recalculate the moment a cell they
+depend on changes; formula cells are never editable by hand.
+
+## Search
+
+- Press **Ctrl+K** (or the magnifier button in the toolbar) to open
+  the search box. Type words you know — "insert table", "regional
+  summary", "keyboard shortcuts" — and Enter runs the top result.
+  It searches commands, help topics, and the document's sections.
+
+## Document settings
+
+- The gear button (toolbar, or search "settings") opens the
+  document settings: fonts, heading and body sizes, table style,
+  chart palette, and page-break behavior. Everything it edits is
+  the style header at the top of the Markdown source — the dialog
+  is just a friendlier way to write the same YAML.
+- **H1/H2 start a new page** applies when printing (and to PDF
+  via the print dialog); a page break in folio is a style, never
+  a character in your text.
+
+## Printing and PDF
+
+- Search "print" in the palette (Ctrl+K), or press **Ctrl+P** —
+  folio prints the rendered document, never the source editor or
+  the toolbar. To get a PDF, choose "Save as PDF" as the
+  destination in the print dialog. Charts and diagrams print as
+  crisp vector graphics.
 
 ## Keyboard shortcuts
 
@@ -77,6 +146,7 @@ columns:
 data:
   - [?, Open this help]
   - [F1, Open this help]
+  - [Ctrl+K, Search commands, help, and sections]
   - [Esc, Close the help window]
 :::
 

@@ -40,6 +40,7 @@ test.describe("document view", () => {
 
   test("web degradation: native Open/Save stay hidden", async ({ page }) => {
     await waitForDocument(page);
+    await expect(page.locator("#file-bar")).toBeHidden();
     await expect(page.locator("#btn-open")).toBeHidden();
     await expect(page.locator("#btn-save")).toBeHidden();
     await expect(page.locator("#btn-help")).toBeVisible();

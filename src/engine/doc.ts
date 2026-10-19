@@ -15,6 +15,7 @@ export type DocBlock =
   | { kind: "heading"; level: number; text: string }
   | { kind: "prose"; text: string }
   | { kind: "code"; lang?: string; text: string }
+  | { kind: "math"; text: string }
   | { kind: "table"; table: Table }
   | { kind: "chart"; chart: Chart }
   | { kind: "diagram"; diagram: { id: string; text: string } };
@@ -97,6 +98,15 @@ export function parseDoc(text: string): Doc {
       doc.blocks.push({
         kind: "code",
         ...(fence[1] ? { lang: fence[1] } : {}),
+        text: lines.slice(i + 1, end).join("\n"),
+      });
+      i = end + 1;
+      continue;
+    }
+    if (line.trim() === "$$") {
+      const end = findMathEnd(lines, i + 1);
+      doc.blocks.push({
+        kind: "math",
         text: lines.slice(i + 1, end).join("\n"),
       });
       i = end + 1;
@@ -313,6 +323,7 @@ function collectProse(lines: string[], start: number): number {
       line.trim() === "" ||
       DIRECTIVE_RE.test(line) ||
       line.startsWith("#") ||
+      line.trim() === "$$" ||
       /^`{3,}/.test(line.trim())
     ) {
       break;
@@ -334,6 +345,13 @@ function findFenceEnd(lines: string[], start: number): number {
     if (/^`{3,}$/.test((lines[i] ?? "").trim())) return i;
   }
   throw new ParseError("Unterminated code block", start);
+}
+
+function findMathEnd(lines: string[], start: number): number {
+  for (let i = start; i < lines.length; i++) {
+    if ((lines[i] ?? "").trim() === "$$") return i;
+  }
+  throw new ParseError("Unterminated math block", start);
 }
 
 function unquote(s: string): string {
@@ -373,6 +391,8 @@ function serializeBlock(block: DocBlock): string {
       return block.text;
     case "code":
       return "```" + (block.lang ?? "") + "\n" + block.text + "\n```";
+    case "math":
+      return "$$\n" + block.text + "\n$$";
     case "table":
       return serializeTable(block.table);
     case "chart":

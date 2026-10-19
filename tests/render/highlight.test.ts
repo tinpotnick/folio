@@ -72,4 +72,12 @@ describe("markdown+ token kinds", () => {
     expect(kinds("~~gone~~")).toEqual(["strike"]);
     expect(kinds("++added++")).toEqual(["underline"]);
   });
+
+  it("classifies a $$ math block, delimiters and content", () => {
+    expect(kinds("$$\nE = mc^2\n$$")).toEqual(["math", "math", "math"]);
+  });
+
+  it("resumes prose highlighting after the closing $$", () => {
+    expect(kinds("$$\nx\n$$\nplain text")[3]).toBe("text");
+  });
 });

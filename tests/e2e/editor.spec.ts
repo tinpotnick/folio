@@ -349,6 +349,111 @@ test.describe("inline formats (document view)", () => {
     await page.locator("folio-doc strong", { hasText: "Midlands" }).click();
     await expect(page.locator(fmt("bold"))).toHaveClass(/active/);
   });
+
+  // The WebKitGTK (Tauri) fallback: no pierceable selection API, so
+  // the component tracks drag selections from the press/release
+  // caret points. Synthetic mouse events create no native
+  // selection even in Chromium, which makes the fallback path
+  // testable in CI.
+  async function syntheticDragSelect(page: Page, word: string): Promise<void> {
+    await page.evaluate((needle) => {
+      const root = document.querySelector("folio-doc")?.shadowRoot;
+      const host = root?.querySelector("article.folio-doc") as
+        HTMLElement | undefined;
+      if (!root || !host) return;
+      const p = Array.from(root.querySelectorAll("p")).find((el) =>
+        el.textContent?.includes(needle),
+      );
+      if (!p) return;
+      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      let rect: DOMRect | null = null;
+      while (node) {
+        const idx = node.textContent?.indexOf(needle) ?? -1;
+        if (idx >= 0) {
+          const r = document.createRange();
+          r.setStart(node, idx);
+          r.setEnd(node, idx + needle.length);
+          rect = r.getClientRects()[0] ?? null;
+          break;
+        }
+        node = walker.nextNode();
+      }
+      if (!rect) return;
+      // A real click focuses the article; synthetic events do not.
+      host.focus();
+      host.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          clientX: rect.x + 2,
+          clientY: rect.y + rect.height / 2,
+        }),
+      );
+      host.dispatchEvent(
+        new MouseEvent("mouseup", {
+          bubbles: true,
+          clientX: rect.x + rect.width - 2,
+          clientY: rect.y + rect.height / 2,
+        }),
+      );
+    }, word);
+  }
+
+  async function pressFormatButton(page: Page, cmd: string): Promise<void> {
+    await page.evaluate((name) => {
+      document
+        .querySelector(`#fmt-bar button[data-cmd="${name}"]`)
+        ?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    }, cmd);
+  }
+
+  test("a drag selection applies bold without a native selection (WebKit path)", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    // Simulate WebKitGTK: no pierceable shadow-root selection API.
+    await page.evaluate(() => {
+      delete (
+        ShadowRoot.prototype as unknown as {
+          getSelection?: unknown;
+        }
+      ).getSelection;
+    });
+    await syntheticDragSelect(page, "outage");
+    await pressFormatButton(page, "bold");
+    await expect(
+      page.locator("folio-doc p strong", { hasText: "outage" }),
+    ).toBeVisible();
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toMatch(
+      /\*\*outage\*\*/,
+    );
+  });
+
+  test("a drag selection over formatted text toggles the format off (WebKit path)", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.evaluate(() => {
+      delete (
+        ShadowRoot.prototype as unknown as {
+          getSelection?: unknown;
+        }
+      ).getSelection;
+    });
+    await syntheticDragSelect(page, "outage");
+    await pressFormatButton(page, "bold");
+    await expect(
+      page.locator("folio-doc p strong", { hasText: "outage" }),
+    ).toBeVisible();
+    // The drag starts exactly at the strong boundary; the toggle
+    // must see through it to the first formatted character.
+    await syntheticDragSelect(page, "outage");
+    await pressFormatButton(page, "bold");
+    await expect(
+      page.locator("folio-doc p strong", { hasText: "outage" }),
+    ).toHaveCount(0);
+  });
 });
 
 /* ------------------------------------------------------------------ */

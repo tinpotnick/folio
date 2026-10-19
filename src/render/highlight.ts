@@ -16,6 +16,7 @@ export type MdTokenKind =
   | "strike"
   | "underline"
   | "code"
+  | "math"
   | "directive"
   | "directive-key"
   | "directive-list"
@@ -37,6 +38,7 @@ export function highlightMarkdown(src: string): MdLine[] {
   let directiveDepth = 0;
   let inMermaid = false;
   let inFence = false;
+  let inMath = false;
   return lines.map((line) => {
     let tokens: MdToken[];
     if (inMermaid) {
@@ -53,6 +55,16 @@ export function highlightMarkdown(src: string): MdLine[] {
       } else {
         tokens = [{ kind: "code", text: line }];
       }
+    } else if (inMath) {
+      if (line.trim() === "$$") {
+        inMath = false;
+        tokens = [{ kind: "math", text: line }];
+      } else {
+        tokens = [{ kind: "math", text: line }];
+      }
+    } else if (line.trim() === "$$") {
+      inMath = true;
+      tokens = [{ kind: "math", text: line }];
     } else if (/^`{3,}\S*$/.test(line.trim())) {
       inFence = true;
       tokens = [{ kind: "fence", text: line }];

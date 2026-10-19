@@ -603,12 +603,12 @@ btnSidebar.addEventListener("click", () => {
 
 /* --- Desktop (Tauri) bridge: native Open/Save (ADR-0006) --- */
 
+const fileBar = requireEl<HTMLElement>("#file-bar");
 const btnOpen = requireEl<HTMLButtonElement>("#btn-open");
 const btnSave = requireEl<HTMLButtonElement>("#btn-save");
 
 if (isDesktop()) {
-  btnOpen.hidden = false;
-  btnSave.hidden = false;
+  fileBar.hidden = false;
 }
 
 btnOpen.addEventListener("click", async () => {
@@ -657,6 +657,371 @@ document.addEventListener("keydown", (ev) => {
   if (editable(a) || editable(a?.shadowRoot?.activeElement)) return;
   ev.preventDefault();
   openHelp();
+});
+
+/* --- Command palette (spec: docs/specs/command-palette.md) --- */
+
+const paletteModal = requireEl<HTMLDialogElement>("#palette-modal");
+const paletteInput = requireEl<HTMLInputElement>("#palette-input");
+const paletteList = requireEl<HTMLElement>("#palette-list");
+const helpDoc = requireEl<FolioDoc>("#help-doc");
+
+interface PaletteEntry {
+  title: string;
+  group: "Command" | "Help" | "Section";
+  keywords: string;
+  action: () => void;
+}
+
+/**
+ * Everything the palette can reach: the toolbar commands, the
+ * document's sections, and the help document's topics. Rebuilt on
+ * every open so view state and the outline stay current.
+ */
+function paletteEntries(): PaletteEntry[] {
+  const entries: PaletteEntry[] = [];
+  // The hidden attribute lives on the wrapping md-wrap, not the
+  // textarea itself.
+  const inMd = !mdWrap.hidden;
+  entries.push({
+    title: inMd ? "Switch to Document view" : "Switch to Markdown source",
+    group: "Command",
+    keywords: "view switch toggle markdown source document",
+    action: () => (inMd ? btnView : btnMd).click(),
+  });
+  entries.push({
+    title: "Insert a table",
+    group: "Command",
+    keywords: "table insert new add dataset",
+    action: () => btnTable.click(),
+  });
+  entries.push({
+    title: "Insert a Mermaid diagram",
+    group: "Command",
+    keywords: "diagram mermaid insert graph figure",
+    action: () => btnDiagram.click(),
+  });
+  entries.push({
+    title: "Toggle a code block",
+    group: "Command",
+    keywords: "code block fence toggle",
+    action: () => btnCodeBlock.click(),
+  });
+  entries.push({
+    title: "Toggle the section browser",
+    group: "Command",
+    keywords: "sections sidebar outline toggle navigation",
+    action: () => btnSidebar.click(),
+  });
+  entries.push({
+    title: "Open the help document",
+    group: "Command",
+    keywords: "help reference guide how to",
+    action: () => openHelp(),
+  });
+  entries.push({
+    title: "Document settings",
+    group: "Command",
+    keywords: "settings style font theme frontmatter page break",
+    action: () => openSettings(),
+  });
+  entries.push({
+    title: "Print the document",
+    group: "Command",
+    keywords: "print pdf export paper",
+    action: () => window.print(),
+  });
+  if (!fileBar.hidden) {
+    entries.push({
+      title: "Open a document",
+      group: "Command",
+      keywords: "open load file document",
+      action: () => btnOpen.click(),
+    });
+    entries.push({
+      title: "Save the document",
+      group: "Command",
+      keywords: "save write file document",
+      action: () => btnSave.click(),
+    });
+  }
+  for (const section of el.getOutline()) {
+    entries.push({
+      title: section.text,
+      group: "Section",
+      keywords: "section jump go to heading outline",
+      action: () => el.revealBlock(section.blockIndex),
+    });
+  }
+  for (const topic of helpDoc.getOutline()) {
+    entries.push({
+      title: `Help: ${topic.text}`,
+      group: "Help",
+      keywords: "help how to documentation guide",
+      action: () => {
+        openHelp();
+        helpDoc.revealBlock(topic.blockIndex);
+      },
+    });
+  }
+  return entries;
+}
+
+/**
+ * Subsequence fuzzy match with bonuses for adjacent characters and
+ * word starts. -1 means no match.
+ */
+function fuzzyScore(needle: string, haystack: string): number {
+  const n = needle.toLowerCase();
+  const h = haystack.toLowerCase();
+  if (!n) return 1;
+  let score = 0;
+  let hi = 0;
+  let last = -2;
+  for (const ch of n) {
+    const at = h.indexOf(ch, hi);
+    if (at < 0) return -1;
+    score += at === last + 1 ? 3 : 1;
+    if (at === 0 || " .:-".includes(h[at - 1] ?? "")) score += 2;
+    last = at;
+    hi = at + 1;
+  }
+  return score;
+}
+
+let paletteFiltered: PaletteEntry[] = [];
+let paletteSel = 0;
+
+function renderPalette(): void {
+  paletteList.textContent = "";
+  if (paletteFiltered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "palette-empty";
+    empty.textContent = "No matches";
+    paletteList.appendChild(empty);
+    return;
+  }
+  paletteFiltered.forEach((entry, i) => {
+    const btn = document.createElement("button");
+    btn.className = `palette-item${i === paletteSel ? " selected" : ""}`;
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-selected", i === paletteSel ? "true" : "false");
+    const tag = document.createElement("span");
+    tag.className = "palette-tag";
+    tag.textContent = entry.group;
+    btn.appendChild(tag);
+    btn.appendChild(document.createTextNode(entry.title));
+    btn.addEventListener("click", () => runPalette(i));
+    paletteList.appendChild(btn);
+  });
+  (paletteList.children[paletteSel] as HTMLElement | undefined)?.scrollIntoView(
+    { block: "nearest" },
+  );
+}
+
+function runPalette(i: number): void {
+  const entry = paletteFiltered[i];
+  if (!entry) return;
+  paletteModal.close();
+  entry.action();
+}
+
+function updatePalette(): void {
+  const query = paletteInput.value.trim();
+  const all = paletteEntries();
+  if (!query) {
+    paletteFiltered = all.slice(0, 30);
+  } else {
+    paletteFiltered = all
+      .map((e) => ({
+        e,
+        s: fuzzyScore(query, `${e.title} ${e.keywords}`),
+      }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .map((x) => x.e)
+      .slice(0, 30);
+  }
+  paletteSel = 0;
+  renderPalette();
+}
+
+function openPalette(): void {
+  if (paletteModal.open) return;
+  paletteModal.showModal();
+  paletteInput.value = "";
+  updatePalette();
+  paletteInput.focus();
+}
+
+requireEl<HTMLButtonElement>("#btn-search").addEventListener(
+  "click",
+  openPalette,
+);
+
+document.addEventListener("keydown", (ev) => {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
+    ev.preventDefault();
+    openPalette();
+  }
+});
+
+paletteInput.addEventListener("input", updatePalette);
+
+paletteInput.addEventListener("keydown", (ev) => {
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    ev.preventDefault();
+    paletteSel =
+      ev.key === "ArrowDown"
+        ? Math.min(paletteSel + 1, paletteFiltered.length - 1)
+        : Math.max(paletteSel - 1, 0);
+    renderPalette();
+  } else if (ev.key === "Enter") {
+    ev.preventDefault();
+    runPalette(paletteSel);
+  }
+});
+
+/* --- Document settings (spec: docs/specs/document-settings.md) --- */
+
+const settingsModal = requireEl<HTMLDialogElement>("#settings-modal");
+const settingsForm = requireEl<HTMLFormElement>("#settings-form");
+const setBodyFont = requireEl<HTMLSelectElement>("#set-body-font");
+const setH1Font = requireEl<HTMLSelectElement>("#set-h1-font");
+const setBodySize = requireEl<HTMLInputElement>("#set-body-size");
+const setH1Size = requireEl<HTMLInputElement>("#set-h1-size");
+const setH2Size = requireEl<HTMLInputElement>("#set-h2-size");
+const setTableStyle = requireEl<HTMLSelectElement>("#set-table-style");
+const setPalette = requireEl<HTMLSelectElement>("#set-palette");
+const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
+const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
+
+const FONT_OPTIONS = [
+  "Source Serif 4",
+  "Merriweather",
+  "Georgia",
+  "Arial",
+  "system-ui",
+];
+
+function fillFontSelect(
+  sel: HTMLSelectElement,
+  current: string | undefined,
+): void {
+  sel.textContent = "";
+  const def = document.createElement("option");
+  def.value = "default";
+  def.textContent = "Theme default (Source Serif 4)";
+  sel.appendChild(def);
+  const options = [...FONT_OPTIONS];
+  if (current && !options.includes(current)) options.push(current);
+  for (const name of options) {
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = name;
+    sel.appendChild(o);
+  }
+  sel.value = current ?? "default";
+}
+
+function fillSettings(): void {
+  const style = new Map(el.getDoc()?.frontmatter.style ?? []);
+  fillFontSelect(setBodyFont, style.get("body.font.family"));
+  fillFontSelect(setH1Font, style.get("h1.font.family"));
+  setBodySize.value = style.get("body.font.size") ?? "";
+  setH1Size.value = style.get("h1.font.size") ?? "";
+  setH2Size.value = style.get("h2.font.size") ?? "";
+  setTableStyle.value = style.get("table.style") ?? "default";
+  setPalette.value = style.get("chart.palette") ?? "default";
+  setPbH1.value = style.get("pagebreak.h1") === "before" ? "before" : "default";
+  setPbH2.value = style.get("pagebreak.h2") === "before" ? "before" : "default";
+}
+
+function openSettings(): void {
+  fillSettings();
+  if (!settingsModal.open) settingsModal.showModal();
+}
+
+requireEl<HTMLButtonElement>("#btn-settings").addEventListener(
+  "click",
+  openSettings,
+);
+requireEl<HTMLButtonElement>("#btn-settings-close").addEventListener(
+  "click",
+  () => settingsModal.close(),
+);
+requireEl<HTMLButtonElement>("#btn-settings-cancel").addEventListener(
+  "click",
+  () => settingsModal.close(),
+);
+
+settingsForm.addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const md = mdWrap.hidden ? (el.getMarkdown() ?? "") : editor.value;
+  try {
+    const doc = parseDoc(md);
+    // The frontmatter is the source of truth: the dialog only
+    // writes style keys through the same parse/serialize pipeline
+    // as editing the YAML by hand. "default" and empty fields
+    // remove the key so the theme default applies. Existing key
+    // order is preserved - the dialog must not churn the user's
+    // YAML - and keys it does not know about pass through
+    // untouched.
+    const values: Record<string, string> = {
+      "body.font.family": setBodyFont.value,
+      "h1.font.family": setH1Font.value,
+      "body.font.size": setBodySize.value.trim(),
+      "h1.font.size": setH1Size.value.trim(),
+      "h2.font.size": setH2Size.value.trim(),
+      "table.style": setTableStyle.value,
+      "chart.palette": setPalette.value,
+      "pagebreak.h1": setPbH1.value,
+      "pagebreak.h2": setPbH2.value,
+    };
+    const style: [string, string][] = [];
+    const seen = new Set<string>();
+    for (const [key, value] of doc.frontmatter.style) {
+      const next = values[key];
+      if (next === undefined) {
+        style.push([key, value]);
+        continue;
+      }
+      if (next !== "" && next !== "default") {
+        style.push([key, next]);
+        seen.add(key);
+      }
+    }
+    for (const [key, value] of Object.entries(values)) {
+      if (!seen.has(key) && value !== "" && value !== "default") {
+        style.push([key, value]);
+      }
+    }
+    doc.frontmatter.style = style;
+    const out = serializeDoc(doc);
+    el.load(out);
+    editor.value = out;
+    if (!mdWrap.hidden) renderHighlight();
+    settingsModal.close();
+    flash("Settings applied");
+    refreshOutline();
+  } catch (e) {
+    flash(`Parse error: ${e instanceof Error ? e.message : String(e)}`);
+  }
+});
+
+/* --- Printing / PDF (spec: docs/specs/print.md) --- */
+
+/**
+ * Whatever triggers the print (the palette command or the
+ * browser's own Ctrl+P / menu), the printout shows the rendered
+ * document - not the source editor or an open dialog. The page
+ * break style keys apply here (paged media).
+ */
+window.addEventListener("beforeprint", () => {
+  if (helpModal.open) helpModal.close();
+  if (paletteModal.open) paletteModal.close();
+  if (settingsModal.open) settingsModal.close();
+  if (!mdWrap.hidden) btnView.click();
 });
 
 refreshOutline();

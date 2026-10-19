@@ -13,6 +13,8 @@ export interface Theme {
   h2Size: string;
   tableStyle: string;
   palette: string[];
+  pageBreakH1: boolean;
+  pageBreakH2: boolean;
 }
 
 const PALETTES: Record<string, string[]> = {
@@ -28,6 +30,8 @@ const DEFAULT_THEME: Theme = {
   h2Size: "20pt",
   tableStyle: "booktabs",
   palette: PALETTES["muted"] ?? ["#4c6ef5"],
+  pageBreakH1: false,
+  pageBreakH2: false,
 };
 
 export function themeFromDoc(doc: Doc): Theme {
@@ -45,6 +49,8 @@ export function themeFromDoc(doc: Doc): Theme {
     tableStyle: style.get("table.style") ?? DEFAULT_THEME.tableStyle,
     palette:
       PALETTES[style.get("chart.palette") ?? "muted"] ?? DEFAULT_THEME.palette,
+    pageBreakH1: style.get("pagebreak.h1") === "before",
+    pageBreakH2: style.get("pagebreak.h2") === "before",
   };
 }
 
@@ -99,6 +105,24 @@ export function themeCss(theme: Theme): string {
       content: "\\00a0";
       opacity: 0;
     }
+    ${
+      theme.tableStyle === "plain"
+        ? `table.folio-table thead tr { border-top: 1px solid #d0d7de; }
+    table.folio-table thead th { border-bottom: 1px solid #d0d7de; }
+    table.folio-table tbody tr:last-child td { border-bottom: 1px solid #d0d7de; }
+    table.folio-table td, table.folio-table th { border: 1px solid #e6e8eb; }`
+        : ""
+    }
+    ${
+      theme.pageBreakH1
+        ? `@media print { article.folio-doc > h1:not(:first-child) { break-before: page; page-break-before: always; } }`
+        : ""
+    }
+    ${
+      theme.pageBreakH2
+        ? `@media print { article.folio-doc > h2:not(:first-child) { break-before: page; page-break-before: always; } }`
+        : ""
+    }
     td.num, th.num { text-align: right; }
     td.folio-formula {
       font-feature-settings: "tnum";
@@ -131,6 +155,14 @@ export function themeCss(theme: Theme): string {
     figure.folio-diagram:focus {
       outline: 2px solid #1f3fbf;
       border-style: solid;
+    }
+    figure.folio-math {
+      margin: 1.2em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    figure.folio-math .math-holder .katex-display {
+      margin: 0;
     }
     code {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -179,5 +211,19 @@ export function themeCss(theme: Theme): string {
     }
     .folio-menu button:hover { background: #f3f4f6; }
     .chart-holder svg { width: 100%; height: auto; display: block; }
+    @media print {
+      article.folio-doc { max-width: none; }
+      article.folio-doc h1,
+      article.folio-doc h2,
+      article.folio-doc h3 {
+        break-after: avoid;
+      }
+      figure,
+      table.folio-table,
+      pre.folio-code {
+        break-inside: avoid;
+      }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   `;
 }
