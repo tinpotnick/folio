@@ -685,12 +685,20 @@ export class FolioDoc extends HTMLElement {
     }
     // No pierceable selection (WebKitGTK typing in a cell steals
     // focus to the article): the last focused cell is the best
-    // available context.
+    // available context - but the most recent CLICK still wins:
+    // it resolves through the shadow root's hit testing, which is
+    // the one pierce available on WebKitGTK. Without this, Enter
+    // in a paragraph after using a table grew the table (the
+    // focused article kept the stale cell authoritative).
     if (
       this.lastCell !== null &&
       this.shadowRoot?.contains(this.lastCell) === true &&
       this.shadowRoot?.activeElement !== null
     ) {
+      if (this.lastBlock !== null && !this.lastBlock.contains(this.lastCell)) {
+        this.lastCell = null;
+        return null;
+      }
       return this.lastCell;
     }
     return null;

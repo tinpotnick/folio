@@ -44,6 +44,17 @@ table at the edges.
   last-used cell is only a fallback for engines with no pierceable
   selection (WebKitGTK). Otherwise a stale cell hijacked Enter and
   grew the table from a paragraph.
+- **Pointer context beats cell history (WebKitGTK):** where no
+  caret is resolvable at all, the fallback cell is only valid
+  while the most recent CLICK resolves inside its table: clicks
+  resolve through the shadow root's hit testing (the one pierce
+  WebKitGTK has), so a click into a paragraph drops the stale
+  cell — otherwise the focused article kept it authoritative and
+  Enter grew the table from the paragraph (the bug returned on
+  desktop after the Chromium fix, which cannot fire there).
+  Verified in WebKitGTK: click a cell, Enter moves down the
+  column; click a paragraph, Enter does not grow the table and
+  clears the stale cell.
 - **Navigation**: Tab/Shift+Tab move across editable cells (formula
   columns are skipped, wrapping across rows); Enter/Shift+Enter
   move down/up a column. Tab or Enter past the last row appends a

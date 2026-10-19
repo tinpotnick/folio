@@ -541,6 +541,35 @@ test.describe("tables", () => {
     expect(rows).toBe(3);
   });
 
+  test("Enter after a table splits the paragraph on engines with no pierceable selection (WebKit path)", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    // Simulate WebKitGTK: no shadow-root selection API, so the
+    // last used cell is the only context - the most recent click
+    // must override it or Enter grows the table from a paragraph.
+    await page.evaluate(() => {
+      delete (
+        ShadowRoot.prototype as unknown as {
+          getSelection?: unknown;
+        }
+      ).getSelection;
+    });
+    await page.locator(td(0, 1)).click();
+    await page.keyboard.type("410");
+    await page
+      .locator("folio-doc p", { hasText: "Numbers are pulled live" })
+      .click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("tail");
+    const rows = await page.locator("#the-doc tbody tr").count();
+    expect(rows).toBe(3);
+    const texts = await proseTexts(page);
+    const idx = texts.findIndex((t) => t.includes("Numbers are pulled live"));
+    expect(texts[idx + 1]).toContain("tail");
+  });
+
   test("Tab moves to the next editable cell and commits", async ({ page }) => {
     await waitForDocument(page);
     await page.locator(td(0, 0)).click();
