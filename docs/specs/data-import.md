@@ -46,6 +46,21 @@ data exactly like hand-authored tables.
   carries every row; a multi-MB source view is the known ceiling
   (see section-windowing.md).
 
+## Shipped demo data
+
+- `demo/data/monthly-sales.csv` - 72 rows (24 months x 3
+  regions), realistic seasonality and per-region trends; the
+  palette command "Import the demo dataset" imports it through
+  the same machinery with no file dialog (it is the demo path
+  for trying import - and for first-contact evals).
+- `demo/data/site-metrics.json` - 24 records, array-of-objects
+  shape, for trying JSON.
+- `demo/examples/report.md` - "Open example: report": the
+  finished article - an imported 72-row table (with the growth
+  running formula and a document-chosen `table.rows.show: 24`
+  window), two line charts over it, and prose that reads like a
+  report. Round-trips byte-identically like every document.
+
 ## Non-goals
 
 - **Live links / refresh** - not now; the snapshot + metadata
