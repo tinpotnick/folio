@@ -36,7 +36,12 @@ flattened back to prose - nothing durable happened.
   merges, and the model follows. The old model-split + re-render
   path destroyed the caret, which forced a click before typing.
   Enter inside a selected diagram is prevented (diagrams never
-  split).
+  split). After each rebuild the article's children are re-stamped
+  with their positional `data-block-index` (guarded to when the
+  child count matches the rebuilt model): native splits create
+  elements that carry no index, and without the re-stamp every
+  index-based action on them (block conversion, code toggling,
+  caret tracking) silently no-opped.
 - **Toolbar**: the code-block button lives in the insert group
   (table / diagram / code) with a `</>` icon. In document view it
   toggles the caret's block between prose and a code block

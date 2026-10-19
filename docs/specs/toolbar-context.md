@@ -44,6 +44,13 @@ view, and the buttons were inert in Markdown view.
     caret's block is a heading (H1–H6) or a code block (`PRE`), the
     B/I/code buttons are disabled — the markdown carries no inline
     emphasis inside them, so they neither light up nor act there.
+- **Document view (actions):** H1/H2/P convert the caret's block at
+  the model level (`setBlockKind`: prose ↔ heading, keeping the
+  text; re-render, caret restored to the block start). execCommand
+  cannot act inside the shadow tree, so a model-level conversion is
+  the only path that works in every engine. The conversion resolves
+  blocks created by native structural edits (Enter splits), not
+  just rendered blocks.
 - **Markdown view (state):** the block buttons reflect the current
   line's prefix (`# ` → H1, `## ` → H2, otherwise P); the inline
   buttons reflect the token kind at the caret via

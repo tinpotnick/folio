@@ -42,7 +42,11 @@ Chart:
 1. **Offline render:** any document renders fully with the network
    cut off. Bindings are enhancement; snapshots are source of truth.
 2. **Round-trip identity:** parsed document -> serialized document is
-   byte-identical.
+   byte-identical. Empty prose blocks round-trip too: the serializer
+   joins blocks with a blank line, so n consecutive empty prose
+   blocks serialize to a run of 2n blank lines and parse back to n
+   empty blocks (floor(k/2) for a run of k). Leading and trailing
+   blank runs are plain separators and carry no blocks.
 3. **Recalc correctness:** editing any cell updates every dependent
    formula and chart with no user action.
 4. **Theme closure:** a document + any conformant theme renders;
