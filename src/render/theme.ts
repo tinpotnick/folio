@@ -140,6 +140,7 @@ export function themeCss(theme: Theme): string {
     table.folio-table thead th { border-bottom: 1px solid #d0d7de; }
     table.folio-table thead th .unit {
       font-weight: 400;
+      font-style: italic;
       font-size: 0.8em;
       color: #57606a;
     }
@@ -243,6 +244,21 @@ export function themeCss(theme: Theme): string {
       font-style: italic;
       color: #57606a;
       flex: none;
+    }
+    .folio-inspector .insp-close {
+      flex: none;
+      margin-left: auto;
+      border: none;
+      background: transparent;
+      font-size: 15px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 5px;
+      cursor: pointer;
+      color: #57606a;
+    }
+    .folio-inspector .insp-close:hover {
+      background: #e6e8eb;
     }
     figure.folio-math {
       margin: 1.2em 0;

@@ -164,17 +164,23 @@ export class FolioDoc extends HTMLElement {
         const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
         const block = el?.closest("[data-block-index]") as HTMLElement | null;
         if (block) this.lastBlock = block;
-        // Clicking away from a table closes its inspector: the
-        // bar belongs to the table being worked on.
-        const hitFigure = el?.closest(
-          "figure[data-table-id]",
-        ) as HTMLElement | null;
+        // Clicking another figure switches inspectors; clicking
+        // a TABLE cell switches its bar off (cell context);
+        // clicking plain content leaves figure bars open - they
+        // are editors with possibly unapplied work, not context.
+        const hitFigure = el?.closest("figure") as HTMLElement | null;
         for (const bar of Array.from(
           this.shadowRoot?.querySelectorAll<HTMLElement>(
             ".folio-inspector:not([hidden])",
           ) ?? [],
         )) {
-          if (bar.closest("figure") !== hitFigure) bar.hidden = true;
+          if (hitFigure !== null) {
+            // Another figure was clicked: show only its bar.
+            if (bar.closest("figure") !== hitFigure) bar.hidden = true;
+          } else if (!bar.classList.contains("figure-inspector")) {
+            // Table bars follow the click (cell context).
+            bar.hidden = true;
+          }
         }
       },
       true,
@@ -566,7 +572,11 @@ export class FolioDoc extends HTMLElement {
    */
   private figureBar(): HTMLElement {
     const bar = document.createElement("div");
-    bar.className = "folio-inspector";
+    // "figure-inspector" bars PERSIST across clicks outside their
+    // figure: they are editing surfaces, and clicking away to
+    // check something must not discard unapplied work. They close
+    // on the × button, Esc, or when another figure is clicked.
+    bar.className = "folio-inspector figure-inspector";
     bar.contentEditable = "false";
     bar.hidden = true;
     bar.addEventListener("mousedown", (ev) => {
@@ -575,6 +585,22 @@ export class FolioDoc extends HTMLElement {
       // clicks from reaching figure-level handlers).
       ev.stopPropagation();
     });
+    bar.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.stopPropagation();
+        bar.hidden = true;
+      }
+    });
+    const close = document.createElement("button");
+    close.className = "insp-close";
+    close.title = "Close inspector (Esc)";
+    close.textContent = "\u00d7";
+    close.addEventListener("mousedown", (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      bar.hidden = true;
+    });
+    bar.appendChild(close);
     return bar;
   }
 

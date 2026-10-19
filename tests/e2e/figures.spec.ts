@@ -154,6 +154,44 @@ test.describe("math and diagram inspectors", () => {
     );
   });
 
+  test("figure inspectors persist across clicks outside the figure", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const figure = page.locator(
+      '#the-doc figure[data-chart-source="regional-data"]',
+    );
+    await figure.locator(".chart-holder").click();
+    const insp = figure.locator(".folio-inspector");
+    await expect(insp).toBeVisible();
+    // Clicking a paragraph (outside the figure) must NOT discard
+    // the editing surface or its unapplied input.
+    await insp.locator(".insp-filter").fill("q2 > 400");
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await expect(insp).toBeVisible();
+    await expect(insp.locator(".insp-filter")).toHaveValue("q2 > 400");
+    // The close button (or Esc) dismisses it explicitly.
+    await insp.locator(".insp-close").click();
+    await expect(insp).toBeHidden();
+  });
+
+  test("the table inspector still hides on outside clicks", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const tableBar = page.locator(
+      '#the-doc figure[data-table-id="regional-data"] .folio-inspector',
+    );
+    await page
+      .locator(
+        '#the-doc figure[data-table-id="regional-data"] td[data-row-index="0"][data-col-index="1"]',
+      )
+      .click();
+    await expect(tableBar).toBeVisible();
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await expect(tableBar).toBeHidden();
+  });
+
   test("editing a diagram's Mermaid source in place re-renders it", async ({
     page,
   }) => {

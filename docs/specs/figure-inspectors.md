@@ -31,10 +31,16 @@ the source to change a filter or fix a Mermaid typo.
   with the block's source (LaTeX / Mermaid); Enter or blur applies
   (Shift+Enter for a newline), redrawing the figure in place.
 - **Shared bar mechanics**: contenteditable="false" so inputs own
-  keystrokes; shown by clicking its figure, hidden by the article
-  mousedown handler when the click lands outside that figure;
-  `figure[data-chart-source]` follows the edited source so charts
-  of the same table stay addressable.
+  keystrokes; `figure[data-chart-source]` follows the edited
+  source so charts of the same table stay addressable.
+- **Persistence (the difference from the table inspector)**:
+  figure bars are EDITING SURFACES, not click context. Clicking
+  anywhere outside the figure leaves them open with their
+  unapplied input intact; they close on the × button, Esc inside
+  the bar, or when ANOTHER figure is clicked (one bar at a
+  time). The table inspector keeps its context semantics: it
+  follows the click (any cell click re-targets it; leaving the
+  table closes it).
 
 ## Also in this change
 
@@ -43,7 +49,8 @@ the source to change a filter or fix a Mermaid typo.
   document settings (theme default 16pt).
 - **Table inspector refinements**: clicking a column HEADER opens
   that column in the bar (the heading itself is never edited in
-  place; the unit is a separate, italic field there).
+  place; the unit is a separate, italic field there, and the
+  header's unit span renders italic too).
 
 ## Acceptance
 
