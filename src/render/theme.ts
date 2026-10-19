@@ -134,16 +134,32 @@ export function themeCss(theme: Theme): string {
       content: "\\00a0";
       opacity: 0;
     }
-    ${
-      theme.tableStyle === "plain"
-        ? `table.folio-table thead tr { border-top: 1px solid #d0d7de; }
-    table.folio-table thead th { border-bottom: 1px solid #d0d7de; }
     table.folio-table thead th .unit {
       font-weight: 400;
       font-style: italic;
       font-size: 0.8em;
       color: #57606a;
     }
+    table.folio-table thead th .name { user-select: text; }
+    table.folio-table thead th .name:hover {
+      background: rgba(76, 110, 245, 0.05);
+      border-radius: 3px;
+    }
+    table.folio-table thead th .name:focus {
+      outline: none;
+      background: rgba(76, 110, 245, 0.07);
+      box-shadow: inset 0 0 0 1px rgba(76, 110, 245, 0.25);
+      border-radius: 3px;
+    }
+    .folio-table-error {
+      color: #9a6700;
+      font-size: 0.9em;
+      padding: 6px 2px;
+    }
+    ${
+      theme.tableStyle === "plain"
+        ? `table.folio-table thead tr { border-top: 1px solid #d0d7de; }
+    table.folio-table thead th { border-bottom: 1px solid #d0d7de; }
     table.folio-table tbody tr:last-child td { border-bottom: 1px solid #d0d7de; }
     table.folio-table td, table.folio-table th { border: 1px solid #e6e8eb; }`
         : ""

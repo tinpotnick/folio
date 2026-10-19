@@ -28,6 +28,7 @@ export class FolioDoc extends HTMLElement {
   private listeners: ((doc: Doc) => void)[] = [];
   private menu: HTMLElement | null = null;
   private lastCell: HTMLTableCellElement | null = null;
+  private lastHeaderName: HTMLElement | null = null;
   private lastBlock: HTMLElement | null = null;
   /**
    * The last mouse-drag text selection, built from the two caret
@@ -321,12 +322,27 @@ export class FolioDoc extends HTMLElement {
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     idx: number,
   ): HTMLElement {
-    const recalced = recalcTable(block.table, this.tablePool());
     const figure = document.createElement("figure");
     figure.dataset.blockIndex = String(idx);
     figure.dataset.tableId = block.table.id;
     const inspector = this.buildInspector(figure, block);
     figure.appendChild(inspector);
+    // A broken formula (a rename that orphaned a reference, bad
+    // Jexl) must not take the whole render down: the error shows in
+    // place, and the inspector stays up so it can be fixed from the
+    // document view.
+    let recalced: Table;
+    try {
+      recalced = recalcTable(block.table, this.tablePool());
+    } catch (e) {
+      const err = document.createElement("div");
+      err.className = "folio-table-error";
+      err.textContent = `Table error: ${
+        e instanceof Error ? e.message : String(e)
+      }`;
+      figure.appendChild(err);
+      return figure;
+    }
     const table = document.createElement("table");
     table.className = "folio-table";
     // Only data cells edit (they set contenteditable themselves):
@@ -339,7 +355,18 @@ export class FolioDoc extends HTMLElement {
     block.table.columns.forEach((col, ci) => {
       const th = document.createElement("th");
       th.dataset.colIndex = String(ci);
-      th.appendChild(document.createTextNode(col.name));
+      // Only the NAME is editable in place - the unit is a separate
+      // read-only annotation. The in-place rename is the document-
+      // view counterpart of editing the column name in the YAML.
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = col.name;
+      name.contentEditable = "true";
+      name.tabIndex = -1;
+      name.addEventListener("blur", () => {
+        this.commitHeaderRename(name, figure, block, ci);
+      });
+      th.appendChild(name);
       if (col.unit !== undefined) {
         th.title = col.unit;
         // Units are data, not decoration: the reader should see
@@ -404,9 +431,18 @@ export class FolioDoc extends HTMLElement {
         "td[data-row-index]",
       ) as HTMLTableCellElement | null;
       if (cell) this.lastCell = cell;
+      const nameSpan = (ev.target as HTMLElement).closest(
+        "thead th .name",
+      ) as HTMLElement | null;
+      if (nameSpan) this.lastHeaderName = nameSpan;
     });
     let cellClick: {
       cell: HTMLTableCellElement;
+      x: number;
+      y: number;
+    } | null = null;
+    let headerClick: {
+      span: HTMLElement;
       x: number;
       y: number;
     } | null = null;
@@ -423,6 +459,14 @@ export class FolioDoc extends HTMLElement {
         ) as HTMLElement | null;
         if (th) {
           this.showInspector(figure, block, Number(th.dataset.colIndex));
+          // The header name is a nested editable: focus it on click
+          // like a data cell (engines hand focus to the article).
+          const nameSpan = (ev.target as HTMLElement).closest(
+            "thead th .name",
+          ) as HTMLElement | null;
+          if (nameSpan) {
+            headerClick = { span: nameSpan, x: ev.clientX, y: ev.clientY };
+          }
         }
         return;
       }
@@ -437,20 +481,44 @@ export class FolioDoc extends HTMLElement {
     table.addEventListener("mouseup", (ev) => {
       const pending = cellClick;
       cellClick = null;
-      if (!pending) return;
-      const dragged =
-        Math.hypot(ev.clientX - pending.x, ev.clientY - pending.y) > 3;
-      pending.cell.focus();
-      if (!dragged) {
-        const range = document.caretRangeFromPoint(pending.x, pending.y);
-        if (range && pending.cell.contains(range.startContainer)) {
-          const sel = window.getSelection();
-          sel?.setBaseAndExtent(
-            range.startContainer,
-            range.startOffset,
-            range.startContainer,
-            range.startOffset,
+      const pendingHead = headerClick;
+      headerClick = null;
+      if (pending) {
+        const dragged =
+          Math.hypot(ev.clientX - pending.x, ev.clientY - pending.y) > 3;
+        pending.cell.focus();
+        if (!dragged) {
+          const range = document.caretRangeFromPoint(pending.x, pending.y);
+          if (range && pending.cell.contains(range.startContainer)) {
+            const sel = window.getSelection();
+            sel?.setBaseAndExtent(
+              range.startContainer,
+              range.startOffset,
+              range.startContainer,
+              range.startOffset,
+            );
+          }
+        }
+      }
+      if (pendingHead) {
+        const dragged =
+          Math.hypot(ev.clientX - pendingHead.x, ev.clientY - pendingHead.y) >
+          3;
+        pendingHead.span.focus();
+        if (!dragged) {
+          const range = document.caretRangeFromPoint(
+            pendingHead.x,
+            pendingHead.y,
           );
+          if (range && pendingHead.span.contains(range.startContainer)) {
+            const sel = window.getSelection();
+            sel?.setBaseAndExtent(
+              range.startContainer,
+              range.startOffset,
+              range.startContainer,
+              range.startOffset,
+            );
+          }
         }
       }
     });
@@ -1718,6 +1786,14 @@ export class FolioDoc extends HTMLElement {
       }
       return;
     }
+    // A header-name rename owns its Enter/Tab/Escape/Ctrl+A;
+    // every other keystroke passes through so typing edits the
+    // name natively.
+    const headerName = this.resolveHeaderName(ev.target);
+    if (headerName) {
+      this.handleHeaderKeys(ev, headerName);
+      return;
+    }
     const cell = this.resolveCell(ev.target);
     if (cell) {
       // Ctrl/Cmd+A with the caret in a cell selects the CELL, not the
@@ -1797,6 +1873,166 @@ export class FolioDoc extends HTMLElement {
     // from the DOM on the input event. The old model-split +
     // re-render path destroyed the caret, which is why typing
     // after Enter needed a click first.
+  }
+
+  /**
+   * The header-name span a keyboard event applies to. Same
+   * resolution ladder as cells: the event target, the caret through
+   * the shadow root's selection (Chromium), then the last focused
+   * name span while focus is still inside the component (WebKitGTK
+   * has no selection API that pierces the shadow root). A caret
+   * inside a data cell is explicitly NOT a header rename.
+   */
+  private resolveHeaderName(target: EventTarget | null): HTMLElement | null {
+    if (target instanceof Element) {
+      const span = target.closest("thead th .name") as HTMLElement | null;
+      if (span) return span;
+    }
+    const root = this.shadowRoot as
+      | (ShadowRoot & {
+          getSelection?: () => Selection | null;
+        })
+      | null;
+    const sel = root?.getSelection?.();
+    if (sel && sel.anchorNode !== null) {
+      let n: Node | null = sel.anchorNode;
+      while (n !== null) {
+        if (n instanceof Element) {
+          const span = n.closest("thead th .name") as HTMLElement | null;
+          if (span) return span;
+          if (n.closest("td[data-row-index]") !== null) return null;
+        }
+        n = n.parentNode;
+      }
+    }
+    if (
+      this.lastHeaderName !== null &&
+      this.shadowRoot?.contains(this.lastHeaderName) === true &&
+      this.shadowRoot?.activeElement !== null
+    ) {
+      if (
+        this.lastBlock !== null &&
+        !this.lastBlock.contains(this.lastHeaderName)
+      ) {
+        this.lastHeaderName = null;
+        return null;
+      }
+      return this.lastHeaderName;
+    }
+    return null;
+  }
+
+  /**
+   * Keys while the caret is in a header name (the in-place rename,
+   * spec: docs/specs/table-inspector.md): Enter commits and drops
+   * into the column's first editable cell; Tab commits and moves to
+   * the next header (past the last, into the first editable cell);
+   * Escape reverts; Ctrl+A selects the name, never the document.
+   */
+  private handleHeaderKeys(ev: KeyboardEvent, span: HTMLElement): void {
+    const th = span.closest("th");
+    const figure = span.closest("figure");
+    const ci = Number(th?.dataset.colIndex ?? -1);
+    const idx = Number(figure?.dataset.blockIndex ?? -1);
+    const block = this.doc?.blocks[idx];
+    if (!th || !figure || !block || block.kind !== "table") return;
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      const col = block.table.columns[ci];
+      if (col) span.textContent = col.name;
+      return;
+    }
+    if (ev.key.toLowerCase() === "a" && (ev.ctrlKey || ev.metaKey)) {
+      ev.preventDefault();
+      const root = this.shadowRoot as
+        | (ShadowRoot & {
+            getSelection?: () => Selection | null;
+          })
+        | null;
+      const sel = root?.getSelection?.();
+      if (sel) {
+        const range = document.createRange();
+        range.selectNodeContents(span);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+      return;
+    }
+    if (ev.key !== "Enter" && ev.key !== "Tab") return;
+    if (ev.key === "Tab" && ev.shiftKey && th.previousElementSibling === null) {
+      // Before the first header: commit, and leave focus movement to
+      // the browser exactly as cell navigation does.
+      this.commitHeaderRename(span, figure, block, ci);
+      return;
+    }
+    ev.preventDefault();
+    this.commitHeaderRename(span, figure, block, ci);
+    if (!this.caretFollowsFocus()) return;
+    const editable = block.table.columns
+      .map((c, i) => (c.type !== "formula" ? i : -1))
+      .filter((i) => i >= 0);
+    if (ev.key === "Enter") {
+      const target = editable.includes(ci) ? ci : (editable[0] ?? -1);
+      if (target >= 0) this.focusCell(idx, 0, target);
+      return;
+    }
+    if (th.nextElementSibling === null) {
+      if (editable.length > 0) this.focusCell(idx, 0, editable[0] ?? 0);
+      return;
+    }
+    const nextTh = th.nextElementSibling as HTMLElement | null;
+    const nextName = ev.shiftKey
+      ? (th.previousElementSibling as HTMLElement | null)
+      : nextTh;
+    (nextName?.querySelector("span.name") as HTMLElement | null)?.focus();
+  }
+
+  /**
+   * Commit an in-place header rename: a model write, exactly like
+   * an inspector edit. Charts that select or sort by the old name
+   * follow the rename; formula expressions are free Jexl text and
+   * do not - a rename that orphans a formula reference surfaces as
+   * the table's error line (guarded render), never a crash.
+   */
+  private commitHeaderRename(
+    span: HTMLElement,
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    ci: number,
+  ): void {
+    const col = block.table.columns[ci];
+    if (!col) return;
+    const text = (span.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (text === "") {
+      // A column must keep a name: revert rather than commit "".
+      if (span.textContent !== col.name) span.textContent = col.name;
+      return;
+    }
+    if (text === col.name) return;
+    const old = col.name;
+    col.name = text;
+    for (const b of this.doc?.blocks ?? []) {
+      if (b.kind !== "chart" || b.chart.source !== block.table.id) continue;
+      b.chart.query.select = b.chart.query.select.map((s) =>
+        s === old ? text : s,
+      );
+      if (b.chart.query.sort && b.chart.query.sort.by === old) {
+        b.chart.query.sort.by = text;
+      }
+    }
+    const opt = figure.querySelector<HTMLElement>(
+      `.insp-col option[value="${String(ci)}"]`,
+    );
+    if (opt) opt.textContent = text;
+    try {
+      this.updateRowCalculations(figure, block);
+    } catch {
+      // A formula still references the old name: the guarded
+      // re-render shows the error line instead of leaving the
+      // table's cells half-updated.
+      this.refreshTableBlock(figure, block);
+    }
+    this.emitChange();
   }
 
   /**
