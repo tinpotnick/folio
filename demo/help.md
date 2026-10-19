@@ -89,6 +89,15 @@ document — written in the same renderer you are working with.
   Enter commits (and drops into the column's first cell), Tab
   moves to the next header, Escape reverts. The unit itself is
   read-only; that is what the inspector is for.
+- A table longer than the theme's window (`table.rows.show`,
+  default 50) shows its head rows plus a "120 rows x 3 columns -
+  showing first 50" line. The full data is always in the document
+  (charts, formulas, and queries see every row); click **Open
+  dataset** for the full-browse surface: continuous scrolling, a
+  Jexl filter (`v > 115 && region != "South"` - the charts'
+  language), click-header sorting (a view sort, never written to
+  the document), and click-to-edit cells. Esc closes it; the
+  grid button on the table's inspector bar opens it too.
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,

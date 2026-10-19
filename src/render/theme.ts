@@ -13,6 +13,8 @@ export interface Theme {
   h2Size: string;
   h3Size: string;
   tableStyle: string;
+  /** Rows a windowed table figure shows in flow (table.rows.show). */
+  tableRowsShow: number;
   palette: string[];
   pageBreakH1: boolean;
   pageBreakH2: boolean;
@@ -31,6 +33,7 @@ const DEFAULT_THEME: Theme = {
   h2Size: "20pt",
   h3Size: "16pt",
   tableStyle: "booktabs",
+  tableRowsShow: 50,
   palette: PALETTES["muted"] ?? ["#4c6ef5"],
   pageBreakH1: false,
   pageBreakH2: false,
@@ -50,6 +53,12 @@ export function themeFromDoc(doc: Doc): Theme {
     h2Size: style.get("h2.font.size") ?? DEFAULT_THEME.h2Size,
     h3Size: style.get("h3.font.size") ?? DEFAULT_THEME.h3Size,
     tableStyle: style.get("table.style") ?? DEFAULT_THEME.tableStyle,
+    tableRowsShow: (() => {
+      const raw = Number(style.get("table.rows.show"));
+      return Number.isFinite(raw) && raw >= 3
+        ? Math.floor(raw)
+        : DEFAULT_THEME.tableRowsShow;
+    })(),
     palette:
       PALETTES[style.get("chart.palette") ?? "muted"] ?? DEFAULT_THEME.palette,
     pageBreakH1: style.get("pagebreak.h1") === "before",
@@ -268,6 +277,159 @@ export function themeCss(theme: Theme): string {
       font-style: italic;
       color: #57606a;
       flex: none;
+    }
+    /* --- Table viewport status line (windowed tables) --- */
+    .folio-table-more {
+      font-size: 0.8em;
+      color: #57606a;
+      margin-top: 0.35em;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .folio-table-more .ds-open {
+      font: inherit;
+      font-size: 0.95em;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      border-radius: 5px;
+      padding: 1px 8px;
+      cursor: pointer;
+      color: #1f2328;
+    }
+    .folio-table-more .ds-open:hover { background: #f3f4f6; }
+    .folio-inspector .insp-dataset {
+      flex: none;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      border-radius: 5px;
+      padding: 2px 7px;
+      cursor: pointer;
+      color: #1f2328;
+      line-height: 1.4;
+    }
+    .folio-inspector .insp-dataset:hover { background: #f3f4f6; }
+
+    /* --- Dataset browser overlay --- */
+    .folio-ds-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(31, 35, 40, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .folio-ds-overlay[hidden] { display: none; }
+    .folio-ds-panel {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+      width: min(1000px, 92vw);
+      height: min(640px, 84vh);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .folio-ds-head {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e6e8eb;
+      flex: none;
+    }
+    .folio-ds-title {
+      font-weight: 600;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 13px;
+      color: #1f2328;
+    }
+    .folio-ds-filter {
+      flex: 1;
+      font: inherit;
+      font-size: 13px;
+      padding: 4px 8px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .folio-ds-count {
+      font-size: 12px;
+      color: #57606a;
+      white-space: nowrap;
+    }
+    .folio-ds-done {
+      font: inherit;
+      font-size: 13px;
+      border: 1px solid #d0d7de;
+      background: #fff;
+      border-radius: 6px;
+      padding: 3px 12px;
+      cursor: pointer;
+    }
+    .folio-ds-done:hover { background: #f3f4f6; }
+    .folio-ds-grid {
+      flex: 1;
+      overflow-y: auto;
+      position: relative;
+      font-variant-numeric: tabular-nums;
+    }
+    .folio-ds-canvas { position: relative; }
+    .folio-ds-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: grid;
+      height: 32px;
+      background: #f6f8fa;
+      border-bottom: 1px solid #d0d7de;
+    }
+    .folio-ds-hcell {
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #1f2328;
+      cursor: pointer;
+      border-right: 1px solid #e6e8eb;
+      user-select: none;
+    }
+    .folio-ds-hcell:hover { background: #eceff2; }
+    .folio-ds-hcell.sorted { color: #1f3fbf; }
+    .folio-ds-row {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 32px;
+      display: grid;
+      border-bottom: 1px solid #eef0f3;
+    }
+    .folio-ds-cell {
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      font-size: 13px;
+      border-right: 1px solid #eef0f3;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .folio-ds-cell.num { justify-content: flex-end; }
+    .folio-ds-cell:not(.computed):hover {
+      background: rgba(76, 110, 245, 0.06);
+      cursor: text;
+    }
+    .folio-ds-cell.computed { color: #57606a; }
+    .folio-ds-edit {
+      font: inherit;
+      font-size: 13px;
+      width: 100%;
+      border: none;
+      outline: none;
+      padding: 0;
+      background: transparent;
     }
     figure.folio-image {
       margin: 1.2em 0;

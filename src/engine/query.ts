@@ -41,48 +41,87 @@ function numericValue(c: Cell): number | null {
   return null;
 }
 
+/**
+ * The row indexes a Jexl filter keeps, in model order. Indexes -
+ * not rows - so callers (the chart pipeline, the dataset browser)
+ * can map kept rows back to their model positions.
+ */
+export function filterIndexes(table: Table, expr: string): number[] {
+  // A typo'd column must be a visible error, not a silently empty
+  // result (Jexl resolves unknown names to undefined).
+  const stripped = expr.replace(/'[^']*'|"[^"]*"/g, "");
+  const known = new Set(table.columns.map((c) => c.name));
+  for (const m of stripped.matchAll(/[A-Za-z_][A-Za-z0-9_]*/g)) {
+    const name = m[0];
+    if (KEYWORDS.has(name) || TRANSFORMS.has(name)) continue;
+    if (!known.has(name)) {
+      throw new Error(
+        `Filter error: unknown column '${name}' (table ${table.id})`,
+      );
+    }
+  }
+  const out: number[] = [];
+  table.rows.forEach((r, i) => {
+    const ctx: Record<string, unknown> = {};
+    table.columns.forEach((c, ci) => {
+      const v = r[ci];
+      ctx[c.name] = v === undefined ? Number.NaN : v;
+    });
+    const keep = jexl.evalSync(expr, ctx);
+    if (
+      keep === true ||
+      (typeof keep === "number" && keep !== 0 && Number.isFinite(keep))
+    ) {
+      out.push(i);
+    }
+  });
+  return out;
+}
+
+/**
+ * Row indexes sorted by one column - a view sort, never a model
+ * write. Numbers first-class, empties last, text collated.
+ */
+export function sortIndexes(
+  table: Table,
+  by: string,
+  order: "asc" | "desc",
+): number[] {
+  const idx = columnIndex(table, by);
+  const sign = order === "desc" ? -1 : 1;
+  return table.rows
+    .map((_, i) => i)
+    .sort((x, y) => {
+      const a = table.rows[x]?.[idx] ?? "";
+      const b = table.rows[y]?.[idx] ?? "";
+      const aEmpty = a === "";
+      const bEmpty = b === "";
+      if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+      if (aEmpty && bEmpty) return 0;
+      return sign * compare(a, b);
+    });
+}
+
 export function executeQuery(table: Table, chart: Chart): QueryResult {
   const { query } = chart;
 
   for (const name of query.select) columnIndex(table, name);
 
-  let rows = table.rows.slice();
+  // The pipeline works on MODEL ROW INDEXES so filter and sort
+  // compose (sorting must not resurrect filtered-out rows - the
+  // bug the old row-swap had).
+  let indexes = table.rows.map((_, i) => i);
   if (query.filter) {
     if (typeof query.filter === "string") {
       // A Jexl expression filter: the same language as table
       // formulas, evaluated per row against the recalced table
       // (any column, text included: "q2 > 400 and region != 'South'").
-      const expr = query.filter;
-      // A typo'd column must be a visible error, not a silently
-      // empty chart (Jexl resolves unknown names to undefined).
-      const stripped = expr.replace(/'[^']*'|"[^"]*"/g, "");
-      const known = new Set(table.columns.map((c) => c.name));
-      for (const m of stripped.matchAll(/[A-Za-z_][A-Za-z0-9_]*/g)) {
-        const name = m[0];
-        if (KEYWORDS.has(name) || TRANSFORMS.has(name)) continue;
-        if (!known.has(name)) {
-          throw new Error(
-            `Filter error: unknown column '${name}' (table ${table.id})`,
-          );
-        }
-      }
-      rows = rows.filter((r) => {
-        const ctx: Record<string, unknown> = {};
-        table.columns.forEach((c, i) => {
-          const v = r[i];
-          ctx[c.name] = v === undefined ? Number.NaN : v;
-        });
-        const keep = jexl.evalSync(expr, ctx);
-        return (
-          keep === true ||
-          (typeof keep === "number" && keep !== 0 && Number.isFinite(keep))
-        );
-      });
+      indexes = filterIndexes(table, query.filter);
     } else {
       const { column, op, value } = query.filter;
       const idx = columnIndex(table, column);
-      rows = rows.filter((r) => {
-        const cell = r[idx];
+      indexes = indexes.filter((i) => {
+        const cell = table.rows[i]?.[idx];
         if (cell === undefined) return false;
         switch (op) {
           case "eq":
@@ -98,21 +137,13 @@ export function executeQuery(table: Table, chart: Chart): QueryResult {
     }
   }
   if (query.sort) {
-    const idx = columnIndex(table, query.sort.by);
-    const order = query.sort.order === "desc" ? -1 : 1;
-    rows = rows
-      .map((r) => r.slice())
-      .sort((x, y) => {
-        const a = x[idx] ?? "";
-        const b = y[idx] ?? "";
-        const aEmpty = a === "";
-        const bEmpty = b === "";
-        if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
-        if (aEmpty && bEmpty) return 0;
-        return order * compare(a, b);
-      });
+    const keep = new Set(indexes);
+    indexes = sortIndexes(table, query.sort.by, query.sort.order).filter((i) =>
+      keep.has(i),
+    );
   }
   const selected = query.select.map((name) => columnIndex(table, name));
+  const rows = indexes.map((i) => table.rows[i] ?? []) as Cell[][];
   return {
     columns: query.select,
     rows: rows.map((r) => selected.map((i) => r[i] ?? "")),
