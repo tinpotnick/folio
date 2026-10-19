@@ -659,4 +659,215 @@ document.addEventListener("keydown", (ev) => {
   openHelp();
 });
 
+/* --- Command palette (spec: docs/specs/command-palette.md) --- */
+
+const paletteModal = requireEl<HTMLDialogElement>("#palette-modal");
+const paletteInput = requireEl<HTMLInputElement>("#palette-input");
+const paletteList = requireEl<HTMLElement>("#palette-list");
+const helpDoc = requireEl<FolioDoc>("#help-doc");
+
+interface PaletteEntry {
+  title: string;
+  group: "Command" | "Help" | "Section";
+  keywords: string;
+  action: () => void;
+}
+
+/**
+ * Everything the palette can reach: the toolbar commands, the
+ * document's sections, and the help document's topics. Rebuilt on
+ * every open so view state and the outline stay current.
+ */
+function paletteEntries(): PaletteEntry[] {
+  const entries: PaletteEntry[] = [];
+  // The hidden attribute lives on the wrapping md-wrap, not the
+  // textarea itself.
+  const inMd = !mdWrap.hidden;
+  entries.push({
+    title: inMd ? "Switch to Document view" : "Switch to Markdown source",
+    group: "Command",
+    keywords: "view switch toggle markdown source document",
+    action: () => (inMd ? btnView : btnMd).click(),
+  });
+  entries.push({
+    title: "Insert a table",
+    group: "Command",
+    keywords: "table insert new add dataset",
+    action: () => btnTable.click(),
+  });
+  entries.push({
+    title: "Insert a Mermaid diagram",
+    group: "Command",
+    keywords: "diagram mermaid insert graph figure",
+    action: () => btnDiagram.click(),
+  });
+  entries.push({
+    title: "Toggle a code block",
+    group: "Command",
+    keywords: "code block fence toggle",
+    action: () => btnCodeBlock.click(),
+  });
+  entries.push({
+    title: "Toggle the section browser",
+    group: "Command",
+    keywords: "sections sidebar outline toggle navigation",
+    action: () => btnSidebar.click(),
+  });
+  entries.push({
+    title: "Open the help document",
+    group: "Command",
+    keywords: "help reference guide how to",
+    action: () => openHelp(),
+  });
+  if (!fileBar.hidden) {
+    entries.push({
+      title: "Open a document",
+      group: "Command",
+      keywords: "open load file document",
+      action: () => btnOpen.click(),
+    });
+    entries.push({
+      title: "Save the document",
+      group: "Command",
+      keywords: "save write file document",
+      action: () => btnSave.click(),
+    });
+  }
+  for (const section of el.getOutline()) {
+    entries.push({
+      title: section.text,
+      group: "Section",
+      keywords: "section jump go to heading outline",
+      action: () => el.revealBlock(section.blockIndex),
+    });
+  }
+  for (const topic of helpDoc.getOutline()) {
+    entries.push({
+      title: `Help: ${topic.text}`,
+      group: "Help",
+      keywords: "help how to documentation guide",
+      action: () => {
+        openHelp();
+        helpDoc.revealBlock(topic.blockIndex);
+      },
+    });
+  }
+  return entries;
+}
+
+/**
+ * Subsequence fuzzy match with bonuses for adjacent characters and
+ * word starts. -1 means no match.
+ */
+function fuzzyScore(needle: string, haystack: string): number {
+  const n = needle.toLowerCase();
+  const h = haystack.toLowerCase();
+  if (!n) return 1;
+  let score = 0;
+  let hi = 0;
+  let last = -2;
+  for (const ch of n) {
+    const at = h.indexOf(ch, hi);
+    if (at < 0) return -1;
+    score += at === last + 1 ? 3 : 1;
+    if (at === 0 || " .:-".includes(h[at - 1] ?? "")) score += 2;
+    last = at;
+    hi = at + 1;
+  }
+  return score;
+}
+
+let paletteFiltered: PaletteEntry[] = [];
+let paletteSel = 0;
+
+function renderPalette(): void {
+  paletteList.textContent = "";
+  if (paletteFiltered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "palette-empty";
+    empty.textContent = "No matches";
+    paletteList.appendChild(empty);
+    return;
+  }
+  paletteFiltered.forEach((entry, i) => {
+    const btn = document.createElement("button");
+    btn.className = `palette-item${i === paletteSel ? " selected" : ""}`;
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-selected", i === paletteSel ? "true" : "false");
+    const tag = document.createElement("span");
+    tag.className = "palette-tag";
+    tag.textContent = entry.group;
+    btn.appendChild(tag);
+    btn.appendChild(document.createTextNode(entry.title));
+    btn.addEventListener("click", () => runPalette(i));
+    paletteList.appendChild(btn);
+  });
+  (paletteList.children[paletteSel] as HTMLElement | undefined)?.scrollIntoView(
+    { block: "nearest" },
+  );
+}
+
+function runPalette(i: number): void {
+  const entry = paletteFiltered[i];
+  if (!entry) return;
+  paletteModal.close();
+  entry.action();
+}
+
+function updatePalette(): void {
+  const query = paletteInput.value.trim();
+  const all = paletteEntries();
+  if (!query) {
+    paletteFiltered = all.slice(0, 30);
+  } else {
+    paletteFiltered = all
+      .map((e) => ({
+        e,
+        s: fuzzyScore(query, `${e.title} ${e.keywords}`),
+      }))
+      .filter((x) => x.s > 0)
+      .sort((a, b) => b.s - a.s)
+      .map((x) => x.e)
+      .slice(0, 30);
+  }
+  paletteSel = 0;
+  renderPalette();
+}
+
+function openPalette(): void {
+  if (paletteModal.open) return;
+  paletteModal.showModal();
+  paletteInput.value = "";
+  updatePalette();
+  paletteInput.focus();
+}
+
+requireEl<HTMLButtonElement>("#btn-search").addEventListener(
+  "click",
+  openPalette,
+);
+
+document.addEventListener("keydown", (ev) => {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
+    ev.preventDefault();
+    openPalette();
+  }
+});
+
+paletteInput.addEventListener("input", updatePalette);
+
+paletteInput.addEventListener("keydown", (ev) => {
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    ev.preventDefault();
+    paletteSel =
+      ev.key === "ArrowDown"
+        ? Math.min(paletteSel + 1, paletteFiltered.length - 1)
+        : Math.max(paletteSel - 1, 0);
+    renderPalette();
+  } else if (ev.key === "Enter") {
+    ev.preventDefault();
+    runPalette(paletteSel);
+  }
+});
+
 refreshOutline();

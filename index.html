@@ -351,6 +351,67 @@
         height: calc(100% - 50px);
         overflow-y: auto;
       }
+      #palette-modal {
+        width: min(560px, calc(100vw - 48px));
+        margin-top: 12vh;
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
+        overflow: hidden;
+      }
+      #palette-modal::backdrop {
+        background: rgba(31, 35, 40, 0.4);
+      }
+      #palette-input {
+        width: 100%;
+        box-sizing: border-box;
+        border: none;
+        border-bottom: 1px solid #e6e8eb;
+        padding: 14px 16px;
+        font-size: 15px;
+        outline: none;
+      }
+      #palette-list {
+        max-height: 46vh;
+        overflow-y: auto;
+        padding: 6px;
+      }
+      .palette-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        border: none;
+        background: transparent;
+        padding: 8px 10px;
+        font-size: 14px;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 8px;
+      }
+      .palette-item.selected {
+        background: #f0f3f6;
+      }
+      .palette-item .palette-tag {
+        font-size: 11px;
+        color: #57606a;
+        border: 1px solid #d0d7de;
+        border-radius: 999px;
+        padding: 1px 8px;
+        flex: none;
+      }
+      .palette-empty {
+        padding: 16px;
+        color: #57606a;
+        font-size: 14px;
+      }
+      .palette-foot {
+        border-top: 1px solid #e6e8eb;
+        padding: 8px 16px;
+        font-size: 12px;
+        color: #57606a;
+      }
     </style>
   </head>
   <body>
@@ -475,6 +536,22 @@
             </svg>
           </button>
         </div>
+        <button
+          id="btn-search"
+          class="plain"
+          title="Search commands, help, and sections (Ctrl+K)"
+          aria-label="Search commands, help, and sections"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <circle cx="7" cy="7" r="4.5" />
+            <path d="M10.5 10.5L14 14" stroke-linecap="round" />
+          </svg>
+        </button>
         <button id="btn-help" class="plain" title="Help (?)">?</button>
       </div>
     </header>
@@ -500,6 +577,19 @@
         </button>
       </div>
       <folio-doc id="help-doc" src="/demo/help.md"></folio-doc>
+    </dialog>
+    <dialog id="palette-modal" aria-label="Search commands, help, and sections">
+      <input
+        id="palette-input"
+        type="text"
+        placeholder="Search commands, help, and sections…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div id="palette-list" role="listbox" aria-label="Results"></div>
+      <div class="palette-foot">
+        Enter to run · ↑ ↓ to move · Esc to close
+      </div>
     </dialog>
     <div id="status">Saved</div>
     <script type="module" src="/src/main.ts"></script>

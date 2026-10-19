@@ -67,6 +67,52 @@ document — written in the same renderer you are working with.
   table and the figure updates on the next render. There is no run
   button anywhere in folio, and no execution state.
 
+## Charts and the query language
+
+A chart is a **query over a table**, written in the Markdown source.
+The figure renders from the table's current data — edit the table
+and the chart updates on the next render. The directive looks like
+this:
+
+```
+::: chart {#growth-chart}
+source: @regional-data
+query: {select: [region, growth], sort: {by: growth, order: desc}}
+type: bar
+caption: "Quarter-on-quarter growth by region"
+:::
+```
+
+- **source** points at a table by its anchor id (`@regional-data`).
+- **query** has three parts, all optional except `select`:
+  - `select: [column, column]` — the columns to plot. The first
+    selected column labels the bars; the last is the value.
+  - `filter: {column: q2, op: gt, value: 0}` — keep rows where the
+    column passes. Operators: `eq`, `gt`, `lt`.
+  - `sort: {by: growth, order: desc}` — sort by a column, `asc` or
+    `desc`.
+- **type** is `bar` (the rendered type; `line` and `scatter` are
+  accepted by the parser but not yet drawn).
+- **caption** is the figure caption.
+
+Chart colors come from the document's style header:
+`chart.palette: "muted"` or `"corporate"`.
+
+### Table formulas
+
+A formula column computes from other columns, cell by cell. The
+grammar is column arithmetic: column names, numbers, `+ - * /`, and
+parentheses — for example `expr: "(q3 - q2) / q2"` with
+`format: percent`. Formulas recalculate the moment a cell they
+depend on changes; formula cells are never editable by hand.
+
+## Search
+
+- Press **Ctrl+K** (or the magnifier button in the toolbar) to open
+  the search box. Type words you know — "insert table", "regional
+  summary", "keyboard shortcuts" — and Enter runs the top result.
+  It searches commands, help topics, and the document's sections.
+
 ## Keyboard shortcuts
 
 ::: table {#help-shortcuts}
@@ -77,6 +123,7 @@ columns:
 data:
   - [?, Open this help]
   - [F1, Open this help]
+  - [Ctrl+K, Search commands, help, and sections]
   - [Esc, Close the help window]
 :::
 
