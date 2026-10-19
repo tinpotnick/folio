@@ -72,6 +72,27 @@ describe("property: round-trip is stable (idempotence)", () => {
     expect(empties.length).toBe(2);
   });
 
+  it("math blocks parse and round-trip byte-identically", () => {
+    const text = "# T\n\n$$\nE = mc^2\n$$\n";
+    const doc = parseDoc(text);
+    const block = doc.blocks.find((b) => b.kind === "math");
+    expect(block && block.kind === "math" ? block.text : null).toBe("E = mc^2");
+    expect(serializeDoc(doc)).toBe(text);
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  it("an unterminated math block is a parse error", () => {
+    expect(() => parseDoc("# T\n\n$$\nE = mc^2\n")).toThrow(
+      /Unterminated math/,
+    );
+  });
+
+  it("a prose paragraph does not swallow a following math block", () => {
+    const doc = parseDoc("# T\n\nSome prose.\n$$\nx^2\n$$\n");
+    const kinds = doc.blocks.map((b) => b.kind);
+    expect(kinds).toEqual(["heading", "prose", "math"]);
+  });
+
   it("leading and trailing blank runs stay separators, not empty blocks", () => {
     const text = "\n\n# T\n\nSome prose.\n\n\n";
     const once = serializeDoc(parseDoc(text));

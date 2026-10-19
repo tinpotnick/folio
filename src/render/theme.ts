@@ -156,6 +156,14 @@ export function themeCss(theme: Theme): string {
       outline: 2px solid #1f3fbf;
       border-style: solid;
     }
+    figure.folio-math {
+      margin: 1.2em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+    figure.folio-math .math-holder .katex-display {
+      margin: 0;
+    }
     code {
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 0.9em;

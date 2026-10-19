@@ -212,6 +212,17 @@ export class FolioDoc extends HTMLElement {
         this.drawDiagram(figure);
         return figure;
       }
+      case "math": {
+        const figure = document.createElement("figure");
+        figure.className = "folio-math";
+        figure.dataset.blockIndex = String(idx);
+        figure.contentEditable = "false";
+        const holder = document.createElement("div");
+        holder.className = "math-holder";
+        figure.appendChild(holder);
+        void this.drawMath(figure);
+        return figure;
+      }
       case "chart": {
         const figure = document.createElement("figure");
         figure.dataset.blockIndex = String(idx);
@@ -407,6 +418,45 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * Render a math block with KaTeX (ADR-0011). Loaded lazily like
+   * mermaid so documents without math never pay for it; bundled, so
+   * rendering stays offline. The KaTeX stylesheet is injected into
+   * this shadow root (scoped trees cannot see page CSS) on first
+   * use. throwOnError: false renders bad LaTeX as visible inline
+   * error text, matching the diagram error contract.
+   */
+  private async drawMath(figure: HTMLElement): Promise<void> {
+    const idx = Number(figure.dataset.blockIndex ?? -1);
+    const block = this.doc?.blocks[idx];
+    const holder = figure.querySelector<HTMLElement>(".math-holder");
+    if (!block || block.kind !== "math" || !holder) return;
+    try {
+      const [katexMod, cssMod] = await Promise.all([
+        import("katex"),
+        import("katex/dist/katex.min.css?inline"),
+      ]);
+      const root = this.shadowRoot;
+      if (root && root.querySelector("style#folio-katex") === null) {
+        const style = document.createElement("style");
+        style.id = "folio-katex";
+        style.textContent = (cssMod as unknown as { default: string }).default;
+        root.appendChild(style);
+      }
+      const html = katexMod.default.renderToString(block.text, {
+        displayMode: true,
+        throwOnError: false,
+      });
+      if (figure.isConnected) holder.innerHTML = html;
+    } catch (e) {
+      if (figure.isConnected) {
+        holder.textContent = `Math error: ${
+          e instanceof Error ? e.message : String(e)
+        }`;
+      }
+    }
+  }
+
+  /**
    * Rebuild the block list from the article's children. Text blocks
    * (prose, headings, code) are re-derived wholesale - the DOM is
    * the source of truth during typing, including native structural
@@ -420,7 +470,11 @@ export class FolioDoc extends HTMLElement {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     if (!host) return;
     const generated = this.doc.blocks.filter(
-      (b) => b.kind === "table" || b.kind === "chart" || b.kind === "diagram",
+      (b) =>
+        b.kind === "table" ||
+        b.kind === "chart" ||
+        b.kind === "diagram" ||
+        b.kind === "math",
     );
     let gi = 0;
     const next: DocBlock[] = [];
@@ -896,6 +950,16 @@ export class FolioDoc extends HTMLElement {
     const block = this.doc.blocks[idx];
     if (!block) return;
     if (block.kind === "table" || block.kind === "chart") return;
+    if (block.kind === "math") {
+      // Math blocks are generated output; never split into one.
+      if (
+        ev.target instanceof Element &&
+        ev.target.closest("figure.folio-math")
+      ) {
+        ev.preventDefault();
+      }
+      return;
+    }
     if (block.kind === "diagram") {
       // Never split into a selected diagram.
       if (

@@ -57,6 +57,10 @@ document — written in the same renderer you are working with.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
   splitting it.
+- **Equations** are fenced `$$` blocks: a line with only `$$`, the
+  LaTeX source, then a closing `$$` line. They render typeset
+  (KaTeX). Edit the LaTeX in the Markdown view; a bad equation
+  shows its error inline instead of breaking the document.
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,
