@@ -337,4 +337,61 @@ test.describe("table inspector", () => {
     await page.keyboard.press("Enter");
     await expect.poll(active).toBe("TD:1:0");
   });
+
+  test("editing a header hides the unit and gives the name the full cell", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const th = page.locator(
+      '#the-doc figure[data-table-id="regional-data"] th[data-col-index="1"]',
+    );
+    const unit = th.locator(".unit");
+    await expect(th).toHaveText("q2 (£k)");
+    await th.locator(".name").click();
+    await expect(th).toHaveClass(/editing/);
+    await expect(unit).toBeHidden();
+    // The name fills the cell while editing: the span is the
+    // whole header, not a sliver next to the unit.
+    const display = await th
+      .locator(".name")
+      .evaluate((el) => getComputedStyle(el).display);
+    expect(display).toBe("block");
+    await page.keyboard.type("zzz");
+    await page.keyboard.press("Escape");
+    // Escape reverts the text but keeps the rename session: the
+    // caret is still in the name and the unit stays hidden.
+    await expect(th).toHaveClass(/editing/);
+    await expect(unit).toBeHidden();
+    await expect(th).toHaveText("q2 (£k)");
+    // Leaving the header ends the session and restores the unit.
+    await page
+      .locator("folio-doc p", { hasText: "Growth was strongest" })
+      .click();
+    await expect(th).not.toHaveClass(/editing/);
+    await expect(unit).toBeVisible();
+  });
+
+  test("clicking anywhere in the header (except the unit) starts the rename", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const th = page.locator(
+      '#the-doc figure[data-table-id="regional-data"] th[data-col-index="1"]',
+    );
+    // The left edge of the th is padding, not the name span.
+    await th.click({ position: { x: 2, y: 8 } });
+    await expect(th).toHaveClass(/editing/);
+    await page.keyboard.press("Escape");
+    // End the rename session by leaving the header.
+    await page
+      .locator("folio-doc p", { hasText: "Growth was strongest" })
+      .click();
+    await expect(th).not.toHaveClass(/editing/);
+    // The unit is the exception: it opens the column in the
+    // inspector and never starts a rename.
+    await th.locator(".unit").click();
+    await expect(th).not.toHaveClass(/editing/);
+    await expect(inspector(page)).toBeVisible();
+    await expect(inspector(page).locator(".insp-col")).toHaveValue("1");
+  });
 });

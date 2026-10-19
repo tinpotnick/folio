@@ -39,4 +39,9 @@ affordances, ever.
 - Read docs/adr/ before touching anything architectural.
 - Review the spec, not the diff, when unsure of intent.
 - Never introduce a dependency without checking ADR-0007.
+- Every inspector bar (table, chart, equation, diagram, and any
+  future one) follows ONE contract: reveal on a click inside its
+  figure, hide on any click outside it, Esc dismisses early, no
+  close buttons. See docs/specs/figure-inspectors.md - do not
+  add per-inspector dismissal special cases.
 - Specs live in docs/specs/; the sample document is the north star.

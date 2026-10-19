@@ -151,6 +151,11 @@ export function themeCss(theme: Theme): string {
       box-shadow: inset 0 0 0 1px rgba(76, 110, 245, 0.25);
       border-radius: 3px;
     }
+    /* While the name is edited the th is all name: the unit hides
+       and the span fills the cell, so renaming feels like editing
+       any other cell. */
+    table.folio-table thead th.editing .unit { display: none; }
+    table.folio-table thead th.editing .name { display: block; }
     .folio-table-error {
       color: #9a6700;
       font-size: 0.9em;
@@ -260,21 +265,6 @@ export function themeCss(theme: Theme): string {
       font-style: italic;
       color: #57606a;
       flex: none;
-    }
-    .folio-inspector .insp-close {
-      flex: none;
-      margin-left: auto;
-      border: none;
-      background: transparent;
-      font-size: 15px;
-      line-height: 1;
-      padding: 2px 6px;
-      border-radius: 5px;
-      cursor: pointer;
-      color: #57606a;
-    }
-    .folio-inspector .insp-close:hover {
-      background: #e6e8eb;
     }
     figure.folio-math {
       margin: 1.2em 0;

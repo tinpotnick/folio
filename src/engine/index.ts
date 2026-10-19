@@ -49,6 +49,6 @@ export interface Chart {
     filter?: string | { column: string; op: string; value: Cell };
     sort?: { by: string; order: "asc" | "desc" };
   };
-  type: "bar" | "line" | "scatter";
+  type: "bar" | "line" | "area" | "pie" | "donut" | "scatter";
   caption?: string;
 }

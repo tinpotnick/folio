@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { renderBarChart } from "@folio/render/chart";
+import {
+  renderAreaChart,
+  renderBarChart,
+  renderPieChart,
+  renderScatterChart,
+} from "@folio/render/chart";
 import type { QueryResult } from "@folio/engine/query";
 
 function result(rows: [string, number][]): QueryResult {
@@ -63,5 +68,84 @@ describe("renderBarChart", () => {
     const bars = rects(svg);
     expect(bars[1]?.[1]).toBeGreaterThan(bars[0]?.[1] ?? 0);
     expect(bars.every(([, h]) => h > 0)).toBe(true);
+  });
+});
+
+describe("renderPieChart", () => {
+  it("draws one slice per row with percentage labels", () => {
+    const svg = renderPieChart(
+      result([
+        ["a", 1],
+        ["b", 2],
+        ["c", 3],
+      ]),
+    ).svg;
+    expect((svg.match(/<path /g) ?? []).length).toBe(3);
+    expect(svg).toContain("a 17%");
+    expect(svg).toContain("c 50%");
+  });
+
+  it("punches out the center for donuts", () => {
+    const svg = renderPieChart(result([["a", 1]]), true).svg;
+    expect(svg).toContain('<circle cx="320" cy="150"');
+  });
+
+  it("negative values are an error, not a backwards slice", () => {
+    expect(() =>
+      renderPieChart(
+        result([
+          ["a", 1],
+          ["b", -2],
+        ]),
+      ),
+    ).toThrow(/non-negative/);
+  });
+
+  it("an empty or zero-total pie is an error", () => {
+    expect(() => renderPieChart(result([]))).toThrow(/at least one row/);
+    expect(() =>
+      renderPieChart(
+        result([
+          ["a", 0],
+          ["b", 0],
+        ]),
+      ),
+    ).toThrow(/positive total/);
+  });
+});
+
+describe("renderAreaChart", () => {
+  it("fills the polygon down to the zero baseline", () => {
+    const svg = renderAreaChart(
+      result([
+        ["a", 10],
+        ["b", 20],
+      ]),
+    ).svg;
+    expect(svg).toContain("<polygon");
+    expect(svg).toContain("<polyline");
+  });
+});
+
+describe("renderScatterChart", () => {
+  it("draws a point per row on numeric axes", () => {
+    const svg = renderScatterChart(
+      result([
+        [1, 10],
+        [2, 20],
+      ] as unknown as [string, number][]),
+    ).svg;
+    expect((svg.match(/<circle /g) ?? []).length).toBe(2);
+  });
+
+  it("non-numeric columns are an error", () => {
+    expect(() =>
+      renderScatterChart(
+        result([
+          ["a", 1],
+          ["b", 2],
+        ]),
+      ),
+    ).toThrow(/two numeric/);
   });
 });

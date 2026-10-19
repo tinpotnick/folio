@@ -154,7 +154,7 @@ test.describe("math and diagram inspectors", () => {
     );
   });
 
-  test("figure inspectors persist across clicks outside the figure", async ({
+  test("figure inspectors hide on outside clicks - the table contract", async ({
     page,
   }) => {
     await waitForDocument(page);
@@ -164,14 +164,16 @@ test.describe("math and diagram inspectors", () => {
     await figure.locator(".chart-holder").click();
     const insp = figure.locator(".folio-inspector");
     await expect(insp).toBeVisible();
-    // Clicking a paragraph (outside the figure) must NOT discard
-    // the editing surface or its unapplied input.
-    await insp.locator(".insp-filter").fill("q2 > 400");
+    // No close button: the outside click IS the dismissal, and
+    // every inspector bar follows the same rule.
+    await expect(insp.locator(".insp-close")).toHaveCount(0);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await expect(insp).toBeHidden();
+    // Esc inside the bar dismisses early, exactly like the table
+    // inspector's bar.
+    await figure.locator(".chart-holder").click();
     await expect(insp).toBeVisible();
-    await expect(insp.locator(".insp-filter")).toHaveValue("q2 > 400");
-    // The close button (or Esc) dismisses it explicitly.
-    await insp.locator(".insp-close").click();
+    await insp.locator(".insp-source").press("Escape");
     await expect(insp).toBeHidden();
   });
 
@@ -209,5 +211,107 @@ test.describe("math and diagram inspectors", () => {
     expect(await page.locator("#editor").inputValue()).toContain(
       "graph TD\n  C --> D",
     );
+  });
+});
+
+test.describe("chart types", () => {
+  const pieDoc = `# T
+
+::: table {#t}
+columns:
+  - {name: k, type: text}
+  - {name: v, type: number}
+data:
+  - [a, 1]
+  - [b, 2]
+  - [c, 3]
+:::
+
+::: chart {#c}
+source: @t
+query: {select: [k, v]}
+type: pie
+:::
+`;
+
+  test("pie renders slices with percentage labels and round-trips", async ({
+    page,
+  }) => {
+    await loadDoc(page, pieDoc);
+    const holder = page.locator("#the-doc figure .chart-holder");
+    await expect(holder.locator("svg path")).toHaveCount(3);
+    await expect(holder).toContainText("a 17%");
+    await expect(holder).toContainText("c 50%");
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain("type: pie");
+  });
+
+  test("the type select offers all six types and donut redraws in place", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const figure = page.locator(
+      '#the-doc figure[data-chart-source="regional-data"]',
+    );
+    await figure.locator(".chart-holder").click();
+    const insp = figure.locator(".folio-inspector");
+    const options = insp.locator(".insp-type option");
+    await expect(options).toHaveCount(6);
+    await insp.locator(".insp-type").selectOption("donut");
+    // A donut is a pie (3 slices for 3 regions) with a
+    // punched-out white center.
+    await expect(figure.locator("svg path")).toHaveCount(3);
+    await expect(figure.locator("svg circle[fill='#fff']")).toHaveCount(1);
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain("type: donut");
+  });
+
+  test("negative values are a visible pie error, not a broken render", async ({
+    page,
+  }) => {
+    await loadDoc(page, pieDoc.replace("  - [c, 3]", "  - [c, -3]"));
+    await expect(page.locator("#the-doc figure .chart-holder")).toContainText(
+      "Chart error",
+    );
+  });
+
+  test("area fills to the zero baseline; scatter draws a numeric x axis", async ({
+    page,
+  }) => {
+    await loadDoc(
+      page,
+      `# T
+
+::: table {#t}
+columns:
+  - {name: k, type: number}
+  - {name: v, type: number}
+data:
+  - [1, 10]
+  - [2, 20]
+  - [3, 15]
+:::
+
+::: chart {#c}
+source: @t
+query: {select: [k, v]}
+type: area
+:::
+
+::: chart {#s}
+source: @t
+query: {select: [k, v]}
+type: scatter
+:::
+`,
+    );
+    const figures = page.locator("#the-doc figure .chart-holder");
+    await expect(figures.nth(0).locator("svg polygon")).toHaveCount(1);
+    await expect(figures.nth(0).locator("svg polyline")).toHaveCount(1);
+    // Scatter: points on a numeric x domain (the bottom axis shows
+    // numbers, not category names).
+    const scatter = figures.nth(1);
+    await expect(scatter.locator("svg circle")).toHaveCount(3);
+    await expect(scatter).toContainText("1");
   });
 });

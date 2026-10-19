@@ -44,7 +44,11 @@ see.
   app").
 - **In-place header rename**: the header's NAME is a nested
   editable span (`th .name`, contenteditable, focused on click
-  like a data cell); the unit stays read-only. It is the
+  like a data cell); the unit stays read-only. While the name is
+  edited the th is all name: the unit hides and the span fills
+  the cell (`.editing`), so renaming feels like editing any
+  other cell - and any click in the th except on the unit starts
+  the rename. It is the
   document-view counterpart of editing the column name in the
   YAML: commit on Enter/Tab/blur writes
   `columns[c].name`, updates the inspector's column dropdown,
