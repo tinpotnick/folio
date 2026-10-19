@@ -98,6 +98,14 @@ document — written in the same renderer you are working with.
   language), click-header sorting (a view sort, never written to
   the document), and click-to-edit cells. Esc closes it; the
   grid button on the table's inspector bar opens it too.
+- **Import data**: the command palette (Ctrl+K) has "Import data
+  from a file (CSV or JSON)". The file becomes a typed table in
+  the document - numeric columns are inferred, the header names
+  become formula-usable column names, and `import: "file.csv"` in
+  the source records where the data came from. It is a snapshot,
+  not a link: the document stays one offline file. Big imports
+  render as windowed tables (see above) and browse in the dataset
+  browser.
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
   formulas and charts recalculate the moment you leave it, and the
   Markdown source always contains what you typed. In the browser,

@@ -210,6 +210,7 @@ function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
       continue;
     }
     if (k === "caption") table.caption = unquote(raw);
+    else if (k === "import") table.import = unquote(raw);
     else if (k === "columns") section = "columns";
     else if (k === "data") section = "data";
     else throw new ParseError(`Unknown table key: '${k}'`, 0);
@@ -481,6 +482,9 @@ function serializeTable(table: Table): string {
   const lines = [`::: table {#${table.id}}`];
   if (table.caption !== undefined) {
     lines.push(`caption: "${table.caption}"`);
+  }
+  if (table.import !== undefined) {
+    lines.push(`import: "${table.import}"`);
   }
   lines.push("columns:");
   for (const col of table.columns) {
