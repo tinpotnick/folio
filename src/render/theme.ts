@@ -141,16 +141,19 @@ export function themeCss(theme: Theme): string {
       color: #57606a;
     }
     table.folio-table thead th .name { user-select: text; }
-    table.folio-table thead th .name:hover {
+    /* The header highlight is the CELL's, exactly like a data
+       cell: the blue wash and the faint inner border fill the
+       whole th - never a box hugging the text. Hover follows the
+       name only (the unit is not an editing affordance). */
+    table.folio-table thead th:has(.name:hover) {
       background: rgba(76, 110, 245, 0.05);
-      border-radius: 3px;
     }
-    table.folio-table thead th .name:focus {
+    table.folio-table thead th.editing {
       outline: none;
       background: rgba(76, 110, 245, 0.07);
       box-shadow: inset 0 0 0 1px rgba(76, 110, 245, 0.25);
-      border-radius: 3px;
     }
+    table.folio-table thead th .name:focus { outline: none; }
     /* While the name is edited the th is all name: the unit hides
        and the span fills the cell, so renaming feels like editing
        any other cell. */

@@ -356,6 +356,16 @@ test.describe("table inspector", () => {
       .locator(".name")
       .evaluate((el) => getComputedStyle(el).display);
     expect(display).toBe("block");
+    // The blue highlight is the CELL's, like a data cell: it
+    // fills the whole th, not a box hugging the text.
+    const thBg = await th.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(thBg).toBe("rgba(76, 110, 245, 0.07)");
+    const nameBg = await th
+      .locator(".name")
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(nameBg).toBe("rgba(0, 0, 0, 0)");
     await page.keyboard.type("zzz");
     await page.keyboard.press("Escape");
     // Escape reverts the text but keeps the rename session: the
