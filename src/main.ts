@@ -725,6 +725,12 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "settings style font theme frontmatter page break",
     action: () => openSettings(),
   });
+  entries.push({
+    title: "Print the document",
+    group: "Command",
+    keywords: "print pdf export paper",
+    action: () => window.print(),
+  });
   if (!fileBar.hidden) {
     entries.push({
       title: "Open a document",
@@ -1001,6 +1007,21 @@ settingsForm.addEventListener("submit", (ev) => {
   } catch (e) {
     flash(`Parse error: ${e instanceof Error ? e.message : String(e)}`);
   }
+});
+
+/* --- Printing / PDF (spec: docs/specs/print.md) --- */
+
+/**
+ * Whatever triggers the print (the palette command or the
+ * browser's own Ctrl+P / menu), the printout shows the rendered
+ * document - not the source editor or an open dialog. The page
+ * break style keys apply here (paged media).
+ */
+window.addEventListener("beforeprint", () => {
+  if (helpModal.open) helpModal.close();
+  if (paletteModal.open) paletteModal.close();
+  if (settingsModal.open) settingsModal.close();
+  if (!mdWrap.hidden) btnView.click();
 });
 
 refreshOutline();

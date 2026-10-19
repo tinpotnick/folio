@@ -453,6 +453,33 @@
         gap: 8px;
         margin-top: 4px;
       }
+      /* Printing (and PDF via the OS print dialog) shows the
+         document, not the app chrome. */
+      @page {
+        size: A4;
+        margin: 18mm 16mm;
+      }
+      @media print {
+        header,
+        #sidebar,
+        #status,
+        #md-wrap {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+        }
+        .layout,
+        main {
+          display: block;
+        }
+        main {
+          padding: 0;
+        }
+        folio-doc {
+          width: 100%;
+        }
+      }
     </style>
   </head>
   <body>

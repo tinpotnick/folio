@@ -115,12 +115,12 @@ export function themeCss(theme: Theme): string {
     }
     ${
       theme.pageBreakH1
-        ? `article.folio-doc > h1:not(:first-child) { break-before: page; page-break-before: always; }`
+        ? `@media print { article.folio-doc > h1:not(:first-child) { break-before: page; page-break-before: always; } }`
         : ""
     }
     ${
       theme.pageBreakH2
-        ? `article.folio-doc > h2:not(:first-child) { break-before: page; page-break-before: always; }`
+        ? `@media print { article.folio-doc > h2:not(:first-child) { break-before: page; page-break-before: always; } }`
         : ""
     }
     td.num, th.num { text-align: right; }
@@ -203,5 +203,19 @@ export function themeCss(theme: Theme): string {
     }
     .folio-menu button:hover { background: #f3f4f6; }
     .chart-holder svg { width: 100%; height: auto; display: block; }
+    @media print {
+      article.folio-doc { max-width: none; }
+      article.folio-doc h1,
+      article.folio-doc h2,
+      article.folio-doc h3 {
+        break-after: avoid;
+      }
+      figure,
+      table.folio-table,
+      pre.folio-code {
+        break-inside: avoid;
+      }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
   `;
 }

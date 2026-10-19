@@ -124,6 +124,14 @@ depend on changes; formula cells are never editable by hand.
   via the print dialog); a page break in folio is a style, never
   a character in your text.
 
+## Printing and PDF
+
+- Search "print" in the palette (Ctrl+K), or press **Ctrl+P** —
+  folio prints the rendered document, never the source editor or
+  the toolbar. To get a PDF, choose "Save as PDF" as the
+  destination in the print dialog. Charts and diagrams print as
+  crisp vector graphics.
+
 ## Keyboard shortcuts
 
 ::: table {#help-shortcuts}
