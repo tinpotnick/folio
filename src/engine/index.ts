@@ -34,9 +34,19 @@ export interface Document {
 }
 
 export interface Block {
-  kind: "prose" | "heading" | "table" | "chart" | "diagram" | "callout";
+  kind:
+    "prose" | "heading" | "table" | "chart" | "diagram" | "callout" | "image";
   id: string;
   data: Table | Chart | Record<string, never>;
+}
+
+export interface Image {
+  id: string; // directive anchor, e.g. ops-photo
+  // A data URI (offline-safe, single file) or an external URL /
+  // path (rendered opportunistically - never a render dependency).
+  src: string;
+  alt?: string;
+  caption?: string;
 }
 
 export interface Chart {

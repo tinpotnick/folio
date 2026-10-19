@@ -1,4 +1,4 @@
-# Figure inspectors: charts, equations, diagrams
+# Figure inspectors: charts, equations, diagrams, images
 
 ## Status: accepted (2026-10-18)
 
@@ -27,6 +27,9 @@ the source to change a filter or fix a Mermaid typo.
   the source; chart errors (bad filter column, unknown sort,
   non-negative-only data in a pie) surface as the chart's
   visible error text - the error contract, not a broken render.
+- **Image inspector** (click the image, spec: docs/specs/
+  images.md): alt text, caption, and a replace-file control -
+  edits are model writes like everywhere else.
 - **Math / diagram inspectors** (click the figure): a textarea
   with the block's source (LaTeX / Mermaid); Enter or blur applies
   (Shift+Enter for a newline), redrawing the figure in place.

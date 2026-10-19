@@ -4,7 +4,7 @@
  * frontmatter, prose, headings, table and chart directive blocks.
  * serializeDoc(parseDoc(text)) === text for any canonical doc.
  */
-import type { Cell, Chart, Table } from "./index.js";
+import type { Cell, Chart, Image, Table } from "./index.js";
 
 export interface Frontmatter {
   theme?: string;
@@ -18,14 +18,15 @@ export type DocBlock =
   | { kind: "math"; text: string }
   | { kind: "table"; table: Table }
   | { kind: "chart"; chart: Chart }
-  | { kind: "diagram"; diagram: { id: string; text: string } };
+  | { kind: "diagram"; diagram: { id: string; text: string } }
+  | { kind: "image"; image: Image };
 
 export interface Doc {
   frontmatter: Frontmatter;
   blocks: DocBlock[];
 }
 
-const DIRECTIVE_RE = /^::: (table|chart) \{#([^}]+)\}$/;
+const DIRECTIVE_RE = /^::: (table|chart|image) \{#([^}]+)\}$/;
 const MERMAID_RE = /^::: mermaid \{#([^}]+)\}$/;
 
 export class ParseError extends Error {
@@ -41,6 +42,7 @@ export function parseDoc(text: string): Doc {
   const lines = text.split("\n");
   const doc: Doc = { frontmatter: { style: [] }, blocks: [] };
   let i = 0;
+  let imageCount = 0;
 
   if (lines[0] === "---") {
     i = parseFrontmatter(lines, 1, doc);
@@ -83,12 +85,30 @@ export function parseDoc(text: string): Doc {
       i = end + 1;
       continue;
     }
+    // A standard Markdown image on its own line - the hand-typed
+    // form. It canonicalizes to the image directive on the next
+    // serialization (ids are assigned per document).
+    const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
+    if (img) {
+      imageCount += 1;
+      doc.blocks.push({
+        kind: "image",
+        image: {
+          id: `image-${imageCount}`,
+          src: img[2] ?? "",
+          ...(img[1] ? { alt: img[1] } : {}),
+        },
+      });
+      i++;
+      continue;
+    }
     const m = DIRECTIVE_RE.exec(line);
     if (m) {
       const id = m[2] ?? "";
       const body = readDirectiveBody(lines, i, id);
       if (m[1] === "table") doc.blocks.push(parseTableDirective(body, id));
-      else doc.blocks.push(parseChartDirective(body, id));
+      else if (m[1] === "chart") doc.blocks.push(parseChartDirective(body, id));
+      else doc.blocks.push(parseImageDirective(body, id));
       i = body.endLine + 1;
       continue;
     }
@@ -279,6 +299,25 @@ function parseChartDirective(body: DirectiveBody, id: string): DocBlock {
   return { kind: "chart", chart };
 }
 
+function parseImageDirective(body: DirectiveBody, id: string): DocBlock {
+  const values: Record<string, string> = {};
+  for (const [k, v] of body.entries) {
+    if (k !== "src" && k !== "alt" && k !== "caption") {
+      throw new ParseError(`Unknown image key: '${k}'`, 0);
+    }
+    values[k] = v;
+  }
+  if (!values["src"]) {
+    throw new ParseError("Image directive missing src", 0);
+  }
+  const image: Image = { id, src: values["src"] };
+  if (values["alt"] !== undefined) image.alt = unquote(values["alt"]);
+  if (values["caption"] !== undefined) {
+    image.caption = unquote(values["caption"]);
+  }
+  return { kind: "image", image };
+}
+
 function parseQuery(raw: string): Chart["query"] {
   const map = parseInlineMap(raw);
   const select = (map["select"] ?? "")
@@ -328,6 +367,7 @@ function collectProse(lines: string[], start: number): number {
     if (
       line.trim() === "" ||
       DIRECTIVE_RE.test(line) ||
+      /^!\[[^\]]*\]\([^)]+\)$/.test(line.trim()) ||
       line.startsWith("#") ||
       line.trim() === "$$" ||
       /^`{3,}/.test(line.trim())
@@ -420,7 +460,21 @@ function serializeBlock(block: DocBlock): string {
       return serializeChart(block.chart);
     case "diagram":
       return `::: mermaid {#${block.diagram.id}}\n${block.diagram.text}\n:::`;
+    case "image":
+      return serializeImage(block.image);
   }
+}
+
+function serializeImage(image: Image): string {
+  const lines = [`::: image {#${image.id}}`];
+  // src stays raw (unquoted): data URIs and URLs carry no spaces.
+  lines.push(`src: ${image.src}`);
+  if (image.alt !== undefined) lines.push(`alt: "${image.alt}"`);
+  if (image.caption !== undefined) {
+    lines.push(`caption: "${image.caption}"`);
+  }
+  lines.push(":::");
+  return lines.join("\n");
 }
 
 function serializeTable(table: Table): string {

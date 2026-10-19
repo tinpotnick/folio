@@ -44,9 +44,9 @@ document — written in the same renderer you are working with.
 
 ## Tables and charts
 
-- The insert group (four icons after the format buttons) holds the
-  block builders: table, Mermaid diagram, equation, and code
-  block. The
+- The insert group (five icons after the format buttons) holds the
+  block builders: table, Mermaid diagram, image, equation, and
+  code block. The
   diagram button inserts a starter diagram; the equation button
   inserts a typeset `$$` block; the code button converts the block
   you are in to a code block and back (in Markdown view it fences
@@ -64,6 +64,17 @@ document — written in the same renderer you are working with.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
   splitting it.
+- **Images** embed in the document as data URIs - a folio document
+  is one file that renders fully offline. Pick a picture with the
+  image button (or the command palette); the file name seeds the
+  alt text. You can also hand-type the standard form
+  `![alt](https://example.com/cat.png)` on its own line - folio
+  upgrades it to an image directive on the next save. Click an
+  image to edit its alt, caption, or replace the file from its
+  inspector bar; click it once and press Backspace or Delete to
+  remove it. Files over 8 MB are refused (resize first); floating
+  images and text wrap are deliberately not supported - layout
+  belongs to the theme, not the document.
 - **Equations** are fenced `$$` blocks: a line with only `$$`, the
   LaTeX source, then a closing `$$` line. They render typeset
   (KaTeX). Edit the LaTeX in the Markdown view; a bad equation

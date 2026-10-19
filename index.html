@@ -570,6 +570,32 @@
             </svg>
           </button>
           <button
+            id="btn-image"
+            title="Insert an image"
+            aria-label="Insert an image"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+              <circle
+                cx="5.8"
+                cy="6"
+                r="1.1"
+                fill="currentColor"
+                stroke="none"
+              />
+              <path
+                d="M3 11l3.2-3.2 2.3 2.3 2.5-2.5L13.5 11.5"
+                stroke-linejoin="round"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+          <button
             id="btn-equation"
             title="Insert an equation"
             aria-label="Insert an equation"
@@ -643,7 +669,10 @@
               stroke="currentColor"
               stroke-width="1.5"
             >
-              <path d="M2.5 13.5v-11h8.5l2.5 2.5v8.5z" stroke-linejoin="round" />
+              <path
+                d="M2.5 13.5v-11h8.5l2.5 2.5v8.5z"
+                stroke-linejoin="round"
+              />
               <path d="M5 13.5V9.5h6v4" stroke-linejoin="round" />
               <path d="M5 2.5v3h4.5v-3" stroke-linejoin="round" />
             </svg>
@@ -689,6 +718,7 @@
       </div>
     </header>
     <div class="layout">
+      <input type="file" id="image-file" accept="image/*" hidden />
       <nav id="sidebar" aria-label="Section browser">
         <h2>Sections</h2>
         <div id="outline"></div>
@@ -720,9 +750,7 @@
         spellcheck="false"
       />
       <div id="palette-list" role="listbox" aria-label="Results"></div>
-      <div class="palette-foot">
-        Enter to run · ↑ ↓ to move · Esc to close
-      </div>
+      <div class="palette-foot">Enter to run · ↑ ↓ to move · Esc to close</div>
     </dialog>
     <dialog id="settings-modal" aria-label="Document settings">
       <div class="settings-head">

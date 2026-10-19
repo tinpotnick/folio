@@ -269,6 +269,27 @@ export function themeCss(theme: Theme): string {
       color: #57606a;
       flex: none;
     }
+    figure.folio-image {
+      margin: 1.2em 0;
+      user-select: none;
+    }
+    figure.folio-image img {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto;
+    }
+    figure.folio-image:focus {
+      outline: 2px solid #1f3fbf;
+    }
+    .folio-inspector .insp-alt {
+      flex: 1;
+      min-width: 120px;
+    }
+    .folio-inspector .insp-file {
+      max-width: 180px;
+      font-size: 12px;
+    }
     figure.folio-math {
       margin: 1.2em 0;
       overflow-x: auto;

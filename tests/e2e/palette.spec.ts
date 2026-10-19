@@ -72,17 +72,21 @@ test.describe("command palette", () => {
     await page.keyboard.press("Enter");
     await expect(page.locator("#palette-modal")).toBeHidden();
     // revealBlock moves focus into the document (the article is the
-    // editing host) and scrolls the section into view.
+    // editing host) and scrolls the section into view. Poll the
+    // rect: the scroll is animated, and a one-shot read races it
+    // (flaked under full-suite load once the sample grew an image).
     const focused = await page.evaluate(() => {
       const a = document.querySelector("folio-doc")?.shadowRoot?.activeElement;
       return a instanceof HTMLElement ? a.tagName : null;
     });
     expect(focused).toBe("ARTICLE");
-    const top = await page
-      .locator("folio-doc h2", { hasText: "Regional summary" })
-      .evaluate((node) => node.getBoundingClientRect().top);
-    expect(top).toBeGreaterThanOrEqual(0);
-    expect(top).toBeLessThan(400);
+    const topOf = async (): Promise<number> =>
+      page
+        .locator("folio-doc h2", { hasText: "Regional summary" })
+        .evaluate((node) => node.getBoundingClientRect().top);
+    await expect.poll(topOf).toBeLessThan(400);
+    const settledTop = await topOf();
+    expect(settledTop).toBeGreaterThanOrEqual(0);
   });
 
   test("a help topic opens the help document at that topic", async ({

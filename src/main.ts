@@ -244,6 +244,41 @@ btnEquation.addEventListener("mousedown", (ev) => {
   flash("Equation inserted");
 });
 
+const btnImage = requireEl<HTMLButtonElement>("#btn-image");
+const imageFile = requireEl<HTMLInputElement>("#image-file");
+// A folio document is ONE file (ADR-0005): images embed as data
+// URIs, so a sane ceiling keeps the Markdown source workable.
+const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
+
+// mousedown (like the other insert buttons) so the press never
+// steals focus from the document before the action runs.
+btnImage.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  imageFile.click();
+});
+
+imageFile.addEventListener("change", () => {
+  const f = imageFile.files?.[0];
+  imageFile.value = "";
+  if (!f) return;
+  if (f.size > IMAGE_MAX_BYTES) {
+    flash("Image too large (over 8 MB) - the document stays one file");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (): void => {
+    if (typeof reader.result !== "string") return;
+    // The file name is a better first alt than nothing.
+    const alt = f.name
+      .replace(/\.[^.]+$/, "")
+      .replace(/[-_]+/g, " ")
+      .trim();
+    el.insertImage(reader.result, alt === "" ? undefined : alt);
+    flash("Image inserted");
+  };
+  reader.readAsDataURL(f);
+});
+
 const btnCodeBlock = requireEl<HTMLButtonElement>("#btn-code");
 btnCodeBlock.addEventListener("mousedown", (ev) => {
   ev.preventDefault();
@@ -753,6 +788,15 @@ function paletteEntries(): PaletteEntry[] {
       el.insertMath();
       flash("Equation inserted");
     },
+  });
+  entries.push({
+    title: "Insert an image",
+    group: "Command",
+    keywords: "image picture photo insert figure png jpg svg",
+    // The palette must not depend on prior document focus: the
+    // file picker opens directly, and without a caret the image
+    // appends at the document end.
+    action: () => imageFile.click(),
   });
   entries.push({
     title: "Toggle the section browser",
