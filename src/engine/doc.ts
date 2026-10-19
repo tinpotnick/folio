@@ -294,12 +294,18 @@ function parseQuery(raw: string): Chart["query"] {
     };
   }
   if (map["filter"]) {
-    const f = parseInlineMap(map["filter"]);
-    query.filter = {
-      column: f["column"] ?? "",
-      op: f["op"] ?? "",
-      value: cell(f["value"] ?? ""),
-    };
+    const raw = map["filter"];
+    if (raw.startsWith('"') || raw.startsWith("'")) {
+      // A Jexl expression filter: the whole value is one string.
+      query.filter = unquoteEscape(raw);
+    } else {
+      const f = parseInlineMap(raw);
+      query.filter = {
+        column: f["column"] ?? "",
+        op: f["op"] ?? "",
+        value: cell(f["value"] ?? ""),
+      };
+    }
   }
   return query;
 }
@@ -357,6 +363,21 @@ function findMathEnd(lines: string[], start: number): number {
 function unquote(s: string): string {
   if (s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1);
   return s;
+}
+
+/** Unquote a string value keeping escaped double quotes (""). */
+function unquoteEscape(s: string): string {
+  const q = s.slice(0, 1);
+  const inner =
+    (q === '"' || q === "'") && s.length > 1 && s.endsWith(q)
+      ? s.slice(1, -1)
+      : s;
+  return inner.replace(/\\"/g, '"');
+}
+
+/** Quote a Jexl expression for the source (double quotes, escaped). */
+function quoteExpr(s: string): string {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
 function quoteStyleValue(v: string): string {
@@ -431,7 +452,11 @@ function serializeChart(chart: Chart): string {
   const q: string[] = [`select: [${chart.query.select.join(", ")}]`];
   if (chart.query.filter) {
     const f = chart.query.filter;
-    q.push(`filter: {column: ${f.column}, op: ${f.op}, value: ${f.value}}`);
+    q.push(
+      typeof f === "string"
+        ? `filter: ${quoteExpr(f)}`
+        : `filter: {column: ${f.column}, op: ${f.op}, value: ${f.value}}`,
+    );
   }
   if (chart.query.sort) {
     q.push(

@@ -12,7 +12,8 @@ import {
   type DocBlock,
 } from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
-import { recalcTable } from "@folio/engine/recalc";
+import { recalcTable, type TablePool } from "@folio/engine/recalc";
+import type { Table } from "@folio/engine/index.js";
 import { executeQuery } from "@folio/engine/query";
 import { themeFromDoc, themeCss } from "./render/theme.js";
 import { renderBarChart } from "./render/chart.js";
@@ -277,11 +278,26 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
+  /**
+   * The document's tables by id, for cross-table formula
+   * references (budget.r3.q2): a table's formulas may read any
+   * other table of the same document.
+   */
+  private tablePool(): TablePool {
+    const blocks = this.doc?.blocks ?? [];
+    return (id: string): Table | undefined => {
+      for (const b of blocks) {
+        if (b.kind === "table" && b.table.id === id) return b.table;
+      }
+      return undefined;
+    };
+  }
+
   private renderTable(
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     idx: number,
   ): HTMLElement {
-    const recalced = recalcTable(block.table);
+    const recalced = recalcTable(block.table, this.tablePool());
     const figure = document.createElement("figure");
     figure.dataset.blockIndex = String(idx);
     figure.dataset.tableId = block.table.id;
@@ -410,7 +426,7 @@ export class FolioDoc extends HTMLElement {
       if (!tableBlock || tableBlock.kind !== "table") {
         throw new Error(`chart source table '${block.chart.source}' not found`);
       }
-      const recalced = recalcTable(tableBlock.table);
+      const recalced = recalcTable(tableBlock.table, this.tablePool());
       const result = executeQuery(recalced, block.chart);
       holder.innerHTML = renderBarChart(result).svg;
     } catch (e) {
@@ -606,7 +622,7 @@ export class FolioDoc extends HTMLElement {
     if (!row) return;
     if (row[c] === value) return;
     row[c] = value;
-    this.updateRowCalculations(td.closest("figure"), block, r);
+    this.updateRowCalculations(td.closest("figure"), block);
     this.emitChange();
   }
 
@@ -614,21 +630,26 @@ export class FolioDoc extends HTMLElement {
   private updateRowCalculations(
     figure: HTMLElement | null,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
-    r: number,
   ): void {
-    const recalced = recalcTable(block.table);
+    const recalced = recalcTable(block.table, this.tablePool());
+    // Formulas may reference other rows (_prev, name:row), so an
+    // edit ripples through every formula cell of the table, not
+    // just the edited row. Text-only updates: no structural
+    // re-render, the caret in the edited cell is untouched.
     block.table.columns.forEach((col, c) => {
       if (col.type !== "formula") return;
-      const cell = figure?.querySelector(
-        `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
-      );
-      if (!cell) return;
-      const v = recalced.rows[r]?.[c];
-      cell.textContent =
-        col.format === "percent" && typeof v === "number"
-          ? `${(v * 100).toFixed(1)}%`
-          : String(v ?? "");
-      cell.classList.toggle("num", typeof v === "number");
+      for (let row = 0; row < block.table.rows.length; row++) {
+        const cell = figure?.querySelector(
+          `td[data-row-index="${String(row)}"][data-col-index="${String(c)}"]`,
+        );
+        if (!cell) continue;
+        const v = recalced.rows[row]?.[c];
+        cell.textContent =
+          col.format === "percent" && typeof v === "number"
+            ? `${(v * 100).toFixed(1)}%`
+            : String(v ?? "");
+        cell.classList.toggle("num", typeof v === "number");
+      }
     });
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     const chartFigures = Array.from(
@@ -636,6 +657,39 @@ export class FolioDoc extends HTMLElement {
     );
     for (const cf of chartFigures) {
       this.drawChart(cf);
+    }
+    // Cross-table references ripple: another table's formulas may
+    // read this one (budget.r3.q2), so their cells refresh too -
+    // text-only updates in place, the edited caret untouched.
+    for (const other of this.doc?.blocks ?? []) {
+      if (other.kind !== "table" || other.table.id === block.table.id) {
+        continue;
+      }
+      const otherFigure = host?.querySelector(
+        `figure[data-table-id="${other.table.id}"]`,
+      ) as HTMLElement | null;
+      if (!otherFigure) continue;
+      let recalcedOther;
+      try {
+        recalcedOther = recalcTable(other.table, this.tablePool());
+      } catch {
+        continue; // its own error renders on its next full render
+      }
+      other.table.columns.forEach((col, c) => {
+        if (col.type !== "formula") return;
+        for (let row = 0; row < other.table.rows.length; row++) {
+          const cell = otherFigure.querySelector(
+            `td[data-row-index="${String(row)}"][data-col-index="${String(c)}"]`,
+          );
+          if (!cell) continue;
+          const v = recalcedOther.rows[row]?.[c];
+          cell.textContent =
+            col.format === "percent" && typeof v === "number"
+              ? `${(v * 100).toFixed(1)}%`
+              : String(v ?? "");
+          cell.classList.toggle("num", typeof v === "number");
+        }
+      });
     }
   }
 

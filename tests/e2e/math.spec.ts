@@ -54,7 +54,7 @@ test.describe("math blocks", () => {
 
   test("editing prose around a math block preserves it", async ({ page }) => {
     await loadDoc(page, "# T\n\nbefore\n\n$$\nx^2\n$$\n\nafter\n");
-    await page.locator("folio-doc p", { hasText: "before" }).click();
+    await page.locator("#the-doc p", { hasText: "before" }).click();
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await page.keyboard.type("middle");

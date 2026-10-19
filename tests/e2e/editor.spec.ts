@@ -639,6 +639,129 @@ test.describe("tables", () => {
     await expect(page.locator("#the-doc tbody tr")).toHaveCount(before + 1);
   });
 
+  test("running totals (self.prev) render and recalculate on edit", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await page
+      .locator("#editor")
+      .fill(
+        [
+          "# T",
+          "",
+          "::: table {#rt}",
+          "columns:",
+          "  - {name: month, type: text}",
+          "  - {name: q2, type: number}",
+          '  - {name: total, type: formula, expr: "q2 + (self.row == 1 ? 0 : self.prev.total)"}',
+          "data:",
+          "  - [jan, 10]",
+          "  - [feb, 20]",
+          ":::",
+          "",
+        ].join("\n"),
+      );
+    await page.locator("#btn-view").click();
+    await expect(
+      page.locator('#the-doc td[data-row-index="0"][data-col-index="2"]'),
+    ).toHaveText("10");
+    await expect(
+      page.locator('#the-doc td[data-row-index="1"][data-col-index="2"]'),
+    ).toHaveText("30");
+    // Editing the first row ripples through the whole column.
+    await page
+      .locator('#the-doc td[data-row-index="0"][data-col-index="1"]')
+      .click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("100");
+    await page.keyboard.press("Tab");
+    await expect(
+      page.locator('#the-doc td[data-row-index="0"][data-col-index="2"]'),
+    ).toHaveText("100");
+    await expect(
+      page.locator('#the-doc td[data-row-index="1"][data-col-index="2"]'),
+    ).toHaveText("120");
+  });
+
+  test("row references (self.rN) address any row by name", async ({ page }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await page
+      .locator("#editor")
+      .fill(
+        [
+          "# T",
+          "",
+          "::: table {#refs}",
+          "columns:",
+          "  - {name: q2, type: number}",
+          '  - {name: delta, type: formula, expr: "self.r2.q2 - q2"}',
+          "data:",
+          "  - [10]",
+          "  - [20]",
+          "  - [30]",
+          ":::",
+          "",
+        ].join("\n"),
+      );
+    await page.locator("#btn-view").click();
+    const deltas = await page
+      .locator('#the-doc td[data-col-index="1"]')
+      .allTextContents();
+    expect(deltas).toEqual(["10", "0", "-10"]);
+  });
+
+  test("cross-table references (@budget) render and ripple on edit", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-markdown").click();
+    await page
+      .locator("#editor")
+      .fill(
+        [
+          "# T",
+          "",
+          "::: table {#budget}",
+          "columns:",
+          "  - {name: target, type: number}",
+          "data:",
+          "  - [100]",
+          ":::",
+          "",
+          "::: table {#actuals}",
+          "columns:",
+          "  - {name: q2, type: number}",
+          '  - {name: vs, type: formula, expr: "q2 - @budget.r1.target"}',
+          "data:",
+          "  - [90]",
+          ":::",
+          "",
+        ].join("\n"),
+      );
+    await page.locator("#btn-view").click();
+    await expect(
+      page.locator(
+        '#the-doc figure[data-table-id="actuals"] td[data-row-index="0"][data-col-index="1"]',
+      ),
+    ).toHaveText("-10");
+    // Editing the budget table ripples into the other table.
+    await page
+      .locator(
+        '#the-doc figure[data-table-id="budget"] td[data-row-index="0"][data-col-index="0"]',
+      )
+      .click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("80");
+    await page.keyboard.press("Tab");
+    await expect(
+      page.locator(
+        '#the-doc figure[data-table-id="actuals"] td[data-row-index="0"][data-col-index="1"]',
+      ),
+    ).toHaveText("10");
+  });
+
   test("clicking a cell then a heading does not break heading Enter", async ({
     page,
   }) => {

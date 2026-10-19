@@ -50,7 +50,18 @@ Added (documented in the in-app help): comparisons and ternaries
   grammar is now someone else's spec to maintain.
 - `parseFormula`/`AstNode` are removed from the public API - the
   expression language is Jexl, not an AST contract.
-- Chained formulas (a formula referencing another formula column)
-  remain rejected, as before.
+- Update (2026-10-18, same day): the row/table reference language
+  (docs/specs/formulas.md) supersedes the original "chained
+  formulas remain rejected" consequence - a formula may now
+  reference formula columns to its LEFT, other rows of its table
+  (`self.prev`, `self.prevN`, `self.rN`, `self.row`), and other
+  tables by id (`@budget.r3.q2`, matching the chart query
+  language's `source: @id`; the `@` is stripped before evaluation).
+  Still plain Jexl plus context objects - no grammar extension,
+  and referenced table ids must be identifier-legal (no hyphens,
+  which would lex as subtraction). Chart query FILTERS are Jexl
+  expressions over the same recalced row context
+  (docs/specs/formulas.md); the legacy {column, op, value} triple
+  still parses. Everything else here is unchanged.
 - The engine stays UI-free (ADR-0001) and fully testable
   headlessly; recalc is synchronous (`jexl.evalSync`).
