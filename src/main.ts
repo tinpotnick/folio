@@ -719,6 +719,12 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "help reference guide how to",
     action: () => openHelp(),
   });
+  entries.push({
+    title: "Document settings",
+    group: "Command",
+    keywords: "settings style font theme frontmatter page break",
+    action: () => openSettings(),
+  });
   if (!fileBar.hidden) {
     entries.push({
       title: "Open a document",
@@ -867,6 +873,133 @@ paletteInput.addEventListener("keydown", (ev) => {
   } else if (ev.key === "Enter") {
     ev.preventDefault();
     runPalette(paletteSel);
+  }
+});
+
+/* --- Document settings (spec: docs/specs/document-settings.md) --- */
+
+const settingsModal = requireEl<HTMLDialogElement>("#settings-modal");
+const settingsForm = requireEl<HTMLFormElement>("#settings-form");
+const setBodyFont = requireEl<HTMLSelectElement>("#set-body-font");
+const setH1Font = requireEl<HTMLSelectElement>("#set-h1-font");
+const setBodySize = requireEl<HTMLInputElement>("#set-body-size");
+const setH1Size = requireEl<HTMLInputElement>("#set-h1-size");
+const setH2Size = requireEl<HTMLInputElement>("#set-h2-size");
+const setTableStyle = requireEl<HTMLSelectElement>("#set-table-style");
+const setPalette = requireEl<HTMLSelectElement>("#set-palette");
+const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
+const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
+
+const FONT_OPTIONS = [
+  "Source Serif 4",
+  "Merriweather",
+  "Georgia",
+  "Arial",
+  "system-ui",
+];
+
+function fillFontSelect(
+  sel: HTMLSelectElement,
+  current: string | undefined,
+): void {
+  sel.textContent = "";
+  const def = document.createElement("option");
+  def.value = "default";
+  def.textContent = "Theme default (Source Serif 4)";
+  sel.appendChild(def);
+  const options = [...FONT_OPTIONS];
+  if (current && !options.includes(current)) options.push(current);
+  for (const name of options) {
+    const o = document.createElement("option");
+    o.value = name;
+    o.textContent = name;
+    sel.appendChild(o);
+  }
+  sel.value = current ?? "default";
+}
+
+function fillSettings(): void {
+  const style = new Map(el.getDoc()?.frontmatter.style ?? []);
+  fillFontSelect(setBodyFont, style.get("body.font.family"));
+  fillFontSelect(setH1Font, style.get("h1.font.family"));
+  setBodySize.value = style.get("body.font.size") ?? "";
+  setH1Size.value = style.get("h1.font.size") ?? "";
+  setH2Size.value = style.get("h2.font.size") ?? "";
+  setTableStyle.value = style.get("table.style") ?? "default";
+  setPalette.value = style.get("chart.palette") ?? "default";
+  setPbH1.value = style.get("pagebreak.h1") === "before" ? "before" : "default";
+  setPbH2.value = style.get("pagebreak.h2") === "before" ? "before" : "default";
+}
+
+function openSettings(): void {
+  fillSettings();
+  if (!settingsModal.open) settingsModal.showModal();
+}
+
+requireEl<HTMLButtonElement>("#btn-settings").addEventListener(
+  "click",
+  openSettings,
+);
+requireEl<HTMLButtonElement>("#btn-settings-close").addEventListener(
+  "click",
+  () => settingsModal.close(),
+);
+requireEl<HTMLButtonElement>("#btn-settings-cancel").addEventListener(
+  "click",
+  () => settingsModal.close(),
+);
+
+settingsForm.addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  const md = mdWrap.hidden ? (el.getMarkdown() ?? "") : editor.value;
+  try {
+    const doc = parseDoc(md);
+    // The frontmatter is the source of truth: the dialog only
+    // writes style keys through the same parse/serialize pipeline
+    // as editing the YAML by hand. "default" and empty fields
+    // remove the key so the theme default applies. Existing key
+    // order is preserved - the dialog must not churn the user's
+    // YAML - and keys it does not know about pass through
+    // untouched.
+    const values: Record<string, string> = {
+      "body.font.family": setBodyFont.value,
+      "h1.font.family": setH1Font.value,
+      "body.font.size": setBodySize.value.trim(),
+      "h1.font.size": setH1Size.value.trim(),
+      "h2.font.size": setH2Size.value.trim(),
+      "table.style": setTableStyle.value,
+      "chart.palette": setPalette.value,
+      "pagebreak.h1": setPbH1.value,
+      "pagebreak.h2": setPbH2.value,
+    };
+    const style: [string, string][] = [];
+    const seen = new Set<string>();
+    for (const [key, value] of doc.frontmatter.style) {
+      const next = values[key];
+      if (next === undefined) {
+        style.push([key, value]);
+        continue;
+      }
+      if (next !== "" && next !== "default") {
+        style.push([key, next]);
+        seen.add(key);
+      }
+    }
+    for (const [key, value] of Object.entries(values)) {
+      if (!seen.has(key) && value !== "" && value !== "default") {
+        style.push([key, value]);
+      }
+    }
+    doc.frontmatter.style = style;
+    const out = serializeDoc(doc);
+    el.load(out);
+    editor.value = out;
+    if (!mdWrap.hidden) renderHighlight();
+    settingsModal.close();
+    flash("Settings applied");
+    refreshOutline();
+  } catch (e) {
+    flash(`Parse error: ${e instanceof Error ? e.message : String(e)}`);
   }
 });
 

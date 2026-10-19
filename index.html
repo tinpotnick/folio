@@ -412,6 +412,47 @@
         font-size: 12px;
         color: #57606a;
       }
+      #settings-modal {
+        width: min(520px, calc(100vw - 48px));
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
+        overflow: hidden;
+      }
+      #settings-modal::backdrop {
+        background: rgba(31, 35, 40, 0.4);
+      }
+      #settings-form {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 12px 16px;
+        padding: 16px;
+        align-items: center;
+      }
+      #settings-form label {
+        font-size: 13px;
+        color: #1f2328;
+        white-space: nowrap;
+      }
+      #settings-form select,
+      #settings-form input {
+        font: inherit;
+        font-size: 13px;
+        padding: 6px 8px;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        background: #fff;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      .settings-actions {
+        grid-column: 1 / -1;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 4px;
+      }
     </style>
   </head>
   <body>
@@ -552,6 +593,25 @@
             <path d="M10.5 10.5L14 14" stroke-linecap="round" />
           </svg>
         </button>
+        <button
+          id="btn-settings"
+          class="plain"
+          title="Document settings"
+          aria-label="Document settings"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <circle cx="8" cy="8" r="2.25" />
+            <path
+              d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
         <button id="btn-help" class="plain" title="Help (?)">?</button>
       </div>
     </header>
@@ -590,6 +650,54 @@
       <div class="palette-foot">
         Enter to run · ↑ ↓ to move · Esc to close
       </div>
+    </dialog>
+    <dialog id="settings-modal" aria-label="Document settings">
+      <div class="help-head">
+        <h2>Document settings</h2>
+        <button id="btn-settings-close" class="plain" title="Close (Esc)">
+          Close
+        </button>
+      </div>
+      <form id="settings-form">
+        <label for="set-body-font">Body font</label>
+        <select id="set-body-font"></select>
+        <label for="set-h1-font">Heading font</label>
+        <select id="set-h1-font"></select>
+        <label for="set-body-size">Body size</label>
+        <input id="set-body-size" type="text" placeholder="17px" />
+        <label for="set-h1-size">H1 size</label>
+        <input id="set-h1-size" type="text" placeholder="28pt" />
+        <label for="set-h2-size">H2 size</label>
+        <input id="set-h2-size" type="text" placeholder="20pt" />
+        <label for="set-table-style">Table style</label>
+        <select id="set-table-style">
+          <option value="default">Default (booktabs)</option>
+          <option value="booktabs">booktabs</option>
+          <option value="plain">plain</option>
+        </select>
+        <label for="set-palette">Chart palette</label>
+        <select id="set-palette">
+          <option value="default">Default (muted)</option>
+          <option value="muted">muted</option>
+          <option value="corporate">corporate</option>
+        </select>
+        <label for="set-pb-h1">H1 starts a new page (print)</label>
+        <select id="set-pb-h1">
+          <option value="default">No</option>
+          <option value="before">Yes</option>
+        </select>
+        <label for="set-pb-h2">H2 starts a new page (print)</label>
+        <select id="set-pb-h2">
+          <option value="default">No</option>
+          <option value="before">Yes</option>
+        </select>
+        <div class="settings-actions">
+          <button type="button" id="btn-settings-cancel" class="plain">
+            Cancel
+          </button>
+          <button type="submit" class="plain">Apply</button>
+        </div>
+      </form>
     </dialog>
     <div id="status">Saved</div>
     <script type="module" src="/src/main.ts"></script>

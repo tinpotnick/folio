@@ -13,6 +13,8 @@ export interface Theme {
   h2Size: string;
   tableStyle: string;
   palette: string[];
+  pageBreakH1: boolean;
+  pageBreakH2: boolean;
 }
 
 const PALETTES: Record<string, string[]> = {
@@ -28,6 +30,8 @@ const DEFAULT_THEME: Theme = {
   h2Size: "20pt",
   tableStyle: "booktabs",
   palette: PALETTES["muted"] ?? ["#4c6ef5"],
+  pageBreakH1: false,
+  pageBreakH2: false,
 };
 
 export function themeFromDoc(doc: Doc): Theme {
@@ -45,6 +49,8 @@ export function themeFromDoc(doc: Doc): Theme {
     tableStyle: style.get("table.style") ?? DEFAULT_THEME.tableStyle,
     palette:
       PALETTES[style.get("chart.palette") ?? "muted"] ?? DEFAULT_THEME.palette,
+    pageBreakH1: style.get("pagebreak.h1") === "before",
+    pageBreakH2: style.get("pagebreak.h2") === "before",
   };
 }
 
@@ -98,6 +104,24 @@ export function themeCss(theme: Theme): string {
     table.folio-table td:empty::after {
       content: "\\00a0";
       opacity: 0;
+    }
+    ${
+      theme.tableStyle === "plain"
+        ? `table.folio-table thead tr { border-top: 1px solid #d0d7de; }
+    table.folio-table thead th { border-bottom: 1px solid #d0d7de; }
+    table.folio-table tbody tr:last-child td { border-bottom: 1px solid #d0d7de; }
+    table.folio-table td, table.folio-table th { border: 1px solid #e6e8eb; }`
+        : ""
+    }
+    ${
+      theme.pageBreakH1
+        ? `article.folio-doc > h1:not(:first-child) { break-before: page; page-break-before: always; }`
+        : ""
+    }
+    ${
+      theme.pageBreakH2
+        ? `article.folio-doc > h2:not(:first-child) { break-before: page; page-break-before: always; }`
+        : ""
     }
     td.num, th.num { text-align: right; }
     td.folio-formula {

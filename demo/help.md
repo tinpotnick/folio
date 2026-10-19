@@ -113,6 +113,17 @@ depend on changes; formula cells are never editable by hand.
   summary", "keyboard shortcuts" — and Enter runs the top result.
   It searches commands, help topics, and the document's sections.
 
+## Document settings
+
+- The gear button (toolbar, or search "settings") opens the
+  document settings: fonts, heading and body sizes, table style,
+  chart palette, and page-break behavior. Everything it edits is
+  the style header at the top of the Markdown source — the dialog
+  is just a friendlier way to write the same YAML.
+- **H1/H2 start a new page** applies when printing (and to PDF
+  via the print dialog); a page break in folio is a style, never
+  a character in your text.
+
 ## Keyboard shortcuts
 
 ::: table {#help-shortcuts}
