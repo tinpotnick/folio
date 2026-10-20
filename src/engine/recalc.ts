@@ -33,30 +33,11 @@ jexl.addBinaryOp("/", 40, (l: unknown, r: unknown): number => {
   return b === 0 ? 0 : a / b;
 });
 
-// A small, documented transform set (called with the pipe syntax,
-// e.g. "growth * 100 | round()").
-jexl.addTransform("round", (v: unknown, ...args: unknown[]): number =>
-  Number(Number(v).toFixed(Number(args[0] ?? 0))),
-);
-jexl.addTransform("floor", (v: unknown): number => Math.floor(Number(v)));
-jexl.addTransform("ceil", (v: unknown): number => Math.ceil(Number(v)));
-jexl.addTransform("abs", (v: unknown): number => Math.abs(Number(v)));
-jexl.addTransform("min", (a: unknown, ...args: unknown[]): number =>
-  Math.min(Number(a), Number(args[0])),
-);
-jexl.addTransform("max", (a: unknown, ...args: unknown[]): number =>
-  Math.max(Number(a), Number(args[0])),
-);
-
-/** The Jexl transform set folio registers - shared with chart filters. */
-export const TRANSFORMS = new Set([
-  "round",
-  "floor",
-  "ceil",
-  "abs",
-  "min",
-  "max",
-]);
+/** The names folio registers in Jexl's function AND transform
+ * pools - shared with chart filters, which whitelist the same
+ * names. Populated by registerFn so the set can never drift
+ * from the registrations. */
+export const TRANSFORMS = new Set<string>();
 /** Jexl language keywords - shared with chart filters. */
 export const KEYWORDS = new Set([
   "true",
@@ -67,6 +48,241 @@ export const KEYWORDS = new Set([
   "not",
   "in",
 ]);
+
+/** Register one catalog entry in BOTH Jexl pools (ADR-0012,
+ * docs/specs/formulas.md). The FUNCTION pool gives the natural
+ * call form - `sqrt(x)`, `hypot(re, im)`, `sin(2 * pi * f * t)` -
+ * and the TRANSFORM pool keeps the pipe form folio documents
+ * (`x | sqrt()`, `(growth * 100) | round(1)`). Same signature
+ * for both: the value first. */
+function registerFn(
+  name: string,
+  fn: (v: unknown, ...args: unknown[]) => number | number[],
+): void {
+  jexl.addTransform(name, fn);
+  jexl.addFunction(name, fn);
+  TRANSFORMS.add(name);
+}
+
+registerFn("round", (v: unknown, ...args: unknown[]): number =>
+  Number(Number(v).toFixed(Number(args[0] ?? 0))),
+);
+registerFn("floor", (v: unknown): number => Math.floor(Number(v)));
+registerFn("ceil", (v: unknown): number => Math.ceil(Number(v)));
+registerFn("abs", (v: unknown): number => Math.abs(Number(v)));
+registerFn("clamp", (v: unknown, ...args: unknown[]): number =>
+  Math.min(Math.max(Number(v), Number(args[0])), Number(args[1])),
+);
+// min/max are polymorphic: variadic over scalars ("a | min(b, c)")
+// and aggregate an array ("self.col.q2 | min()"). Empty and
+// non-finite cells are skipped - a sparse column aggregates its
+// data, it does not poison it with NaN.
+registerFn("min", (v: unknown, ...args: unknown[]): number =>
+  Math.min(
+    ...((Array.isArray(v) ? v : [v, ...args]) as unknown[])
+      .map((x) => Number(x))
+      .filter((x) => Number.isFinite(x)),
+  ),
+);
+registerFn("max", (v: unknown, ...args: unknown[]): number =>
+  Math.max(
+    ...((Array.isArray(v) ? v : [v, ...args]) as unknown[])
+      .map((x) => Number(x))
+      .filter((x) => Number.isFinite(x)),
+  ),
+);
+
+/** Named constants available in every formula and chart filter
+ * (docs/specs/formulas.md). A column of the same name shadows the
+ * constant - contexts are seeded with these, then the row's
+ * columns overwrite them. */
+export const CONSTANTS: Readonly<Record<string, number>> = {
+  pi: Math.PI,
+  tau: 2 * Math.PI,
+  e: Math.E,
+};
+
+/** Coerce a piped value into a numeric sample list: a scalar reads
+ * as a one-sample signal, an array elementwise. */
+const samples = (v: unknown): number[] => {
+  const list = Array.isArray(v) ? v : [v];
+  return list.map((x) => Number(x));
+};
+/** Aggregate input: missing cells are skipped, not counted. */
+const finite = (v: unknown): number[] =>
+  samples(v).filter((x) => Number.isFinite(x));
+/** Signal input: missing samples read as 0 - the DSP convention
+ * for gaps (a spectrum must not depend on sparse formatting). */
+const signal = (v: unknown): number[] =>
+  samples(v).map((x) => (Number.isFinite(x) ? x : 0));
+
+// --- Powers, roots, logs ---------------------------------------------
+registerFn("sqrt", (v: unknown): number => Math.sqrt(Number(v)));
+registerFn("cbrt", (v: unknown): number => Math.cbrt(Number(v)));
+registerFn("pow", (v: unknown, n: unknown): number =>
+  Math.pow(Number(v), Number(n)),
+);
+registerFn("exp", (v: unknown): number => Math.exp(Number(v)));
+registerFn("ln", (v: unknown): number => Math.log(Number(v)));
+registerFn("log10", (v: unknown): number => Math.log10(Number(v)));
+registerFn("log2", (v: unknown): number => Math.log2(Number(v)));
+
+// --- Trigonometry (radians unless noted) ------------------------------
+registerFn("sin", (v: unknown): number => Math.sin(Number(v)));
+registerFn("cos", (v: unknown): number => Math.cos(Number(v)));
+registerFn("tan", (v: unknown): number => Math.tan(Number(v)));
+registerFn("asin", (v: unknown): number => Math.asin(Number(v)));
+registerFn("acos", (v: unknown): number => Math.acos(Number(v)));
+registerFn("atan", (v: unknown): number => Math.atan(Number(v)));
+// The piped value is y: "dy | atan2(dx)".
+registerFn("atan2", (v: unknown, x: unknown): number =>
+  Math.atan2(Number(v), Number(x)),
+);
+registerFn("sinh", (v: unknown): number => Math.sinh(Number(v)));
+registerFn("cosh", (v: unknown): number => Math.cosh(Number(v)));
+registerFn("tanh", (v: unknown): number => Math.tanh(Number(v)));
+registerFn("deg", (v: unknown): number => (Number(v) * 180) / Math.PI);
+registerFn("rad", (v: unknown): number => (Number(v) * Math.PI) / 180);
+
+// --- Number utility ----------------------------------------------------
+registerFn("sign", (v: unknown): number => Math.sign(Number(v)));
+// True modulo: the result takes the divisor's sign, unlike JS %.
+registerFn("mod", (v: unknown, n: unknown): number => {
+  const a = Number(v);
+  const b = Number(n);
+  return ((a % b) + b) % b;
+});
+registerFn("hypot", (v: unknown, x: unknown): number =>
+  Math.hypot(Number(v), Number(x)),
+);
+
+// --- Column aggregates (self.col.name; scalars pass through) ----------
+const mean = (xs: number[]): number =>
+  xs.length === 0 ? Number.NaN : xs.reduce((a, b) => a + b, 0) / xs.length;
+registerFn("sum", (v: unknown): number => finite(v).reduce((a, b) => a + b, 0));
+registerFn("count", (v: unknown): number => finite(v).length);
+registerFn("mean", (v: unknown): number => mean(finite(v)));
+registerFn("median", (v: unknown): number => {
+  const xs = finite(v).sort((a, b) => a - b);
+  const mid = Math.floor(xs.length / 2);
+  return xs.length === 0
+    ? Number.NaN
+    : xs.length % 2 === 1
+      ? (xs[mid] ?? Number.NaN)
+      : ((xs[mid - 1] ?? 0) + (xs[mid] ?? 0)) / 2;
+});
+// Sample standard deviation (n-1), the spreadsheet convention.
+registerFn("stdev", (v: unknown): number => {
+  const xs = finite(v);
+  if (xs.length < 2) return Number.NaN;
+  const m = mean(xs);
+  return Math.sqrt(
+    xs.reduce((a, b) => a + (b - m) * (b - m), 0) / (xs.length - 1),
+  );
+});
+registerFn("first", (v: unknown): number => finite(v)[0] ?? Number.NaN);
+registerFn("last", (v: unknown): number => {
+  const xs = finite(v);
+  return xs[xs.length - 1] ?? Number.NaN;
+});
+registerFn("at", (v: unknown, i: unknown): number => {
+  const xs = Array.isArray(v) ? v : [v];
+  const got = xs[Number(i)];
+  return typeof got === "number" ? got : Number(got ?? Number.NaN);
+});
+
+// --- Signal transforms (the piped array is the signal) ----------------
+// The textbook DFT, one bin at a time - O(N) per row, which keeps
+// the catalog honest: a row's formula computes that row's bin.
+//   X_k = sum_n x_n * e^{-i 2 pi k n / N}
+const dftReOf = (xs: number[], k: number): number => {
+  let re = 0;
+  for (let n = 0; n < xs.length; n++) {
+    re += (xs[n] ?? 0) * Math.cos((2 * Math.PI * k * n) / xs.length);
+  }
+  return re;
+};
+const dftImOf = (xs: number[], k: number): number => {
+  let im = 0;
+  for (let n = 0; n < xs.length; n++) {
+    im -= (xs[n] ?? 0) * Math.sin((2 * Math.PI * k * n) / xs.length);
+  }
+  return im;
+};
+registerFn("dftRe", (v: unknown, k: unknown): number =>
+  dftReOf(signal(v), Number(k)),
+);
+registerFn("dftIm", (v: unknown, k: unknown): number =>
+  dftImOf(signal(v), Number(k)),
+);
+registerFn("dftMag", (v: unknown, k: unknown): number => {
+  const xs = signal(v);
+  const kk = Number(k);
+  return Math.hypot(dftReOf(xs, kk), dftImOf(xs, kk));
+});
+registerFn("dftPhase", (v: unknown, k: unknown): number => {
+  const xs = signal(v);
+  const kk = Number(k);
+  return Math.atan2(dftImOf(xs, kk), dftReOf(xs, kk));
+});
+// Radix-2 Cooley-Tukey FFT: bit-reverse permutation, then butterfly
+// passes. Returns every bin's magnitude - index with "at(k)". The
+// per-bin DFT above and this agree to floating-point rounding
+// (the demo document shows both columns side by side).
+registerFn("fft", (v: unknown): number[] => {
+  const xs = signal(v);
+  const n = xs.length;
+  if (n < 2 || (n & (n - 1)) !== 0) {
+    throw new Error("fft needs a power-of-two number of samples");
+  }
+  const re = xs.slice();
+  const im: number[] = new Array(n).fill(0);
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; (j & bit) !== 0; bit >>= 1) j ^= bit;
+    j |= bit;
+    if (i < j) {
+      const tr = re[i] ?? 0;
+      re[i] = re[j] ?? 0;
+      re[j] = tr;
+      const ti = im[i] ?? 0;
+      im[i] = im[j] ?? 0;
+      im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const half = len >> 1;
+    for (let i = 0; i < n; i += len) {
+      for (let k = 0; k < half; k++) {
+        const wRe = Math.cos(ang * k);
+        const wIm = Math.sin(ang * k);
+        const a = i + k;
+        const b = a + half;
+        const tr = (re[b] ?? 0) * wRe - (im[b] ?? 0) * wIm;
+        const ti = (re[b] ?? 0) * wIm + (im[b] ?? 0) * wRe;
+        re[b] = (re[a] ?? 0) - tr;
+        im[b] = (im[a] ?? 0) - ti;
+        re[a] = (re[a] ?? 0) + tr;
+        im[a] = (im[a] ?? 0) + ti;
+      }
+    }
+  }
+  const out: number[] = new Array(n);
+  for (let k = 0; k < n; k++) {
+    out[k] = Math.hypot(re[k] ?? 0, im[k] ?? 0);
+  }
+  return out;
+});
+// Simple moving average of window w ending at 0-based row index i
+// (inclusive): the average of rows max(0, i-w+1) .. i.
+registerFn("sma", (v: unknown, i: unknown, w: unknown): number => {
+  const xs = signal(v);
+  const end = Math.floor(Number(i)) + 1;
+  const win = Math.max(1, Math.floor(Number(w)));
+  const slice = xs.slice(Math.max(0, end - win), Math.max(0, end));
+  return mean(slice);
+});
 
 /** Other tables of the same document, by id (raw, not recalced). */
 export type TablePool = (id: string) => Table | undefined;
@@ -85,6 +301,13 @@ type RowHandle =
 interface SelfRef {
   handle: RowHandle;
   name: string | null; // null only for a bare handle (error, except row)
+}
+
+/** A whole-column reference - `self.col.name` - feeding the
+ * aggregate and signal transforms an array of the column's
+ * values (numeric or earlier formula columns only). */
+interface ColRef {
+  name: string;
 }
 
 interface CrossRef {
@@ -199,6 +422,7 @@ function compute(
     const stripped = raw.replace(/'[^']*'|"[^"]*"/g, "");
     const selfRefs: SelfRef[] = [];
     const crossRefs: CrossRef[] = [];
+    const colRefs: ColRef[] = [];
     let selfRow = false;
     const neutralized = stripped.replace(
       /@?[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+/g,
@@ -214,9 +438,13 @@ function compute(
             selfRow = true;
             return "_row__REF__";
           }
+          if (segs.length === 2 && segs[0] === "col") {
+            colRefs.push({ name: segs[1] ?? "" });
+            return "_row__REF__";
+          }
           if (segs.length !== 2) {
             fail(
-              `self references are self.prev.q2, self.prevN.q2, self.r4.q2, self.row`,
+              `self references are self.prev.q2, self.prevN.q2, self.r4.q2, self.col.q2, self.row`,
             );
           }
           const handle = parseHandle(segs[0] ?? "");
@@ -273,6 +501,10 @@ function compute(
       if (name === "self") {
         fail("self needs a handle: self.prev.q2, self.r4.q2, self.row");
       }
+      if (name === "col") {
+        fail("col follows self: self.col.q2");
+      }
+      if (name in CONSTANTS) continue;
       const kind = kindOf(name, index);
       if (kind.kind === "unknown") {
         if (name !== table.id && pool(name) !== undefined) {
@@ -305,6 +537,25 @@ function compute(
         if (handle.kind === "absolute" && handle.n < 1) {
           fail("row indexes start at 1");
         }
+      }
+    }
+    for (const ref of colRefs) {
+      const kind = kindOf(ref.name, index);
+      if (kind.kind === "unknown") {
+        fail(`unknown column '${ref.name}'`);
+      }
+      if (kind.kind === "text") {
+        fail(`non-numeric column '${ref.name}'`);
+      }
+      if (kind.kind === "formula-later") {
+        fail(
+          `later formula column '${ref.name}' - a formula may only reference columns to its left`,
+        );
+      }
+      if (kind.kind === "formula-self") {
+        fail(
+          `self-reference '${ref.name}' - a whole-column reference reads the column being computed; use self.prev.${ref.name}`,
+        );
       }
     }
     for (const ref of crossRefs) {
@@ -372,8 +623,22 @@ function compute(
       return snap;
     };
 
+    // Whole-column snapshots are taken ONCE per formula column -
+    // earlier columns are complete, and the row loop never changes
+    // them. Missing cells read NaN, which the aggregate transforms
+    // skip and the signal transforms read as 0.
+    const colSnap: Record<string, unknown> = {};
+    for (const ref of colRefs) {
+      const i = indexByName.get(ref.name) ?? -1;
+      colSnap[ref.name] = rows.map((row) => {
+        const v = row?.[i];
+        return typeof v === "number" ? v : Number.NaN;
+      });
+    }
+
     table.rows.forEach((_row, r) => {
-      const ctx: Record<string, unknown> = {};
+      // Constants first, so a column of the same name shadows them.
+      const ctx: Record<string, unknown> = { ...CONSTANTS };
       for (const [name, i] of indexByName) {
         const c = table.columns[i];
         if (c === undefined) continue;
@@ -388,6 +653,7 @@ function compute(
       }
       const self: Record<string, unknown> = {};
       if (selfRow) self.row = r + 1;
+      if (colRefs.length > 0) self.col = colSnap;
       const selfSnap = (row: number): Record<string, unknown> =>
         snapshot(row, indexByName, table.columns, rows, index, r);
       for (const ref of selfRefs) {
@@ -427,7 +693,15 @@ function compute(
       try {
         const v = jexl.evalSync(stripAtRefs(raw), ctx) as Cell;
         result =
-          typeof v === "number" ? (Number.isFinite(v) ? v : "") : (v ?? "");
+          typeof v === "number"
+            ? Number.isFinite(v)
+              ? v
+              : ""
+            : // fft() alone yields an array - it is meant to be
+              // indexed with at(); a bare array is not a cell.
+              Array.isArray(v)
+              ? ""
+              : (v ?? "");
       } catch (e) {
         throw new Error(
           `Formula '${col.name}' in table '${table.id}': ${

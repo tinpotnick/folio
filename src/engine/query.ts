@@ -4,7 +4,7 @@
  */
 import jexl from "jexl";
 import type { Cell, Chart, Table } from "./index.js";
-import { KEYWORDS, TRANSFORMS } from "./recalc.js";
+import { CONSTANTS, KEYWORDS, TRANSFORMS } from "./recalc.js";
 
 export interface QueryResult {
   columns: string[];
@@ -53,7 +53,9 @@ export function filterIndexes(table: Table, expr: string): number[] {
   const known = new Set(table.columns.map((c) => c.name));
   for (const m of stripped.matchAll(/[A-Za-z_][A-Za-z0-9_]*/g)) {
     const name = m[0];
-    if (KEYWORDS.has(name) || TRANSFORMS.has(name)) continue;
+    if (KEYWORDS.has(name) || TRANSFORMS.has(name) || name in CONSTANTS) {
+      continue;
+    }
     if (!known.has(name)) {
       throw new Error(
         `Filter error: unknown column '${name}' (table ${table.id})`,
@@ -62,7 +64,8 @@ export function filterIndexes(table: Table, expr: string): number[] {
   }
   const out: number[] = [];
   table.rows.forEach((r, i) => {
-    const ctx: Record<string, unknown> = {};
+    // Constants first, so a column of the same name shadows them.
+    const ctx: Record<string, unknown> = { ...CONSTANTS };
     table.columns.forEach((c, ci) => {
       const v = r[ci];
       ctx[c.name] = v === undefined ? Number.NaN : v;

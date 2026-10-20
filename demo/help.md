@@ -205,10 +205,20 @@ language is **Jexl**: numeric columns by name, `+ - * /`,
 parentheses, comparisons (`>`, `<`, `==`), logic (`&&`,
 `||`, `!`), and ternaries — for example
 `q3 > 400 ? "up" : "down"`, or `expr: "(q3 - q2) / q2"` with
-`format: percent`. Transforms apply with a pipe — the pipe binds
-tighter than arithmetic, so parenthesize its operand:
-`((q3 - q2) / q2 * 100) | round(1)` — available transforms are
-`round`, `floor`, `ceil`, `abs`, `min`, `max`.
+`format: percent`. The math catalog is callable two ways: as a
+function (`sqrt(x)`, `hypot(re, im)`) or with a pipe — the pipe
+binds tighter than arithmetic, so parenthesize its operand:
+`((q3 - q2) / q2 * 100) | round(1)`. The catalog: `round`,
+`floor`, `ceil`, `abs`, `clamp`, `min`, `max`, `sqrt`, `cbrt`,
+`pow`, `exp`, `ln`, `log10`, `log2`, `sin`, `cos`, `tan`,
+`asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `deg`,
+`rad`, `sign`, `mod`, `hypot`, and the constants `pi`, `tau`,
+`e`. Whole columns pipe into the aggregates and signal
+transforms (`self.col.q2 | mean()`, `self.col.sig | fft() |
+at(k)`): `sum`, `count`, `mean`, `median`, `stdev`, `first`,
+`last`, `at`, `dftRe`, `dftIm`, `dftMag`, `dftPhase`, `fft`,
+`sma`. See the *Signals and spectra* example for a full
+walkthrough.
 
 Formulas may reference other rows and other tables, all through
 the same namespaced references (plain Jexl context objects - rows
@@ -223,6 +233,9 @@ count from 1 like a spreadsheet's, but addressed by NAME):
   empty.
 - `self.r4.q2` — row 4 of this table. Rows past the data read as
   empty.
+- `self.col.q2` — the WHOLE column as an array (numeric or
+  earlier formula columns): `self.col.q2 | sum()`,
+  `self.col.sig | dftMag(self.row - 1)`.
 - `@budget.r3.q2` — row 3 of the table with id `budget` (the `@`
   matches how charts name their source; the bare form
   `budget.r3.q2` works too). `@budget.prev.q2` is that table's

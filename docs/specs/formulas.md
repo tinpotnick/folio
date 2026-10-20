@@ -20,6 +20,7 @@ addressed BY NAME everywhere, never by spreadsheet coordinates.
 | `self.prev.name` | Previous row | ANY column, including the formula's own — the running-total form |
 | `self.prev2.name` | Two rows back (`prev3`, … by distance) | ANY column; distances before row 1 read empty |
 | `self.r4.name` | Row 4 of this table (1-based) | ANY column; rows past the data read empty |
+| `self.col.name` | The WHOLE column as an array | Numeric or EARLIER formula columns only — feeds the aggregates and signal transforms below |
 | `@budget.r3.q2` | Row 3 of the table with id `budget` (bare `budget.r3.q2` works too) | ANY column of that table, including its computed formulas |
 | `@budget.prev.q2` | The LAST row of that table | A table has no current row inside another table's formula |
 
@@ -53,6 +54,64 @@ and ternaries (note: Jexl 2.x has no word-form logic operators).
   comparisons.
 - Division by zero yields 0; non-finite results render empty
   (reporting contract, ADR-0012).
+
+## Constants
+
+`pi` (π), `tau` (2π), and `e` (Euler's number) are available in
+every formula and chart filter. A column of the same name shadows
+the constant. Example: `sin(2 * pi * 5 * t)`.
+
+## Math function catalog
+
+Every entry below is callable in two forms: the natural call
+`sqrt(x)`, `hypot(re, im)`, `sin(2 * pi * f * t)` — and the pipe
+`x | sqrt()`, which is how transforms apply to a whole expression
+(the pipe binds tighter than arithmetic, so parenthesize its
+operand: `((q3 - q2) / q2 * 100) | round(1)`). Pipes chain:
+`self.col.sig | fft() | at(self.row - 1)`.
+
+**Rounding & limits** (already shipped): `round(p)`, `floor()`,
+`ceil()`, `abs()`, `clamp(lo, hi)`, `min`, `max` — `min`/`max` are
+variadic over scalars (`a | min(b, c)`) and aggregate an array
+(`self.col.q2 | min()`).
+
+**Powers, roots, logs**: `sqrt()`, `cbrt()`, `pow(n)`, `exp()`,
+`ln()`, `log10()`, `log2()`.
+
+**Trigonometry** (radians unless noted): `sin()`, `cos()`, `tan()`,
+`asin()`, `acos()`, `atan()`, `atan2(x)` — the piped value is the
+*y*: `dy | atan2(dx)`; hyperbolic `sinh()`, `cosh()`, `tanh()`;
+`deg()` converts radians→degrees, `rad()` degrees→radians.
+
+**Number utility**: `sign()`, `mod(n)` (true modulo — the result
+takes the divisor's sign, unlike JS `%`), `hypot(x)` —
+`Math.hypot(piped, x)`.
+
+**Column aggregates** — pipe a whole column (`self.col.name`) or a
+scalar; empty and non-finite cells are skipped, so a sparse column
+aggregates its data honestly: `sum()`, `count()`, `mean()`,
+`median()`, `stdev()` (sample, n−1), `min()`, `max()`, `first()`,
+`last()`, `at(i)` (0-based; out-of-range reads empty).
+
+**Signal transforms** — the piped array is the sampled signal
+(`self.col.name`); missing samples read as 0:
+
+| Transform | Meaning |
+|---|---|
+| `dftRe(k)` / `dftIm(k)` | Real/imaginary part of DFT bin *k* — the textbook O(N) sum |
+| `dftMag(k)` | Magnitude of DFT bin *k* |
+| `dftPhase(k)` | Phase angle of bin *k*, radians |
+| `fft()` | Radix-2 Cooley–Tukey FFT; returns every bin's magnitude as an array (N must be a power of two; pair with `at(k)`) |
+| `sma(i, w)` | Simple moving average of window *w* ending at row index *i* (0-based, inclusive) |
+
+Whole-column references are read ONCE per formula column, from the
+recalced state — earlier formula columns are complete, later ones
+are rejected with the standard "columns to its left" error, and the
+formula's own column is rejected pointing at `self.prev`. Text
+columns are rejected (numeric only). The canonical walkthrough
+document is `demo/examples/signal-processing.md` — a 64-row
+signal, its DFT/FFT spectrum, and a recursive filter, each step
+computed in the table and plotted.
 
 ## Chart filters speak the same language
 

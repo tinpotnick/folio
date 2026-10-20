@@ -151,6 +151,25 @@ describe("filterIndexes / sortIndexes (dataset browser primitives)", () => {
     expect(() => filterIndexes(table, "nope > 1")).toThrow(/unknown column/);
   });
 
+  it("chart filters see the math constants (a column shadows them)", () => {
+    // tau*3 is about 18.85 - rows 1 and 2 clear the bar.
+    expect(filterIndexes(table, "v > tau * 3")).toEqual([1, 2]);
+    expect(filterIndexes(table, "v > 5")).toEqual([0, 1, 2]);
+    const withE: Table = {
+      id: "t2",
+      columns: [
+        { name: "e", type: "number" },
+        { name: "v", type: "number" },
+      ],
+      rows: [
+        [100, 1],
+        [1, 2],
+      ],
+    };
+    // The COLUMN e (100, 1) shadows Euler's number.
+    expect(filterIndexes(withE, "e > 50")).toEqual([0]);
+  });
+
   it("sortIndexes sorts indexes without touching the model", () => {
     expect(sortIndexes(table, "v", "desc")).toEqual([1, 2, 0]);
     expect(sortIndexes(table, "v", "asc")).toEqual([0, 2, 1]);

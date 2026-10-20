@@ -1,0 +1,294 @@
+---
+theme: technical
+---
+
+# Signals and spectra
+
+This document is a worked example of folio's math catalog: every
+number in every table below is a formula, computed row by row as
+you read. The signal is synthesized, transformed into the
+frequency domain two ways (a textbook DFT and a radix-2 FFT), and
+pushed through a recursive low-pass filter - all inside one
+table, all visible in the Markdown source.
+
+## Two tones
+
+A one-second signal sampled 64 times a second (fs = 64 Hz): a
+5 Hz sine at full amplitude and a 20 Hz sine at 0.6, summed
+sample by sample. The `t` column is the sample time, `sig` the
+signal itself - the table *is* the signal:
+
+::: table {#signal}
+caption: "A 64-sample signal: two sine tones, all formula columns"
+columns:
+  - {name: n, type: number, align: right}
+  - {name: t, type: formula, unit: "s", align: right, expr: "(self.row - 1) / 64"}
+  - {name: sig, type: formula, align: right, expr: "sin(2 * pi * 5 * t) + 0.6 * sin(2 * pi * 20 * t)"}
+  - {name: lp, type: formula, align: right, expr: "0.2 * sig + (self.row == 1 ? sig : 0.8 * self.prev.lp)"}
+  - {name: freq, type: formula, unit: "Hz", align: right, expr: "self.row - 1"}
+  - {name: re, type: formula, align: right, expr: "round(dftRe(self.col.sig, self.row - 1), 6)"}
+  - {name: im, type: formula, align: right, expr: "round(dftIm(self.col.sig, self.row - 1), 6)"}
+  - {name: mag, type: formula, align: right, expr: "sqrt(re * re + im * im)"}
+  - {name: fftmag, type: formula, align: right, expr: "round(at(fft(self.col.sig), self.row - 1), 6)"}
+  - {name: lpmag, type: formula, align: right, expr: "round(dftMag(self.col.lp, self.row - 1), 6)"}
+data:
+  - [1]
+  - [2]
+  - [3]
+  - [4]
+  - [5]
+  - [6]
+  - [7]
+  - [8]
+  - [9]
+  - [10]
+  - [11]
+  - [12]
+  - [13]
+  - [14]
+  - [15]
+  - [16]
+  - [17]
+  - [18]
+  - [19]
+  - [20]
+  - [21]
+  - [22]
+  - [23]
+  - [24]
+  - [25]
+  - [26]
+  - [27]
+  - [28]
+  - [29]
+  - [30]
+  - [31]
+  - [32]
+  - [33]
+  - [34]
+  - [35]
+  - [36]
+  - [37]
+  - [38]
+  - [39]
+  - [40]
+  - [41]
+  - [42]
+  - [43]
+  - [44]
+  - [45]
+  - [46]
+  - [47]
+  - [48]
+  - [49]
+  - [50]
+  - [51]
+  - [52]
+  - [53]
+  - [54]
+  - [55]
+  - [56]
+  - [57]
+  - [58]
+  - [59]
+  - [60]
+  - [61]
+  - [62]
+  - [63]
+  - [64]
+:::
+
+The time domain plot - 64 samples, two visible wiggles:
+
+::: chart {#time-chart}
+source: @signal
+query: {select: [n, sig]}
+type: line
+caption: "Time domain: a 5 Hz tone riding a 20 Hz ripple (64 samples = 1 s)"
+:::
+
+## From time to frequency
+
+A signal can be described two ways: as it changes in time (above)
+or as the pure tones it is built from (below). The bridge is the
+discrete Fourier transform. For each frequency bin *k* it asks:
+how much of the signal rotates *k* times per window? Using
+Euler's formula, one bin of the DFT is a single sum:
+
+$$
+X_k = \sum_{n=0}^{N-1} x_n \, e^{-i\,2\pi k n / N}
+$$
+
+Splitting $e^{-i\theta}$ into its real and imaginary parts gives
+the two sums the table computes per row (`re` and `im`, rounded
+to six decimals so the table reads like a report, not a float
+dump), and the magnitude of a complex number - the length of its
+vector - is the `mag` column, exactly as written:
+
+$$
+|X_k| = \sqrt{(\mathrm{Re}\, X_k)^2 + (\mathrm{Im}\, X_k)^2}
+$$
+
+The per-bin cost is the textbook implementation - O(N) per bin,
+O(N^2) for the whole spectrum, and completely unambiguous:
+
+```ts
+function dftBin(x: number[], k: number): [number, number] {
+  const N = x.length;
+  let re = 0;
+  let im = 0;
+  for (let n = 0; n < N; n++) {
+    const angle = (-2 * Math.PI * k * n) / N;
+    re += x[n] * Math.cos(angle);
+    im += x[n] * Math.sin(angle);
+  }
+  return [re, im];
+}
+```
+
+Because `fs` is 64 Hz and the window holds 64 samples, bin *k*
+is literally the frequency *k* Hz - the `freq` column. Plotting
+`mag` against `freq`:
+
+::: chart {#spectrum-chart}
+source: @signal
+query: {select: [freq, mag]}
+type: bar
+caption: "Frequency domain: energy peaks at 5 Hz and 20 Hz"
+:::
+
+Two things deserve a look. The peaks land at exactly 32 and 19.2
+- that is N/2 times each tone's amplitude, the DFT's promise.
+And the spectrum is mirrored around the Nyquist frequency
+(32 Hz): a 5 Hz tone also appears at 59 Hz because a real-valued
+signal cannot tell +5 from -5 apart. Both halves carry the same
+information.
+
+## The FFT: divide and conquer
+
+The fast Fourier transform computes the same bins, but it never
+computes a bin from scratch. It splits the signal into even- and
+odd-indexed samples, transforms each half (recursively), and
+stitches them with the butterfly - the two outputs of one
+complex multiply:
+
+$$
+X_k = E_k + e^{-i 2\pi k/N} O_k \qquad
+X_{k+N/2} = E_k - e^{-i 2\pi k/N} O_k
+$$
+
+An iterative radix-2 version - bit-reverse the input order, then
+fly through the butterflies - runs in O(N log N) instead of
+O(N^2), which is the difference between a heartbeat and a coffee
+break at a million samples:
+
+```ts
+function fftMagnitudes(x: number[]): number[] {
+  const N = x.length; // power of two
+  const re = [...x];
+  const im = new Array(N).fill(0);
+  for (let i = 1, j = 0; i < N; i++) {
+    let bit = N >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j |= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= N; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    for (let i = 0; i < N; i += len) {
+      for (let k = 0; k < len / 2; k++) {
+        const wr = Math.cos(ang * k);
+        const wi = Math.sin(ang * k);
+        const a = i + k;
+        const b = a + len / 2;
+        const tr = re[b] * wr - im[b] * wi;
+        const ti = re[b] * wi + im[b] * wr;
+        re[b] = re[a] - tr;
+        im[b] = im[a] - ti;
+        re[a] = re[a] + tr;
+        im[a] = im[a] + ti;
+      }
+    }
+  }
+  return re.map((r, k) => Math.hypot(r, im[k]));
+}
+```
+
+The table's `fftmag` column runs this against the whole `sig`
+column and picks out one bin per row (`at(fft(...), k)`). Compare
+`mag` and `fftmag` in the table: they agree to floating-point
+rounding - two very different algorithms, one answer.
+
+## Filters: smoothing in time
+
+A one-pole exponential moving average is the simplest recursive
+low-pass filter: each output is a blend of the current input and
+the previous output.
+
+$$
+y_n = \alpha\, x_n + (1-\alpha)\, y_{n-1}
+$$
+
+That recurrence is exactly what the `lp` column computes - note
+`self.prev.lp`, the previous row of the formula's own column, the
+same mechanism that powers running totals:
+
+```ts
+function ema(x: number[], alpha: number): number[] {
+  const y: number[] = [];
+  for (let n = 0; n < x.length; n++) {
+    y.push(n === 0 ? x[0] : alpha * x[n] + (1 - alpha) * y[n - 1]);
+  }
+  return y;
+}
+```
+
+The price of smoothing is lag: the filtered curve in red below
+starts at the signal's first value and takes a few samples to
+settle into its slower rhythm:
+
+::: chart {#filtered-time-chart}
+source: @signal
+query: {select: [n, lp]}
+type: line
+caption: "The filtered signal: the 20 Hz ripple is gone"
+:::
+
+## Hearing the filter in the spectrum
+
+What did the filter do? Take the DFT of the *filtered* signal -
+the `lpmag` column - and plot it against frequency:
+
+::: chart {#filtered-spectrum-chart}
+source: @signal
+query: {select: [freq, lpmag]}
+type: bar
+caption: "The filtered spectrum: high tones fade, low tones survive"
+:::
+
+The 20 Hz tone is crushed to about 13% of its amplitude while the
+5 Hz tone keeps about 42%. That is what "low-pass" means, made
+measurable. The cutoff of an EMA with smoothing factor $\alpha$
+sampled at $f_s$ sits at:
+
+$$
+f_c = -\frac{f_s}{2\pi} \ln(1-\alpha)
+$$
+
+With $\alpha = 0.2$ and $f_s = 64\,\mathrm{Hz}$ that is about
+2.27 Hz - well below both tones, which is why they both shrink,
+the higher one faster.
+
+## Try it
+
+Nothing here is static. Switch to the Markdown view and change
+the second tone in `sig` from 20 to 40 - the spectrum peak slides
+to 40 Hz and its mirror to 24. Raise the 20 Hz amplitude past the
+5 Hz one and watch the time-domain plot change its mind about
+which wiggle dominates. Set $\alpha$ to 0.5 in `lp` and the
+cutoff rises to about 7 Hz - the 5 Hz tone starts to survive.
+Every chart follows, because every chart is a query over the
+same living table.

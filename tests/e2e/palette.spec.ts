@@ -212,6 +212,41 @@ test.describe("example documents", () => {
       { timeout: 10_000 },
     );
   });
+
+  test("Open example: signal-processing renders spectra and live math", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await openPalette(page);
+    await page
+      .locator("#palette-list .palette-item", {
+        hasText: "Open example: signal-processing",
+      })
+      .first()
+      .click();
+    await expect(
+      page.locator("folio-doc h1", { hasText: "Signals and spectra" }),
+    ).toBeVisible();
+    // Four charts: two time-domain lines, two frequency-domain bars.
+    await expect(page.locator("#the-doc .chart-holder svg")).toHaveCount(4);
+    // The equations typeset (KaTeX) and the FFT code block shows.
+    await expect(
+      page.locator("#the-doc figure.folio-math .katex").first(),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#the-doc figure.folio-math")).toHaveCount(5);
+    await expect(
+      page.locator("#the-doc pre.folio-code", {
+        hasText: "fftMagnitudes",
+      }),
+    ).toBeVisible();
+    // The math catalog computed: the table carries the DFT's promised
+    // peak (32) on the 5 Hz row and the 20 Hz peak (19.2).
+    const fifthRow = page.locator("#the-doc table.folio-table tr").nth(6);
+    await expect(fifthRow).toContainText("32", { timeout: 10_000 });
+    await expect(
+      page.locator("#the-doc table.folio-table tr").nth(21),
+    ).toContainText("19.2");
+  });
   test("Open example: music renders playable strudel figures", async ({
     page,
   }) => {

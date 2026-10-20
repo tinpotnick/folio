@@ -18,12 +18,15 @@ test.describe("links", () => {
   test("the sample document links the other examples", async ({ page }) => {
     await waitForDocument(page);
     const links = page.locator("#the-doc a");
-    // Poem, accounts, technical, report, and music.
-    await expect(links).toHaveCount(5);
+    // Poem, accounts, technical, signal-processing, report, and music.
+    await expect(links).toHaveCount(6);
     await expect(links.first()).toHaveAttribute(
       "href",
       "demo/examples/poem.md",
     );
+    await expect(
+      page.locator("#the-doc a", { hasText: "Signals and spectra" }),
+    ).toHaveAttribute("href", "demo/examples/signal-processing.md");
   });
 
   test("clicking a document link opens it in place", async ({ page }) => {

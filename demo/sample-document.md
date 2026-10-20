@@ -115,6 +115,9 @@ in place:
   formulas, and a chart that shows a decline.
 - [A technical paper](demo/examples/technical.md) - equations,
   code, and diagrams.
+- [Signals and spectra](demo/examples/signal-processing.md) - a
+  64-sample signal, its FFT spectrum, and a low-pass filter, every
+  number a live formula.
 - [An imported-data report](demo/examples/report.md) - a 72-row
   import with running formulas and line charts.
 - [A music document](demo/examples/music.md) - Strudel patterns
