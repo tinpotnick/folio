@@ -15,12 +15,13 @@ language — in coding blocks that play right in the page.
 Click into the block, then press ▶ Play in its header:
 
 ```strudel
-note("c a f e").s(0.1)
+note("c a f e").decay(0.15).sustain(0)
 ```
 
 That single line is a loop: the mini-notation inside the quotes
 steps through the notes `c a f e`, one per cycle position, and
-`.s(0.1)` fades each note quickly. Edit the pattern right in the
+`.decay(0.15).sustain(0)` makes each note die away quickly instead
+of holding. Edit the pattern right in the
 block - while it plays, ▶ Update applies the edit - or in the
 Markdown view.
 
@@ -30,10 +31,29 @@ A slightly bigger pattern — a kick on every beat, a melody
 weaving through it:
 
 ```strudel
-s("<[~ sd*2]! ~>").bank("RolandTR808")
-  .slow(2)
-  .stack(note("<a4 [c5 e5] g4 f4>").lp(800))
+stack(
+  s("bd*4"),
+  s("~ sd ~ sd"),
+  s("hh*8").gain(0.4),
+  note("<a4 [c5 e5] g4 f4>").lpf(800)
+)
 ```
+
+Line by line:
+
+- `s("bd*4")` — `s` picks a sound; `bd` is the kick drum, and `*4`
+  plays it four times per cycle: a kick on every beat.
+- `s("~ sd ~ sd")` — four steps, where `~` is a rest: the snare
+  (`sd`) lands on beats two and four.
+- `s("hh*8").gain(0.4)` — closed hi-hat eight times per cycle,
+  turned down so it sits behind the rest.
+- `note("<a4 [c5 e5] g4 f4>")` — the melody. `<...>` plays ONE
+  entry per cycle, taking turns, and `[c5 e5]` squeezes two notes
+  into one step. `.lpf(800)` (a low-pass filter) softens the tone.
+- `stack(...)` plays all four layers at the same time.
+
+The drums come from folio's built-in kit — the in-app help lists
+every drum name (`bd`, `sd`, `hh`, `oh`, `cp`, toms, cymbals).
 
 Press ■ Stop when the neighbours complain.
 
