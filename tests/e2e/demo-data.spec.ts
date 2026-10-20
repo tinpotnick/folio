@@ -68,3 +68,30 @@ test.describe("demo data and the report example", () => {
     );
   });
 });
+
+test.describe("dense charts in the report example", () => {
+  test("24-month charts do not clump: thinned ticks, sparse labels, axis titles", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await runPaletteCommand(page, "report");
+    await expect(
+      page.locator("folio-doc h1", { hasText: "Two-year sales report" }),
+    ).toBeVisible();
+    const north = page.locator('figure[data-chart-source="monthly-sales"]');
+    // One chart at a time (the example has two).
+    const holder = north.locator(".chart-holder").first();
+    await expect(holder.locator(".x-tick").first()).toBeVisible();
+    // 24 monthly points: the x axis thins to at most eight
+    // labels instead of 24 clumped ones.
+    const xTicks = await holder.locator(".x-tick").count();
+    expect(xTicks).toBeLessThanOrEqual(8);
+    // Value labels only on the extremes and the last point.
+    const vLabels = await holder.locator(".v-label").count();
+    expect(vLabels).toBeLessThanOrEqual(3);
+    // Axis titles name the query's columns - the chart explains
+    // itself.
+    await expect(holder).toContainText("month");
+    await expect(holder).toContainText("revenue (£k)");
+  });
+});
