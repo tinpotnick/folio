@@ -265,6 +265,16 @@ numeric columns are referenceable in formulas (except through
 recalculate the moment any cell they depend on changes — including
 rows they reference; formula cells are never editable by hand.
 
+## Undo and redo
+
+- Press **Ctrl+Z** to undo, **Ctrl+Shift+Z** (or Ctrl+Y) to redo -
+  or use the undo/redo buttons at the front of the toolbar (grey
+  when there is nothing to step). One undo is one action: a burst
+  of typing, a cell edit, an insert, a deletion, an inspector
+  change. Opening a different document starts the history fresh;
+  settings and Markdown-view edits are undoable steps like any
+  other change. Text fields keep their own native undo.
+
 ## Search
 
 - Press **Ctrl+K** (or the magnifier button in the toolbar) to open

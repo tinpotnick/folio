@@ -97,6 +97,34 @@ const PLAY_LABEL = "▶ Play";
 const PLAYING_LABEL = "▶ Playing…";
 const UPDATE_LABEL = "▶ Update";
 
+/**
+ * A structural deep clone for undo snapshots: objects and arrays
+ * are rebuilt node by node, but STRINGS are shared (immutable in
+ * JS) - a document full of audio data URIs snapshots for the cost
+ * of its block structure, never its media bytes.
+ */
+function cloneBlocks(blocks: DocBlock[]): DocBlock[] {
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (v !== null && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>)) {
+        out[k] = walk((v as Record<string, unknown>)[k]);
+      }
+      return out;
+    }
+    return v;
+  };
+  return blocks.map((b) => walk(b) as DocBlock);
+}
+
+/** Undo grouping: same-label changes within this window are one step. */
+const COALESCE_MS = 600;
+/** Two changes this close are one user action, whatever their labels. */
+const ACTION_MS = 100;
+/** The undo stack's ceiling. */
+const HISTORY_MAX = 100;
+
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
     return ["src"];
@@ -143,6 +171,21 @@ export class FolioDoc extends HTMLElement {
   private strudelPlaying: StrudelPlaying | null = null;
   /** The text each code figure's syntax colors were painted for. */
   private painted = new WeakMap<HTMLElement, string>();
+  /**
+   * Undo/redo (spec: docs/specs/undo-redo.md): snapshots of the
+   * block list, taken at the `emitChange` chokepoint. Strings are
+   * shared (immutable), so data URIs never get copied per
+   * snapshot; consecutive same-label changes within the coalesce
+   * window merge into one step (a typing burst is one undo).
+   */
+  private undoStack: DocBlock[][] = [];
+  private redoStack: DocBlock[][] = [];
+  /** The blocks as of the last change - the NEXT group's pre-state. */
+  private committed: DocBlock[] | null = null;
+  private activeLabel: string | null = null;
+  private lastChangeAt = 0;
+  /** Restores re-render and re-emit; they must not become history. */
+  private restoring = false;
 
   constructor() {
     super();
@@ -163,7 +206,15 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
-  async load(src: string): Promise<void> {
+  /**
+   * Load a document. History semantics (spec: undo-redo.md): a
+   * DIFFERENT document (open, example, followed link) starts the
+   * history fresh; the same bytes (a view round-trip) keep it;
+   * `keepHistory` turns a model-level change made outside the
+   * article (settings apply, markdown-view edits) into ONE undo
+   * step instead of a reset.
+   */
+  async load(src: string, opts?: { keepHistory?: boolean }): Promise<void> {
     if (!src.trim()) {
       this.renderEmpty();
       return;
@@ -177,10 +228,21 @@ export class FolioDoc extends HTMLElement {
         if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
         text = await res.text();
       }
-      this.doc = parseDoc(text);
+      const parsed = parseDoc(text);
+      const same =
+        this.doc !== null && serializeDoc(this.doc) === serializeDoc(parsed);
+      this.doc = parsed;
       // A new document invalidates any open dataset browser.
       this.closeDataset();
-      this.render();
+      if (same) {
+        this.render();
+      } else if (opts?.keepHistory) {
+        this.render();
+        this.noteHistory("load");
+      } else {
+        this.clearHistory();
+        this.render();
+      }
     } catch (e) {
       this.renderError(e instanceof Error ? e.message : String(e));
     }
@@ -224,9 +286,125 @@ export class FolioDoc extends HTMLElement {
     this.listeners.push(fn);
   }
 
-  private emitChange(): void {
+  private emitChange(label = "edit"): void {
     if (!this.doc) return;
+    this.noteHistory(label);
     for (const fn of this.listeners) fn(this.doc);
+  }
+
+  /**
+   * Record a change against the undo history. Changes group into
+   * undo steps: the same label within COALESCE_MS (a typing
+   * burst) or anything within ACTION_MS (the several emits of
+   * one user action - a keystroke commits a cell AND syncs the
+   * article) merges; a new group pushes the last committed state
+   * as that step's pre-image and clears redo.
+   */
+  private noteHistory(label: string): void {
+    if (!this.doc || this.restoring) return;
+    const now = Date.now();
+    const same =
+      (label === this.activeLabel && now - this.lastChangeAt < COALESCE_MS) ||
+      now - this.lastChangeAt < ACTION_MS;
+    if (this.committed === null) {
+      this.committed = cloneBlocks(this.doc.blocks);
+      this.activeLabel = label;
+      this.lastChangeAt = now;
+      this.dispatchHistory();
+      return;
+    }
+    if (!same) {
+      this.undoStack.push(this.committed);
+      if (this.undoStack.length > HISTORY_MAX) this.undoStack.shift();
+      this.redoStack = [];
+      this.activeLabel = label;
+    }
+    this.committed = cloneBlocks(this.doc.blocks);
+    this.lastChangeAt = now;
+    this.dispatchHistory();
+  }
+
+  private clearHistory(): void {
+    this.undoStack = [];
+    this.redoStack = [];
+    this.activeLabel = null;
+    this.lastChangeAt = 0;
+    this.committed = this.doc ? cloneBlocks(this.doc.blocks) : null;
+    this.dispatchHistory();
+  }
+
+  /** The host mirrors canUndo/canRedo onto its toolbar buttons. */
+  private dispatchHistory(): void {
+    this.dispatchEvent(
+      new CustomEvent("folio-history", {
+        detail: { canUndo: this.canUndo(), canRedo: this.canRedo() },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+
+  canRedo(): boolean {
+    return this.redoStack.length > 0;
+  }
+
+  /**
+   * Step back to the pre-image of the current change group. The
+   * restore re-renders and re-emits, but never re-enters history.
+   */
+  undo(): boolean {
+    if (!this.doc || this.undoStack.length === 0) return false;
+    const caretIdx = this.blockIndexAtCaret();
+    const snapshot = this.undoStack.pop() as DocBlock[];
+    this.redoStack.push(cloneBlocks(this.doc.blocks));
+    this.doc = { ...this.doc, blocks: cloneBlocks(snapshot) };
+    this.committed = cloneBlocks(this.doc.blocks);
+    this.activeLabel = null;
+    this.lastChangeAt = 0;
+    this.restoring = true;
+    try {
+      this.closeDataset();
+      this.render();
+      this.emitChange();
+    } finally {
+      this.restoring = false;
+    }
+    // The restore's render replaced the article; without this
+    // a follow-up keystroke (a second Ctrl+Z) goes nowhere.
+    const last = (this.doc?.blocks.length ?? 1) - 1;
+    this.focusBlockStart(Math.max(0, Math.min(caretIdx, last)), true);
+    this.dispatchHistory();
+    return true;
+  }
+
+  /** Step forward again, mirroring undo(). */
+  redo(): boolean {
+    if (!this.doc || this.redoStack.length === 0) return false;
+    const caretIdx = this.blockIndexAtCaret();
+    const snapshot = this.redoStack.pop() as DocBlock[];
+    this.undoStack.push(cloneBlocks(this.doc.blocks));
+    this.doc = { ...this.doc, blocks: cloneBlocks(snapshot) };
+    this.committed = cloneBlocks(this.doc.blocks);
+    this.activeLabel = null;
+    this.lastChangeAt = 0;
+    this.restoring = true;
+    try {
+      this.closeDataset();
+      this.render();
+      this.emitChange();
+    } finally {
+      this.restoring = false;
+    }
+    // The restore's render replaced the article; without this
+    // a follow-up keystroke (a second Ctrl+Z) goes nowhere.
+    const last = (this.doc?.blocks.length ?? 1) - 1;
+    this.focusBlockStart(Math.max(0, Math.min(caretIdx, last)), true);
+    this.dispatchHistory();
+    return true;
   }
 
   private renderEmpty(): void {
@@ -577,7 +755,7 @@ export class FolioDoc extends HTMLElement {
     if (!code || (code.textContent ?? "") !== "") return false;
     this.doc.blocks.splice(idx, 1);
     this.render();
-    this.emitChange();
+    this.emitChange("delete");
     if (idx > 0) this.focusBlockStart(idx - 1, true);
     return true;
   }
@@ -1750,7 +1928,7 @@ export class FolioDoc extends HTMLElement {
     const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
     this.doc.blocks.splice(at, 0, { kind: "table", table });
     this.render();
-    this.emitChange();
+    this.emitChange("insert");
   }
 
   /**
@@ -1913,7 +2091,7 @@ export class FolioDoc extends HTMLElement {
     };
     this.doc.blocks.splice(at, 0, { kind: "image", image });
     this.render();
-    this.emitChange();
+    this.emitChange("insert");
   }
 
   /**
@@ -1936,7 +2114,7 @@ export class FolioDoc extends HTMLElement {
     };
     this.doc.blocks.splice(at, 0, { kind: "audio", audio: clip });
     this.render();
-    this.emitChange();
+    this.emitChange("insert");
   }
 
   /** The theme's in-flow row window (table.rows.show, default 50). */
@@ -2531,7 +2709,7 @@ export class FolioDoc extends HTMLElement {
     this.syncFromDom();
     this.commitCaretCell();
     this.freezeStrudelLights();
-    this.emitChange();
+    this.emitChange("type");
   }
 
   /**
@@ -2585,7 +2763,7 @@ export class FolioDoc extends HTMLElement {
     if (row[c] === value) return;
     row[c] = value;
     this.updateRowCalculations(td.closest("figure"), block);
-    this.emitChange();
+    this.emitChange("cell");
   }
 
   /** Refresh the row's formula cells and dependent charts in place. */
@@ -3160,6 +3338,23 @@ export class FolioDoc extends HTMLElement {
     if (ev.target instanceof Element && ev.target.closest(".folio-inspector")) {
       return;
     }
+    // Undo/redo (spec: docs/specs/undo-redo.md). The Markdown
+    // textarea lives outside the shadow root, so its native undo
+    // is untouched; inspector inputs keep their per-field undo
+    // via the guard above.
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey) {
+      const key = ev.key.toLowerCase();
+      if (key === "z" && !ev.shiftKey) {
+        ev.preventDefault();
+        this.undo();
+        return;
+      }
+      if ((key === "z" && ev.shiftKey) || key === "y") {
+        ev.preventDefault();
+        this.redo();
+        return;
+      }
+    }
     const removableFigure =
       ev.target instanceof Element
         ? (ev.target.closest(
@@ -3176,7 +3371,7 @@ export class FolioDoc extends HTMLElement {
       if (idx >= 0) {
         this.doc.blocks.splice(idx, 1);
         this.render();
-        this.emitChange();
+        this.emitChange("delete");
       }
       return;
     }

@@ -542,6 +542,46 @@
       <h1>folio</h1>
       <span class="tag">document-first workspace</span>
       <div class="toolbar">
+        <div class="fmt" id="history-bar">
+          <button
+            id="btn-undo"
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+            disabled
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M3.5 7h6a3 3 0 1 1 0 6H6"
+                stroke-linecap="round"
+              />
+              <path d="M6 4L3.5 7 6 10" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button
+            id="btn-redo"
+            title="Redo (Ctrl+Shift+Z)"
+            aria-label="Redo"
+            disabled
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M12.5 7h-6a3 3 0 1 0 0 6H10"
+                stroke-linecap="round"
+              />
+              <path d="M10 4l2.5 3L10 10" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
         <div class="fmt" id="block-bar">
           <button data-block="h1" title="Heading 1">H1</button>
           <button data-block="h2" title="Heading 2">H2</button>
