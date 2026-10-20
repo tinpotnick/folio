@@ -63,9 +63,13 @@ RECORDED media (a file the document carries).
   the same `insertAudio()` the file picker uses, with `alt`
   seeded as "recording". A denied or missing microphone is a
   visible status message, never a silent failure; tracks are
-  stopped and the button state cleared either way. Desktop note:
-  the webview must grant mic permission - verify by hand on each
-  host (the engine and the model are unaffected either way).
+  stopped and the button state cleared either way. Desktop: the
+  Tauri shell registers `Builder::on_permission_request` and
+  ALLOWs `PermissionKind::Microphone` - without a handler WebKitGTK
+  silently denies every getUserMedia request. The record button is
+  the consent gesture, so no second prompt; everything else falls
+  through to the platform default. (macOS/iOS still need their
+  own permission plumbing - untested there.)
 - **Figure, not an editing surface**: `figure.folio-audio`
   (shadow-root scoped CSS: full-width element, the image figure's
   margins and focus outline) is `contentEditable="false"`, carries

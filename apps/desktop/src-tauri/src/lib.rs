@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use tauri::Manager;
+use tauri::webview::{PermissionKind, PermissionResponse};
 use tauri_plugin_dialog::DialogExt;
 
 /// The result of a successful open: the file's PATH (the host
@@ -155,6 +156,14 @@ async fn save_document(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Recording (spec: docs/specs/audio-embeds.md) is a
+        // first-class feature: the record button IS the consent
+        // gesture. Without a handler WebKitGTK silently DENIES
+        // every getUserMedia request - "permission denied".
+        .on_permission_request(|_webview, kind| match kind {
+            PermissionKind::Microphone => PermissionResponse::Allow,
+            _ => PermissionResponse::Default,
+        })
         .invoke_handler(tauri::generate_handler![open_document, save_document])
         .run(tauri::generate_context!())
         .expect("error while running folio desktop");
