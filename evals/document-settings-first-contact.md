@@ -2,6 +2,8 @@
 name: document-settings-first-contact
 feature: document-settings
 steps:
+  - Open the document settings and switch the Theme select to
+    "editorial"; press Apply.
   - Start the demo host with the sample document. Click the gear
     button in the toolbar (or press Ctrl+K and search "settings").
   - Change the body font to Merriweather and Apply.

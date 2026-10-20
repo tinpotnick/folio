@@ -6,6 +6,13 @@ import { expect, test, type Page } from "@playwright/test";
  * writes through the same parse/serialize pipeline as hand edits.
  */
 
+async function loadDoc(page: Page, markdown: string): Promise<void> {
+  await waitForDocument(page);
+  await page.locator("#btn-markdown").click();
+  await page.locator("#editor").fill(markdown);
+  await page.locator("#btn-view").click();
+}
+
 async function waitForDocument(page: Page): Promise<void> {
   await page.goto("/");
   await expect(
@@ -137,5 +144,57 @@ test.describe("document settings", () => {
     await openSettings(page);
     await expect(page.locator("#set-palette")).toHaveValue("corporate");
     await page.locator("#btn-settings-cancel").click();
+  });
+});
+
+test.describe("themes", () => {
+  test("the dialog lists the shipped themes and switching re-renders", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    // The sample declares theme: corporate-report - the select
+    // honors the document's own frontmatter. (Its charts stay
+    // folio-blue: the sample also sets chart.palette: "muted",
+    // and a style key always overrides the theme.)
+    await page.locator("#btn-settings").click();
+    const themeSelect = page.locator("#set-theme");
+    await expect(themeSelect).toHaveValue("corporate-report");
+    const options = await themeSelect.locator("option").allTextContents();
+    expect(options).toContain("default");
+    expect(options).toContain("technical");
+    expect(options).toContain("editorial");
+    await page.locator("#btn-settings-cancel").click();
+
+    // A bare document wears the theme: switch to editorial and
+    // the body becomes Georgia 19px, the theme line written.
+    await loadDoc(page, "# T\n\nHello\n");
+    await page.locator("#btn-settings").click();
+    await expect(page.locator("#set-theme")).toHaveValue("default");
+    await page.locator("#set-theme").selectOption("editorial");
+    await page.locator("#settings-form button[type=submit]").click();
+    const font = await page
+      .locator("#the-doc p")
+      .first()
+      .evaluate((el) => getComputedStyle(el));
+    expect(font.fontFamily.toLowerCase()).toContain("georgia");
+    expect(font.fontSize).toBe("19px");
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "theme: editorial",
+    );
+  });
+
+  test("default removes the theme line; style keys still override", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-settings").click();
+    await page.locator("#set-theme").selectOption("default");
+    await page.locator("#settings-form button[type=submit]").click();
+    await page.locator("#btn-markdown").click();
+    const md = await page.locator("#editor").inputValue();
+    expect(md).not.toContain("theme:");
+    // The style keys the sample sets (fonts, table style) survive.
+    expect(md).toContain("body.font.family");
   });
 });

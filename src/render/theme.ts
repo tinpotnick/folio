@@ -23,7 +23,54 @@ export interface Theme {
 const PALETTES: Record<string, string[]> = {
   muted: ["#4c6ef5", "#12b886", "#fab005", "#e8590c", "#845ef7"],
   corporate: ["#1c3f60", "#2f6a8f", "#6aa2b8", "#b8cdd9", "#3d5a80"],
+  ink: ["#37474f", "#546e7a", "#78909c", "#8d6e63", "#26a69a"],
+  warm: ["#b3592a", "#d08c3c", "#6b8f71", "#a45a7a", "#4a6fa5"],
 };
+
+/**
+ * Named themes (ADR-0002): a theme is a PRESET of typed theme
+ * values, applied before the document's own style keys - a style
+ * key always overrides its theme. Unknown names fall back to the
+ * default look (a document may outlive a theme).
+ */
+export const THEME_PRESETS: Record<string, Partial<Theme>> = {
+  // folio's own look - also the fallback for unknown names.
+  default: {},
+  "corporate-report": {
+    bodyFont: '"Source Serif 4", Georgia, serif',
+    bodySize: "17px",
+    h1Font: '"Source Serif 4", Georgia, serif',
+    h1Size: "28pt",
+    h2Size: "20pt",
+    tableStyle: "booktabs",
+    palette: PALETTES["corporate"] ?? ["#1c3f60"],
+  },
+  technical: {
+    bodyFont: 'ui-sans-serif, system-ui, "Segoe UI", Helvetica, sans-serif',
+    bodySize: "15px",
+    h1Font: 'ui-sans-serif, system-ui, "Segoe UI", Helvetica, sans-serif',
+    h1Size: "22pt",
+    h2Size: "16pt",
+    h3Size: "13.5pt",
+    tableStyle: "plain",
+    palette: PALETTES["ink"] ?? ["#37474f"],
+  },
+  editorial: {
+    bodyFont: 'Georgia, "Times New Roman", serif',
+    bodySize: "19px",
+    h1Font: 'Georgia, "Times New Roman", serif',
+    h1Size: "32pt",
+    h2Size: "22pt",
+    h3Size: "17pt",
+    tableStyle: "booktabs",
+    palette: PALETTES["warm"] ?? ["#b3592a"],
+  },
+};
+
+/** The theme names the settings dialog offers, in order. */
+export function themeNames(): string[] {
+  return Object.keys(THEME_PRESETS);
+}
 
 const DEFAULT_THEME: Theme = {
   bodyFont: "Source Serif 4, Georgia, serif",
@@ -41,26 +88,33 @@ const DEFAULT_THEME: Theme = {
 
 export function themeFromDoc(doc: Doc): Theme {
   const style = new Map(doc.frontmatter.style);
+  // The named theme presets the base look; the document's own
+  // style keys then override key by key (ADR-0002: style lives
+  // with the theme, and explicit always wins).
+  const preset =
+    doc.frontmatter.theme !== undefined
+      ? (THEME_PRESETS[doc.frontmatter.theme] ?? {})
+      : {};
+  const base = { ...DEFAULT_THEME, ...preset };
   return {
     bodyFont: style.get("body.font.family")
       ? `"${style.get("body.font.family")}", Georgia, serif`
-      : DEFAULT_THEME.bodyFont,
-    bodySize: style.get("body.font.size") ?? DEFAULT_THEME.bodySize,
+      : base.bodyFont,
+    bodySize: style.get("body.font.size") ?? base.bodySize,
     h1Font: style.get("h1.font.family")
       ? `"${style.get("h1.font.family")}", Georgia, serif`
-      : DEFAULT_THEME.h1Font,
-    h1Size: style.get("h1.font.size") ?? DEFAULT_THEME.h1Size,
-    h2Size: style.get("h2.font.size") ?? DEFAULT_THEME.h2Size,
-    h3Size: style.get("h3.font.size") ?? DEFAULT_THEME.h3Size,
-    tableStyle: style.get("table.style") ?? DEFAULT_THEME.tableStyle,
+      : base.h1Font,
+    h1Size: style.get("h1.font.size") ?? base.h1Size,
+    h2Size: style.get("h2.font.size") ?? base.h2Size,
+    h3Size: style.get("h3.font.size") ?? base.h3Size,
+    tableStyle: style.get("table.style") ?? base.tableStyle,
     tableRowsShow: (() => {
       const raw = Number(style.get("table.rows.show"));
       return Number.isFinite(raw) && raw >= 3
         ? Math.floor(raw)
-        : DEFAULT_THEME.tableRowsShow;
+        : base.tableRowsShow;
     })(),
-    palette:
-      PALETTES[style.get("chart.palette") ?? "muted"] ?? DEFAULT_THEME.palette,
+    palette: PALETTES[style.get("chart.palette") ?? ""] ?? base.palette,
     pageBreakH1: style.get("pagebreak.h1") === "before",
     pageBreakH2: style.get("pagebreak.h2") === "before",
   };
