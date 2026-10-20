@@ -254,3 +254,55 @@ describe("image blocks", () => {
     ).toThrow(/Unknown image key/);
   });
 });
+
+describe("audio blocks", () => {
+  const audioDoc =
+    "::: audio {#clip}\n" +
+    "src: data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA\n" +
+    'alt: "wind chimes"\n' +
+    'caption: "The porch, April"\n' +
+    ":::\n";
+
+  it("parses the audio directive with src, alt, and caption", () => {
+    const doc = parseDoc(audioDoc);
+    const b = doc.blocks[0];
+    expect(b?.kind).toBe("audio");
+    if (b?.kind === "audio") {
+      expect(b.audio.id).toBe("clip");
+      expect(b.audio.src).toBe(
+        "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA",
+      );
+      expect(b.audio.alt).toBe("wind chimes");
+      expect(b.audio.caption).toBe("The porch, April");
+    }
+  });
+
+  it("round-trips byte-identically", () => {
+    expect(serializeDoc(parseDoc(audioDoc))).toBe(audioDoc);
+  });
+
+  it("requires src", () => {
+    expect(() => parseDoc('::: audio {#x}\nalt: "nope"\n:::')).toThrow(
+      /Audio directive missing src/,
+    );
+  });
+
+  it("rejects unknown audio directive keys", () => {
+    expect(() =>
+      parseDoc("::: audio {#x}\nsrc: a.mp3\nloop: yes\n:::"),
+    ).toThrow(/Unknown audio key/);
+  });
+
+  it("audio sits between other blocks without disturbing them", () => {
+    const doc = parseDoc(`# T
+
+${audioDoc}
+After.`);
+    expect(doc.blocks.map((b) => b.kind)).toEqual([
+      "heading",
+      "audio",
+      "prose",
+    ]);
+    expect(serializeDoc(parseDoc(serializeDoc(doc)))).toBe(serializeDoc(doc));
+  });
+});

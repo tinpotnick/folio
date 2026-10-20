@@ -165,7 +165,15 @@ test.describe("example documents", () => {
     await waitForDocument(page);
     await openPalette(page);
     await page.locator("#palette-input").fill("poem");
-    await page.keyboard.press("Enter");
+    // Click the example by name: "poem" also fuzzy-matches the
+    // audio-insert command at the same score, and ranking must
+    // not retarget tests.
+    await page
+      .locator("#palette-list .palette-item", {
+        hasText: "Open example: poem",
+      })
+      .first()
+      .click();
     await expect(
       page.locator("folio-doc h1", { hasText: "Ozymandias" }),
     ).toBeVisible();

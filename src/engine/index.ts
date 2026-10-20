@@ -53,6 +53,17 @@ export interface Image {
   caption?: string;
 }
 
+/** Embedded audio - the media sibling of Image: a recorded sound,
+ * played by the native <audio> element (no execution, no engine).
+ * Same src contract: a data URI is offline-safe; an external URL
+ * or path renders opportunistically, never as a dependency. */
+export interface Audio {
+  id: string; // directive anchor, e.g. interview-clip
+  src: string;
+  alt?: string;
+  caption?: string;
+}
+
 export interface Chart {
   id?: string; // directive anchor, e.g. growth-chart
   source: string; // table id

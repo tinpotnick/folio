@@ -13,7 +13,7 @@ import {
 } from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable, type TablePool } from "@folio/engine/recalc";
-import type { Cell, Chart, Image, Table } from "@folio/engine/index.js";
+import type { Audio, Cell, Chart, Image, Table } from "@folio/engine/index.js";
 import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import type { StrudelRepl } from "@strudel/web";
 import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
@@ -401,6 +401,9 @@ export class FolioDoc extends HTMLElement {
       }
       case "image": {
         return this.renderImage(block, idx);
+      }
+      case "audio": {
+        return this.renderAudio(block, idx);
       }
       case "chart": {
         const figure = document.createElement("figure");
@@ -1751,6 +1754,145 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * Embedded audio: the media sibling of the image figure. The
+   * NATIVE <audio controls> element plays the src (a data URI is
+   * offline; an external URL renders opportunistically) - media,
+   * not execution, so the document stays a document. Same bar
+   * contract as the image inspector: alt, caption, replace file.
+   */
+  private renderAudio(
+    block: Extract<Doc["blocks"][number], { kind: "audio" }>,
+    idx: number,
+  ): HTMLElement {
+    const figure = document.createElement("figure");
+    figure.className = "folio-audio";
+    figure.dataset.blockIndex = String(idx);
+    figure.dataset.audioId = block.audio.id;
+    // Selectable (tabindex) so Backspace/Delete on a selected
+    // audio figure removes the block - the figure affordance.
+    figure.contentEditable = "false";
+    figure.tabIndex = -1;
+    figure.title = "Audio - Backspace or Delete removes it";
+    figure.appendChild(this.buildAudioInspector(figure, block));
+    // The native widget swallows pointer events (its controls live
+    // in a UA shadow DOM), so the ALT TEXT strip is the figure's
+    // clickable identity - click it to reveal the inspector, like
+    // a code block's header. It also names the sound in print.
+    const label = document.createElement("div");
+    label.className = "folio-audio-label";
+    label.textContent = block.audio.alt || "audio clip";
+    figure.appendChild(label);
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.preload = "metadata";
+    audio.src = block.audio.src;
+    audio.title = block.audio.alt ?? "";
+    figure.appendChild(audio);
+    if (block.audio.caption) {
+      const cap = document.createElement("figcaption");
+      cap.textContent = block.audio.caption;
+      figure.appendChild(cap);
+    }
+    return figure;
+  }
+
+  /** The audio inspector: alt text, caption, and a replace-file
+   * control - the whole audio directive editable from the
+   * document view, on the uniform bar contract. */
+  private buildAudioInspector(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "audio" }>,
+  ): HTMLElement {
+    const bar = this.figureBar();
+    const clip = block.audio;
+
+    const altInp = document.createElement("input");
+    altInp.className = "insp-alt";
+    altInp.type = "text";
+    altInp.placeholder = "alt text";
+    altInp.title = "Alt text - what the sound is (empty removes it)";
+    const altPatch = (): void => {
+      const v = altInp.value.trim();
+      if (v) clip.alt = v;
+      else delete clip.alt;
+      const audio = figure.querySelector("audio");
+      if (audio) audio.title = v;
+      const label = figure.querySelector(".folio-audio-label");
+      if (label) label.textContent = v || "audio clip";
+      this.emitChange();
+    };
+    altInp.addEventListener("change", altPatch);
+    altInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        altInp.blur();
+      }
+    });
+
+    const capInp = document.createElement("input");
+    capInp.className = "insp-caption";
+    capInp.type = "text";
+    capInp.placeholder = "caption";
+    capInp.title = "Figure caption (empty removes it)";
+    const capPatch = (): void => {
+      const v = capInp.value.trim();
+      if (v) clip.caption = v;
+      else delete clip.caption;
+      const cap = figure.querySelector("figcaption");
+      if (v && cap) cap.textContent = v;
+      else if (v && !cap) {
+        const el = document.createElement("figcaption");
+        el.textContent = v;
+        figure.appendChild(el);
+      } else if (!v && cap) {
+        cap.remove();
+      }
+      this.emitChange();
+    };
+    capInp.addEventListener("change", capPatch);
+    capInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        capInp.blur();
+      }
+    });
+
+    const fileInp = document.createElement("input");
+    fileInp.className = "insp-file";
+    fileInp.type = "file";
+    fileInp.accept = "audio/*";
+    fileInp.title = "Replace the audio file";
+    fileInp.addEventListener("change", () => {
+      const f = fileInp.files?.[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = (): void => {
+        if (typeof reader.result !== "string") return;
+        clip.src = reader.result;
+        const audio = figure.querySelector("audio");
+        if (audio) audio.src = clip.src;
+        this.emitChange();
+      };
+      reader.readAsDataURL(f);
+      fileInp.value = "";
+    });
+
+    const show = (): void => {
+      altInp.value = clip.alt ?? "";
+      capInp.value = clip.caption ?? "";
+      bar.hidden = false;
+    };
+    // The native <audio> widget swallows pointer events inside its
+    // UA shadow DOM - a mousedown on the player never reaches the
+    // figure. Focus DOES bubble: clicking or tabbing to the player
+    // reveals the bar the same way.
+    figure.addEventListener("mousedown", () => show());
+    figure.addEventListener("focusin", () => show());
+    bar.append(altInp, capInp, fileInp);
+    return bar;
+  }
+
+  /**
    * Insert an image block after the caret's block (the toolbar's
    * image button in document view). src is a data URI from the
    * host's file picker, or any URL. Ids count per document, like
@@ -1770,6 +1912,29 @@ export class FolioDoc extends HTMLElement {
       ...(alt ? { alt } : {}),
     };
     this.doc.blocks.splice(at, 0, { kind: "image", image });
+    this.render();
+    this.emitChange();
+  }
+
+  /**
+   * Insert an audio block after the caret's block (the toolbar's
+   * audio button in document view). src is a data URI from the
+   * host's file picker, or any URL. Ids count per document.
+   */
+  insertAudio(src: string, alt?: string): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
+    let n = 0;
+    for (const b of this.doc.blocks) {
+      if (b.kind === "audio") n += 1;
+    }
+    const clip: Audio = {
+      id: `audio-${n + 1}`,
+      src,
+      ...(alt ? { alt } : {}),
+    };
+    this.doc.blocks.splice(at, 0, { kind: "audio", audio: clip });
     this.render();
     this.emitChange();
   }
@@ -2296,7 +2461,8 @@ export class FolioDoc extends HTMLElement {
         b.kind === "chart" ||
         b.kind === "diagram" ||
         b.kind === "math" ||
-        b.kind === "image",
+        b.kind === "image" ||
+        b.kind === "audio",
     );
     let gi = 0;
     const next: DocBlock[] = [];
@@ -2588,7 +2754,8 @@ export class FolioDoc extends HTMLElement {
       block.kind === "chart" ||
       block.kind === "diagram" ||
       block.kind === "math" ||
-      block.kind === "image"
+      block.kind === "image" ||
+      block.kind === "audio"
     ) {
       return;
     }
@@ -2996,7 +3163,7 @@ export class FolioDoc extends HTMLElement {
     const removableFigure =
       ev.target instanceof Element
         ? (ev.target.closest(
-            "figure.folio-diagram, figure.folio-image",
+            "figure.folio-diagram, figure.folio-image, figure.folio-audio",
           ) as HTMLElement | null)
         : null;
     if (

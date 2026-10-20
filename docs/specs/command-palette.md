@@ -32,8 +32,11 @@ magnifier button in the toolbar.
     help window and reveals that topic.
 - **Matching** is a dependency-free subsequence fuzzy match with
   bonuses for adjacent characters and word starts, over the title
-  plus a keyword string. Empty query lists everything, commands
-  first, capped at 30 rows.
+  plus a keyword string; a query appearing VERBATIM in an entry
+  scores a large bonus, so "poem" ranks the poem example over a
+  command whose keywords merely contain p...o...e...m scattered
+  about. Empty query lists everything, commands first, capped at
+  30 rows.
 - **Command actions reuse the toolbar handlers** (`.click()` on the
   existing buttons): the palette is a discovery layer, never a
   second implementation of an action.
