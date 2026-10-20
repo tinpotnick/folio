@@ -13,9 +13,15 @@ folder. Their dialogs fall back to the LAST USED folder: the
 Rust host remembers the parent of every file opened or saved in
 `last-folder` under the app's config dir (best-effort, plain
 text), so even a fresh start lands where the user last worked
-instead of the platform's Recent view. Hints pointing at
-folders that no longer exist are skipped; the resolution order
-and skip rules are unit-tested in `src-tauri/src/lib.rs`
-(`folder_hint`). Only the very first run has nothing to
-remember and sees the platform default.
+instead of the platform's Recent view. On the true first run
+nothing has been opened or saved yet, so the dialog falls back
+further: the folder the DEFAULT document was loaded from —
+`tauri dev` serves `demo/` straight from the checkout
+(`dev_demo_dir`, resolved from `CARGO_MANIFEST_DIR`), so the
+boot document counts as a real file even though the host loaded
+it as a web asset. Hints pointing at folders that no longer
+exist are skipped; the resolution order and skip rules are
+unit-tested in `src-tauri/src/lib.rs` (`folder_hint`). A bundled
+release embeds the demo in the binary and has no disk folder to
+offer — only release first runs see the platform default.
 
