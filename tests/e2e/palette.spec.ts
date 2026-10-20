@@ -229,6 +229,28 @@ test.describe("example documents", () => {
     ).toBeVisible();
     // Four charts: two time-domain lines, two frequency-domain bars.
     await expect(page.locator("#the-doc .chart-holder svg")).toHaveCount(4);
+    // Each figure renders ITS OWN query - the time-domain lines
+    // and frequency-domain bars alternate with the sections (a
+    // regression here once rendered the first chart's query in
+    // every figure over the same table).
+    const kinds = await page
+      .locator("#the-doc .chart-holder svg")
+      .evaluateAll((els) =>
+        els.map((el) =>
+          el.innerHTML.includes("polyline")
+            ? "line"
+            : el.innerHTML.includes("rect")
+              ? "bar"
+              : "?",
+        ),
+      );
+    expect(kinds).toEqual(["line", "bar", "line", "bar"]);
+    // Charts rotate palette colors by document position: the two
+    // line charts never wear the same color.
+    const strokes = await page
+      .locator("#the-doc .chart-holder svg polyline")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("stroke")));
+    expect(new Set(strokes).size).toBe(strokes.length);
     // The equations typeset (KaTeX) and the FFT code block shows.
     await expect(
       page.locator("#the-doc figure.folio-math .katex").first(),
@@ -240,12 +262,12 @@ test.describe("example documents", () => {
       }),
     ).toBeVisible();
     // The math catalog computed: the table carries the DFT's promised
-    // peak (32) on the 5 Hz row and the 20 Hz peak (19.2).
+    // peak (256) on the 5 Hz row and the 20 Hz peak (153.6).
     const fifthRow = page.locator("#the-doc table.folio-table tr").nth(6);
-    await expect(fifthRow).toContainText("32", { timeout: 10_000 });
+    await expect(fifthRow).toContainText("256", { timeout: 10_000 });
     await expect(
       page.locator("#the-doc table.folio-table tr").nth(21),
-    ).toContainText("19.2");
+    ).toContainText("153.6");
   });
   test("Open example: music renders playable strudel figures", async ({
     page,

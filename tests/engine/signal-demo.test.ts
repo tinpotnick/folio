@@ -1,7 +1,7 @@
 /**
  * The signal-processing walkthrough document (demo/examples/
  * signal-processing.md) is the math catalog's proof of work: a
- * 64-sample two-tone signal, its DFT and FFT spectra, and a
+ * 512-sample two-tone signal, its DFT and FFT spectra, and a
  * one-pole low-pass filter - all formula columns. This test pins
  * the document to the physics it describes.
  */
@@ -38,9 +38,9 @@ describe("demo: signal-processing walkthrough", () => {
     );
   });
 
-  it("has the signal table with ten columns and 64 rows", () => {
+  it("has the signal table with ten columns and 512 rows", () => {
     expect(signalTable?.columns.length).toBe(10);
-    expect(signalTable?.rows.length).toBe(64);
+    expect(signalTable?.rows.length).toBe(512);
   });
 
   it("recalcs every formula column without error", () => {
@@ -56,9 +56,9 @@ describe("demo: signal-processing walkthrough", () => {
 
   it("peaks at 5 Hz and 20 Hz with the amplitudes the DFT promises", () => {
     const mag = out?.rows.map((r) => (r[col("mag")] as number) ?? 0) ?? [];
-    // N/2 times each tone's amplitude: 32 and 0.6 * 32.
-    expect(mag[5]).toBeCloseTo(32, 9);
-    expect(mag[20]).toBeCloseTo(19.2, 9);
+    // N/2 times each tone's amplitude: 256 and 0.6 * 256.
+    expect(mag[5]).toBeCloseTo(256, 9);
+    expect(mag[20]).toBeCloseTo(153.6, 9);
     // Everything off the tones (and their mirrors) is zero.
     expect(mag[10]).toBeCloseTo(0, 9);
     expect(mag[32]).toBeCloseTo(0, 9);
@@ -77,7 +77,7 @@ describe("demo: signal-processing walkthrough", () => {
     const sig = out?.rows.map((r) => (r[col("sig")] as number) ?? 0) ?? [];
     const lp: number[] = [];
     sig.forEach((x, i) => {
-      lp.push(i === 0 ? x : 0.2 * x + 0.8 * (lp[i - 1] ?? 0));
+      lp.push(i === 0 ? x : 0.03 * x + 0.97 * (lp[i - 1] ?? 0));
     });
     const dftMag = (xs: number[], k: number): number => {
       let re = 0;
@@ -110,7 +110,7 @@ describe("demo: signal-processing walkthrough", () => {
     const lp = out?.rows.map((r) => (r[col("lp")] as number) ?? 0) ?? [];
     const sig = out?.rows.map((r) => (r[col("sig")] as number) ?? 0) ?? [];
     expect(lp[0]).toBeCloseTo(sig[0] ?? 0, 12);
-    expect(lp[1]).toBeCloseTo(0.2 * (sig[1] ?? 0) + 0.8 * (lp[0] ?? 0), 12);
-    expect(lp[2]).toBeCloseTo(0.2 * (sig[2] ?? 0) + 0.8 * (lp[1] ?? 0), 12);
+    expect(lp[1]).toBeCloseTo(0.03 * (sig[1] ?? 0) + 0.97 * (lp[0] ?? 0), 12);
+    expect(lp[2]).toBeCloseTo(0.03 * (sig[2] ?? 0) + 0.97 * (lp[1] ?? 0), 12);
   });
 });
