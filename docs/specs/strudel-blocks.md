@@ -70,11 +70,25 @@ does nothing. The fix is structural, not environmental:
   (the first token flash replaces the pre's children; the bar
   used to blink out of existence there).
 
-Note for verification: automated WebKitGTK probes dispatch
-synthetic clicks, which produce no user activation, so the
-context stays suspended in the probe environment; the unlock is
-pinned by the Chromium e2e and needs one real click on desktop
-to confirm audibly.
+## The zero-channel destination (WebKitGTK, the Linux desktop)
+
+WebKitGTK reports `destination.maxChannelCount` as 0 and rejects
+every `destination.channelCount` assignment against that limit
+("Channel count cannot be 0" / "exceeds maximum limit"). Strudel
+sizes its output stage with `channelCount = maxChannelCount`, so
+on Linux desktop every note failed (`[getTrigger] error`) while
+the clock ran - Play looked alive (Playing..., sweep moving) but
+was silent, with no token flashes. When folio's context reports
+fewer than 1 channel, it shadows both properties on that
+context's destination: `maxChannelCount` reports the channel
+count the destination actually has (at least 2), and a refused
+`channelCount` assignment keeps the existing count. Pinned by an
+e2e that stubs the WebKitGTK behaviour in Chromium.
+
+Note for verification: a WebKitGTK probe must deliver clicks as
+GTK input events (`gtk_widget_event` with a button press and
+release), not DOM `dispatchEvent`. Only GTK input events carry user
+activation, so a DOM-dispatched click leaves the context suspended.
 
 ## Acceptance
 

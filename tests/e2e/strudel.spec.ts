@@ -147,6 +147,53 @@ test.describe("strudel music blocks", () => {
     expect(requests).toEqual([]);
   });
 
+  test("playback survives an engine reporting zero output channels", async ({
+    page,
+  }) => {
+    // WebKitGTK (the Linux desktop webview) reports
+    // destination.maxChannelCount as 0; strudel sizes its output
+    // from it, so every note used to fail with "Channel count
+    // cannot be 0" while the clock kept ticking - silent play.
+    // Mimic WebKitGTK: maxChannelCount is 0 and, as its internal
+    // limit is also 0, every channelCount assignment throws.
+    await page.addInitScript(() => {
+      const proto = AudioDestinationNode.prototype;
+      const cc = Object.getOwnPropertyDescriptor(
+        AudioNode.prototype,
+        "channelCount",
+      );
+      Object.defineProperty(proto, "maxChannelCount", {
+        configurable: true,
+        get: () => 0,
+      });
+      Object.defineProperty(proto, "channelCount", {
+        configurable: true,
+        get(this: AudioNode) {
+          return cc?.get?.call(this) as number;
+        },
+        set(v: number) {
+          throw new DOMException(
+            v === 0
+              ? "Channel count cannot be 0"
+              : "Channel count exceeds maximum limit",
+            "NotSupportedError",
+          );
+        },
+      });
+    });
+    const logs: string[] = [];
+    page.on("console", (m) => logs.push(m.text()));
+    await loadDoc(page, SRC);
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".folio-inspector .strudel-play").click();
+    await expect(
+      figure.locator("pre.strudel-source .strudel-hit").first(),
+    ).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(1000);
+    expect(logs.filter((l) => l.includes("Channel count"))).toEqual([]);
+  });
+
   test("playing highlights the sounding tokens and sweeps the cycle", async ({
     page,
   }) => {
