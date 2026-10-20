@@ -371,6 +371,122 @@ audioFile.addEventListener("change", () => {
   reader.readAsDataURL(f);
 });
 
+/* --- Record audio from the microphone (spec: audio-embeds.md) ---
+ * A recording is just another INPUT PATH for an audio block:
+ * getUserMedia + MediaRecorder are browser APIs (no dependency,
+ * ADR-0007), and the clip lands in the document as a data URI
+ * through the same insertAudio() the file picker uses. The
+ * model, the parser, and the theme do not change at all. */
+const btnRecord = requireEl<HTMLButtonElement>("#btn-record");
+let recStream: MediaStream | null = null;
+let recorder: MediaRecorder | null = null;
+let recChunks: Blob[] = [];
+let recStartedAt = 0;
+let recTick: number | undefined;
+// Opus lands at roughly 180 KB per minute, so three minutes sits
+// comfortably under the 8 MB single-file ceiling.
+const RECORD_MAX_MS = 3 * 60 * 1000;
+
+function cleanupRecording(): void {
+  if (recTick !== undefined) {
+    clearInterval(recTick);
+    recTick = undefined;
+  }
+  recStream?.getTracks().forEach((t) => t.stop());
+  recStream = null;
+  recorder = null;
+  recChunks = [];
+  btnRecord.classList.remove("rec");
+}
+
+function stopRecording(): void {
+  const rec = recorder;
+  if (rec && rec.state !== "inactive") rec.stop();
+  else cleanupRecording();
+}
+
+async function startRecording(): Promise<void> {
+  if (
+    typeof MediaRecorder === "undefined" ||
+    !navigator.mediaDevices?.getUserMedia
+  ) {
+    flash("Recording is not supported in this browser");
+    return;
+  }
+  if (recorder !== null) {
+    stopRecording();
+    return;
+  }
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    flash("Microphone unavailable or permission denied");
+    return;
+  }
+  const mime = MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+  let rec: MediaRecorder;
+  try {
+    rec = new MediaRecorder(recStream, mime ? { mimeType: mime } : undefined);
+  } catch {
+    cleanupRecording();
+    flash("Recording could not start");
+    return;
+  }
+  recorder = rec;
+  recChunks = [];
+  rec.ondataavailable = (ev: BlobEvent): void => {
+    if (ev.data.size > 0) recChunks.push(ev.data);
+  };
+  rec.onstop = (): void => {
+    const type = rec.mimeType || "audio/webm";
+    const seconds = Math.max(1, Math.round((Date.now() - recStartedAt) / 1000));
+    // Snapshot the chunks BEFORE cleanup - cleanupRecording resets
+    // the accumulator, and an empty blob would read "nothing".
+    const chunks = recChunks;
+    cleanupRecording();
+    const blob = new Blob(chunks, { type });
+    if (blob.size === 0) {
+      flash("Nothing recorded");
+      return;
+    }
+    if (blob.size > AUDIO_MAX_BYTES) {
+      flash("Recording too long (over 8 MB) - the document stays one file");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (): void => {
+      if (typeof reader.result !== "string") return;
+      el.insertAudio(reader.result, "recording");
+      flash(
+        `Recorded ${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, "0")}`,
+      );
+    };
+    reader.readAsDataURL(blob);
+  };
+  rec.start(250);
+  recStartedAt = Date.now();
+  btnRecord.classList.add("rec");
+  recTick = window.setInterval((): void => {
+    const elapsed = Date.now() - recStartedAt;
+    const secs = Math.floor(elapsed / 1000);
+    status.textContent = `Recording ${String(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")} - click the mic to stop`;
+    status.classList.add("show");
+    if (elapsed >= RECORD_MAX_MS) stopRecording();
+  }, 500);
+}
+
+function toggleRecording(): void {
+  if (recorder !== null) stopRecording();
+  else void startRecording();
+}
+
+// mousedown (like the other insert buttons) so the press never
+// steals focus from the document before the action runs.
+btnRecord.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  toggleRecording();
+});
+
 /* --- Import data from a file (CSV / JSON) --- */
 
 const importFile = requireEl<HTMLInputElement>("#import-file");
@@ -1064,6 +1180,14 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "audio sound music clip mp3 wav embed insert recording voice",
     // Same focus-free contract as the image picker.
     action: () => audioFile.click(),
+  });
+  entries.push({
+    title: "Record an audio clip",
+    group: "Command",
+    keywords: "record microphone mic voice capture memo dictation audio",
+    // Same handler as the toolbar button: without a caret the clip
+    // appends at the document end; invoked while recording it stops.
+    action: () => toggleRecording(),
   });
   entries.push({
     title: "Toggle the section browser",

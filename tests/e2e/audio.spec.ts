@@ -227,3 +227,55 @@ test.describe("audio blocks", () => {
     );
   });
 });
+
+test.describe("recording", () => {
+  test("the mic button records from the microphone and embeds the clip", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    await page.locator("#btn-record").click();
+    // The button pulses while capture runs, and the status counts.
+    await expect(page.locator("#btn-record")).toHaveClass(/rec/);
+    await expect(page.locator("#status")).toContainText("Recording 0:0");
+    await page.waitForTimeout(1200);
+    // The same button stops the capture.
+    await page.locator("#btn-record").click();
+    await expect(page.locator("#btn-record")).not.toHaveClass(/rec/);
+    const figure = page.locator("#the-doc figure.folio-audio");
+    await expect(figure).toHaveCount(1);
+    const src = await figure
+      .locator("audio")
+      .evaluate((el) => (el as HTMLAudioElement).src);
+    expect(src).toMatch(/^data:audio\//);
+    // The clip's alt seeds from the recording itself.
+    await expect(figure.locator(".folio-audio-label")).toHaveText("recording");
+    await expect(page.locator("#status")).toContainText("Recorded 0:0");
+    await page.locator("#btn-markdown").click();
+    const md = await page.locator("#editor").inputValue();
+    expect(md).toMatch(/^src: data:audio\/.*$/m);
+  });
+
+  test("a denial shows a visible message instead of failing silently", async ({
+    browser,
+  }) => {
+    // The launch flags auto-grant the mic, so this context stubs
+    // getUserMedia to reject - the visible error path.
+    const context = await browser.newContext();
+    await context.addInitScript(() => {
+      navigator.mediaDevices.getUserMedia = () =>
+        Promise.reject(new Error("Permission denied"));
+    });
+    const page = await context.newPage();
+    await page.goto("/");
+    await expect(
+      page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
+    ).toBeVisible();
+    await page.locator("#btn-record").click();
+    await expect(page.locator("#status")).toContainText(
+      /Microphone unavailable|permission/,
+    );
+    await expect(page.locator("#btn-record")).not.toHaveClass(/rec/);
+    await context.close();
+  });
+});

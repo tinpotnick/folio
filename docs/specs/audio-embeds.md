@@ -51,6 +51,21 @@ RECORDED media (a file the document carries).
   uniform inspector bar, like a code block's header - and it
   names the sound in print when the player itself is hidden.
   Editing the alt updates the strip live.
+
+- **Recording** is a second input path for the same block - host
+  chrome, never a model concept. The mic button (and the palette's
+  "Record an audio clip") captures with `getUserMedia` +
+  `MediaRecorder` - browser APIs, so ADR-0007 is satisfied by the
+  platform. One button toggles: a press starts (the button pulses,
+  the status bar counts elapsed time, capture auto-stops at three
+  minutes - opus lands near 180 KB/min, so the ceiling holds); a
+  second press stops, and the clip embeds as a data URI through
+  the same `insertAudio()` the file picker uses, with `alt`
+  seeded as "recording". A denied or missing microphone is a
+  visible status message, never a silent failure; tracks are
+  stopped and the button state cleared either way. Desktop note:
+  the webview must grant mic permission - verify by hand on each
+  host (the engine and the model are unaffected either way).
 - **Figure, not an editing surface**: `figure.folio-audio`
   (shadow-root scoped CSS: full-width element, the image figure's
   margins and focus outline) is `contentEditable="false"`, carries
@@ -78,5 +93,6 @@ RECORDED media (a file the document carries).
 - e2e: `tests/e2e/audio.spec.ts` (hand-typed directive renders
   the native element; insert-from-file embeds a real WAV and
   reaches the Markdown source; inspector alt/caption/replace;
-  dismissal contract; Backspace removal; 8 MB refusal).
+  dismissal contract; Backspace removal; 8 MB refusal; recording
+  via a fake microphone device, and the denied-mic error path).
 - First-contact eval: `evals/audio-embeds-first-contact.md`.

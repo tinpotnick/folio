@@ -61,6 +61,21 @@
       .seg button:hover {
         background: #f3f4f6;
       }
+      /* Recording: the mic button pulses while capture runs. */
+      #btn-record.rec {
+        background: #fbe4e4;
+        color: #b42318;
+        animation: rec-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes rec-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(180, 35, 24, 0.35);
+        }
+        50% {
+          box-shadow: 0 0 0 4px rgba(180, 35, 24, 0.12);
+        }
+      }
       .seg button.active {
         background: #1f2328;
         color: #fff;
@@ -637,6 +652,25 @@
                 d="M11 5.5a3.2 3.2 0 010 5"
                 stroke-linecap="round"
               />
+            </svg>
+          </button>
+          <button
+            id="btn-record"
+            title="Record audio from the microphone"
+            aria-label="Record audio from the microphone"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M8 2a2 2 0 0 1 2 2v3.5a2 2 0 1 1-4 0V4a2 2 0 0 1 2-2z"
+                stroke-linejoin="round"
+              />
+              <path d="M4.5 8a3.5 3.5 0 0 0 7 0" stroke-linecap="round" />
+              <path d="M8 11.5V13.5" stroke-linecap="round" />
             </svg>
           </button>
           <button

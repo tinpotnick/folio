@@ -123,7 +123,11 @@ document — written in the same renderer you are working with.
   Click the figure to edit its alt text, caption, or replace the
   file; click once and press Backspace or Delete to remove it.
   The same 8 MB ceiling applies - and for sounds you want to
-  SYNTHESIZE, use a Strudel block instead.
+  SYNTHESIZE, use a Strudel block instead. The mic button records
+  straight from the microphone: click to start, click again to
+  stop (the button pulses and the status bar counts while
+  recording); the clip embeds in place. The browser asks for
+  microphone permission the first time.
 - **Equations** are fenced `$$` blocks: a line with only `$$`, the
   LaTeX source, then a closing `$$` line. They render typeset
   (KaTeX). Edit the LaTeX in the Markdown view; a bad equation
