@@ -338,6 +338,39 @@ imageFile.addEventListener("change", () => {
   reader.readAsDataURL(f);
 });
 
+const btnAudio = requireEl<HTMLButtonElement>("#btn-audio");
+const audioFile = requireEl<HTMLInputElement>("#audio-file");
+// Same single-file ceiling as images: a data URI makes the sound
+// travel inside the document (ADR-0005), so keep it sane.
+const AUDIO_MAX_BYTES = 8 * 1024 * 1024;
+
+btnAudio.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  audioFile.click();
+});
+
+audioFile.addEventListener("change", () => {
+  const f = audioFile.files?.[0];
+  audioFile.value = "";
+  if (!f) return;
+  if (f.size > AUDIO_MAX_BYTES) {
+    flash("Audio too large (over 8 MB) - the document stays one file");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (): void => {
+    if (typeof reader.result !== "string") return;
+    // The file name is a better first alt than nothing.
+    const alt = f.name
+      .replace(/\.[^.]+$/, "")
+      .replace(/[-_]+/g, " ")
+      .trim();
+    el.insertAudio(reader.result, alt === "" ? undefined : alt);
+    flash("Audio inserted");
+  };
+  reader.readAsDataURL(f);
+});
+
 /* --- Import data from a file (CSV / JSON) --- */
 
 const importFile = requireEl<HTMLInputElement>("#import-file");
@@ -1026,6 +1059,13 @@ function paletteEntries(): PaletteEntry[] {
     action: () => imageFile.click(),
   });
   entries.push({
+    title: "Insert an audio clip",
+    group: "Command",
+    keywords: "audio sound music clip mp3 wav embed insert recording voice",
+    // Same focus-free contract as the image picker.
+    action: () => audioFile.click(),
+  });
+  entries.push({
     title: "Toggle the section browser",
     group: "Command",
     keywords: "sections sidebar outline toggle navigation",
@@ -1111,7 +1151,10 @@ function fuzzyScore(needle: string, haystack: string): number {
   const n = needle.toLowerCase();
   const h = haystack.toLowerCase();
   if (!n) return 1;
-  let score = 0;
+  // The query appearing VERBATIM beats any scattered-letter
+  // match: "poem" must rank the poem example over a command whose
+  // keywords merely contain p...o...e...m somewhere.
+  let score = h.includes(n) ? 10 : 0;
   let hi = 0;
   let last = -2;
   for (const ch of n) {

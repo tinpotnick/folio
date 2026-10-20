@@ -498,6 +498,23 @@ export function themeCss(theme: Theme): string {
     figure.folio-image:focus {
       outline: 2px solid #1f3fbf;
     }
+    figure.folio-audio {
+      margin: 1.2em 0;
+      user-select: none;
+    }
+    figure.folio-audio .folio-audio-label {
+      font-size: 12px;
+      color: #6b7280;
+      padding: 1px 1px 6px;
+      user-select: none;
+    }
+    figure.folio-audio audio {
+      display: block;
+      width: 100%;
+    }
+    figure.folio-audio:focus {
+      outline: 2px solid #1f3fbf;
+    }
     .folio-inspector .insp-alt {
       flex: 1;
       min-width: 120px;
@@ -711,6 +728,9 @@ export function themeCss(theme: Theme): string {
       table.folio-table,
       pre.folio-code {
         break-inside: avoid;
+      }
+      figure.folio-audio audio {
+        display: none;
       }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }

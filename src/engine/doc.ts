@@ -4,7 +4,7 @@
  * frontmatter, prose, headings, table and chart directive blocks.
  * serializeDoc(parseDoc(text)) === text for any canonical doc.
  */
-import type { Cell, Chart, Image, Table } from "./index.js";
+import type { Audio, Cell, Chart, Image, Table } from "./index.js";
 
 export interface Frontmatter {
   theme?: string;
@@ -19,14 +19,15 @@ export type DocBlock =
   | { kind: "table"; table: Table }
   | { kind: "chart"; chart: Chart }
   | { kind: "diagram"; diagram: { id: string; text: string } }
-  | { kind: "image"; image: Image };
+  | { kind: "image"; image: Image }
+  | { kind: "audio"; audio: Audio };
 
 export interface Doc {
   frontmatter: Frontmatter;
   blocks: DocBlock[];
 }
 
-const DIRECTIVE_RE = /^::: (table|chart|image) \{#([^}]+)\}$/;
+const DIRECTIVE_RE = /^::: (table|chart|image|audio) \{#([^}]+)\}$/;
 const MERMAID_RE = /^::: mermaid \{#([^}]+)\}$/;
 
 export class ParseError extends Error {
@@ -108,6 +109,7 @@ export function parseDoc(text: string): Doc {
       const body = readDirectiveBody(lines, i, id);
       if (m[1] === "table") doc.blocks.push(parseTableDirective(body, id));
       else if (m[1] === "chart") doc.blocks.push(parseChartDirective(body, id));
+      else if (m[1] === "audio") doc.blocks.push(parseAudioDirective(body, id));
       else doc.blocks.push(parseImageDirective(body, id));
       i = body.endLine + 1;
       continue;
@@ -319,6 +321,25 @@ function parseImageDirective(body: DirectiveBody, id: string): DocBlock {
   return { kind: "image", image };
 }
 
+function parseAudioDirective(body: DirectiveBody, id: string): DocBlock {
+  const values: Record<string, string> = {};
+  for (const [k, v] of body.entries) {
+    if (k !== "src" && k !== "alt" && k !== "caption") {
+      throw new ParseError(`Unknown audio key: '${k}'`, 0);
+    }
+    values[k] = v;
+  }
+  if (!values["src"]) {
+    throw new ParseError("Audio directive missing src", 0);
+  }
+  const audio: Audio = { id, src: values["src"] };
+  if (values["alt"] !== undefined) audio.alt = unquote(values["alt"]);
+  if (values["caption"] !== undefined) {
+    audio.caption = unquote(values["caption"]);
+  }
+  return { kind: "audio", audio };
+}
+
 function parseQuery(raw: string): Chart["query"] {
   const map = parseInlineMap(raw);
   const select = (map["select"] ?? "")
@@ -463,6 +484,8 @@ function serializeBlock(block: DocBlock): string {
       return `::: mermaid {#${block.diagram.id}}\n${block.diagram.text}\n:::`;
     case "image":
       return serializeImage(block.image);
+    case "audio":
+      return serializeAudio(block.audio);
   }
 }
 
@@ -473,6 +496,18 @@ function serializeImage(image: Image): string {
   if (image.alt !== undefined) lines.push(`alt: "${image.alt}"`);
   if (image.caption !== undefined) {
     lines.push(`caption: "${image.caption}"`);
+  }
+  lines.push(":::");
+  return lines.join("\n");
+}
+
+function serializeAudio(audio: Audio): string {
+  const lines = [`::: audio {#${audio.id}}`];
+  // src stays raw (unquoted): data URIs and URLs carry no spaces.
+  lines.push(`src: ${audio.src}`);
+  if (audio.alt !== undefined) lines.push(`alt: "${audio.alt}"`);
+  if (audio.caption !== undefined) {
+    lines.push(`caption: "${audio.caption}"`);
   }
   lines.push(":::");
   return lines.join("\n");

@@ -44,9 +44,9 @@ document — written in the same renderer you are working with.
 
 ## Tables and charts
 
-- The insert group (six icons after the format buttons) holds the
-  block builders: table, Mermaid diagram, image, equation,
-  Strudel music, and code block. The
+- The insert group (seven icons after the format buttons) holds the
+  block builders: table, Mermaid diagram, image, audio clip,
+  equation, Strudel music, and code block. The
   diagram button inserts a starter diagram; the equation button
   inserts a typeset `$$` block; the music button inserts a
   playable Strudel pattern; the code button converts the block
@@ -116,6 +116,14 @@ document — written in the same renderer you are working with.
   remove it. Files over 8 MB are refused (resize first); floating
   images and text wrap are deliberately not supported - layout
   belongs to the theme, not the document.
+- **Audio** embeds like an image - a recorded sound is media, the
+  temporal sibling of a picture. Pick a file with the speaker
+  button (or hand-type an `::: audio` directive with a `src`);
+  it plays in the page through the browser's own audio controls.
+  Click the figure to edit its alt text, caption, or replace the
+  file; click once and press Backspace or Delete to remove it.
+  The same 8 MB ceiling applies - and for sounds you want to
+  SYNTHESIZE, use a Strudel block instead.
 - **Equations** are fenced `$$` blocks: a line with only `$$`, the
   LaTeX source, then a closing `$$` line. They render typeset
   (KaTeX). Edit the LaTeX in the Markdown view; a bad equation
