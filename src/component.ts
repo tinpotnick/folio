@@ -60,6 +60,15 @@ export class FolioDoc extends HTMLElement {
   private dragStart: { x: number; y: number } | null = null;
   /** The live strudel REPL, once initStrudel has resolved. */
   private repl: StrudelRepl | null = null;
+  /**
+   * The AudioContext created SYNCHRONOUSLY in the play click
+   * (ADR-0014): WebKit's autoplay policy only lets a context run
+   * when it is created and resumed inside the user gesture. The
+   * strudel import is a heavy async boundary - a context created
+   * after it stays suspended and play does nothing (the bug this
+   * field exists to prevent).
+   */
+  private strudelCtx: AudioContext | null = null;
   /** Playing-highlight state for the strudel figure (ADR-0014). */
   private strudelHighlight: {
     pre: HTMLElement;
@@ -420,10 +429,16 @@ export class FolioDoc extends HTMLElement {
       const block = this.doc?.blocks[idx];
       if (!block || block.kind !== "code") return;
       err.hidden = true;
-      void this.playStrudel(block.text, err);
+      // Unlock audio SYNCHRONOUSLY, inside the gesture, BEFORE
+      // the async import - the load must never eat the activation
+      // window (the play-does-nothing bug on WebKitGTK).
+      this.ensureStrudelAudio();
+      play.textContent = "\u25b6 Playing\u2026";
+      void this.playStrudel(block.text, err, play);
     });
     stop.addEventListener("click", () => {
       err.hidden = true;
+      play.textContent = "\u25b6 Play";
       void this.stopStrudel();
     });
     const show = (): void => {
@@ -442,7 +457,35 @@ export class FolioDoc extends HTMLElement {
    * pattern, ADR-0010/0011); evaluation errors surface as content
    * in the player's error line, never a broken render.
    */
-  private async playStrudel(source: string, err: HTMLElement): Promise<void> {
+  /**
+   * Create (once) and resume the AudioContext inside the click's
+   * user-gesture window. Falls back to strudel's own context when
+   * the engine has no audio (the library works without one for
+   * the highlight machinery).
+   */
+  private ensureStrudelAudio(): void {
+    if (this.strudelCtx === null) {
+      try {
+        const Ctor =
+          window.AudioContext ??
+          (
+            window as unknown as {
+              webkitAudioContext?: typeof AudioContext;
+            }
+          ).webkitAudioContext;
+        if (Ctor) this.strudelCtx = new Ctor();
+      } catch {
+        this.strudelCtx = null;
+      }
+    }
+    if (this.strudelCtx !== null) void this.strudelCtx.resume();
+  }
+
+  private async playStrudel(
+    source: string,
+    err: HTMLElement,
+    play: HTMLElement,
+  ): Promise<void> {
     try {
       const strudel = await import("@strudel/web");
       // The figure's source pre is the highlight surface: each
@@ -459,10 +502,16 @@ export class FolioDoc extends HTMLElement {
         initOptions.editPattern = (pattern) =>
           this.hookStrudelHighlight(pattern);
       }
-      this.repl = await strudel.initStrudel(initOptions);
+      this.repl = await strudel.initStrudel({
+        ...initOptions,
+        // The pre-unlocked context: created and resumed in the
+        // click, so the clock starts even on strict engines.
+        audioContext: this.strudelCtx ?? undefined,
+      });
       await strudel.evaluate(source);
       this.startStrudelSweep(pre);
     } catch (e) {
+      if (play.isConnected) play.textContent = "\u25b6 Play";
       if (err.isConnected) {
         err.textContent = `Strudel error: ${
           e instanceof Error ? e.message : String(e)
@@ -532,6 +581,11 @@ export class FolioDoc extends HTMLElement {
       frag.appendChild(document.createTextNode(source.slice(cursor)));
     }
     pre.replaceChildren(frag);
+    // replaceChildren wiped the sweep bar (it lives in this pre):
+    // re-attach it - the playhead is playback chrome, never
+    // content, and it must not blink out of existence on the
+    // first flash.
+    if (hl.sweep) pre.appendChild(hl.sweep);
     return hl.byStart.get(loc.start) ?? null;
   }
 

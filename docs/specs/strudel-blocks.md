@@ -50,6 +50,32 @@ text }` - the existing fence block (docs/specs/
 - **Help**: the in-app help documents the feature in the SAME
   commit as the code (ADR-0009).
 
+## The play-gesture contract (the play-does-nothing bug)
+
+Web autoplay policy (strictest on WebKit - the desktop engine):
+an AudioContext only runs when it is created AND resumed inside
+a real user gesture. The library import is a heavy async
+boundary, so a context created after `await import("@strudel/web")`
+stays suspended forever - the clock never advances, and Play
+does nothing. The fix is structural, not environmental:
+
+- The play click SYNCHRONOUSLY creates (once) and resumes folio's
+  own AudioContext, before the import runs, and hands it to
+  `initStrudel({ audioContext })`.
+- The Play button shows `Playing...` the moment it is clicked
+  and reverts to `Play` on Stop or on any play error - the
+  button can never look dead while the first load pays the
+  import cost.
+- The cycle sweep bar re-attaches after every highlight rebuild
+  (the first token flash replaces the pre's children; the bar
+  used to blink out of existence there).
+
+Note for verification: automated WebKitGTK probes dispatch
+synthetic clicks, which produce no user activation, so the
+context stays suspended in the probe environment; the unlock is
+pinned by the Chromium e2e and needs one real click on desktop
+to confirm audibly.
+
 ## Acceptance
 
 - `just lint`, `just test`, `just build` green; engine fence tests

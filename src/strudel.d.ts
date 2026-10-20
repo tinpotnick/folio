@@ -30,6 +30,8 @@ declare module "@strudel/web" {
   export interface StrudelInitOptions {
     /** Receives the compiled pattern before scheduling. */
     editPattern?: (pattern: StrudelPattern) => StrudelPattern;
+    /** The caller's AudioContext (created in the play gesture). */
+    audioContext?: AudioContext | undefined;
   }
   export interface StrudelWeb {
     initStrudel(options?: StrudelInitOptions): Promise<StrudelRepl>;
