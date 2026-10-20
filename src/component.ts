@@ -17,6 +17,7 @@ import type { Cell, Chart, Image, Table } from "@folio/engine/index.js";
 import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import type { StrudelRepl } from "@strudel/web";
 import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
+import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
 import { themeFromDoc, themeCss } from "./render/theme.js";
 import {
   renderAreaChart,
@@ -685,6 +686,20 @@ export class FolioDoc extends HTMLElement {
           // The REPL logs evaluation errors instead of rejecting;
           // route them to the block being played.
           onEvalError: (e) => this.strudelEvalError?.(e),
+          // folio's bundled CC0 drum kit (ADR-0016): registered
+          // under the standard names and PRELOADED - strudel loads
+          // samples lazily and skips a hit whose buffer arrives
+          // late, so a cold kit would drop the first beats. A
+          // sample that fails to load stays silent, never fatal.
+          prebake: async () => {
+            await strudel.samples(DRUM_KIT);
+            const ctx = strudel.getAudioContext();
+            await Promise.all(
+              drumKitUrls().map((url) =>
+                strudel.loadBuffer(url, ctx).catch(() => null),
+              ),
+            );
+          },
         })
         .catch((e: unknown) => {
           this.strudelInit = null;

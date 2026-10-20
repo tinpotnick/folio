@@ -39,11 +39,19 @@ declare module "@strudel/web" {
     audioContext?: AudioContext | undefined;
     /** Called with evaluation errors (evaluate() does not reject). */
     onEvalError?: (e: unknown) => void;
+    /** Awaited by setup after the default synth sounds register. */
+    prebake?: () => Promise<unknown>;
   }
   export interface StrudelWeb {
     initStrudel(options?: StrudelInitOptions): Promise<StrudelRepl>;
     evaluate(code: string): Promise<unknown>;
     hush(): void;
+    /** Register sample sounds: name -> URLs (index = n). */
+    samples(map: Record<string, string[]>, baseUrl?: string): Promise<void>;
+    /** Fetch + decode one sample URL into strudel's buffer cache. */
+    loadBuffer(url: string, ctx: BaseAudioContext): Promise<AudioBuffer>;
+    /** The AudioContext strudel plays through. */
+    getAudioContext(): AudioContext;
   }
   const strudel: StrudelWeb;
   export = strudel;

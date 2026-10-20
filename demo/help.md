@@ -82,8 +82,12 @@ document — written in the same renderer you are working with.
   becomes **▶ Update** - press it to hear the change. A pattern
   like `note("c a f e")` loops as synthesized sound; see
   [strudel.cc](https://strudel.cc) for the language. Playback is
-  offline - no samples are downloaded, so sample-based sounds
-  such as the `bd`/`sd`/`hh` drums stay silent.
+  offline - nothing is downloaded. Melodic sounds are synthesized,
+  and folio ships its own **drum kit** under the usual names:
+  `bd` kick, `sd` snare, `hh` closed hat, `oh` open hat, `cp`
+  clap, `rim`, `lt` `mt` `ht` toms, `cr` crash, `rd` ride, `cb`
+  cowbell - e.g. `s("bd sd [hh hh] sd")`. Add `:1` (`bd:1`) for
+  an alternative sound.
 - **Links** are standard inline Markdown: `[label](url)` in a
   paragraph. Clicking a link follows it - a `.md` path opens
   that document in place (the sample's "More examples" section
