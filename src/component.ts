@@ -477,6 +477,34 @@ export class FolioDoc extends HTMLElement {
       } catch {
         this.strudelCtx = null;
       }
+      // WebKitGTK (the Linux desktop webview) reports a
+      // maxChannelCount of 0 and rejects EVERY channelCount
+      // assignment against that limit. Strudel sizes its output
+      // with destination.channelCount = maxChannelCount, which
+      // then throws on every note - a running clock, no sound.
+      // Shadow both on this context's destination: report the
+      // channel count it actually has, and keep it when an
+      // assignment is refused.
+      const dest = this.strudelCtx?.destination;
+      if (dest && dest.maxChannelCount < 1) {
+        const cc = Object.getOwnPropertyDescriptor(
+          AudioNode.prototype,
+          "channelCount",
+        );
+        Object.defineProperty(dest, "maxChannelCount", {
+          value: Math.max(dest.channelCount, 2),
+        });
+        Object.defineProperty(dest, "channelCount", {
+          get: () => cc?.get?.call(dest) as number,
+          set: (v: number) => {
+            try {
+              cc?.set?.call(dest, v);
+            } catch {
+              // refused by the engine: the existing count stands
+            }
+          },
+        });
+      }
     }
     if (this.strudelCtx !== null) void this.strudelCtx.resume();
   }
