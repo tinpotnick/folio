@@ -318,6 +318,11 @@
       .tk-text {
         color: #1f2328;
       }
+      /* The sticky app header's height: the document's sticky
+         code headers stop below it instead of under it. */
+      #the-doc {
+        --folio-sticky-top: 52px;
+      }
       folio-doc[hidden] {
         display: none;
       }

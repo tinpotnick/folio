@@ -50,9 +50,10 @@ language) as a runtime dependency:
 ## Consequences
 
 - ```strudel fences round-trip losslessly like any fence.
-- Strudel blocks render as figures with a player inspector (play/
-  stop, source textarea, error line) following the ONE inspector
-  contract.
+- Strudel blocks render as code blocks whose code header (the ONE
+  inspector contract) carries a player: play / stop / error line.
+  The source edits in place like any code block (amended by
+  ADR-0015's code header; originally a source textarea).
 - Playback requires a user gesture (autoplay policy); the play
   button is that gesture. Default sample banks are NOT fetched -
   the player runs on synthesized sound only, keeping documents

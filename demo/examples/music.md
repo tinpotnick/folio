@@ -12,7 +12,7 @@ language — in coding blocks that play right in the page.
 
 ## Four notes
 
-Click the figure, then press ▶ Play in the inspector:
+Click into the block, then press ▶ Play in its header:
 
 ```strudel
 note("c a f e").s(0.1)
@@ -20,8 +20,9 @@ note("c a f e").s(0.1)
 
 That single line is a loop: the mini-notation inside the quotes
 steps through the notes `c a f e`, one per cycle position, and
-`.s(0.1)` fades each note quickly. Edit the source in the
-inspector (Enter applies) or in the Markdown view.
+`.s(0.1)` fades each note quickly. Edit the pattern right in the
+block - while it plays, ▶ Update applies the edit - or in the
+Markdown view.
 
 ## Make it groove
 

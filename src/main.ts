@@ -502,7 +502,14 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
       }
       node = node.parentNode;
     }
-    const tag = node instanceof HTMLElement ? node.tagName : "";
+    // A code block renders as a figure around its pre (the code
+    // header is its inspector); it reflects as a code block.
+    const tag =
+      node instanceof HTMLElement
+        ? node.classList.contains("folio-codeblock")
+          ? "PRE"
+          : node.tagName
+        : "";
     blockButtons.forEach((b) => {
       const want =
         b.dataset.block === "p" ? "P" : (b.dataset.block ?? "").toUpperCase();
@@ -943,6 +950,17 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords: "music strudel audio beat pattern sound player live coding",
     action: () => btnStrudel.click(),
+  });
+  entries.push({
+    title: "Change the code block language",
+    group: "Command",
+    keywords:
+      "code block language syntax highlighting highlight python javascript typescript rust sql shell strudel fence",
+    action: () => {
+      if (!el.focusCodeLanguage()) {
+        flash("Click into a code block first, then change its language");
+      }
+    },
   });
   entries.push({
     title: "Import the demo dataset (monthly-sales.csv)",
