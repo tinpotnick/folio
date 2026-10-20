@@ -88,7 +88,6 @@ stack(
   drums.fast(2).color('tomato'), 
   synths
 ).slow(2)
-`;
 ```
 
 Press ■ Stop when the neighbours complain. (That heading is
