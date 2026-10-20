@@ -34,7 +34,12 @@ test.describe("strudel music blocks", () => {
   test("clicking the figure reveals the player inspector; a click outside hides it", async ({
     page,
   }) => {
-    await loadDoc(page, SRC);
+    // The outside-click target is the paragraph, so the document
+    // needs one (SRC alone has no <p> - the click hung forever).
+    await loadDoc(
+      page,
+      `# T\n\nsome prose\n\n${"```"}strudel\nnote("c a f e")\n${"```"}\n`,
+    );
     const figure = page.locator("#the-doc figure.folio-strudel");
     await figure.click();
     const bar = figure.locator(".folio-inspector");
@@ -161,9 +166,19 @@ test.describe("strudel music blocks", () => {
     await expect(pre.locator(".strudel-hit").first()).toBeVisible({
       timeout: 10_000,
     });
+    // The sweep survives the hit spans' DOM rebuilds (the first
+    // flash replaces the pre's children - the bar must re-attach).
+    await expect(pre.locator(".strudel-sweep")).toHaveAttribute("data-on", "1");
+    // The play button reflects playing state.
+    await expect(
+      figure.locator(".folio-inspector .strudel-play"),
+    ).toContainText("Playing");
     // Stop: the highlight chrome is removed and the plain source
     // text is restored.
     await figure.locator(".folio-inspector .strudel-stop").click();
+    await expect(
+      figure.locator(".folio-inspector .strudel-play"),
+    ).toContainText("Play");
     await expect(pre.locator(".strudel-hit")).toHaveCount(0);
     await expect(pre.locator(".strudel-sweep")).toHaveCount(0);
     await expect(pre).toHaveText('note("c a f e")');
@@ -178,7 +193,8 @@ test.describe("strudel music blocks", () => {
   });
 
   test("the toolbar music button inserts a strudel block", async ({ page }) => {
-    await loadDoc(page, "# T\n\n");
+    // The button needs an editable caret: give the doc a paragraph.
+    await loadDoc(page, "# T\n\nsome prose\n");
     await page.locator("#the-doc p").first().click();
     await page.locator("#btn-strudel").click();
     await expect(page.locator("#the-doc figure.folio-strudel")).toBeVisible();
