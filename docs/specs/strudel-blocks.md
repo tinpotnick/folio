@@ -50,8 +50,16 @@ text }` - the existing fence block (docs/specs/
   Stop removes the atom spans and restores plain syntax colors;
   the spans never reach the model (it reads `innerText`).
 - **Offline (ADR-0005)**: the library is bundled and lazily
-  imported, never fetched. No sample banks are loaded; playback
-  uses synthesized sound only.
+  imported, never fetched. No external sample banks are loaded:
+  melodic sounds are synthesized, and drums come from folio's
+  bundled CC0 kit (ADR-0016) under the standard names - `bd`
+  (kick), `sd` (snare), `hh` (closed hat), `oh` (open hat), `cp`
+  (clap/snap), `rim`, `lt`/`mt`/`ht` (toms), `cr` (crash), `rd`
+  (ride), `cb` (cowbell), with variants via `bd:1` or `.n(1)`. The
+  kit is registered and preloaded in the REPL's one-time setup
+  (`prebake`), so the first beats are never skipped as late. Kit
+  files are hashed assets emitted next to the bundle and loaded
+  from the app's own origin.
 - **Markdown view**: ```strudel fences highlight with the standard
   fence/code tokens - no new token kinds.
 - **Language picker**: "Strudel (music)" in any code block's
@@ -123,6 +131,8 @@ activation, so a DOM-dispatched click leaves the context suspended.
   restores the plain text; a sounding note lights ALL its
   locations; an evaluation error shows in the header; editing while
   playing pauses the lights and offers Update, which resumes them.
+- e2e: every kit drum name plays from bundled assets with no
+  "not found" or late-load errors and no remote request.
 - e2e (`tests/e2e/palette.spec.ts`): the music example's Caverave
   lights up while playing, offline.
 - First-contact eval: `evals/strudel-first-contact.md`.

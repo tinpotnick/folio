@@ -55,9 +55,9 @@ language) as a runtime dependency:
   The source edits in place like any code block (amended by
   ADR-0015's code header; originally a source textarea).
 - Playback requires a user gesture (autoplay policy); the play
-  button is that gesture. Default sample banks are NOT fetched -
-  the player runs on synthesized sound only, keeping documents
-  offline-clean.
+  button is that gesture. No external sample banks are fetched -
+  documents stay offline-clean. (Amended by ADR-0016: folio bundles
+  its own CC0 drum kit, so drum names such as `bd sd hh` play.)
 - The AGPL status of any combined distribution is tracked in this
   ADR and must be settled before the first binary/hosted release
   that bundles it.

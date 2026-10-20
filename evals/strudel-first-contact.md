@@ -12,6 +12,8 @@ steps:
     plays, and make the edit audible.
   - Switch to Markdown view, look at the block, and switch back.
   - Change the block's language to JavaScript, then back to Strudel.
+  - Make the block play a drum beat, using only what the in-app help
+    says about sounds.
 expected:
   - The music button (a note icon, tooltip "Insert a Strudel music
     block") or the palette entry "Insert a Strudel music block"
@@ -32,4 +34,8 @@ expected:
   - Picking JavaScript removes the player and keeps the code
     (now highlighted as JavaScript, fence tag `javascript`);
     picking Strudel brings the player back.
+  - The help names the drum sounds (`bd`, `sd`, `hh`, ...); a
+    pattern such as `s("bd sd [hh hh] sd")` plays audible drums
+    offline (no network requests), with the drum names lighting
+    as they sound and no error line.
 ---

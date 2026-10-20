@@ -158,6 +158,41 @@ test.describe("strudel music blocks", () => {
     expect(requests).toEqual([]);
   });
 
+  test("drum names play from folio's bundled kit, preloaded, offline", async ({
+    page,
+  }) => {
+    // bd/sd/hh/oh/cp/rim/lt/mt/ht/cr/rd/cb are sample sounds; with no
+    // sample bank every hit failed "sound bd not found" - Caverave's
+    // drums were silent everywhere. folio bundles a CC0 kit.
+    const logs: string[] = [];
+    page.on("console", (m) => logs.push(m.text()));
+    const local: string[] = [];
+    const remote: string[] = [];
+    page.on("request", (r) => {
+      const url = r.url();
+      if (!url.startsWith("http")) return;
+      if (url.includes("localhost")) local.push(url);
+      else remote.push(url);
+    });
+    await loadDoc(
+      page,
+      '# T\n\n```strudel\ns("bd sd [hh hh] oh, cp rim lt mt ht cr rd cb")\n```\n',
+    );
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".folio-inspector .strudel-play").click();
+    await expect(figure.locator(".strudel-on").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(2500);
+    expect(logs.filter((l) => /not found|could not load/.test(l))).toEqual([]);
+    // Preloaded before the first beat: no hit is skipped as late.
+    expect(logs.filter((l) => l.includes("took too long"))).toEqual([]);
+    expect(local.filter((u) => u.endsWith(".flac")).length).toBeGreaterThan(10);
+    expect(remote).toEqual([]);
+    await figure.locator(".folio-inspector .strudel-stop").click();
+  });
+
   test("playback survives an engine reporting zero output channels", async ({
     page,
   }) => {
