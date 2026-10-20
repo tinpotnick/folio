@@ -879,6 +879,11 @@ const EXAMPLES: { id: string; file: string; blurb: string }[] = [
     file: "/demo/examples/technical.md",
     blurb: "technical code equations benchmarks",
   },
+  {
+    id: "music",
+    file: "/demo/examples/music.md",
+    blurb: "music strudel audio beats pattern fun player",
+  },
 ];
 
 interface PaletteEntry {

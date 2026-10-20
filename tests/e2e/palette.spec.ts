@@ -212,4 +212,20 @@ test.describe("example documents", () => {
       { timeout: 10_000 },
     );
   });
+  test("Open example: music renders playable strudel figures", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await openPalette(page);
+    await page.locator("#palette-input").fill("music");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("folio-doc h1", { hasText: "A little bit of fun" }),
+    ).toBeVisible();
+    // Two strudel fences, each a figure with a player inspector.
+    await expect(page.locator("#the-doc figure.folio-strudel")).toHaveCount(2);
+    const first = page.locator("#the-doc figure.folio-strudel").first();
+    await first.click();
+    await expect(first.locator(".folio-inspector .strudel-play")).toBeVisible();
+  });
 });
