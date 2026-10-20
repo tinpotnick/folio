@@ -125,15 +125,14 @@ test.describe("code blocks: header and highlighting", () => {
     // block's top (where the header lives) is far above.
     const pre = figure.locator("pre.folio-code");
     await pre.evaluate((el) => el.scrollIntoView({ block: "end" }));
-    const h = (await pre.boundingBox())!.height;
+    const h = (await pre.boundingBox())?.height ?? 0;
     await pre.click({ position: { x: 40, y: h - 30 } });
     const bar = figure.locator(".folio-inspector");
     await expect(bar).toBeVisible();
-    const box = await bar.boundingBox();
-    expect(box).not.toBeNull();
+    const y = (await bar.boundingBox())?.y ?? -1;
     // Below the sticky app header (52px), inside the viewport.
-    expect(box!.y).toBeGreaterThanOrEqual(50);
-    expect(box!.y).toBeLessThan(120);
+    expect(y).toBeGreaterThanOrEqual(50);
+    expect(y).toBeLessThan(120);
   });
 
   test("the palette command opens the caret block's language picker", async ({
