@@ -1,10 +1,72 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Set the mode BEFORE first paint: dark-preference users
+      // would otherwise get a flash of light.
+      (function () {
+        var saved = localStorage.getItem("folio:mode");
+        document.documentElement.dataset.mode =
+          saved === "dark" || saved === "light"
+            ? saved
+            : window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+      })();
+    </script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>folio — document-first workspace</title>
     <style>
+      /* Light is the default; dark is an attribute away. The
+         document itself stays PAPER (its look comes from its
+         theme, not the app) - dark mode dresses the app chrome
+         around it: toolbar, sidebar, Markdown editor, modals. */
+      :root {
+        --bg: #fafbfc;
+        --surface: #ffffff;
+        --surface-2: #f3f4f6;
+        --surface-3: #f0f3f6;
+        --text: #1f2328;
+        --text-muted: #57606a;
+        --border: #e6e8eb;
+        --border-strong: #d0d7de;
+        --active-bg: #1f2328;
+        --active-fg: #ffffff;
+        --accent-bg: #e7ecff;
+        --accent-text: #1f3fbf;
+        --gutter: #b0b8c1;
+        --syntax-purple: #8250df;
+        --syntax-orange: #953800;
+        --syntax-blue: #0550ae;
+        --syntax-green: #116329;
+        --syntax-red: #cf222e;
+        --rec-bg: #fbe4e4;
+        --rec-fg: #b42318;
+      }
+      html[data-mode="dark"] {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --surface-2: #21262d;
+        --surface-3: #10151c;
+        --text: #e6edf3;
+        --text-muted: #9199a1;
+        --border: #30363d;
+        --border-strong: #3d444d;
+        --active-bg: #e6edf3;
+        --active-fg: #0d1117;
+        --accent-bg: #1b2a4a;
+        --accent-text: #6f9dff;
+        --gutter: #484f58;
+        --syntax-purple: #d2a8ff;
+        --syntax-orange: #ffa657;
+        --syntax-blue: #79c0ff;
+        --syntax-green: #7ee787;
+        --syntax-red: #ff7b72;
+        --rec-bg: #3d1a1a;
+        --rec-fg: #f85149;
+      }
       /* Author display rules beat the UA's [hidden] mapping. */
       [hidden] {
         display: none !important;
@@ -12,15 +74,15 @@
       body {
         margin: 0;
         font-family: system-ui, sans-serif;
-        background: #fafbfc;
+        background: var(--bg);
       }
       header {
-        border-bottom: 1px solid #e6e8eb;
+        border-bottom: 1px solid var(--border);
         padding: 10px 24px;
         display: flex;
         gap: 16px;
         align-items: center;
-        background: #fff;
+        background: var(--surface);
         position: sticky;
         top: 0;
         z-index: 10;
@@ -30,10 +92,6 @@
         margin: 0;
         font-weight: 700;
       }
-      header .tag {
-        color: #57606a;
-        font-size: 13px;
-      }
       .toolbar {
         margin-left: auto;
         display: flex;
@@ -42,10 +100,10 @@
       }
       .seg {
         display: flex;
-        border: 1px solid #d0d7de;
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
         padding: 3px;
-        background: #fff;
+        background: var(--surface);
       }
       .seg button {
         border: none;
@@ -56,15 +114,15 @@
         display: grid;
         place-items: center;
         cursor: pointer;
-        color: #57606a;
+        color: var(--text-muted);
       }
       .seg button:hover {
-        background: #f3f4f6;
+        background: var(--surface-2);
       }
       /* Recording: the mic button pulses while capture runs. */
       #btn-record.rec {
-        background: #fbe4e4;
-        color: #b42318;
+        background: var(--rec-bg);
+        color: var(--rec-fg);
         animation: rec-pulse 1.2s ease-in-out infinite;
       }
       @keyframes rec-pulse {
@@ -77,8 +135,8 @@
         }
       }
       .seg button.active {
-        background: #1f2328;
-        color: #fff;
+        background: var(--active-bg);
+        color: var(--active-fg);
       }
       .seg svg {
         width: 16px;
@@ -87,10 +145,10 @@
       .fmt {
         display: flex;
         gap: 2px;
-        border: 1px solid #d0d7de;
+        border: 1px solid var(--border-strong);
         border-radius: 8px;
         padding: 3px;
-        background: #fff;
+        background: var(--surface);
       }
       .fmt button {
         border: none;
@@ -100,30 +158,30 @@
         height: 28px;
         font-size: 14px;
         cursor: pointer;
-        color: #1f2328;
+        color: var(--text);
         font-family: inherit;
       }
       .fmt button:hover {
-        background: #f3f4f6;
+        background: var(--surface-2);
       }
       .fmt button.md:active,
       .fmt button:active {
-        background: #e6e8eb;
+        background: var(--surface-2);
       }
       .fmt button.active,
       .fmt button.active:hover {
-        background: #1f2328;
-        color: #fff;
+        background: var(--active-bg);
+        color: var(--active-fg);
       }
       .fmt button:disabled,
       .fmt button:disabled:hover {
-        background: #fff;
+        background: var(--surface);
         opacity: 0.4;
         cursor: default;
       }
       button.plain {
-        border: 1px solid #d0d7de;
-        background: #fff;
+        border: 1px solid var(--border-strong);
+        background: var(--surface);
         border-radius: 8px;
         padding: 6px 12px;
         font-size: 13px;
@@ -136,15 +194,15 @@
       }
       .kbd-hint {
         font-size: 11px;
-        color: #57606a;
-        border: 1px solid #d0d7de;
+        color: var(--text-muted);
+        border: 1px solid var(--border-strong);
         border-radius: 5px;
         padding: 1px 5px;
-        background: #f6f8fa;
+        background: var(--surface-3);
         line-height: 1.3;
       }
       button.plain:hover {
-        background: #f3f4f6;
+        background: var(--surface-2);
       }
       button.plain svg {
         display: block;
@@ -161,8 +219,8 @@
         align-self: flex-start;
         width: 230px;
         flex: none;
-        border-right: 1px solid #e6e8eb;
-        background: #fff;
+        border-right: 1px solid var(--border);
+        background: var(--surface);
         height: calc(100vh - 52px);
         overflow-y: auto;
         padding: 14px 8px 24px 14px;
@@ -175,7 +233,7 @@
         font-size: 11px;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: #57606a;
+        color: var(--text-muted);
         margin: 0 0 8px 6px;
       }
       #outline {
@@ -189,7 +247,7 @@
         text-align: left;
         font: inherit;
         font-size: 13px;
-        color: #1f2328;
+        color: var(--text);
         padding: 4px 8px;
         border-radius: 6px;
         cursor: pointer;
@@ -198,11 +256,11 @@
         text-overflow: ellipsis;
       }
       #outline button:hover {
-        background: #f3f4f6;
+        background: var(--surface-2);
       }
       #outline button.active {
-        background: #e7ecff;
-        color: #1f3fbf;
+        background: var(--accent-bg);
+        color: var(--accent-text);
         font-weight: 600;
       }
       #outline .l1 {
@@ -216,7 +274,7 @@
       #outline .l5,
       #outline .l6 {
         padding-left: 32px;
-        color: #57606a;
+        color: var(--text-muted);
       }
       main {
         padding: 24px;
@@ -236,7 +294,7 @@
       .md-gutter {
         user-select: none;
         text-align: right;
-        color: #b0b8c1;
+        color: var(--gutter);
         padding: 24px 10px 40vh 0;
         white-space: pre;
         line-height: 1.6;
@@ -260,7 +318,7 @@
         padding: 24px 0 40vh 2px;
         border: none;
         background: transparent;
-        color: #1f2328;
+        color: var(--text);
       }
       #editor {
         grid-column: 2;
@@ -268,7 +326,7 @@
         resize: none;
         outline: none;
         color: transparent;
-        caret-color: #1f2328;
+        caret-color: var(--text);
         z-index: 2;
         width: 100%;
       }
@@ -284,54 +342,54 @@
         min-height: 1.6em;
       }
       .tk-frontmatter-delim {
-        color: #8250df;
+        color: var(--syntax-purple);
         font-weight: 600;
       }
       .tk-frontmatter-key {
-        color: #953800;
+        color: var(--syntax-orange);
       }
       .tk-heading {
-        color: #0550ae;
+        color: var(--syntax-blue);
         font-weight: 650;
       }
       .tk-bullet {
-        color: #116329;
+        color: var(--syntax-green);
       }
       .tk-bold {
-        color: #1f2328;
+        color: var(--text);
         font-weight: 650;
       }
       .tk-italic {
-        color: #1f2328;
+        color: var(--text);
         font-style: italic;
       }
       .tk-code {
-        color: #cf222e;
+        color: var(--syntax-red);
       }
       .tk-math {
-        color: #8250df;
+        color: var(--syntax-purple);
         background: rgba(130, 80, 223, 0.06);
       }
       .tk-strike {
-        color: #953800;
+        color: var(--syntax-orange);
         text-decoration: line-through;
       }
       .tk-underline {
-        color: #0550ae;
+        color: var(--syntax-blue);
         text-decoration: underline;
       }
       .tk-directive {
-        color: #8250df;
+        color: var(--syntax-purple);
         font-weight: 600;
       }
       .tk-directive-key {
-        color: #0550ae;
+        color: var(--syntax-blue);
       }
       .tk-directive-list {
-        color: #116329;
+        color: var(--syntax-green);
       }
       .tk-text {
-        color: #1f2328;
+        color: var(--text);
       }
       /* The sticky app header's height: the document's sticky
          code headers stop below it instead of under it. */
@@ -345,8 +403,8 @@
         position: fixed;
         bottom: 12px;
         right: 12px;
-        background: #1f2328;
-        color: #fff;
+        background: var(--active-bg);
+        color: var(--active-fg);
         border-radius: 6px;
         padding: 6px 12px;
         font-size: 13px;
@@ -374,8 +432,8 @@
         align-items: center;
         gap: 12px;
         padding: 12px 16px;
-        border-bottom: 1px solid #e6e8eb;
-        background: #fff;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
       }
       #help-modal .help-head h2 {
         margin: 0;
@@ -405,7 +463,7 @@
         width: 100%;
         box-sizing: border-box;
         border: none;
-        border-bottom: 1px solid #e6e8eb;
+        border-bottom: 1px solid var(--border);
         padding: 14px 16px;
         font-size: 15px;
         outline: none;
@@ -429,26 +487,26 @@
         border-radius: 8px;
       }
       .palette-item.selected {
-        background: #f0f3f6;
+        background: var(--surface-3);
       }
       .palette-item .palette-tag {
         font-size: 11px;
-        color: #57606a;
-        border: 1px solid #d0d7de;
+        color: var(--text-muted);
+        border: 1px solid var(--border-strong);
         border-radius: 999px;
         padding: 1px 8px;
         flex: none;
       }
       .palette-empty {
         padding: 16px;
-        color: #57606a;
+        color: var(--text-muted);
         font-size: 14px;
       }
       .palette-foot {
-        border-top: 1px solid #e6e8eb;
+        border-top: 1px solid var(--border);
         padding: 8px 16px;
         font-size: 12px;
-        color: #57606a;
+        color: var(--text-muted);
       }
       #settings-modal {
         width: min(520px, calc(100vw - 48px));
@@ -477,7 +535,7 @@
       }
       #settings-form label {
         font-size: 13px;
-        color: #1f2328;
+        color: var(--text);
         white-space: nowrap;
       }
       #settings-form select,
@@ -485,9 +543,9 @@
         font: inherit;
         font-size: 13px;
         padding: 6px 8px;
-        border: 1px solid #d0d7de;
+        border: 1px solid var(--border-strong);
         border-radius: 8px;
-        background: #fff;
+        background: var(--surface);
         width: 100%;
         box-sizing: border-box;
       }
@@ -498,7 +556,7 @@
         gap: 8px;
         padding-top: 12px;
         margin-top: 8px;
-        border-top: 1px solid #e6e8eb;
+        border-top: 1px solid var(--border);
       }
       /* Printing (and PDF via the OS print dialog) shows the
          document, not the app chrome. */
@@ -514,7 +572,7 @@
           display: none !important;
         }
         body {
-          background: #fff;
+          background: var(--surface);
         }
         .layout,
         main {
@@ -539,8 +597,9 @@
       >
         ☰
       </button>
-      <h1>folio</h1>
-      <span class="tag">document-first workspace</span>
+      <h1 title="folio — a document-first workspace: semantic Markdown documents, typed tables, query-driven charts">
+        folio
+      </h1>
       <div class="toolbar">
         <div class="fmt" id="history-bar">
           <button
@@ -849,6 +908,24 @@
             <path
               d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"
               stroke-linecap="round"
+            />
+          </svg>
+        </button>
+        <button
+          id="btn-mode"
+          class="plain"
+          title="Switch to dark mode"
+          aria-label="Switch to dark mode"
+        >
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <path
+              d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7z"
+              stroke-linejoin="round"
             />
           </svg>
         </button>

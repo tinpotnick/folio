@@ -887,6 +887,38 @@ btnTable.addEventListener("click", () => {
   flash("Table inserted");
 });
 
+/* --- Dark / light mode (spec: docs/specs/dark-light-mode.md) ---
+ * The app chrome dresses from CSS variables; the DOCUMENT stays
+ * paper (its look comes from its own theme). The choice persists
+ * in localStorage and defaults to the system preference. */
+const MODE_KEY = "folio:mode";
+const btnMode = requireEl<HTMLButtonElement>("#btn-mode");
+
+function reflectModeButton(): void {
+  const dark = document.documentElement.dataset.mode === "dark";
+  btnMode.title = dark ? "Switch to light mode" : "Switch to dark mode";
+  btnMode.setAttribute("aria-label", btnMode.title);
+}
+
+function setMode(mode: "dark" | "light"): void {
+  document.documentElement.dataset.mode = mode;
+  localStorage.setItem(MODE_KEY, mode);
+  reflectModeButton();
+}
+
+(function initMode(): void {
+  // The <head> script set the attribute before first paint
+  // (saved choice, else the system preference); the button only
+  // needs to say which way the next press goes.
+  reflectModeButton();
+})();
+
+function toggleMode(): void {
+  setMode(document.documentElement.dataset.mode === "dark" ? "light" : "dark");
+}
+
+btnMode.addEventListener("click", toggleMode);
+
 /* --- Undo/redo (spec: docs/specs/undo-redo.md) --- */
 
 const btnUndo = requireEl<HTMLButtonElement>("#btn-undo");
@@ -1215,6 +1247,12 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "audio sound music clip mp3 wav embed insert recording voice",
     // Same focus-free contract as the image picker.
     action: () => audioFile.click(),
+  });
+  entries.push({
+    title: "Toggle dark mode",
+    group: "Command",
+    keywords: "dark light theme mode night appearance contrast toggle",
+    action: () => toggleMode(),
   });
   entries.push({
     title: "Undo",

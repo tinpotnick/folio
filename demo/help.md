@@ -275,6 +275,15 @@ rows they reference; formula cells are never editable by hand.
   settings and Markdown-view edits are undoable steps like any
   other change. Text fields keep their own native undo.
 
+## Dark and light mode
+
+- The moon button beside **?** (or the palette's "Toggle dark
+  mode") switches the app - toolbar, section browser, Markdown
+  source, dialogs - between light and dark. The choice is
+  remembered, and the first visit follows the system preference.
+  The document itself keeps its paper look in both modes: its
+  appearance comes from its theme, not from the app around it.
+
 ## Search
 
 - Press **Ctrl+K** (or the magnifier button in the toolbar) to open

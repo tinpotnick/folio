@@ -135,6 +135,10 @@ export function themeCss(theme: Theme): string {
       font-size: ${theme.bodySize};
       line-height: 1.65;
       color: #1f2328;
+      /* The document OWNS its paper - it never sits on whatever
+         the app paints behind it, so a dark app chrome never
+         darkens the page. */
+      background: #ffffff;
     }
     h1 {
       font-family: ${theme.h1Font};
