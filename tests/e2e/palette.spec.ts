@@ -222,10 +222,41 @@ test.describe("example documents", () => {
     await expect(
       page.locator("folio-doc h1", { hasText: "A little bit of fun" }),
     ).toBeVisible();
-    // Two strudel fences, each a figure with a player inspector.
-    await expect(page.locator("#the-doc figure.folio-strudel")).toHaveCount(2);
+    // Three strudel fences, each a figure with a player inspector.
+    await expect(page.locator("#the-doc figure.folio-strudel")).toHaveCount(3);
     const first = page.locator("#the-doc figure.folio-strudel").first();
     await first.click();
     await expect(first.locator(".folio-inspector .strudel-play")).toBeVisible();
+  });
+  test("Open example: music's Caverave tune plays offline", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await openPalette(page);
+    await page.locator("#palette-input").fill("music");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("folio-doc h1", { hasText: "A little bit of fun" }),
+    ).toBeVisible();
+    const caverave = page
+      .locator("#the-doc figure.folio-strudel")
+      .filter({ hasText: "Caverave" })
+      .first();
+    await expect(caverave).toBeVisible();
+    const requests: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().startsWith("http") && !r.url().includes("localhost")) {
+        requests.push(r.url());
+      }
+    });
+    await caverave.click();
+    await caverave.locator(".folio-inspector .strudel-play").click();
+    await expect(caverave.locator(".folio-inspector")).not.toContainText(
+      "Strudel error",
+      { timeout: 10_000 },
+    );
+    await page.waitForTimeout(1000);
+    expect(requests).toEqual([]);
+    await caverave.locator(".folio-inspector .strudel-stop").click();
   });
 });
