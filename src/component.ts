@@ -15,12 +15,9 @@ import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable, type TablePool } from "@folio/engine/recalc";
 import type { Cell, Chart, Image, Table } from "@folio/engine/index.js";
 import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
-import type {
-  StrudelInitOptions,
-  StrudelLocation,
-  StrudelPattern,
-  StrudelRepl,
-} from "@strudel/web";
+import type { StrudelRepl } from "@strudel/web";
+import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
+import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
 import { themeFromDoc, themeCss } from "./render/theme.js";
 import {
   renderAreaChart,
@@ -30,6 +27,74 @@ import {
   renderScatterChart,
 } from "./render/chart.js";
 import { inlineMarkdownToHtml, htmlToInlineMarkdown } from "./render/inline.js";
+
+type CodeBlock = Extract<DocBlock, { kind: "code" }>;
+
+/** A strudel block's playing highlight (spec: strudel-blocks.md). */
+interface StrudelPlaying {
+  figure: HTMLElement;
+  code: HTMLElement;
+  /** The source the atom spans were painted for. */
+  source: string;
+  /** Atom spans by "start:end" source range. */
+  marks: Map<string, HTMLElement>;
+  lit: Set<HTMLElement>;
+  raf: number | null;
+}
+
+/**
+ * WebKitGTK (the Linux desktop webview) reports an AudioContext
+ * destination's maxChannelCount as 0 and rejects EVERY channelCount
+ * assignment against that limit. Strudel sizes its output with
+ * destination.channelCount = maxChannelCount, which then throws on
+ * every note - a running clock, no sound. Patch the PROTOTYPE, not
+ * the instance: WebKit may collect the destination's JS wrapper and
+ * hand out a fresh one, dropping instance properties (a long tune
+ * lost the fix mid-play). Both overrides only act where the engine
+ * itself reports 0: maxChannelCount then reports the channel count
+ * the destination actually has, and a refused assignment keeps it.
+ */
+let zeroChannelPatched = false;
+function patchZeroChannelDestinations(): void {
+  if (zeroChannelPatched) return;
+  zeroChannelPatched = true;
+  const proto = AudioDestinationNode.prototype;
+  const max = Object.getOwnPropertyDescriptor(proto, "maxChannelCount");
+  const cc =
+    Object.getOwnPropertyDescriptor(proto, "channelCount") ??
+    Object.getOwnPropertyDescriptor(AudioNode.prototype, "channelCount");
+  const readMax = max?.get;
+  const readCount = cc?.get;
+  const writeCount = cc?.set;
+  if (!readMax || !readCount || !writeCount) return;
+  Object.defineProperty(proto, "maxChannelCount", {
+    configurable: true,
+    enumerable: true,
+    get(this: AudioDestinationNode): number {
+      const n = readMax.call(this) as number;
+      return n >= 1 ? n : Math.max(readCount.call(this) as number, 2);
+    },
+  });
+  Object.defineProperty(proto, "channelCount", {
+    configurable: true,
+    enumerable: true,
+    get(this: AudioDestinationNode): number {
+      return readCount.call(this) as number;
+    },
+    set(this: AudioDestinationNode, v: number) {
+      try {
+        writeCount.call(this, v);
+      } catch (e) {
+        // Only the zero-limit quirk is absorbed; real errors stand.
+        if ((readMax.call(this) as number) >= 1) throw e;
+      }
+    },
+  });
+}
+
+const PLAY_LABEL = "▶ Play";
+const PLAYING_LABEL = "▶ Playing…";
+const UPDATE_LABEL = "▶ Update";
 
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
@@ -69,15 +134,14 @@ export class FolioDoc extends HTMLElement {
    * field exists to prevent).
    */
   private strudelCtx: AudioContext | null = null;
-  /** Playing-highlight state for the strudel figure (ADR-0014). */
-  private strudelHighlight: {
-    pre: HTMLElement;
-    source: string;
-    byStart: Map<number, HTMLElement>;
-    sweep: HTMLElement | null;
-  } | null = null;
-  private pendingLocs: StrudelLocation[] = [];
-  private sweepRaf: number | null = null;
+  /** The one strudel REPL's setup, started by the first play. */
+  private strudelInit: Promise<StrudelRepl> | null = null;
+  /** Receives the REPL's evaluation error for the play in flight. */
+  private strudelEvalError: ((e: unknown) => void) | null = null;
+  /** The playing highlight, while a strudel block plays. */
+  private strudelPlaying: StrudelPlaying | null = null;
+  /** The text each code figure's syntax colors were painted for. */
+  private painted = new WeakMap<HTMLElement, string>();
 
   constructor() {
     super();
@@ -187,6 +251,10 @@ export class FolioDoc extends HTMLElement {
 
   private render(): void {
     if (!this.doc || !this.shadowRoot) return;
+    // A full render replaces every figure: music stops with it
+    // (only once the library was ever loaded - never import it
+    // for a document that plays nothing).
+    if (this.repl !== null) void this.stopStrudel();
     const theme = themeFromDoc(this.doc);
     const root = this.shadowRoot;
     root.innerHTML = "";
@@ -235,7 +303,14 @@ export class FolioDoc extends HTMLElement {
             ".folio-inspector:not([hidden])",
           ) ?? [],
         )) {
-          if (bar.closest("figure") !== hitFigure) bar.hidden = true;
+          const owner = bar.closest("figure");
+          if (owner === hitFigure) continue;
+          bar.hidden = true;
+          // Leaving a code block: repaint its syntax colors for
+          // the edited text (never while the caret is inside).
+          if (owner?.classList.contains("folio-codeblock")) {
+            void this.highlightCode(owner as HTMLElement);
+          }
         }
       },
       true,
@@ -287,17 +362,7 @@ export class FolioDoc extends HTMLElement {
         return el;
       }
       case "code": {
-        if (block.lang === "strudel") {
-          return this.renderStrudel(block, idx);
-        }
-        const pre = document.createElement("pre");
-        pre.className = "folio-code";
-        pre.dataset.blockIndex = String(idx);
-        if (block.lang !== undefined) pre.dataset.lang = block.lang;
-        const code = document.createElement("code");
-        code.textContent = block.text;
-        pre.appendChild(code);
-        return pre;
+        return this.renderCode(block, idx);
       }
       case "table": {
         return this.renderTable(block, idx);
@@ -364,104 +429,218 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
-   * A strudel code block (spec: docs/specs/strudel-blocks.md):
-   * generated output like every figure - the source body is
-   * selectable and Backspace/Delete removes it (the diagram
-   * affordance); the player inspector owns playback and edits.
+   * A fenced code block (spec: docs/specs/code-blocks.md): a figure
+   * holding the code header - an inspector bar with the language
+   * picker plus per-language controls (strudel's player, spec:
+   * docs/specs/strudel-blocks.md) - and the code body. Unlike the
+   * generated figures, the body edits in place like prose, and is
+   * syntax-highlighted for supported languages (presentation only;
+   * the model reads the body's text back).
    */
-  private renderStrudel(
-    block: Extract<Doc["blocks"][number], { kind: "code" }>,
-    idx: number,
-  ): HTMLElement {
+  private renderCode(block: CodeBlock, idx: number): HTMLElement {
+    const strudel = block.lang === "strudel";
     const figure = document.createElement("figure");
-    figure.className = "folio-strudel";
+    figure.className = strudel
+      ? "folio-codeblock folio-strudel"
+      : "folio-codeblock";
     figure.dataset.blockIndex = String(idx);
-    figure.contentEditable = "false";
-    figure.tabIndex = -1;
-    figure.title = "Strudel music block - Backspace or Delete removes it";
-    figure.appendChild(this.buildStrudelInspector(figure, idx));
+    if (block.lang !== undefined) figure.dataset.lang = block.lang;
+    figure.appendChild(this.buildCodeInspector(figure, block));
     const pre = document.createElement("pre");
-    pre.className = "folio-code strudel-source";
-    pre.textContent = block.text;
+    pre.className = strudel ? "folio-code strudel-source" : "folio-code";
+    if (block.lang !== undefined) pre.dataset.lang = block.lang;
+    const code = document.createElement("code");
+    code.textContent = block.text;
+    pre.appendChild(code);
     figure.appendChild(pre);
+    void this.highlightCode(figure);
     return figure;
   }
 
+  /** The code body's current text (rendered line breaks included). */
+  private codeText(code: HTMLElement): string {
+    return code.isConnected ? code.innerText : (code.textContent ?? "");
+  }
+
   /**
-   * The strudel player inspector (spec: docs/specs/
-   * strudel-blocks.md): play/stop buttons and the pattern source.
-   * The library is loaded lazily on the first play (ADR-0014) -
-   * bundled, never fetched; the click is the autoplay gesture.
+   * (Re)paint a code figure's syntax colors. Skipped when the text
+   * already painted is current, when the body was edited while the
+   * grammar loaded, or while strudel playback owns the paint.
+   * Repainting moves no caret only because it runs on render and
+   * when the user leaves the block (the header hides).
    */
-  private buildStrudelInspector(figure: HTMLElement, idx: number): HTMLElement {
+  private async highlightCode(figure: HTMLElement): Promise<void> {
+    const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+    if (!code) return;
+    const text = this.codeText(code);
+    if (this.painted.get(figure) === text) return;
+    const tokens = await tokenizeCode(text, figure.dataset.lang);
+    if (tokens === null) return;
+    if (code.isConnected && this.codeText(code) !== text) return;
+    if (this.strudelPlaying?.figure === figure) return;
+    paintCode(code, text, tokens);
+    this.painted.set(figure, text);
+  }
+
+  /**
+   * The code header (spec: docs/specs/code-blocks.md): one bar for
+   * every language - the language picker - plus the controls that
+   * language adds (strudel: play / stop / error line). It follows
+   * the ONE inspector contract (docs/specs/figure-inspectors.md):
+   * reveal on a click inside the figure, hide on a click outside,
+   * Esc dismisses early, no close button.
+   */
+  private buildCodeInspector(
+    figure: HTMLElement,
+    block: CodeBlock,
+  ): HTMLElement {
     const bar = this.figureBar();
+    bar.classList.add("code-inspector");
+    const picker = document.createElement("select");
+    picker.className = "code-lang";
+    picker.title = "Code language";
+    picker.setAttribute("aria-label", "Code language");
+    const options: Array<[string, string]> = [
+      ["", "Plain text"],
+      ...CODE_LANGUAGES.map((l): [string, string] => [l.id, l.label]),
+    ];
+    // An unlisted fence tag stays selectable as itself, so opening
+    // the header never rewrites a language it does not know.
+    if (
+      block.lang !== undefined &&
+      !CODE_LANGUAGES.some((l) => l.id === block.lang)
+    ) {
+      options.push([block.lang, block.lang]);
+    }
+    for (const [value, label] of options) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      picker.appendChild(opt);
+    }
+    picker.value = block.lang ?? "";
+    picker.addEventListener("change", () => {
+      this.setCodeLanguage(
+        Number(figure.dataset.blockIndex ?? -1),
+        picker.value,
+      );
+    });
+    bar.appendChild(picker);
+    if (block.lang === "strudel") {
+      bar.append(...this.buildStrudelControls(figure));
+    }
+    figure.addEventListener("mousedown", () => {
+      bar.hidden = false;
+    });
+    return bar;
+  }
+
+  /**
+   * Change a code block's language from its header: a model write
+   * that re-renders the one figure in place (the header stays open
+   * on the picker) and reaches the fence tag in the source.
+   */
+  setCodeLanguage(idx: number, lang: string): void {
+    const block = this.doc?.blocks[idx];
+    if (!block || block.kind !== "code") return;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const old = host?.children[idx] as HTMLElement | undefined;
+    if (this.strudelPlaying && this.strudelPlaying.figure === old) {
+      void this.stopStrudel();
+    }
+    if (lang === "") delete block.lang;
+    else block.lang = lang;
+    const fresh = this.renderBlock(block, idx);
+    if (old) old.replaceWith(fresh);
+    const bar = fresh.querySelector<HTMLElement>(".folio-inspector");
+    if (bar) bar.hidden = false;
+    fresh.querySelector<HTMLElement>("select.code-lang")?.focus();
+    this.emitChange();
+  }
+
+  /**
+   * Backspace in an EMPTY code body removes the block (its header
+   * would otherwise strand an empty figure); the caret moves to the
+   * end of the previous block. True when a block was removed.
+   */
+  private removeEmptyCodeBlock(): boolean {
+    if (!this.doc) return false;
+    const idx = this.blockIndexAtCaret();
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const figure = host?.children[idx] as HTMLElement | undefined;
+    if (!figure?.classList.contains("folio-codeblock")) return false;
+    const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+    if (!code || (code.textContent ?? "") !== "") return false;
+    this.doc.blocks.splice(idx, 1);
+    this.render();
+    this.emitChange();
+    if (idx > 0) this.focusBlockStart(idx - 1, true);
+    return true;
+  }
+
+  /**
+   * Reveal the caret's code header with the language picker
+   * focused - the palette's "Change the code block language".
+   * False when the caret is not in a code block.
+   */
+  focusCodeLanguage(): boolean {
+    const idx = this.blockIndexAtCaret();
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const figure = host?.children[idx] as HTMLElement | undefined;
+    if (!figure?.classList.contains("folio-codeblock")) return false;
+    for (const other of Array.from(
+      host?.querySelectorAll<HTMLElement>(".folio-inspector") ?? [],
+    )) {
+      if (other.closest("figure") !== figure) other.hidden = true;
+    }
+    const bar = figure.querySelector<HTMLElement>(".folio-inspector");
+    if (bar) bar.hidden = false;
+    figure.querySelector<HTMLElement>("select.code-lang")?.focus();
+    return true;
+  }
+
+  /**
+   * The strudel player controls of the code header: play / stop and
+   * the error line. The library is loaded lazily on the first play
+   * (ADR-0014) - bundled, never fetched; the click is the autoplay
+   * gesture. Play while playing re-evaluates the (edited) source.
+   */
+  private buildStrudelControls(figure: HTMLElement): HTMLElement[] {
     const err = document.createElement("span");
     err.className = "insp-error strudel-error";
     err.hidden = true;
     const play = document.createElement("button");
     play.type = "button";
     play.className = "insp-select strudel-play";
-    play.textContent = "\u25b6 Play";
+    play.textContent = PLAY_LABEL;
     const stop = document.createElement("button");
     stop.type = "button";
     stop.className = "insp-select strudel-stop";
-    stop.textContent = "\u25a0 Stop";
-    const ta = document.createElement("textarea");
-    ta.className = "insp-source-text";
-    ta.rows = 3;
-    ta.placeholder = "Strudel pattern source";
-    ta.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter" && !ev.shiftKey) {
-        ev.preventDefault();
-        apply();
-      }
-    });
-    ta.addEventListener("change", () => apply());
-    const apply = (): void => {
-      const block = this.doc?.blocks[idx];
-      if (!block || block.kind !== "code") return;
-      block.text = ta.value;
-      const pre = figure.querySelector("pre.strudel-source");
-      if (pre) pre.textContent = ta.value;
-      this.emitChange();
-    };
+    stop.textContent = "■ Stop";
     play.addEventListener("click", () => {
-      const block = this.doc?.blocks[idx];
-      if (!block || block.kind !== "code") return;
+      const code = figure.querySelector<HTMLElement>(
+        "pre.strudel-source > code",
+      );
+      if (!code) return;
       err.hidden = true;
       // Unlock audio SYNCHRONOUSLY, inside the gesture, BEFORE
       // the async import - the load must never eat the activation
       // window (the play-does-nothing bug on WebKitGTK).
       this.ensureStrudelAudio();
-      play.textContent = "\u25b6 Playing\u2026";
-      void this.playStrudel(block.text, err, play);
+      play.textContent = PLAYING_LABEL;
+      void this.playStrudel(figure, this.codeText(code), err, play);
     });
     stop.addEventListener("click", () => {
       err.hidden = true;
-      play.textContent = "\u25b6 Play";
       void this.stopStrudel();
     });
-    const show = (): void => {
-      const block = this.doc?.blocks[idx];
-      if (block && block.kind === "code") ta.value = block.text;
-      bar.hidden = false;
-    };
-    figure.addEventListener("mousedown", () => show());
-    bar.append(play, stop, err, ta);
-    return bar;
+    return [play, stop, err];
   }
 
   /**
-   * Start strudel playback for one pattern source. The library is
-   * dynamically imported on first use only (the Mermaid/KaTeX
-   * pattern, ADR-0010/0011); evaluation errors surface as content
-   * in the player's error line, never a broken render.
-   */
-  /**
    * Create (once) and resume the AudioContext inside the click's
    * user-gesture window. Falls back to strudel's own context when
-   * the engine has no audio (the library works without one for
-   * the highlight machinery).
+   * the engine has no audio.
    */
   private ensureStrudelAudio(): void {
     if (this.strudelCtx === null) {
@@ -477,54 +656,83 @@ export class FolioDoc extends HTMLElement {
       } catch {
         this.strudelCtx = null;
       }
+      const dest = this.strudelCtx?.destination;
+      if (dest && dest.maxChannelCount < 1) patchZeroChannelDestinations();
     }
     if (this.strudelCtx !== null) void this.strudelCtx.resume();
   }
 
+  /**
+   * Start (or re-evaluate) strudel playback for one block's source.
+   * The library is dynamically imported on first use only (the
+   * Mermaid/KaTeX pattern, ADR-0010/0011) and initialised ONCE - a
+   * second REPL would keep the first one's pattern playing past
+   * Stop. Evaluation errors surface as content in the header's
+   * error line, never a broken render.
+   */
   private async playStrudel(
+    figure: HTMLElement,
     source: string,
     err: HTMLElement,
     play: HTMLElement,
   ): Promise<void> {
     try {
       const strudel = await import("@strudel/web");
-      // The figure's source pre is the highlight surface: each
-      // sounding event flashes the mini-notation token it came
-      // from (a hap's context.locations are offsets into the
-      // pattern source), and a sweep bar tracks the live cycle
-      // position - the REPL's mesmerising paint, on folio's DOM.
-      const figure = err.closest("figure.folio-strudel");
-      const pre =
-        figure?.querySelector<HTMLElement>("pre.strudel-source") ?? null;
-      const initOptions: StrudelInitOptions = {};
-      if (pre) {
-        this.buildStrudelHighlight(pre, source);
-        initOptions.editPattern = (pattern) =>
-          this.hookStrudelHighlight(pattern);
+      this.strudelInit ??= strudel
+        .initStrudel({
+          // The pre-unlocked context: created and resumed in the
+          // click, so the clock starts even on strict engines.
+          audioContext: this.strudelCtx ?? undefined,
+          // The REPL logs evaluation errors instead of rejecting;
+          // route them to the block being played.
+          onEvalError: (e) => this.strudelEvalError?.(e),
+          // folio's bundled CC0 drum kit (ADR-0016): registered
+          // under the standard names and PRELOADED - strudel loads
+          // samples lazily and skips a hit whose buffer arrives
+          // late, so a cold kit would drop the first beats. A
+          // sample that fails to load stays silent, never fatal.
+          prebake: async () => {
+            await strudel.samples(DRUM_KIT);
+            const ctx = strudel.getAudioContext();
+            await Promise.all(
+              drumKitUrls().map((url) =>
+                strudel.loadBuffer(url, ctx).catch(() => null),
+              ),
+            );
+          },
+        })
+        .catch((e: unknown) => {
+          this.strudelInit = null;
+          throw e;
+        });
+      const repl = await this.strudelInit;
+      this.repl = repl;
+      const status: { error: unknown } = { error: null };
+      this.strudelEvalError = (e) => {
+        status.error = e ?? new Error("the pattern did not evaluate");
+      };
+      try {
+        await strudel.evaluate(source);
+      } finally {
+        this.strudelEvalError = null;
       }
-      this.repl = await strudel.initStrudel({
-        ...initOptions,
-        // The pre-unlocked context: created and resumed in the
-        // click, so the clock starts even on strict engines.
-        audioContext: this.strudelCtx ?? undefined,
-      });
-      await strudel.evaluate(source);
-      this.startStrudelSweep(pre);
-      // Engine watchdog: on some WebKitGTK systems the context
-      // ends up "interrupted" (an engine-level WebAudio failure -
-      // the clock never starts and nothing is audible). Say so
-      // instead of leaving a dead "Playing..." label up.
+      if (status.error !== null) throw status.error;
+      await this.startStrudelLights(figure, source, repl);
+      // Audio watchdog: if folio's context never starts running
+      // (an engine that cannot open an audio device), say so
+      // instead of leaving a silent "Playing..." label up.
       const audible = await this.waitStrudelAudio(2000);
-      if (!audible && this.strudelCtx !== null) {
-        err.textContent =
-          "Audio device unavailable in this engine - no sound output " +
-          "(a WebKitGTK audio limitation; works in Chromium/Firefox)";
-        err.hidden = false;
-        play.textContent = "\u25b6 Play";
+      if (!audible) {
         await this.stopStrudel();
+        if (err.isConnected) {
+          err.textContent =
+            "Audio device unavailable - no sound output. Check the " +
+            "system's audio output and press Play again.";
+          err.hidden = false;
+        }
       }
     } catch (e) {
-      if (play.isConnected) play.textContent = "\u25b6 Play";
+      if (play.isConnected) play.textContent = PLAY_LABEL;
       if (err.isConnected) {
         err.textContent = `Strudel error: ${
           e instanceof Error ? e.message : String(e)
@@ -535,160 +743,132 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
-   * Split the source pre into per-token spans up front, so the
-   * per-event callback only has to flash spans (never parse).
-   * Locations arrive per hap at trigger time; the spans are
-   * looked up by start offset.
+   * The playing highlight (spec: docs/specs/strudel-blocks.md):
+   * the strudel REPL's own technique. The evaluator reports every
+   * mini-notation atom's source range up front (miniLocations), so
+   * the body is painted once with an addressable span per atom;
+   * then every animation frame queries the playing pattern at the
+   * scheduler's current cycle and lights the atoms of every hap
+   * sounding NOW - all of each hap's source locations, for the
+   * hap's whole duration. Lit atoms fade out via CSS when released.
    */
-  private buildStrudelHighlight(pre: HTMLElement, source: string): void {
-    this.strudelHighlight = {
-      pre,
+  private async startStrudelLights(
+    figure: HTMLElement,
+    source: string,
+    repl: StrudelRepl,
+  ): Promise<void> {
+    this.stopStrudelLights();
+    const code = figure.querySelector<HTMLElement>("pre.strudel-source > code");
+    if (!code) return;
+    const tokens = (await tokenizeCode(source, "strudel")) ?? [];
+    if (!code.isConnected || this.codeText(code) !== source) return;
+    this.stopStrudelLights();
+    const marks = paintCode(code, source, tokens, repl.state.miniLocations);
+    this.painted.set(figure, source);
+    const state: StrudelPlaying = {
+      figure,
+      code,
       source,
-      byStart: new Map(),
-      sweep: null,
+      marks,
+      lit: new Set(),
+      raf: null,
     };
-    // Nothing to wrap until locations arrive; spans are created
-    // lazily per unique location on first flash.
-  }
-
-  /** Lazily wrap one source range in a flashable span. */
-  private strudelSpan(loc: StrudelLocation): HTMLElement | null {
-    const hl = this.strudelHighlight;
-    if (!hl) return null;
-    const { pre, source } = hl;
-    if (loc.start < 0 || loc.end <= loc.start || loc.end > source.length) {
-      return null;
-    }
-    const span = hl.byStart.get(loc.start);
-    if (span?.isConnected) return span;
-    // Rebuild the pre from plain text, then split out every known
-    // location - kept simple and rare (first flash per location).
-    pre.textContent = source;
-    for (const [start, known] of hl.byStart) {
-      void known;
-      hl.byStart.delete(start);
-    }
-    // Collect all locations to wrap: the new one plus any that
-    // already fired (they will re-flash).
-    const locs = [...this.pendingLocs, loc];
-    const sorted = [...new Map(locs.map((l) => [l.start, l])).values()].sort(
-      (a, b) => a.start - b.start,
-    );
-    let cursor = 0;
-    const frag = document.createDocumentFragment();
-    for (const l of sorted) {
-      if (l.start < cursor) continue;
-      if (l.start > cursor) {
-        frag.appendChild(
-          document.createTextNode(source.slice(cursor, l.start)),
-        );
-      }
-      const s = document.createElement("span");
-      s.className = "strudel-hit";
-      s.textContent = source.slice(l.start, l.end);
-      frag.appendChild(s);
-      hl.byStart.set(l.start, s);
-      cursor = l.end;
-    }
-    if (cursor < source.length) {
-      frag.appendChild(document.createTextNode(source.slice(cursor)));
-    }
-    pre.replaceChildren(frag);
-    // replaceChildren wiped the sweep bar (it lives in this pre):
-    // re-attach it - the playhead is playback chrome, never
-    // content, and it must not blink out of existence on the
-    // first flash.
-    if (hl.sweep) pre.appendChild(hl.sweep);
-    return hl.byStart.get(loc.start) ?? null;
-  }
-
-  /**
-   * Attach the per-event hook to the compiled pattern: flash the
-   * span for the hap's last source location.
-   */
-  private hookStrudelHighlight(pattern: StrudelPattern): StrudelPattern {
-    const flash = (loc: StrudelLocation): void => {
-      const hl = this.strudelHighlight;
-      if (!hl) return;
-      const span = hl.byStart.get(loc.start) ?? this.strudelSpan(loc);
-      if (!span) return;
-      span.classList.remove("strudel-hit-flash");
-      void span.offsetWidth;
-      span.classList.add("strudel-hit-flash");
-    };
-    return pattern.onTrigger((hap) => {
-      const loc = hap.context?.locations?.at(-1);
-      if (loc) {
-        this.pendingLocs.push(loc);
-        flash(loc);
-      }
-    }, false);
-  }
-
-  /**
-   * The cycle sweep: a thin bar whose horizontal position follows
-   * the scheduler's cycle position (now() % 1) across the pre's
-   * content box - the REPL's moving playhead. One rAF loop per
-   * component, stopped on hush. The sweep is playback chrome on
-   * top of the pre, never document content.
-   */
-  private startStrudelSweep(pre: HTMLElement | null): void {
-    this.stopStrudelSweep();
-    if (!pre) return;
-    const sweep = document.createElement("div");
-    sweep.className = "strudel-sweep";
-    sweep.dataset.on = "0";
-    pre.appendChild(sweep);
-    if (this.strudelHighlight) this.strudelHighlight.sweep = sweep;
+    this.strudelPlaying = state;
     const tick = (): void => {
-      const now = this.repl?.scheduler.now() ?? 0;
-      sweep.style.left = `${(now % 1) * 100}%`;
-      const on = now > 0 ? "1" : "0";
-      if (sweep.dataset.on !== on) sweep.dataset.on = on;
-      this.sweepRaf = requestAnimationFrame(tick);
+      if (this.strudelPlaying !== state) return;
+      if (!code.isConnected) {
+        this.strudelPlaying = null;
+        return;
+      }
+      const on = new Set<HTMLElement>();
+      try {
+        const t = repl.scheduler.now();
+        const haps = repl.state.pattern?.queryArc(t, t + 1 / 240) ?? [];
+        for (const hap of haps) {
+          const whole = hap.whole;
+          if (!whole || Number(whole.begin) > t || Number(whole.end) <= t) {
+            continue;
+          }
+          for (const loc of hap.context?.locations ?? []) {
+            const el = marks.get(`${loc.start}:${loc.end}`);
+            if (el) on.add(el);
+          }
+        }
+      } catch {
+        // A query error leaves the lights as they were.
+      }
+      for (const el of state.lit) {
+        if (!on.has(el)) el.classList.remove("strudel-on");
+      }
+      for (const el of on) {
+        if (!state.lit.has(el)) el.classList.add("strudel-on");
+      }
+      state.lit = on;
+      state.raf = requestAnimationFrame(tick);
     };
     tick();
   }
 
-  private stopStrudelSweep(): void {
-    if (this.sweepRaf !== null) {
-      cancelAnimationFrame(this.sweepRaf);
-      this.sweepRaf = null;
+  /**
+   * Stop the playing highlight: lights out, the atom spans give
+   * way to plain syntax colors, and the block's Play button reads
+   * Play again. Audio is untouched (stopStrudel hushes).
+   */
+  private stopStrudelLights(): void {
+    const state = this.strudelPlaying;
+    if (!state) return;
+    this.strudelPlaying = null;
+    if (state.raf !== null) cancelAnimationFrame(state.raf);
+    for (const el of state.lit) el.classList.remove("strudel-on");
+    const play = state.figure.querySelector<HTMLElement>(".strudel-play");
+    if (play) play.textContent = PLAY_LABEL;
+    this.painted.delete(state.figure);
+    void this.highlightCode(state.figure);
+  }
+
+  /**
+   * The playing block's source was edited: the atom ranges no
+   * longer match the text, so the lights stop (the audio plays on)
+   * and Play offers to apply the edit.
+   */
+  private freezeStrudelLights(): void {
+    const state = this.strudelPlaying;
+    if (!state || !state.code.isConnected) return;
+    if (this.codeText(state.code) === state.source) return;
+    this.strudelPlaying = null;
+    if (state.raf !== null) cancelAnimationFrame(state.raf);
+    for (const el of state.lit) el.classList.remove("strudel-on");
+    const play = state.figure.querySelector<HTMLElement>(".strudel-play");
+    if (play) play.textContent = UPDATE_LABEL;
+  }
+
+  /**
+   * Whether folio's AudioContext reached "running" within the
+   * window. False means the engine could not start audio output
+   * (its context stayed suspended or "interrupted"); the play can
+   * at best be visual and the user must be told.
+   */
+  private async waitStrudelAudio(timeoutMs: number): Promise<boolean> {
+    const ctx = this.strudelCtx;
+    if (ctx === null) return true; // strudel's own context
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (ctx.state === "running") return true;
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
-    this.strudelHighlight?.sweep?.remove();
-    if (this.strudelHighlight) this.strudelHighlight.sweep = null;
+    return ctx.state === "running";
   }
 
   /**
    * Stop all strudel playback. Hush is safe to call whether or
    * not the library ever loaded.
    */
-  /**
-   * Whether folio's AudioContext reached "running" within the
-   * window. False means the engine could not start audio output
-   * (WebKitGTK reports "interrupted" on some systems) - the play
-   * is visual-only at best and the user must be told.
-   */
-  private async waitStrudelAudio(timeoutMs: number): Promise<boolean> {
-    if (this.strudelCtx === null) return true; // strudel's own ctx
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      if (this.strudelCtx.state === "running") return true;
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-    return this.strudelCtx.state === "running";
-  }
-
   private async stopStrudel(): Promise<void> {
-    this.stopStrudelSweep();
-    this.pendingLocs = [];
-    const hl = this.strudelHighlight;
-    if (hl) {
-      // Restore the plain source text: the flash spans and sweep
-      // bar are playback chrome, not document content.
-      const pre = hl.pre;
-      if (pre.isConnected) pre.textContent = hl.source;
-      this.strudelHighlight = null;
+    this.stopStrudelLights();
+    for (const play of Array.from(
+      this.shadowRoot?.querySelectorAll<HTMLElement>(".strudel-play") ?? [],
+    )) {
+      play.textContent = PLAY_LABEL;
     }
     const strudel = await import("@strudel/web").catch(() => null);
     if (strudel) strudel.hush();
@@ -2082,20 +2262,17 @@ export class FolioDoc extends HTMLElement {
     const next: DocBlock[] = [];
     for (const child of Array.from(host.children)) {
       const el = child as HTMLElement;
-      if (el.tagName === "FIGURE" && el.classList.contains("folio-strudel")) {
-        // A strudel block renders as a figure but stays a text
-        // block: the source is re-derived from the DOM like any
-        // code block, keeping structural sync (and Backspace
-        // removal) uniform.
-        const pre = el.querySelector("pre.strudel-source");
-        // The sweep bar is playback chrome; only the source text
-        // reaches the model.
-        const chrome = pre?.querySelector(":scope > .strudel-sweep");
-        if (chrome) chrome.remove();
+      if (el.tagName === "FIGURE" && el.classList.contains("folio-codeblock")) {
+        // A code block renders as a figure (its header is the
+        // inspector) but stays a text block: the body is re-derived
+        // from the DOM like prose. Syntax colors and strudel's
+        // playing lights are spans over the text - innerText reads
+        // through them.
+        const code = el.querySelector<HTMLElement>("pre.folio-code > code");
         next.push({
           kind: "code",
-          lang: "strudel",
-          text: pre ? (pre.textContent ?? "") : "",
+          ...(el.dataset.lang !== undefined ? { lang: el.dataset.lang } : {}),
+          text: code ? code.innerText : "",
         });
         continue;
       }
@@ -2147,6 +2324,7 @@ export class FolioDoc extends HTMLElement {
     }
     this.syncFromDom();
     this.commitCaretCell();
+    this.freezeStrudelLights();
     this.emitChange();
   }
 
@@ -2697,14 +2875,17 @@ export class FolioDoc extends HTMLElement {
   }
 
   /** Re-rendering loses the caret; put it back at the block start. */
-  private focusBlockStart(idx: number): void {
+  private focusBlockStart(idx: number, atEnd = false): void {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
-    const el = (host?.children[idx] ?? null) as HTMLElement | null;
+    const child = (host?.children[idx] ?? null) as HTMLElement | null;
+    // A code figure's caret belongs in its body, not its header.
+    const el =
+      child?.querySelector<HTMLElement>("pre.folio-code > code") ?? child;
     if (!el) return;
     el.focus();
     const range = document.createRange();
     range.selectNodeContents(el);
-    range.collapse(true);
+    range.collapse(!atEnd);
     const sel = window.getSelection();
     sel?.removeAllRanges();
     sel?.addRange(range);
@@ -2775,7 +2956,7 @@ export class FolioDoc extends HTMLElement {
     const removableFigure =
       ev.target instanceof Element
         ? (ev.target.closest(
-            "figure.folio-diagram, figure.folio-image, figure.folio-strudel",
+            "figure.folio-diagram, figure.folio-image",
           ) as HTMLElement | null)
         : null;
     if (
@@ -2790,6 +2971,10 @@ export class FolioDoc extends HTMLElement {
         this.render();
         this.emitChange();
       }
+      return;
+    }
+    if (ev.key === "Backspace" && this.removeEmptyCodeBlock()) {
+      ev.preventDefault();
       return;
     }
     // A header-name rename owns its Enter/Tab/Escape/Ctrl+A;
@@ -2864,15 +3049,6 @@ export class FolioDoc extends HTMLElement {
       return;
     }
     if (block.kind === "code") {
-      // A strudel figure is generated output; never split or edit
-      // it in place (the inspector's textarea owns the source).
-      if (
-        ev.target instanceof Element &&
-        ev.target.closest("figure.folio-strudel")
-      ) {
-        ev.preventDefault();
-        return;
-      }
       // A line break inside the code block, not a block split.
       // syncFromDom reads code blocks via innerText so the inserted
       // <br> becomes a real newline in the model.

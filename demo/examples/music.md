@@ -12,7 +12,7 @@ language — in coding blocks that play right in the page.
 
 ## Four notes
 
-Click the figure, then press ▶ Play in the inspector:
+Click into the block, then press ▶ Play in its header:
 
 ```strudel
 note("c a f e").s(0.1)
@@ -20,8 +20,9 @@ note("c a f e").s(0.1)
 
 That single line is a loop: the mini-notation inside the quotes
 steps through the notes `c a f e`, one per cycle position, and
-`.s(0.1)` fades each note quickly. Edit the source in the
-inspector (Enter applies) or in the Markdown view.
+`.s(0.1)` fades each note quickly. Edit the pattern right in the
+block - while it plays, ▶ Update applies the edit - or in the
+Markdown view.
 
 ## Make it groove
 
@@ -41,9 +42,9 @@ Press ■ Stop when the neighbours complain.
 The Strudel project ships its own open-source tune collection -
 this one is "Caverave" by Felix Roos, licensed CC BY-NC-SA 4.0
 (https://strudel.cc), reproduced from the strudel repository.
-Drums, a layered synth arpeggio, chords, and a bassline, all
-synthesized in the browser - press ▶ Play and watch the notes
-light up:
+Drums from folio's built-in kit, plus a layered synth arpeggio,
+chords, and a bassline synthesized in the browser - press ▶ Play
+and watch the notes light up:
 
 ```strudel
 // "Caverave"
@@ -88,7 +89,6 @@ stack(
   drums.fast(2).color('tomato'), 
   synths
 ).slow(2)
-`;
 ```
 
 Press ■ Stop when the neighbours complain. (That heading is
@@ -100,8 +100,9 @@ borrowed from earlier - the advice applies doubly here.)
   inside the quotes is Strudel's mini-notation, where spaces
   step in time and `<...>` alternates.
 - `.stack(...)` layers patterns on top of each other.
-- Playback is synthesized in the browser — no samples are
-  downloaded, the document stays one offline file.
+- `s("bd sd hh")` plays drums from folio's built-in kit (kick,
+  snare, hi-hat, and more - see the help). Nothing is downloaded,
+  so the document stays one offline file.
 
 Everything else about this document — prose, the links, this
 theme — is ordinary folio. Music is just one more block kind.

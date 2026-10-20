@@ -218,7 +218,14 @@ test.describe("example documents", () => {
     await waitForDocument(page);
     await openPalette(page);
     await page.locator("#palette-input").fill("music");
-    await page.keyboard.press("Enter");
+    // Click the example by name (bare Enter picks the Strudel
+    // INSERT command - ranking must not retarget tests).
+    await page
+      .locator("#palette-list .palette-item", {
+        hasText: "Open example: music",
+      })
+      .first()
+      .click();
     await expect(
       page.locator("folio-doc h1", { hasText: "A little bit of fun" }),
     ).toBeVisible();
@@ -234,7 +241,15 @@ test.describe("example documents", () => {
     await waitForDocument(page);
     await openPalette(page);
     await page.locator("#palette-input").fill("music");
-    await page.keyboard.press("Enter");
+    // Bare Enter picks the TOP match - "Insert a Strudel music
+    // block". Click the example by name so palette ranking
+    // changes cannot silently retarget this test.
+    await page
+      .locator("#palette-list .palette-item", {
+        hasText: "Open example: music",
+      })
+      .first()
+      .click();
     await expect(
       page.locator("folio-doc h1", { hasText: "A little bit of fun" }),
     ).toBeVisible();
@@ -251,10 +266,15 @@ test.describe("example documents", () => {
     });
     await caverave.click();
     await caverave.locator(".folio-inspector .strudel-play").click();
-    await expect(caverave.locator(".folio-inspector")).not.toContainText(
-      "Strudel error",
-      { timeout: 10_000 },
-    );
+    // Real playback proof, not just absence of error text: with
+    // the broken source (an unterminated template) evaluate
+    // failed and nothing ever lit.
+    await expect(caverave.locator(".strudel-on").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(
+      caverave.locator(".folio-inspector .strudel-error"),
+    ).toBeHidden();
     await page.waitForTimeout(1000);
     expect(requests).toEqual([]);
     await caverave.locator(".folio-inspector .strudel-stop").click();
