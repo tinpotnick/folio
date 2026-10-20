@@ -73,7 +73,8 @@ btnView.addEventListener("click", () => {
   if (!editor.hidden) {
     try {
       const doc = parseDoc(editor.value);
-      el.load(serializeDoc(doc));
+      // Markdown-view edits are one undo step in document view.
+      el.load(serializeDoc(doc), { keepHistory: true });
       flash("Parsed OK");
     } catch (e) {
       flash(`Parse error: ${e instanceof Error ? e.message : String(e)}`);
@@ -886,6 +887,40 @@ btnTable.addEventListener("click", () => {
   flash("Table inserted");
 });
 
+/* --- Undo/redo (spec: docs/specs/undo-redo.md) --- */
+
+const btnUndo = requireEl<HTMLButtonElement>("#btn-undo");
+const btnRedo = requireEl<HTMLButtonElement>("#btn-redo");
+
+function reflectHistory(): void {
+  btnUndo.disabled = !el.canUndo();
+  btnRedo.disabled = !el.canRedo();
+}
+
+el.addEventListener("folio-history", reflectHistory);
+btnUndo.addEventListener("click", () => el.undo());
+btnRedo.addEventListener("click", () => el.redo());
+
+// App-wide undo: the component owns Ctrl+Z inside its shadow root,
+// and text fields keep their native undo - this listener catches
+// the rest (focus on a toolbar button, on the page body) so undo
+// works wherever the caret is NOT.
+document.addEventListener("keydown", (ev) => {
+  if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) return;
+  const key = ev.key.toLowerCase();
+  const isUndo = key === "z" && !ev.shiftKey;
+  const isRedo = (key === "z" && ev.shiftKey) || key === "y";
+  if (!isUndo && !isRedo) return;
+  const t = ev.target instanceof HTMLElement ? ev.target : null;
+  // Fields keep their native per-field undo (the Markdown source
+  // textarea included); the component handles its own shadow tree.
+  if (t && t.closest("input, textarea") !== null) return;
+  if (t && t.closest("folio-doc") !== null) return;
+  ev.preventDefault();
+  if (isUndo) el.undo();
+  else el.redo();
+});
+
 el.onChange(() => {
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
@@ -1180,6 +1215,22 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "audio sound music clip mp3 wav embed insert recording voice",
     // Same focus-free contract as the image picker.
     action: () => audioFile.click(),
+  });
+  entries.push({
+    title: "Undo",
+    group: "Command",
+    keywords: "undo revert back history step z",
+    action: () => {
+      if (!el.undo()) flash("Nothing to undo");
+    },
+  });
+  entries.push({
+    title: "Redo",
+    group: "Command",
+    keywords: "redo repeat again forward history step",
+    action: () => {
+      if (!el.redo()) flash("Nothing to redo");
+    },
   });
   entries.push({
     title: "Record an audio clip",
@@ -1518,7 +1569,8 @@ settingsForm.addEventListener("submit", (ev) => {
     }
     doc.frontmatter.style = style;
     const out = serializeDoc(doc);
-    el.load(out);
+    // Settings are a model change: undoable as a single step.
+    el.load(out, { keepHistory: true });
     editor.value = out;
     if (!mdWrap.hidden) renderHighlight();
     settingsModal.close();
