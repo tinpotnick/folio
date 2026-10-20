@@ -174,6 +174,16 @@ describe("fenced code blocks", () => {
   it("throws on an unterminated fence", () => {
     expect(() => parseDoc("```\nno end")).toThrow(ParseError);
   });
+  it("parses and round-trips a strudel fence", () => {
+    const src = '# T\n\n```strudel\nnote("c a f e")\n```\n';
+    const doc = parseDoc(src);
+    expect(doc.blocks[1]).toEqual({
+      kind: "code",
+      lang: "strudel",
+      text: 'note("c a f e")',
+    });
+    expect(serializeDoc(doc)).toBe(src);
+  });
 });
 
 describe("mermaid diagram blocks", () => {

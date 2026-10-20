@@ -117,3 +117,5 @@ in place:
   code, and diagrams.
 - [An imported-data report](demo/examples/report.md) - a 72-row
   import with running formulas and line charts.
+- [A music document](demo/examples/music.md) - Strudel patterns
+  that play in the page.
