@@ -8,23 +8,45 @@ export function isDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-export async function openDocument(): Promise<string | null> {
+export interface OpenedDocument {
+  /** The file's absolute path: the host remembers it so the NEXT
+   * open dialog starts in this folder (not the home folder). */
+  path: string;
+  text: string;
+}
+
+/** `current` is the open document's path - the dialog starts in
+ * its folder. Returns null when cancelled or not on desktop. */
+export async function openDocument(
+  current?: string,
+): Promise<OpenedDocument | null> {
   if (!isDesktop()) return null;
   const { invoke } = await import("@tauri-apps/api/core");
   try {
-    return await invoke<string>("open_document");
+    return await invoke<OpenedDocument>("open_document", {
+      current: current ?? null,
+    });
   } catch {
     return null;
   }
 }
 
-export async function saveDocument(text: string): Promise<string | null> {
+/** `current` is the open document's path: the dialog starts in
+ * its folder, defaulting the file name to the document's own. */
+export async function saveDocument(
+  text: string,
+  current?: string,
+): Promise<string | null> {
   if (!isDesktop()) return null;
   const { invoke } = await import("@tauri-apps/api/core");
+  const suggested = current
+    ? (current.split(/[\\/]/).pop() ?? "document.md")
+    : "document.md";
   try {
     return await invoke<string>("save_document", {
       text,
-      suggested: "document.md",
+      suggested,
+      current: current ?? null,
     });
   } catch {
     return null;

@@ -249,6 +249,7 @@ async function openLinkedDocument(href: string): Promise<void> {
     const res = await fetch(url.pathname);
     if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
     const text = await res.text();
+    currentDocPath = null; // an in-memory doc has no folder
     await el.load(text);
     editor.value = text;
     refreshOutline();
@@ -806,15 +807,21 @@ const fileBar = requireEl<HTMLElement>("#file-bar");
 const btnOpen = requireEl<HTMLButtonElement>("#btn-open");
 const btnSave = requireEl<HTMLButtonElement>("#btn-save");
 
+/** The open document's file path, when it came from disk. The
+ * Open/Save dialogs start in ITS folder - never the home folder
+ * - and in-memory docs (examples, links, imports) clear it. */
+let currentDocPath: string | null = null;
+
 if (isDesktop()) {
   fileBar.hidden = false;
 }
 
 btnOpen.addEventListener("click", async () => {
-  const text = await openDocument();
-  if (text === null) return;
-  await el.load(text);
-  editor.value = text;
+  const res = await openDocument(currentDocPath ?? undefined);
+  if (res === null) return;
+  currentDocPath = res.path;
+  await el.load(res.text);
+  editor.value = res.text;
   refreshOutline();
   flash("Opened document");
 });
@@ -822,8 +829,11 @@ btnOpen.addEventListener("click", async () => {
 btnSave.addEventListener("click", async () => {
   const md = el.getMarkdown();
   if (md === null) return;
-  const path = await saveDocument(md);
-  if (path !== null) flash(`Saved ${path}`);
+  const path = await saveDocument(md, currentDocPath ?? undefined);
+  if (path !== null) {
+    currentDocPath = path;
+    flash(`Saved ${path}`);
+  }
 });
 
 /* --- In-app help (spec: docs/specs/in-app-help.md) --- */
@@ -1042,6 +1052,7 @@ function paletteEntries(): PaletteEntry[] {
         void (async (): Promise<void> => {
           const res = await fetch(ex.file);
           const text = await res.text();
+          currentDocPath = null; // an in-memory doc has no folder
           await el.load(text);
           editor.value = text;
           refreshOutline();
