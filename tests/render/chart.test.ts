@@ -188,6 +188,32 @@ describe("dense-data rendering (the clumping fix)", () => {
     expect((svg.match(/class="v-label"/g) ?? []).length).toBe(3);
   });
 
+  it("sparse series keep a marker on every point", () => {
+    const svg = renderLineChart(
+      result([
+        ["a", 1],
+        ["b", 2],
+        ["c", 3],
+      ]),
+    ).svg;
+    expect((svg.match(/<circle /g) ?? []).length).toBe(3);
+  });
+
+  it("dense series thin their markers to the x-ticks", () => {
+    // 128 points: a marker per point is a bead necklace, not a
+    // line. Markers land only at x-tick positions (<= 8).
+    const many: QueryResult = {
+      columns: ["n", "v"],
+      rows: Array.from({ length: 128 }, (_, i) => [String(i), Math.sin(i / 8)]),
+    };
+    const svg = renderLineChart(many).svg;
+    const markers = svg.match(/<circle /g) ?? [];
+    expect(markers.length).toBeGreaterThan(0);
+    expect(markers.length).toBeLessThanOrEqual(8);
+    // The curve itself still covers every point.
+    expect((svg.match(/<polyline /g) ?? []).length).toBe(1);
+  });
+
   it("axis titles name the columns, with the unit", () => {
     const svg = renderLineChart(dense, {
       xTitle: "month",

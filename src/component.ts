@@ -2136,10 +2136,20 @@ export class FolioDoc extends HTMLElement {
 
   private drawChart(figure: HTMLElement): void {
     if (!this.doc) return;
+    // A chart figure is its BLOCK, not its source: several charts
+    // can (and do) plot different queries over the same table -
+    // resolving by source here rendered the FIRST chart's query in
+    // every figure over that table. The block index, stamped
+    // positionally by the renderer, is the figure's identity.
+    const idx = Number(figure.dataset.blockIndex ?? "-1");
+    const byIndex = this.doc.blocks[idx];
     const source = figure.dataset.chartSource;
-    const block = this.doc.blocks.find(
-      (b) => b.kind === "chart" && b.chart.source === source,
-    );
+    const block =
+      byIndex !== undefined && byIndex.kind === "chart"
+        ? byIndex
+        : this.doc.blocks.find(
+            (b) => b.kind === "chart" && b.chart.source === source,
+          );
     if (!block || block.kind !== "chart") return;
     const holder = figure.querySelector<HTMLElement>(".chart-holder");
     if (!holder) return;
@@ -2157,13 +2167,23 @@ export class FolioDoc extends HTMLElement {
       // columns (with the value column's unit) - a chart that
       // explains itself.
       const theme = themeFromDoc(this.doc);
+      // Charts dress in order: the second chart on a page should
+      // not wear the first chart's color. Rotation is by the
+      // chart's position among the document's chart blocks, so a
+      // chart keeps its color through re-renders.
+      const ordinal = this.doc.blocks
+        .filter((b) => b.kind === "chart")
+        .indexOf(block);
+      const palette = theme.palette.length > 0 ? theme.palette : ["#4c6ef5"];
+      const seriesColor =
+        palette[ordinal % palette.length] ?? theme.palette[0] ?? "#4c6ef5";
       const select = block.chart.query.select;
       const valueCol = select[select.length - 1] ?? "";
       const unit =
         tableBlock.table.columns.find((c) => c.name === valueCol)?.unit ??
         undefined;
       const style: ChartStyle = {
-        color: theme.palette[0] ?? "#4c6ef5",
+        color: seriesColor,
         colors: theme.palette,
         xTitle: select[0],
         yTitle:

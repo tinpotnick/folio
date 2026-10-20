@@ -268,9 +268,16 @@ function renderLineLike(
 
   const { indices: labelAt, dense } = valueLabelIndices(values);
   const tickAt = new Set(xTickIndices(n));
+  // Dense series draw a marker per x-TICK only: a marker on every
+  // point turns a smooth 512-sample line into a bead necklace.
+  // Sparse series keep every marker.
+  const markerAt: (i: number) => boolean =
+    n > 64 ? (i) => tickAt.has(i) : () => true;
   result.rows.forEach((row, i) => {
     const x = xs[i] ?? 0;
-    parts.push(`<circle cx="${x}" cy="${ys[i]}" r="3" fill="${color}" />`);
+    if (markerAt(i)) {
+      parts.push(`<circle cx="${x}" cy="${ys[i]}" r="3" fill="${color}" />`);
+    }
     if (tickAt.has(i)) {
       parts.push(
         `<text class="x-tick" x="${x}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${TEXT_DARK}">${escapeXml(String(row[0] ?? ""))}</text>`,

@@ -898,6 +898,11 @@ const EXAMPLES: { id: string; file: string; blurb: string }[] = [
     blurb: "technical code equations benchmarks",
   },
   {
+    id: "signal-processing",
+    file: "/demo/examples/signal-processing.md",
+    blurb: "signal processing fft dft filter spectrum math frequency",
+  },
+  {
     id: "music",
     file: "/demo/examples/music.md",
     blurb: "music strudel audio beats pattern fun player",

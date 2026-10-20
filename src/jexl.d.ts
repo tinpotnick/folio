@@ -13,9 +13,11 @@ declare module "jexl" {
     ): void;
     addTransform(
       name: string,
-      fn:
-        | ((value: unknown) => unknown)
-        | ((value: unknown, arg1: unknown) => unknown),
+      fn: (value: unknown, ...args: unknown[]) => unknown,
+    ): void;
+    addFunction(
+      name: string,
+      fn: (value: unknown, ...args: unknown[]) => unknown,
     ): void;
   }
   const jexl: Jexl;

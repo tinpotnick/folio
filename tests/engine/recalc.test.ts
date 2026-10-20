@@ -566,3 +566,239 @@ describe("recalcTable", () => {
     expect(recalcTable(t).rows[0]?.[1]).toBe(1);
   });
 });
+
+describe("recalcTable math catalog", () => {
+  function oneExpr(expr: string, rows: number[][]): (number | string)[][] {
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        { name: "y", type: "number" },
+        { name: "f", type: "formula", expr },
+      ],
+      rows,
+    };
+    return recalcTable(t).rows;
+  }
+
+  it("provides pi, tau, and e as constants", () => {
+    expect(oneExpr("sin(pi)", [[1]])[0]?.[2]).toBeCloseTo(0, 10);
+    expect(oneExpr("cos(tau)", [[1]])[0]?.[2]).toBeCloseTo(1, 10);
+    expect(oneExpr("ln(e)", [[1]])[0]?.[2]).toBeCloseTo(1, 10);
+  });
+
+  it("a column of the same name shadows the constant", () => {
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "e", type: "number" },
+        { name: "f", type: "formula", expr: "e * 2" },
+      ],
+      rows: [[21]],
+    };
+    expect(recalcTable(t).rows[0]?.[1]).toBe(42);
+  });
+
+  it("scalar transforms: roots, logs, powers, trig, utility", () => {
+    expect(oneExpr("x | sqrt()", [[9]])[0]?.[2]).toBe(3);
+    expect(oneExpr("x | cbrt()", [[27]])[0]?.[2]).toBe(3);
+    expect(oneExpr("x | pow(3)", [[2]])[0]?.[2]).toBe(8);
+    expect(oneExpr("x | ln()", [[Math.exp(2)]])[0]?.[2]).toBeCloseTo(2, 10);
+    expect(oneExpr("x | log10()", [[1000]])[0]?.[2]).toBeCloseTo(3, 10);
+    expect(oneExpr("x | log2()", [[8]])[0]?.[2]).toBe(3);
+    expect(oneExpr("x | sin()", [[0.5]])[0]?.[2]).toBeCloseTo(
+      Math.sin(0.5),
+      10,
+    );
+    expect(oneExpr("x | tanh()", [[0.5]])[0]?.[2]).toBeCloseTo(
+      Math.tanh(0.5),
+      10,
+    );
+    expect(oneExpr("x | deg()", [[Math.PI]])[0]?.[2]).toBeCloseTo(180, 10);
+    expect(oneExpr("x | rad()", [[180]])[0]?.[2]).toBeCloseTo(Math.PI, 10);
+    // atan2: the piped value is y.
+    expect(oneExpr("x | atan2(1)", [[1]])[0]?.[2]).toBeCloseTo(Math.PI / 4, 10);
+    // True modulo: the result takes the divisor's sign.
+    expect(oneExpr("-5 | mod(3)", [[1]])[0]?.[2]).toBe(1);
+    expect(oneExpr("-5 | mod(-3)", [[1]])[0]?.[2]).toBe(-2);
+    expect(oneExpr("x | clamp(0, 10)", [[-4]])[0]?.[2]).toBe(0);
+    expect(oneExpr("x | sign()", [[-4]])[0]?.[2]).toBe(-1);
+    expect(oneExpr("x | hypot(y)", [[3, 4]])[0]?.[2]).toBe(5);
+  });
+
+  it("min and max are variadic over scalars and aggregate arrays", () => {
+    expect(oneExpr("x | min(y, 1)", [[5, 3]])[0]?.[2]).toBe(1);
+    expect(oneExpr("x | max(y, 7)", [[5, 3]])[0]?.[2]).toBe(7);
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        { name: "f", type: "formula", expr: "self.col.x | max()" },
+      ],
+      rows: [[5], [3], [9]],
+    };
+    expect(recalcTable(t).rows.every((r) => r[1] === 9)).toBe(true);
+  });
+
+  it("self.col aggregates skip empty and non-finite cells", () => {
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        { name: "s", type: "formula", expr: "self.col.x | sum()" },
+        { name: "c", type: "formula", expr: "self.col.x | count()" },
+        { name: "mean", type: "formula", expr: "self.col.x | mean()" },
+        { name: "med", type: "formula", expr: "self.col.x | median()" },
+        { name: "sd", type: "formula", expr: "self.col.x | stdev()" },
+        { name: "f", type: "formula", expr: "self.col.x | first()" },
+        { name: "l", type: "formula", expr: "self.col.x | last()" },
+      ],
+      rows: [[1], [""], [3], [7]],
+    };
+    const out = recalcTable(t).rows;
+    const row = out[0] ?? [];
+    expect(row[1]).toBe(11); // sum
+    expect(row[2]).toBe(3); // count (empty skipped)
+    expect(row[3]).toBeCloseTo(11 / 3, 10); // mean
+    expect(row[4]).toBe(3); // median of [1,3,7]
+    // Sample stdev of [1,3,7]
+    const sd = Math.sqrt(
+      ((1 - 11 / 3) ** 2 + (3 - 11 / 3) ** 2 + (7 - 11 / 3) ** 2) / 2,
+    );
+    expect(row[5]).toBeCloseTo(sd, 10);
+    expect(row[6]).toBe(1); // first
+    expect(row[7]).toBe(7); // last
+  });
+
+  it("the direct DFT computes known bins of a cosine tone", () => {
+    // cos(2*pi*1*n/4) = [1, 0, -1, 0]: all energy is in bin 1.
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        {
+          name: "re",
+          type: "formula",
+          expr: "self.col.x | dftRe(self.row - 1)",
+        },
+        {
+          name: "im",
+          type: "formula",
+          expr: "self.col.x | dftIm(self.row - 1)",
+        },
+        {
+          name: "mag",
+          type: "formula",
+          expr: "self.col.x | dftMag(self.row - 1)",
+        },
+      ],
+      rows: [[1], [0], [-1], [0]],
+    };
+    const out = recalcTable(t).rows;
+    expect(out[1]?.[3]).toBeCloseTo(2, 10); // bin 1 magnitude
+    expect(out[0]?.[1]).toBeCloseTo(0, 10); // bin 0 real
+    expect(out[1]?.[2]).toBeCloseTo(0, 10); // bin 1 imaginary
+    expect(out[3]?.[3]).toBeCloseTo(2, 10); // conjugate symmetry: bin 3
+  });
+
+  it("the radix-2 FFT agrees with the per-bin DFT", () => {
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        {
+          name: "dft",
+          type: "formula",
+          expr: "self.col.x | dftMag(self.row - 1)",
+        },
+        {
+          name: "fft",
+          type: "formula",
+          expr: "self.col.x | fft() | at(self.row - 1)",
+        },
+      ],
+      rows: [[3], [1], [-2], [5], [0.5], [-1.5], [4], [2.25]],
+    };
+    const out = recalcTable(t).rows;
+    out.forEach((row) => {
+      expect(row[2]).toBeCloseTo(row[1] as number, 10);
+    });
+  });
+
+  it("fft rejects a non-power-of-two sample count with a visible error", () => {
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        { name: "f", type: "formula", expr: "self.col.x | fft() | at(0)" },
+      ],
+      rows: [[1], [2], [3]],
+    };
+    expect(() => recalcTable(t)).toThrow(/power-of-two/);
+  });
+
+  it("sma is a simple moving average ending at the row", () => {
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        {
+          name: "f",
+          type: "formula",
+          expr: "self.col.x | sma(self.row - 1, 2)",
+        },
+      ],
+      rows: [[1], [5], [3]],
+    };
+    const out = recalcTable(t).rows;
+    expect(out[0]?.[1]).toBe(1); // window clipped at the first row
+    expect(out[1]?.[1]).toBe(3); // (1+5)/2
+    expect(out[2]?.[1]).toBe(4); // (5+3)/2
+  });
+
+  it("self.col validates the referenced column", () => {
+    const base = (expr: string): Table => ({
+      id: "m",
+      columns: [
+        { name: "a", type: "number" },
+        { name: "txt", type: "text" },
+        { name: "f", type: "formula", expr },
+        { name: "later", type: "formula", expr: "a + 1" },
+      ],
+      rows: [[1, "x"]],
+    });
+    expect(() => recalcTable(base("self.col.nope | sum()"))).toThrow(
+      /unknown column 'nope'/,
+    );
+    expect(() => recalcTable(base("self.col.txt | sum()"))).toThrow(
+      /non-numeric column 'txt'/,
+    );
+    expect(() => recalcTable(base("self.col.later | sum()"))).toThrow(
+      /columns to its left/,
+    );
+    expect(() => recalcTable(base("self.col.f | sum()"))).toThrow(
+      /self-reference/,
+    );
+    expect(() => recalcTable(base("col | sum()"))).toThrow(/col follows self/);
+  });
+
+  it("recurrences chain with transforms: an EMA low-pass filter", () => {
+    // y_n = a*x_n + (1-a)*y_{n-1} with a = 0.5 on a unit step.
+    const t: Table = {
+      id: "m",
+      columns: [
+        { name: "x", type: "number" },
+        {
+          name: "y",
+          type: "formula",
+          expr: "0.5 * x + (self.row == 1 ? 0 : 0.5 * self.prev.y)",
+        },
+      ],
+      rows: [[1], [1], [1]],
+    };
+    const out = recalcTable(t).rows;
+    expect(out[0]?.[1]).toBeCloseTo(0.5, 10);
+    expect(out[1]?.[1]).toBeCloseTo(0.75, 10);
+    expect(out[2]?.[1]).toBeCloseTo(0.875, 10);
+  });
+});
