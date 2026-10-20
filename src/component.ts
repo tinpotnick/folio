@@ -25,6 +25,7 @@ import {
   renderLineChart,
   renderPieChart,
   renderScatterChart,
+  type ChartStyle,
 } from "./render/chart.js";
 import { inlineMarkdownToHtml, htmlToInlineMarkdown } from "./render/inline.js";
 
@@ -2151,18 +2152,37 @@ export class FolioDoc extends HTMLElement {
       }
       const recalced = recalcTable(tableBlock.table, this.tablePool());
       const result = executeQuery(recalced, block.chart);
+      // The chart dresses from the theme: the series color comes
+      // from the palette, and the axis titles name the query's
+      // columns (with the value column's unit) - a chart that
+      // explains itself.
+      const theme = themeFromDoc(this.doc);
+      const select = block.chart.query.select;
+      const valueCol = select[select.length - 1] ?? "";
+      const unit =
+        tableBlock.table.columns.find((c) => c.name === valueCol)?.unit ??
+        undefined;
+      const style: ChartStyle = {
+        color: theme.palette[0] ?? "#4c6ef5",
+        colors: theme.palette,
+        xTitle: select[0],
+        yTitle:
+          valueCol === ""
+            ? undefined
+            : `${valueCol}${unit ? ` (${unit})` : ""}`,
+      };
       holder.innerHTML =
         block.chart.type === "line"
-          ? renderLineChart(result).svg
+          ? renderLineChart(result, style).svg
           : block.chart.type === "area"
-            ? renderAreaChart(result).svg
+            ? renderAreaChart(result, style).svg
             : block.chart.type === "scatter"
-              ? renderScatterChart(result).svg
+              ? renderScatterChart(result, style).svg
               : block.chart.type === "pie"
-                ? renderPieChart(result).svg
+                ? renderPieChart(result, false, style).svg
                 : block.chart.type === "donut"
-                  ? renderPieChart(result, true).svg
-                  : renderBarChart(result).svg;
+                  ? renderPieChart(result, true, style).svg
+                  : renderBarChart(result, style).svg;
     } catch (e) {
       holder.textContent = `Chart error: ${e instanceof Error ? e.message : String(e)}`;
     }

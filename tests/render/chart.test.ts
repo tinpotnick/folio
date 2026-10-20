@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   renderAreaChart,
   renderBarChart,
+  renderLineChart,
   renderPieChart,
   renderScatterChart,
 } from "@folio/render/chart";
@@ -147,5 +148,67 @@ describe("renderScatterChart", () => {
         ]),
       ),
     ).toThrow(/two numeric/);
+  });
+});
+
+describe("dense-data rendering (the clumping fix)", () => {
+  // 24 monthly points: the imported-data report case.
+  const dense: QueryResult = {
+    columns: ["month", "v"],
+    rows: Array.from({ length: 24 }, (_, i) => [
+      `2024-${String((i % 12) + 1).padStart(2, "0")}`,
+      10 + i,
+    ]),
+  };
+
+  it("x tick labels thin to at most eight (plus the last)", () => {
+    const svg = renderLineChart(dense).svg;
+    const ticks = svg.match(/class="x-tick"/g) ?? [];
+    expect(ticks.length).toBeLessThanOrEqual(8);
+    // The last point is always labeled.
+    expect(svg).toContain("2024-12");
+  });
+
+  it("dense lines label only extremes and the last point", () => {
+    const svg = renderLineChart(dense).svg;
+    const labels = svg.match(/class="v-label"/g) ?? [];
+    expect(labels.length).toBeLessThanOrEqual(3);
+    // 33 is the maximum (the last point), labeled bold.
+    expect(svg).toContain('font-weight="600"');
+  });
+
+  it("sparse series keep every label", () => {
+    const svg = renderLineChart(
+      result([
+        ["a", 1],
+        ["b", 2],
+        ["c", 3],
+      ]),
+    ).svg;
+    expect((svg.match(/class="v-label"/g) ?? []).length).toBe(3);
+  });
+
+  it("axis titles name the columns, with the unit", () => {
+    const svg = renderLineChart(dense, {
+      xTitle: "month",
+      yTitle: "revenue (£k)",
+    }).svg;
+    expect(svg).toContain('class="axis-title"');
+    expect(svg).toContain("revenue (£k)");
+  });
+
+  it("the series color comes from the style", () => {
+    const svg = renderLineChart(dense, { color: "#1c3f60" }).svg;
+    expect(svg).toContain('stroke="#1c3f60"');
+  });
+
+  it("the line's gradient fill is unique per chart", () => {
+    const a = renderLineChart(dense).svg;
+    const b = renderLineChart(dense).svg;
+    const idA = /id="(folio-grad-\d+)"/.exec(a)?.[1];
+    const idB = /id="(folio-grad-\d+)"/.exec(b)?.[1];
+    expect(idA).toBeTruthy();
+    expect(idB).toBeTruthy();
+    expect(idA).not.toBe(idB);
   });
 });
