@@ -2,11 +2,20 @@
 
 ## Dialog folders (2026-10-20)
 
-The Open and Save dialogs start in the CURRENT DOCUMENT's folder,
-never the home folder: `open_document` returns `{ path, text }`,
+The Open and Save dialogs start in the CURRENT DOCUMENT's folder
+when it came from disk: `open_document` returns `{ path, text }`,
 the host remembers the path, and both dialogs receive it as a
 directory hint (`set_directory(parent)`). Save also defaults the
-file name to the open document's own. In-memory documents
-(examples, followed links, imports) have no folder - the hint
-clears and the dialog falls back to the platform default.
+file name to the open document's own.
+
+In-memory documents (examples, followed links, imports) have no
+folder. Their dialogs fall back to the LAST USED folder: the
+Rust host remembers the parent of every file opened or saved in
+`last-folder` under the app's config dir (best-effort, plain
+text), so even a fresh start lands where the user last worked
+instead of the platform's Recent view. Hints pointing at
+folders that no longer exist are skipped; the resolution order
+and skip rules are unit-tested in `src-tauri/src/lib.rs`
+(`folder_hint`). Only the very first run has nothing to
+remember and sees the platform default.
 
