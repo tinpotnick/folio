@@ -70,6 +70,15 @@ does nothing. The fix is structural, not environmental:
   (the first token flash replaces the pre's children; the bar
   used to blink out of existence there).
 
+- **Engine watchdog**: after evaluate, folio polls its
+  AudioContext for up to 2s. If it never reaches "running"
+  (WebKitGTK on some systems reports "interrupted" - an
+  engine-level WebAudio failure where nothing can ever sound),
+  the player shows "Audio device unavailable in this engine -
+  no sound output", resets the button, and cleans up the play
+  chrome. Silent failure is never an option; the user is told
+  what is wrong and that Chromium/Firefox play it fine.
+
 Note for verification: automated WebKitGTK probes dispatch
 synthetic clicks, which produce no user activation, so the
 context stays suspended in the probe environment; the unlock is

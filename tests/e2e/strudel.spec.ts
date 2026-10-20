@@ -209,3 +209,43 @@ test.describe("strudel music blocks", () => {
     ).toBeVisible();
   });
 });
+
+test.describe("engine audio failure", () => {
+  // WebKitGTK on some systems leaves the AudioContext
+  // "interrupted" - an engine-level failure where play can never
+  // sound. The player must SAY so, not show a dead Playing label.
+  test("an interrupted audio device shows a visible message", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const FakeCtx = class {
+        state = "interrupted";
+        sampleRate = 44100;
+        currentTime = 0;
+        resume(): Promise<void> {
+          return new Promise(() => {
+            /* never settles - the WebKitGTK signature */
+          });
+        }
+      };
+      Object.defineProperty(window, "AudioContext", {
+        value: FakeCtx,
+        configurable: true,
+      });
+    });
+    await loadDoc(page, SRC);
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".folio-inspector .strudel-play").click();
+    const err = figure.locator(".folio-inspector .strudel-error");
+    await expect(err).toBeVisible({ timeout: 10_000 });
+    await expect(err).toContainText("no sound output");
+    await expect(
+      figure.locator(".folio-inspector .strudel-play"),
+    ).toContainText("Play");
+    // The failed play is cleaned up: no chrome left behind.
+    await expect(
+      figure.locator("pre.strudel-source .strudel-sweep"),
+    ).toHaveCount(0);
+  });
+});

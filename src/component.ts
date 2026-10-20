@@ -510,6 +510,19 @@ export class FolioDoc extends HTMLElement {
       });
       await strudel.evaluate(source);
       this.startStrudelSweep(pre);
+      // Engine watchdog: on some WebKitGTK systems the context
+      // ends up "interrupted" (an engine-level WebAudio failure -
+      // the clock never starts and nothing is audible). Say so
+      // instead of leaving a dead "Playing..." label up.
+      const audible = await this.waitStrudelAudio(2000);
+      if (!audible && this.strudelCtx !== null) {
+        err.textContent =
+          "Audio device unavailable in this engine - no sound output " +
+          "(a WebKitGTK audio limitation; works in Chromium/Firefox)";
+        err.hidden = false;
+        play.textContent = "\u25b6 Play";
+        await this.stopStrudel();
+      }
     } catch (e) {
       if (play.isConnected) play.textContent = "\u25b6 Play";
       if (err.isConnected) {
@@ -650,6 +663,22 @@ export class FolioDoc extends HTMLElement {
    * Stop all strudel playback. Hush is safe to call whether or
    * not the library ever loaded.
    */
+  /**
+   * Whether folio's AudioContext reached "running" within the
+   * window. False means the engine could not start audio output
+   * (WebKitGTK reports "interrupted" on some systems) - the play
+   * is visual-only at best and the user must be told.
+   */
+  private async waitStrudelAudio(timeoutMs: number): Promise<boolean> {
+    if (this.strudelCtx === null) return true; // strudel's own ctx
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (this.strudelCtx.state === "running") return true;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return this.strudelCtx.state === "running";
+  }
+
   private async stopStrudel(): Promise<void> {
     this.stopStrudelSweep();
     this.pendingLocs = [];
