@@ -461,6 +461,39 @@ export function themeCss(theme: Theme): string {
     }
     figure.folio-strudel pre.strudel-source {
       margin: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    figure.folio-strudel .strudel-hit {
+      border-radius: 3px;
+      transition: background 80ms ease-out, color 80ms ease-out;
+    }
+    @keyframes folio-strudel-flash {
+      0% {
+        background: rgba(130, 80, 223, 0.45);
+        color: #ffffff;
+      }
+      100% {
+        background: rgba(130, 80, 223, 0.08);
+        color: inherit;
+      }
+    }
+    figure.folio-strudel .strudel-hit-flash {
+      animation: folio-strudel-flash 450ms ease-out forwards;
+    }
+    figure.folio-strudel .strudel-sweep {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      margin-left: -1px;
+      background: #8250df;
+      opacity: 0;
+      transition: opacity 200ms ease;
+      pointer-events: none;
+    }
+    figure.folio-strudel .strudel-sweep[data-on="1"] {
+      opacity: 0.55;
     }
     .folio-inspector .strudel-error {
       color: #b3261e;

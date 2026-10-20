@@ -19,7 +19,9 @@ expected:
   - The block renders as a figure with the pattern source; clicking
     the figure reveals an inspector bar with a Play button, a Stop
     button, and the source in a textarea. Play starts a synth
-    pattern (audio, after the click); Stop ends it.
+    pattern (audio, after the click); Stop ends it. While
+    playing, the notes that sound flash in the source and a
+    playhead sweeps across the block.
   - Editing the textarea and pressing Enter applies the edit: the
     figure's source updates and the Markdown stays in sync.
   - The Markdown view shows a ```strudel fence containing exactly

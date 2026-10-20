@@ -11,7 +11,7 @@ as a **figure with a player in its inspector**, not inert text.
 ## Contract
 
 - **Model**: no new block kind. `{ kind: "code", lang: "strudel",
-  text }` - the existing fence block (docs/specs/
+text }` - the existing fence block (docs/specs/
   code-blocks.md). Parser, serializer, and round-trip identity are
   untouched.
 - **Render**: `figure.folio-strudel` (generated output:
@@ -27,6 +27,14 @@ as a **figure with a player in its inspector**, not inert text.
   applies, Shift+Enter newline). Evaluation errors render as an
   inline `Strudel error: ...` line - error as content, never a
   broken render (the diagram/math error contract).
+- **Playing highlight**: while a pattern plays, each sounding
+  mini-notation token flashes in the source body (driven by the
+  haps' source locations via an onTrigger hook - audio stays
+  audible) and a sweep bar tracks the live cycle position
+  (scheduler.now() % 1) across the source. The flash spans and
+  sweep bar are playback chrome: Stop removes them and restores
+  the plain source text, and the structural sync never lets them
+  reach the model.
 - **Offline (ADR-0005)**: the library is bundled and lazily
   imported, never fetched. No sample banks are loaded; playback
   uses synthesized sound only.

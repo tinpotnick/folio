@@ -142,6 +142,33 @@ test.describe("strudel music blocks", () => {
     expect(requests).toEqual([]);
   });
 
+  test("playing highlights the sounding tokens and sweeps the cycle", async ({
+    page,
+  }) => {
+    await loadDoc(page, SRC);
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    const pre = figure.locator("pre.strudel-source");
+    await figure.click();
+    await figure.locator(".folio-inspector .strudel-play").click();
+    // The sweep bar exists and switches on with the scheduler.
+    const sweep = pre.locator(".strudel-sweep");
+    await expect(sweep).toBeVisible();
+    await expect(sweep).toHaveAttribute("data-on", "1", {
+      timeout: 10_000,
+    });
+    // Sounding mini-notation tokens flash: at least one hit span
+    // appears (the pattern's first cycle plays c, a, f, e).
+    await expect(pre.locator(".strudel-hit").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    // Stop: the highlight chrome is removed and the plain source
+    // text is restored.
+    await figure.locator(".folio-inspector .strudel-stop").click();
+    await expect(pre.locator(".strudel-hit")).toHaveCount(0);
+    await expect(pre.locator(".strudel-sweep")).toHaveCount(0);
+    await expect(pre).toHaveText('note("c a f e")');
+  });
+
   test("the Markdown view highlights the strudel fence with fence tokens", async ({
     page,
   }) => {

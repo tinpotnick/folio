@@ -69,7 +69,9 @@ document — written in the same renderer you are working with.
   `strudel` renders as a music figure with a **player in its
   inspector**. Click the figure to reveal the bar, then **▶ Play**
   to start the pattern and **■ Stop** to end it; the textarea is
-  the pattern source - Enter applies it. A pattern like
+  the pattern source - Enter applies it. While it plays, the
+  sounding notes light up in the source and a playhead sweeps
+  the cycle - the mesmeric bit of live coding. A pattern like
   `note("c a f e")` loops as synthesized sound; see
   [strudel.cc](https://strudel.cc) for the language. Playback is
   offline - no samples are downloaded. Clicking a strudel figure

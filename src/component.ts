@@ -15,6 +15,12 @@ import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable, type TablePool } from "@folio/engine/recalc";
 import type { Cell, Chart, Image, Table } from "@folio/engine/index.js";
 import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
+import type {
+  StrudelInitOptions,
+  StrudelLocation,
+  StrudelPattern,
+  StrudelRepl,
+} from "@strudel/web";
 import { themeFromDoc, themeCss } from "./render/theme.js";
 import {
   renderAreaChart,
@@ -52,6 +58,17 @@ export class FolioDoc extends HTMLElement {
    */
   private dragRange: Range | null = null;
   private dragStart: { x: number; y: number } | null = null;
+  /** The live strudel REPL, once initStrudel has resolved. */
+  private repl: StrudelRepl | null = null;
+  /** Playing-highlight state for the strudel figure (ADR-0014). */
+  private strudelHighlight: {
+    pre: HTMLElement;
+    source: string;
+    byStart: Map<number, HTMLElement>;
+    sweep: HTMLElement | null;
+  } | null = null;
+  private pendingLocs: StrudelLocation[] = [];
+  private sweepRaf: number | null = null;
 
   constructor() {
     super();
@@ -428,8 +445,23 @@ export class FolioDoc extends HTMLElement {
   private async playStrudel(source: string, err: HTMLElement): Promise<void> {
     try {
       const strudel = await import("@strudel/web");
-      await strudel.initStrudel();
+      // The figure's source pre is the highlight surface: each
+      // sounding event flashes the mini-notation token it came
+      // from (a hap's context.locations are offsets into the
+      // pattern source), and a sweep bar tracks the live cycle
+      // position - the REPL's mesmerising paint, on folio's DOM.
+      const figure = err.closest("figure.folio-strudel");
+      const pre =
+        figure?.querySelector<HTMLElement>("pre.strudel-source") ?? null;
+      const initOptions: StrudelInitOptions = {};
+      if (pre) {
+        this.buildStrudelHighlight(pre, source);
+        initOptions.editPattern = (pattern) =>
+          this.hookStrudelHighlight(pattern);
+      }
+      this.repl = await strudel.initStrudel(initOptions);
       await strudel.evaluate(source);
+      this.startStrudelSweep(pre);
     } catch (e) {
       if (err.isConnected) {
         err.textContent = `Strudel error: ${
@@ -441,10 +473,140 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * Split the source pre into per-token spans up front, so the
+   * per-event callback only has to flash spans (never parse).
+   * Locations arrive per hap at trigger time; the spans are
+   * looked up by start offset.
+   */
+  private buildStrudelHighlight(pre: HTMLElement, source: string): void {
+    this.strudelHighlight = {
+      pre,
+      source,
+      byStart: new Map(),
+      sweep: null,
+    };
+    // Nothing to wrap until locations arrive; spans are created
+    // lazily per unique location on first flash.
+  }
+
+  /** Lazily wrap one source range in a flashable span. */
+  private strudelSpan(loc: StrudelLocation): HTMLElement | null {
+    const hl = this.strudelHighlight;
+    if (!hl) return null;
+    const { pre, source } = hl;
+    if (loc.start < 0 || loc.end <= loc.start || loc.end > source.length) {
+      return null;
+    }
+    const span = hl.byStart.get(loc.start);
+    if (span?.isConnected) return span;
+    // Rebuild the pre from plain text, then split out every known
+    // location - kept simple and rare (first flash per location).
+    pre.textContent = source;
+    for (const [start, known] of hl.byStart) {
+      void known;
+      hl.byStart.delete(start);
+    }
+    // Collect all locations to wrap: the new one plus any that
+    // already fired (they will re-flash).
+    const locs = [...this.pendingLocs, loc];
+    const sorted = [...new Map(locs.map((l) => [l.start, l])).values()].sort(
+      (a, b) => a.start - b.start,
+    );
+    let cursor = 0;
+    const frag = document.createDocumentFragment();
+    for (const l of sorted) {
+      if (l.start < cursor) continue;
+      if (l.start > cursor) {
+        frag.appendChild(
+          document.createTextNode(source.slice(cursor, l.start)),
+        );
+      }
+      const s = document.createElement("span");
+      s.className = "strudel-hit";
+      s.textContent = source.slice(l.start, l.end);
+      frag.appendChild(s);
+      hl.byStart.set(l.start, s);
+      cursor = l.end;
+    }
+    if (cursor < source.length) {
+      frag.appendChild(document.createTextNode(source.slice(cursor)));
+    }
+    pre.replaceChildren(frag);
+    return hl.byStart.get(loc.start) ?? null;
+  }
+
+  /**
+   * Attach the per-event hook to the compiled pattern: flash the
+   * span for the hap's last source location.
+   */
+  private hookStrudelHighlight(pattern: StrudelPattern): StrudelPattern {
+    const flash = (loc: StrudelLocation): void => {
+      const hl = this.strudelHighlight;
+      if (!hl) return;
+      const span = hl.byStart.get(loc.start) ?? this.strudelSpan(loc);
+      if (!span) return;
+      span.classList.remove("strudel-hit-flash");
+      void span.offsetWidth;
+      span.classList.add("strudel-hit-flash");
+    };
+    return pattern.onTrigger((hap) => {
+      const loc = hap.context?.locations?.at(-1);
+      if (loc) {
+        this.pendingLocs.push(loc);
+        flash(loc);
+      }
+    }, false);
+  }
+
+  /**
+   * The cycle sweep: a thin bar whose horizontal position follows
+   * the scheduler's cycle position (now() % 1) across the pre's
+   * content box - the REPL's moving playhead. One rAF loop per
+   * component, stopped on hush. The sweep is playback chrome on
+   * top of the pre, never document content.
+   */
+  private startStrudelSweep(pre: HTMLElement | null): void {
+    this.stopStrudelSweep();
+    if (!pre) return;
+    const sweep = document.createElement("div");
+    sweep.className = "strudel-sweep";
+    sweep.dataset.on = "0";
+    pre.appendChild(sweep);
+    if (this.strudelHighlight) this.strudelHighlight.sweep = sweep;
+    const tick = (): void => {
+      const now = this.repl?.scheduler.now() ?? 0;
+      sweep.style.left = `${(now % 1) * 100}%`;
+      const on = now > 0 ? "1" : "0";
+      if (sweep.dataset.on !== on) sweep.dataset.on = on;
+      this.sweepRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  private stopStrudelSweep(): void {
+    if (this.sweepRaf !== null) {
+      cancelAnimationFrame(this.sweepRaf);
+      this.sweepRaf = null;
+    }
+    this.strudelHighlight?.sweep?.remove();
+    if (this.strudelHighlight) this.strudelHighlight.sweep = null;
+  }
+
+  /**
    * Stop all strudel playback. Hush is safe to call whether or
    * not the library ever loaded.
    */
   private async stopStrudel(): Promise<void> {
+    this.stopStrudelSweep();
+    this.pendingLocs = [];
+    const hl = this.strudelHighlight;
+    if (hl) {
+      // Restore the plain source text: the flash spans and sweep
+      // bar are playback chrome, not document content.
+      const pre = hl.pre;
+      if (pre.isConnected) pre.textContent = hl.source;
+      this.strudelHighlight = null;
+    }
     const strudel = await import("@strudel/web").catch(() => null);
     if (strudel) strudel.hush();
   }
@@ -1843,6 +2005,10 @@ export class FolioDoc extends HTMLElement {
         // code block, keeping structural sync (and Backspace
         // removal) uniform.
         const pre = el.querySelector("pre.strudel-source");
+        // The sweep bar is playback chrome; only the source text
+        // reaches the model.
+        const chrome = pre?.querySelector(":scope > .strudel-sweep");
+        if (chrome) chrome.remove();
         next.push({
           kind: "code",
           lang: "strudel",
