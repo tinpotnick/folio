@@ -18,7 +18,8 @@ test.describe("links", () => {
   test("the sample document links the other examples", async ({ page }) => {
     await waitForDocument(page);
     const links = page.locator("#the-doc a");
-    await expect(links).toHaveCount(4);
+    // Poem, accounts, technical, report, and music.
+    await expect(links).toHaveCount(5);
     await expect(links.first()).toHaveAttribute(
       "href",
       "demo/examples/poem.md",
