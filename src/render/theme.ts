@@ -452,48 +452,101 @@ export function themeCss(theme: Theme): string {
       max-width: 180px;
       font-size: 12px;
     }
-    figure.folio-strudel {
+    figure.folio-codeblock {
       margin: 0.9em 0;
       padding: 0;
     }
-    figure.folio-strudel:focus {
-      outline: 2px solid #1f3fbf;
-    }
-    figure.folio-strudel pre.strudel-source {
+    figure.folio-codeblock pre.folio-code {
       margin: 0;
-      position: relative;
-      overflow: hidden;
     }
-    figure.folio-strudel .strudel-hit {
+    /* The code header sits on the code body like a tab strip. */
+    figure.folio-codeblock > .code-inspector {
+      /* Sticky, so a long block's header (strudel's Play/Stop)
+         stays in view while the caret is deep inside it. Hosts
+         with their own sticky chrome set --folio-sticky-top. */
+      position: sticky;
+      top: var(--folio-sticky-top, 0px);
+      z-index: 2;
+      margin-bottom: 0;
+      border-bottom: none;
+      border-radius: 6px 6px 0 0;
+      background: #eef1f4;
+    }
+    figure.folio-codeblock > .code-inspector:not([hidden]) + pre.folio-code {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+    .code-inspector select.code-lang {
+      font-weight: 600;
+    }
+    /* Syntax colors (highlight.js token classes; GitHub light). */
+    pre.folio-code .hljs-comment,
+    pre.folio-code .hljs-quote {
+      color: #6e7781;
+      font-style: italic;
+    }
+    pre.folio-code .hljs-keyword,
+    pre.folio-code .hljs-selector-tag,
+    pre.folio-code .hljs-doctag,
+    pre.folio-code .hljs-template-tag {
+      color: #cf222e;
+    }
+    pre.folio-code .hljs-string,
+    pre.folio-code .hljs-regexp,
+    pre.folio-code .hljs-meta .hljs-string {
+      color: #0a3069;
+    }
+    pre.folio-code .hljs-number,
+    pre.folio-code .hljs-literal,
+    pre.folio-code .hljs-attr,
+    pre.folio-code .hljs-attribute,
+    pre.folio-code .hljs-symbol,
+    pre.folio-code .hljs-meta,
+    pre.folio-code .hljs-selector-attr,
+    pre.folio-code .hljs-selector-class,
+    pre.folio-code .hljs-selector-id,
+    pre.folio-code .hljs-variable.language_ {
+      color: #0550ae;
+    }
+    pre.folio-code .hljs-title,
+    pre.folio-code .hljs-title.function_,
+    pre.folio-code .hljs-title.class_,
+    pre.folio-code .hljs-section {
+      color: #8250df;
+    }
+    pre.folio-code .hljs-built_in,
+    pre.folio-code .hljs-type,
+    pre.folio-code .hljs-params,
+    pre.folio-code .hljs-variable,
+    pre.folio-code .hljs-template-variable {
+      color: #953800;
+    }
+    pre.folio-code .hljs-name,
+    pre.folio-code .hljs-tag,
+    pre.folio-code .hljs-selector-pseudo,
+    pre.folio-code .hljs-bullet {
+      color: #116329;
+    }
+    pre.folio-code .hljs-addition {
+      color: #116329;
+      background: #dafbe1;
+    }
+    pre.folio-code .hljs-deletion {
+      color: #82071e;
+      background: #ffebe9;
+    }
+    pre.folio-code .hljs-emphasis { font-style: italic; }
+    pre.folio-code .hljs-strong { font-weight: 600; }
+    /* Strudel's playing lights: an atom lights the moment its
+       note sounds and fades out once it is released. */
+    figure.folio-strudel .strudel-atom {
       border-radius: 3px;
-      transition: background 80ms ease-out, color 80ms ease-out;
+      transition: background-color 420ms ease-out, box-shadow 420ms ease-out;
     }
-    @keyframes folio-strudel-flash {
-      0% {
-        background: rgba(130, 80, 223, 0.45);
-        color: #ffffff;
-      }
-      100% {
-        background: rgba(130, 80, 223, 0.08);
-        color: inherit;
-      }
-    }
-    figure.folio-strudel .strudel-hit-flash {
-      animation: folio-strudel-flash 450ms ease-out forwards;
-    }
-    figure.folio-strudel .strudel-sweep {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      margin-left: -1px;
-      background: #8250df;
-      opacity: 0;
-      transition: opacity 200ms ease;
-      pointer-events: none;
-    }
-    figure.folio-strudel .strudel-sweep[data-on="1"] {
-      opacity: 0.55;
+    figure.folio-strudel .strudel-atom.strudel-on {
+      background-color: rgba(130, 80, 223, 0.28);
+      box-shadow: 0 0 0 1px rgba(130, 80, 223, 0.55);
+      transition-duration: 0ms;
     }
     .folio-inspector .strudel-error {
       color: #b3261e;

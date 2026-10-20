@@ -268,8 +268,8 @@ test.describe("example documents", () => {
     await caverave.locator(".folio-inspector .strudel-play").click();
     // Real playback proof, not just absence of error text: with
     // the broken source (an unterminated template) evaluate
-    // failed and nothing ever flashed.
-    await expect(caverave.locator(".strudel-hit").first()).toBeVisible({
+    // failed and nothing ever lit.
+    await expect(caverave.locator(".strudel-on").first()).toBeVisible({
       timeout: 10_000,
     });
     await expect(

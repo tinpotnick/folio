@@ -17,9 +17,46 @@ flattened back to prose - nothing durable happened.
   fences; the serializer emits ``` + lang fences. Round-trip
   identity holds (golden tests unaffected - the sample has no
   fences).
-- **Render**: `pre.folio-code > code` (themed: mono, tinted
-  background, pre-wrap). The source-view highlighter emits `fence`
-  tokens for delimiter lines and `code` tokens for content.
+- **Render**: `figure.folio-codeblock[data-lang]` holding the code
+  header (below) and the body `pre.folio-code > code` (themed:
+  mono, tinted background, pre-wrap). Unlike the generated figures
+  the figure is NOT contenteditable=false: the body edits in place,
+  exactly like the bare `pre` it replaced. The source-view
+  highlighter emits `fence` tokens for delimiter lines and `code`
+  tokens for content.
+- **Code header** (one header for every language): an inspector bar
+  (`.code-inspector`) following the ONE inspector contract
+  (docs/specs/figure-inspectors.md) - reveal on a click inside the
+  block, hide on any click outside, Esc dismisses early, no close
+  button. It holds the **language picker** (`select.code-lang`):
+  Plain text (a bare fence) plus the supported languages
+  (`CODE_LANGUAGES` in `src/render/code.ts`); a fence tag outside
+  that list stays selectable as itself, so opening the header never
+  rewrites an unknown tag. Picking a language is a model write: the
+  fence tag changes, the one figure re-renders in place, and the
+  header stays open. Languages add their own controls after the
+  picker - Strudel adds its player (docs/specs/strudel-blocks.md).
+  The header is `position: sticky` (top: `--folio-sticky-top`,
+  which a host with sticky chrome sets - the demo host sets its
+  52px app header) so a long block's controls stay in view.
+- **Syntax highlighting** (ADR-0015): supported languages are
+  colored with highlight.js - core and grammars bundled and lazily
+  imported on first use, never fetched. Fence tags and common
+  aliases (`js`, `ts`, `py`, `sh`, `yml`, `toml`, ...) map to a
+  grammar; `strudel` colors as JavaScript; plain and unknown tags
+  stay uncolored. Highlighting is presentation only: token spans
+  over the text, the model reads `innerText` back, round-trip
+  identity holds. Colors live in the theme CSS (highlight.js token
+  classes), never in the document. Repainting would move the caret,
+  so it runs on render and when the user leaves the block (its
+  header hides); text typed meanwhile takes the color of the span
+  it lands in until then.
+- **Removal**: Backspace in an EMPTY code body removes the block
+  (the caret moves to the end of the previous block); the toolbar's
+  code button still converts the block back to prose.
+- **Palette**: "Change the code block language" reveals the caret
+  block's header with the picker focused (a flash explains when the
+  caret is not in a code block).
 - **Editing**: code blocks sync from the DOM as plain text via
   `innerText` (rendered line breaks become model newlines). Enter
   inside a code block inserts a line break instead of splitting the
@@ -67,3 +104,12 @@ flattened back to prose - nothing durable happened.
   tests for fences (with/without language, unterminated error);
   e2e: fence round-trip, toolbar conversion both directions, Enter
   inserts a newline.
+- e2e (`tests/e2e/code-blocks.spec.ts`): the header reveals/hides
+  per the inspector contract and shows the fence's language;
+  supported languages carry token spans while the text is
+  unchanged; plain/unknown tags stay uncolored and unknown tags
+  stay selectable; picking a language rewrites the fence tag
+  (Plain text drops it, Strudel adds the player); edits recolor
+  when the caret leaves; the sticky header stays in view inside a
+  long block; the palette command focuses the picker.
+- First-contact eval: `evals/code-blocks-first-contact.md`.

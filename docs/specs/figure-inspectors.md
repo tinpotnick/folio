@@ -30,6 +30,10 @@ the source to change a filter or fix a Mermaid typo.
 - **Image inspector** (click the image, spec: docs/specs/
   images.md): alt text, caption, and a replace-file control -
   edits are model writes like everywhere else.
+- **Code header** (spec: docs/specs/code-blocks.md): every fenced
+  code block's inspector - the language picker, plus per-language
+  controls (Strudel's player). The body edits in place, so the bar
+  carries no source textarea.
 - **Math / diagram inspectors** (click the figure): a textarea
   with the block's source (LaTeX / Mermaid); Enter or blur applies
   (Shift+Enter for a newline), redrawing the figure in place.
@@ -37,7 +41,7 @@ the source to change a filter or fix a Mermaid typo.
   keystrokes; `figure[data-chart-source]` follows the edited
   source so charts of the same table stay addressable.
 - **Dismissal is uniform - the table inspector's contract, not a
-  special case**: every bar (table, chart, math, diagram) reveals
+  special case**: every bar (table, chart, math, diagram, code) reveals
   on a click inside its figure and hides on any click outside
   it; Esc inside a bar dismisses early. There is no close
   button: the earlier × was an inconsistent second dismissal

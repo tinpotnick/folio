@@ -64,18 +64,26 @@ document — written in the same renderer you are working with.
   document setting alongside H1 and H2.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
-  splitting it.
-- **Strudel** is the one language that plays: a fence tagged
-  `strudel` renders as a music figure with a **player in its
-  inspector**. Click the figure to reveal the bar, then **▶ Play**
-  to start the pattern and **■ Stop** to end it; the textarea is
-  the pattern source - Enter applies it. While it plays, the
-  sounding notes light up in the source and a playhead sweeps
-  the cycle - the mesmeric bit of live coding. A pattern like
-  `note("c a f e")` loops as synthesized sound; see
+  splitting it. Click into a code block to reveal its **code
+  header**: the **language picker** (Python, JavaScript,
+  TypeScript, Rust, Go, SQL, Shell, JSON, YAML, and more - or
+  Plain text) sets the fence's language, and the code is
+  **syntax-highlighted** in that language. The header follows
+  you down a long block; click outside (or press Esc) to close
+  it. The palette's "Change the code block language" opens the
+  picker for the block you are in. Backspace in an empty code
+  block removes it.
+- **Strudel** is the one language that plays: pick "Strudel
+  (music)" in the language picker - or tag a fence `strudel` -
+  and the code header gains **▶ Play** and **■ Stop**. Edit the
+  pattern right in the block like any code. While it plays, the
+  notes and pattern pieces sounding right now **light up** in
+  the source and fade as they end. Edit while it plays and Play
+  becomes **▶ Update** - press it to hear the change. A pattern
+  like `note("c a f e")` loops as synthesized sound; see
   [strudel.cc](https://strudel.cc) for the language. Playback is
-  offline - no samples are downloaded. Clicking a strudel figure
-  selects it; Backspace or Delete removes it.
+  offline - no samples are downloaded, so sample-based sounds
+  such as the `bd`/`sd`/`hh` drums stay silent.
 - **Links** are standard inline Markdown: `[label](url)` in a
   paragraph. Clicking a link follows it - a `.md` path opens
   that document in place (the sample's "More examples" section
