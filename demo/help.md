@@ -92,6 +92,10 @@ document — written in the same renderer you are working with.
   instruments - stay silent here (the header shows no error, but
   those sounds are not in folio's offline kit); drop the `.bank(...)`
   to use folio's drums.
+- **Themes**: the document settings dialog (gear icon) has a
+  Theme select - default, corporate-report, technical, editorial.
+  It writes the `theme:` line at the top of the source; any
+  individual style setting still overrides the theme, key by key.
 - **Links** are standard inline Markdown: `[label](url)` in a
   paragraph. Clicking a link follows it - a `.md` path opens
   that document in place (the sample's "More examples" section

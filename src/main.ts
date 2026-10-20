@@ -9,6 +9,7 @@ import { parseDoc, serializeDoc } from "./engine/doc.js";
 import { importedTable, parseImport } from "./engine/ingest.js";
 import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
+import { themeNames } from "./render/theme.js";
 import { isDesktop, openDocument, saveDocument } from "./desktop.js";
 
 function requireEl<T extends HTMLElement>(selector: string): T {
@@ -1222,6 +1223,16 @@ const setBodySize = requireEl<HTMLInputElement>("#set-body-size");
 const setH1Size = requireEl<HTMLInputElement>("#set-h1-size");
 const setH2Size = requireEl<HTMLInputElement>("#set-h2-size");
 const setH3Size = requireEl<HTMLInputElement>("#set-h3-size");
+const setTheme = requireEl<HTMLSelectElement>("#set-theme");
+// The shipped themes (spec: docs/specs/themes.md); the dialog
+// writes the `theme:` frontmatter line, individual settings
+// below still override the theme per key.
+for (const name of themeNames()) {
+  const o = document.createElement("option");
+  o.value = name;
+  o.textContent = name;
+  setTheme.appendChild(o);
+}
 const setTableStyle = requireEl<HTMLSelectElement>("#set-table-style");
 const setPalette = requireEl<HTMLSelectElement>("#set-palette");
 const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
@@ -1256,7 +1267,9 @@ function fillFontSelect(
 }
 
 function fillSettings(): void {
-  const style = new Map(el.getDoc()?.frontmatter.style ?? []);
+  const doc = el.getDoc();
+  const style = new Map(doc?.frontmatter.style ?? []);
+  setTheme.value = doc?.frontmatter.theme ?? "default";
   fillFontSelect(setBodyFont, style.get("body.font.family"));
   fillFontSelect(setH1Font, style.get("h1.font.family"));
   setBodySize.value = style.get("body.font.size") ?? "";
@@ -1306,6 +1319,13 @@ settingsForm.addEventListener("submit", (ev) => {
       "pagebreak.h1": setPbH1.value,
       "pagebreak.h2": setPbH2.value,
     };
+    // The theme name rides the `theme:` frontmatter line;
+    // "default" removes it so the fallback look applies.
+    if (setTheme.value !== "default") {
+      doc.frontmatter.theme = setTheme.value;
+    } else {
+      delete doc.frontmatter.theme;
+    }
     const style: [string, string][] = [];
     const seen = new Set<string>();
     for (const [key, value] of doc.frontmatter.style) {
