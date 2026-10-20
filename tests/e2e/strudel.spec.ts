@@ -363,3 +363,43 @@ test.describe("strudel music blocks", () => {
     ).toBeVisible();
   });
 });
+
+test.describe("engine audio failure", () => {
+  // An engine that cannot open an audio device leaves the
+  // AudioContext suspended or "interrupted" - play can never
+  // sound. The player must SAY so, not show a dead Playing label.
+  test("an interrupted audio device shows a visible message", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const FakeCtx = class {
+        state = "interrupted";
+        sampleRate = 44100;
+        currentTime = 0;
+        resume(): Promise<void> {
+          return new Promise(() => {
+            /* never settles - no audio device */
+          });
+        }
+      };
+      Object.defineProperty(window, "AudioContext", {
+        value: FakeCtx,
+        configurable: true,
+      });
+    });
+    await loadDoc(page, SRC);
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".folio-inspector .strudel-play").click();
+    const err = figure.locator(".folio-inspector .strudel-error");
+    await expect(err).toBeVisible({ timeout: 10_000 });
+    await expect(err).toContainText("no sound output");
+    await expect(figure.locator(".folio-inspector .strudel-play")).toHaveText(
+      "\u25b6 Play",
+    );
+    // The failed play is cleaned up: no lights left behind.
+    await expect(
+      figure.locator("pre.strudel-source .strudel-atom"),
+    ).toHaveCount(0);
+  });
+});

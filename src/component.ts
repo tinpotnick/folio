@@ -718,6 +718,19 @@ export class FolioDoc extends HTMLElement {
       }
       if (status.error !== null) throw status.error;
       await this.startStrudelLights(figure, source, repl);
+      // Audio watchdog: if folio's context never starts running
+      // (an engine that cannot open an audio device), say so
+      // instead of leaving a silent "Playing..." label up.
+      const audible = await this.waitStrudelAudio(2000);
+      if (!audible) {
+        await this.stopStrudel();
+        if (err.isConnected) {
+          err.textContent =
+            "Audio device unavailable - no sound output. Check the " +
+            "system's audio output and press Play again.";
+          err.hidden = false;
+        }
+      }
     } catch (e) {
       if (play.isConnected) play.textContent = PLAY_LABEL;
       if (err.isConnected) {
@@ -827,6 +840,23 @@ export class FolioDoc extends HTMLElement {
     for (const el of state.lit) el.classList.remove("strudel-on");
     const play = state.figure.querySelector<HTMLElement>(".strudel-play");
     if (play) play.textContent = UPDATE_LABEL;
+  }
+
+  /**
+   * Whether folio's AudioContext reached "running" within the
+   * window. False means the engine could not start audio output
+   * (its context stayed suspended or "interrupted"); the play can
+   * at best be visual and the user must be told.
+   */
+  private async waitStrudelAudio(timeoutMs: number): Promise<boolean> {
+    const ctx = this.strudelCtx;
+    if (ctx === null) return true; // strudel's own context
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (ctx.state === "running") return true;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    return ctx.state === "running";
   }
 
   /**

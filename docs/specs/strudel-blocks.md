@@ -90,6 +90,15 @@ does nothing. The fix is structural, not environmental:
   and reverts to `Play` on Stop or on any play error - the
   button can never look dead while the first load pays the
   import cost.
+- **Audio watchdog**: after evaluate, folio polls its
+  AudioContext for up to 2s. If it never reaches "running" (an
+  engine that cannot open an audio device leaves it suspended or
+  "interrupted"), playback stops, the button reads Play, and the
+  error line says "Audio device unavailable - no sound output",
+  with a hint to check the system audio output. A silent
+  "Playing..." is never left up. (The original Linux-desktop
+  silence turned out to be the zero-channel bug below, not a
+  dead device; the watchdog stays as a guard.)
 
 ## The zero-channel destination (WebKitGTK, the Linux desktop)
 
@@ -130,7 +139,9 @@ activation, so a DOM-dispatched click leaves the context suspended.
   sounding atoms light (and move on), with no sweep line, and Stop
   restores the plain text; a sounding note lights ALL its
   locations; an evaluation error shows in the header; editing while
-  playing pauses the lights and offers Update, which resumes them.
+  playing pauses the lights and offers Update, which resumes them;
+  an audio context that never runs shows "no sound output" and
+  resets the player.
 - e2e: every kit drum name plays from bundled assets with no
   "not found" or late-load errors and no remote request.
 - e2e (`tests/e2e/palette.spec.ts`): the music example's Caverave
