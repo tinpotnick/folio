@@ -235,6 +235,46 @@ test.describe("example documents", () => {
     await first.click();
     await expect(first.locator(".folio-inspector .strudel-play")).toBeVisible();
   });
+  test("every block in the music example plays without sound errors", async ({
+    page,
+  }) => {
+    // The examples are a newcomer's first contact with strudel:
+    // every block must make the sounds its text describes. "Make it
+    // groove" used .bank("RolandTR808"), a strudel.cc sample bank
+    // folio does not ship - every snare failed "not found" and the
+    // described kick was never in the pattern.
+    await waitForDocument(page);
+    const md = await (await page.request.get("/demo/examples/music.md")).text();
+    await page.locator("#btn-markdown").click();
+    await page.locator("#editor").fill(md);
+    await page.locator("#btn-view").click();
+    const figures = page.locator("#the-doc figure.folio-strudel");
+    await expect(figures).toHaveCount(3);
+    for (let i = 0; i < 3; i++) {
+      const figure = figures.nth(i);
+      const logs: string[] = [];
+      const listen = (m: { text: () => string }): void => {
+        logs.push(m.text());
+      };
+      page.on("console", listen);
+      await figure.locator("pre").click({ position: { x: 10, y: 10 } });
+      await figure.locator(".folio-inspector .strudel-play").click();
+      await expect(figure.locator(".strudel-on").first()).toBeVisible({
+        timeout: 10_000,
+      });
+      // Long enough for a slow pattern's first hits (two cycles).
+      await page.waitForTimeout(4000);
+      await figure.locator(".folio-inspector .strudel-stop").click();
+      page.off("console", listen);
+      expect(
+        logs.filter((l) => /not found|could not load|error/i.test(l)),
+      ).toEqual([]);
+      await expect(figure.locator(".strudel-error")).toBeHidden();
+    }
+    // The groove has the kick its text promises.
+    await expect(figures.nth(1).locator("pre")).toContainText('s("bd*4")');
+  });
+
   test("Open example: music's Caverave tune plays offline", async ({
     page,
   }) => {

@@ -87,7 +87,11 @@ document — written in the same renderer you are working with.
   `bd` kick, `sd` snare, `hh` closed hat, `oh` open hat, `cp`
   clap, `rim`, `lt` `mt` `ht` toms, `cr` crash, `rd` ride, `cb`
   cowbell - e.g. `s("bd sd [hh hh] sd")`. Add `:1` (`bd:1`) for
-  an alternative sound.
+  an alternative sound. Examples copied from strudel.cc that pick
+  an online sample bank - `.bank("RolandTR808")`, pianos, other
+  instruments - stay silent here (the header shows no error, but
+  those sounds are not in folio's offline kit); drop the `.bank(...)`
+  to use folio's drums.
 - **Links** are standard inline Markdown: `[label](url)` in a
   paragraph. Clicking a link follows it - a `.md` path opens
   that document in place (the sample's "More examples" section
