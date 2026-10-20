@@ -414,6 +414,23 @@ btnCodeBlock.addEventListener("mousedown", (ev) => {
   }
   wrapMdLines("```\n", "\n```");
 });
+const btnStrudel = requireEl<HTMLButtonElement>("#btn-strudel");
+// mousedown (like the other insert buttons) so the press never
+// steals focus from the document before the action runs.
+btnStrudel.addEventListener("mousedown", (ev) => {
+  ev.preventDefault();
+  if (currentEditable()) {
+    el.insertStrudel();
+    flash("Strudel music block inserted");
+    return;
+  }
+  if (document.activeElement !== editor) {
+    flash("Click into the text first");
+    return;
+  }
+  wrapMdLines("```strudel\n", "\n```\n");
+  flash("Strudel music block inserted");
+});
 
 /**
  * Fence the caret's whole paragraph (blank-line delimited) with the
@@ -915,6 +932,12 @@ function paletteEntries(): PaletteEntry[] {
       el.insertMath();
       flash("Equation inserted");
     },
+  });
+  entries.push({
+    title: "Insert a Strudel music block",
+    group: "Command",
+    keywords: "music strudel audio beat pattern sound player live coding",
+    action: () => btnStrudel.click(),
   });
   entries.push({
     title: "Import the demo dataset (monthly-sales.csv)",

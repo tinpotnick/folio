@@ -261,6 +261,9 @@ export class FolioDoc extends HTMLElement {
         return el;
       }
       case "code": {
+        if (block.lang === "strudel") {
+          return this.renderStrudel(block, idx);
+        }
         const pre = document.createElement("pre");
         pre.className = "folio-code";
         pre.dataset.blockIndex = String(idx);
@@ -332,6 +335,135 @@ export class FolioDoc extends HTMLElement {
         return el;
       }
     }
+  }
+
+  /**
+   * A strudel code block (spec: docs/specs/strudel-blocks.md):
+   * generated output like every figure - the source body is
+   * selectable and Backspace/Delete removes it (the diagram
+   * affordance); the player inspector owns playback and edits.
+   */
+  private renderStrudel(
+    block: Extract<Doc["blocks"][number], { kind: "code" }>,
+    idx: number,
+  ): HTMLElement {
+    const figure = document.createElement("figure");
+    figure.className = "folio-strudel";
+    figure.dataset.blockIndex = String(idx);
+    figure.contentEditable = "false";
+    figure.tabIndex = -1;
+    figure.title = "Strudel music block - Backspace or Delete removes it";
+    figure.appendChild(this.buildStrudelInspector(figure, idx));
+    const pre = document.createElement("pre");
+    pre.className = "folio-code strudel-source";
+    pre.textContent = block.text;
+    figure.appendChild(pre);
+    return figure;
+  }
+
+  /**
+   * The strudel player inspector (spec: docs/specs/
+   * strudel-blocks.md): play/stop buttons and the pattern source.
+   * The library is loaded lazily on the first play (ADR-0014) -
+   * bundled, never fetched; the click is the autoplay gesture.
+   */
+  private buildStrudelInspector(figure: HTMLElement, idx: number): HTMLElement {
+    const bar = this.figureBar();
+    const err = document.createElement("span");
+    err.className = "insp-error strudel-error";
+    err.hidden = true;
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "insp-select strudel-play";
+    play.textContent = "\u25b6 Play";
+    const stop = document.createElement("button");
+    stop.type = "button";
+    stop.className = "insp-select strudel-stop";
+    stop.textContent = "\u25a0 Stop";
+    const ta = document.createElement("textarea");
+    ta.className = "insp-source-text";
+    ta.rows = 3;
+    ta.placeholder = "Strudel pattern source";
+    ta.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.shiftKey) {
+        ev.preventDefault();
+        apply();
+      }
+    });
+    ta.addEventListener("change", () => apply());
+    const apply = (): void => {
+      const block = this.doc?.blocks[idx];
+      if (!block || block.kind !== "code") return;
+      block.text = ta.value;
+      const pre = figure.querySelector("pre.strudel-source");
+      if (pre) pre.textContent = ta.value;
+      this.emitChange();
+    };
+    play.addEventListener("click", () => {
+      const block = this.doc?.blocks[idx];
+      if (!block || block.kind !== "code") return;
+      err.hidden = true;
+      void this.playStrudel(block.text, err);
+    });
+    stop.addEventListener("click", () => {
+      err.hidden = true;
+      void this.stopStrudel();
+    });
+    const show = (): void => {
+      const block = this.doc?.blocks[idx];
+      if (block && block.kind === "code") ta.value = block.text;
+      bar.hidden = false;
+    };
+    figure.addEventListener("mousedown", () => show());
+    bar.append(play, stop, err, ta);
+    return bar;
+  }
+
+  /**
+   * Start strudel playback for one pattern source. The library is
+   * dynamically imported on first use only (the Mermaid/KaTeX
+   * pattern, ADR-0010/0011); evaluation errors surface as content
+   * in the player's error line, never a broken render.
+   */
+  private async playStrudel(source: string, err: HTMLElement): Promise<void> {
+    try {
+      const strudel = await import("@strudel/web");
+      await strudel.initStrudel();
+      await strudel.evaluate(source);
+    } catch (e) {
+      if (err.isConnected) {
+        err.textContent = `Strudel error: ${
+          e instanceof Error ? e.message : String(e)
+        }`;
+        err.hidden = false;
+      }
+    }
+  }
+
+  /**
+   * Stop all strudel playback. Hush is safe to call whether or
+   * not the library ever loaded.
+   */
+  private async stopStrudel(): Promise<void> {
+    const strudel = await import("@strudel/web").catch(() => null);
+    if (strudel) strudel.hush();
+  }
+
+  /**
+   * Insert a starter strudel block after the caret's block (the
+   * toolbar's music button).
+   */
+  insertStrudel(): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
+    this.doc.blocks.splice(at, 0, {
+      kind: "code",
+      lang: "strudel",
+      text: 'note("c a f e")',
+    });
+    this.render();
+    this.emitChange();
   }
 
   /**
@@ -1705,6 +1837,19 @@ export class FolioDoc extends HTMLElement {
     const next: DocBlock[] = [];
     for (const child of Array.from(host.children)) {
       const el = child as HTMLElement;
+      if (el.tagName === "FIGURE" && el.classList.contains("folio-strudel")) {
+        // A strudel block renders as a figure but stays a text
+        // block: the source is re-derived from the DOM like any
+        // code block, keeping structural sync (and Backspace
+        // removal) uniform.
+        const pre = el.querySelector("pre.strudel-source");
+        next.push({
+          kind: "code",
+          lang: "strudel",
+          text: pre ? (pre.textContent ?? "") : "",
+        });
+        continue;
+      }
       if (el.tagName === "FIGURE") {
         const g = generated[gi];
         gi += 1;
@@ -2381,7 +2526,7 @@ export class FolioDoc extends HTMLElement {
     const removableFigure =
       ev.target instanceof Element
         ? (ev.target.closest(
-            "figure.folio-diagram, figure.folio-image",
+            "figure.folio-diagram, figure.folio-image, figure.folio-strudel",
           ) as HTMLElement | null)
         : null;
     if (
@@ -2470,6 +2615,15 @@ export class FolioDoc extends HTMLElement {
       return;
     }
     if (block.kind === "code") {
+      // A strudel figure is generated output; never split or edit
+      // it in place (the inspector's textarea owns the source).
+      if (
+        ev.target instanceof Element &&
+        ev.target.closest("figure.folio-strudel")
+      ) {
+        ev.preventDefault();
+        return;
+      }
       // A line break inside the code block, not a block split.
       // syncFromDom reads code blocks via innerText so the inserted
       // <br> becomes a real newline in the model.

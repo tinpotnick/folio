@@ -452,6 +452,20 @@ export function themeCss(theme: Theme): string {
       max-width: 180px;
       font-size: 12px;
     }
+    figure.folio-strudel {
+      margin: 0.9em 0;
+      padding: 0;
+    }
+    figure.folio-strudel:focus {
+      outline: 2px solid #1f3fbf;
+    }
+    figure.folio-strudel pre.strudel-source {
+      margin: 0;
+    }
+    .folio-inspector .strudel-error {
+      color: #b3261e;
+      font-size: 12px;
+    }
     figure.folio-math {
       margin: 1.2em 0;
       overflow-x: auto;

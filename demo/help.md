@@ -44,11 +44,12 @@ document — written in the same renderer you are working with.
 
 ## Tables and charts
 
-- The insert group (five icons after the format buttons) holds the
-  block builders: table, Mermaid diagram, image, equation, and
-  code block. The
+- The insert group (six icons after the format buttons) holds the
+  block builders: table, Mermaid diagram, image, equation,
+  Strudel music, and code block. The
   diagram button inserts a starter diagram; the equation button
-  inserts a typeset `$$` block; the code button converts the block
+  inserts a typeset `$$` block; the music button inserts a
+  playable Strudel pattern; the code button converts the block
   you are in to a code block and back (in Markdown view it fences
   the paragraph you are in).
 - Diagrams are Mermaid blocks: `::: mermaid {#id}` ... `:::` with
@@ -64,6 +65,15 @@ document — written in the same renderer you are working with.
 - Code blocks use GitHub-style fences (``` with an optional
   language). Enter adds lines inside a code block instead of
   splitting it.
+- **Strudel** is the one language that plays: a fence tagged
+  `strudel` renders as a music figure with a **player in its
+  inspector**. Click the figure to reveal the bar, then **▶ Play**
+  to start the pattern and **■ Stop** to end it; the textarea is
+  the pattern source - Enter applies it. A pattern like
+  `note("c a f e")` loops as synthesized sound; see
+  [strudel.cc](https://strudel.cc) for the language. Playback is
+  offline - no samples are downloaded. Clicking a strudel figure
+  selects it; Backspace or Delete removes it.
 - **Links** are standard inline Markdown: `[label](url)` in a
   paragraph. Clicking a link follows it - a `.md` path opens
   that document in place (the sample's "More examples" section
