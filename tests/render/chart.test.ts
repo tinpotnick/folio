@@ -5,6 +5,7 @@ import {
   renderLineChart,
   renderPieChart,
   renderScatterChart,
+  renderSeriesChart,
 } from "@folio/render/chart";
 import type { QueryResult } from "@folio/engine/query";
 
@@ -385,5 +386,67 @@ describe("pie colors belong to categories", () => {
     ).svg;
     expect(fills(before)).toEqual(["#111111", "#222222", "#333333"]);
     expect(fills(after)).toEqual(["#222222", "#111111", "#333333"]);
+  });
+});
+
+describe("several series", () => {
+  const data = {
+    categories: ["Jan", "Feb", "Mar"],
+    series: [
+      { name: "revenue", values: [10, 12, 14] },
+      { name: "cost", values: [4, 5, 6] },
+    ],
+  };
+  const style = { colors: ["#111111", "#222222", "#333333"] };
+  const rectsOf = (svg: string, i: number): [number, number][] =>
+    [...svg.matchAll(new RegExp(`<rect class="series-${i}" [^>]*/>`, "g"))].map(
+      (m) => [
+        Number(/ y="([^"]+)"/.exec(m[0])?.[1]),
+        Number(/height="([^"]+)"/.exec(m[0])?.[1]),
+      ],
+    );
+
+  it("grouped bars: one bar per series per category, a legend each", () => {
+    const r = renderSeriesChart(data, "bar", false, style);
+    expect(rectsOf(r.svg, 0)).toHaveLength(3);
+    expect(rectsOf(r.svg, 1)).toHaveLength(3);
+    expect(r.legend).toEqual([
+      { name: "revenue", color: "#111111" },
+      { name: "cost", color: "#222222" },
+    ]);
+  });
+
+  it("stacked bars: each series sits on the one below; totals fit the axis", () => {
+    const r = renderSeriesChart(data, "bar", true, style);
+    const [a] = rectsOf(r.svg, 0);
+    const [b] = rectsOf(r.svg, 1);
+    // cost's bottom edge is revenue's top edge.
+    expect((b?.[0] ?? 0) + (b?.[1] ?? 0)).toBeCloseTo(a?.[0] ?? -1, 0);
+    // The axis reaches the largest stack (14 + 6 = 20).
+    const ticks = [...r.svg.matchAll(/class="tick-y"[^>]*>([^<]*)</g)].map(
+      (m) => Number(m[1]),
+    );
+    expect(Math.max(...ticks)).toBeGreaterThanOrEqual(20);
+    expect(r.svg).toContain(">20<"); // a total label
+  });
+
+  it("lines: one line per series, broken at a gap", () => {
+    const gap = {
+      categories: ["a", "b", "c", "d"],
+      series: [
+        { name: "x", values: [1, 2, null, 4] as (number | null)[] },
+        { name: "y", values: [2, 3, 4, 5] },
+      ],
+    };
+    const r = renderSeriesChart(gap, "line", false, style);
+    const lines = r.svg.match(/<polyline class="series-0"/g) ?? [];
+    // [1,2] then [4] (a single point draws no line).
+    expect(lines).toHaveLength(1);
+    expect(r.svg.match(/<polyline class="series-1"/g)).toHaveLength(1);
+  });
+
+  it("stacked areas: a filled band per series", () => {
+    const r = renderSeriesChart(data, "area", true, style);
+    expect(r.svg.match(/<polygon class="series-\d"/g)).toHaveLength(2);
   });
 });

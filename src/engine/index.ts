@@ -91,5 +91,10 @@ export interface Chart {
     sort?: { by: string; order: "asc" | "desc" };
   };
   type: "bar" | "line" | "area" | "pie" | "donut" | "scatter";
+  /** Split the value into one series per distinct value of this
+   * column (long tables). */
+  series?: string;
+  /** Stack the series (bar, area) instead of grouping/overlapping. */
+  stack?: boolean;
   caption?: string;
 }

@@ -29,6 +29,15 @@ caption: "Half-on-half change by region"
 
 East declined by 15.3% — the bar hangs below the zero line.
 
+Both halves side by side - two value columns, two series:
+
+::: chart {#halves-chart}
+source: @pl
+query: {select: [region, h1, h2]}
+type: bar
+caption: "First and second half by region (GBP thousands)"
+:::
+
 ::: table {#cashflow}
 caption: "Cash by month (GBP thousands)"
 columns:

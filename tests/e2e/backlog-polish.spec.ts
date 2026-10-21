@@ -28,6 +28,8 @@ test("the chart bar labels its fields", async ({ page }) => {
     "Filter",
     "Sort by",
     "Order",
+    "Split by",
+    "Stack",
     "Caption",
   ]);
   // Labels name the controls for assistive tech too.

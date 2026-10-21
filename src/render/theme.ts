@@ -1605,6 +1605,31 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-menu button:hover { background: var(--folio-hover, #f3f4f6); }
     .chart-holder svg { width: 100%; height: auto; display: block; }
+    /* A legend under a chart with several series. */
+    .chart-legend {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 6px 16px;
+      font-size: 0.8em;
+      color: var(--folio-ink-muted);
+      margin-top: 2px;
+    }
+    .chart-legend .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chart-legend i {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+    .folio-inspector .insp-field:has(> .insp-stack) {
+      flex: 0 0 auto;
+      align-items: center;
+    }
     @media print {
       /* Print is always the LIGHT rendition on white paper,
          whatever the app mode. */

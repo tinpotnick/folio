@@ -54,7 +54,12 @@ test.describe("demo data and the report example", () => {
     ).toHaveText("-2.7%");
     // Two line charts over the imported data.
     await expect(
-      page.locator('figure[data-chart-source="monthly-sales"] svg polyline'),
+      // The two single-series line charts (the regions chart, with a
+      // legend, draws one line per region on top of these).
+      page
+        .locator('figure[data-chart-source="monthly-sales"]')
+        .filter({ hasNot: page.locator(".chart-legend") })
+        .locator("svg polyline"),
     ).toHaveCount(2);
     await expect(
       page.locator("figure figcaption", { hasText: "North region revenue" }),

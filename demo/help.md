@@ -280,6 +280,13 @@ caption: "Quarter-on-quarter growth by region"
   column as x and the last as y, both numeric.
 - **caption** is the figure caption.
 
+**Several series**: select more than one value column
+(`select: [month, revenue, cost]`) for grouped bars or several lines,
+or split one value by a column with `series: region` (one line or
+bar per region). Add `stack: true` to stack bars or areas. In the
+chart's bar these are **Split by** and **Stack**. A legend appears
+under the chart.
+
 Charts label values the way the table does: a `format: percent`
 column reads `21.6%` on the chart too. Chart colors come from the
 theme. To pick a palette yourself, set

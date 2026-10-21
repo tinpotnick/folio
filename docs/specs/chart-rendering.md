@@ -66,8 +66,38 @@ output by `src/render/chart.ts`. The contract for dense data:
 - SVG classes are part of the test surface: `.x-tick`, `.v-label`,
   `.tick-y`, `.axis-title`.
 
+## Several series (2026-10-21)
+
+A bar, line or area chart can draw several series, in two ways that
+both run through the query (filter and sort apply):
+
+- **Several value columns**: `select: [month, revenue, cost]` gives
+  one series per value column, named after it. (Before this, only the
+  LAST column was plotted; no shipped document relied on that.)
+- **A split-by column**: `series: region` with `select: [month,
+  revenue]` gives one series per distinct region, in first-appearance
+  order, for long (imported) tables. Repeated category/series pairs
+  sum; a missing pair is a gap, not a zero.
+
+`stack: true` stacks bars (positives up from zero, negatives down;
+each stack labelled with its total) and areas (each band on the
+series below). Without it, bars are grouped side by side and areas
+overlap. Lines never stack, and break at gaps. A legend (HTML, under
+the chart) names the series in palette order. With several value
+columns the y axis shows only their shared unit. Pie, donut and
+scatter keep their first series. The engine half is
+`chartSeries()` (`src/engine/series.ts`, UI-free); the drawing is
+`renderSeriesChart()`.
+
+The chart bar has **Split by** (a column, or none) and **Stack**.
+
 ## Acceptance
 
+- Unit: `tests/engine/series.test.ts` (both series forms, gaps,
+  filter/sort, `series:`/`stack:` round-trip); `chart.test.ts`
+  "several series" (grouped, stacked totals on the axis, lines broken
+  at gaps, stacked areas, legend).
+- e2e: `tests/e2e/multi-series.spec.ts`.
 - Unit: `tests/render/chart.test.ts` (domain rules, nice ticks,
   percent formats, label collisions and floor placement, negative
   bar label clearance, line fill below the curve, thinning,
