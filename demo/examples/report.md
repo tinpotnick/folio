@@ -1,7 +1,6 @@
 ---
-theme: corporate-report
+theme: newsroom
 style:
-  table.style: "booktabs"
   table.rows.show: "24"
 ---
 

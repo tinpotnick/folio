@@ -1,5 +1,5 @@
 ---
-theme: literary
+theme: manuscript
 ---
 
 # Ozymandias

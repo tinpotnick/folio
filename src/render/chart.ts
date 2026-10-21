@@ -24,6 +24,13 @@ export interface ChartStyle {
   colors?: string[] | undefined;
   xTitle?: string | undefined;
   yTitle?: string | undefined;
+  /** Axis/tick ink. Defaults to the light-paper values; a dark
+   * rendition passes its own (the same chart, re-dressed). */
+  text?: string | undefined;
+  textMuted?: string | undefined;
+  grid?: string | undefined;
+  /** The page behind the chart: pie seams and the donut hole. */
+  paper?: string | undefined;
 }
 
 const W = 640;
@@ -85,8 +92,14 @@ function drawFrame(
     padBottom: number;
     yTitle?: string | undefined;
     xTitle?: string | undefined;
+    grid?: string | undefined;
+    ink?: string | undefined;
+    inkMuted?: string | undefined;
   },
 ): (v: number) => number {
+  const grid = opts.grid ?? GRID_COLOR;
+  const ink = opts.ink ?? TEXT_DARK;
+  const inkMuted = opts.inkMuted ?? TEXT_MUTED;
   const padLeft = opts.yTitle ? 78 : 60;
   const yOf = (v: number): number =>
     PAD.top + ((opts.gridMax - v) / opts.span) * opts.innerH;
@@ -94,24 +107,24 @@ function drawFrame(
     const y = PAD.top + (opts.innerH * i) / 4;
     const v = opts.gridMax - (opts.span * i) / 4;
     parts.push(
-      `<line x1="${padLeft}" y1="${y}" x2="${W - PAD.right}" y2="${y}" stroke="${GRID_COLOR}" />`,
-      `<text class="tick-y" x="${padLeft - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="${TEXT_MUTED}">${fmt(v)}</text>`,
+      `<line x1="${padLeft}" y1="${y}" x2="${W - PAD.right}" y2="${y}" stroke="${grid}" />`,
+      `<text class="tick-y" x="${padLeft - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="${inkMuted}">${fmt(v)}</text>`,
     );
   }
   const zeroY = yOf(0);
   if (opts.gridMin < 0) {
     parts.push(
-      `<line x1="${padLeft}" y1="${zeroY}" x2="${W - PAD.right}" y2="${zeroY}" stroke="#8b949e" />`,
+      `<line x1="${padLeft}" y1="${zeroY}" x2="${W - PAD.right}" y2="${zeroY}" stroke="${opts.inkMuted ?? "#8b949e"}" />`,
     );
   }
   if (opts.yTitle) {
     parts.push(
-      `<text class="axis-title" transform="translate(16 ${PAD.top + opts.innerH / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="${TEXT_DARK}">${escapeXml(opts.yTitle)}</text>`,
+      `<text class="axis-title" transform="translate(16 ${PAD.top + opts.innerH / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="${ink}">${escapeXml(opts.yTitle)}</text>`,
     );
   }
   if (opts.xTitle) {
     parts.push(
-      `<text class="axis-title" x="${(padLeft + W - PAD.right) / 2}" y="${H - 6}" text-anchor="middle" font-size="12" fill="${TEXT_DARK}">${escapeXml(opts.xTitle)}</text>`,
+      `<text class="axis-title" x="${(padLeft + W - PAD.right) / 2}" y="${H - 6}" text-anchor="middle" font-size="12" fill="${ink}">${escapeXml(opts.xTitle)}</text>`,
     );
   }
   return yOf;
@@ -134,6 +147,8 @@ export function renderBarChart(
   result: QueryResult,
   style: ChartStyle = {},
 ): RenderedChart {
+  const ink = style.text ?? TEXT_DARK;
+  const inkMuted = style.textMuted ?? TEXT_MUTED;
   const color = style.color ?? "#4c6ef5";
   const values = result.rows.map((r) => Number(r[1] ?? 0));
   const { gridMin, gridMax, span } = domain(values);
@@ -154,6 +169,9 @@ export function renderBarChart(
     span,
     innerH,
     padBottom,
+    grid: style.grid,
+    ink: style.text,
+    inkMuted: style.textMuted,
     yTitle: style.yTitle,
     xTitle: style.xTitle,
   });
@@ -174,14 +192,14 @@ export function renderBarChart(
     const label = escapeXml(String(row[0] ?? ""));
     if (xTickIndices(n).includes(i)) {
       parts.push(
-        `<text class="x-tick" x="${x + barW / 2}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${TEXT_DARK}">${label}</text>`,
+        `<text class="x-tick" x="${x + barW / 2}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${ink}">${label}</text>`,
       );
     }
     if (labelAt.includes(i)) {
       const valueY =
         value >= 0 ? y - 4 : Math.min(zeroY + height + 12, H - PAD.top);
       parts.push(
-        `<text class="v-label" x="${x + barW / 2}" y="${valueY}" text-anchor="middle" font-size="11" fill="${TEXT_MUTED}">${fmt(value)}</text>`,
+        `<text class="v-label" x="${x + barW / 2}" y="${valueY}" text-anchor="middle" font-size="11" fill="${inkMuted}">${fmt(value)}</text>`,
       );
     }
   });
@@ -213,6 +231,8 @@ function renderLineLike(
   style: ChartStyle,
   areaMode: boolean,
 ): RenderedChart {
+  const ink = style.text ?? TEXT_DARK;
+  const inkMuted = style.textMuted ?? TEXT_MUTED;
   const color = style.color ?? "#4c6ef5";
   const values = result.rows.map((r) => Number(r[1] ?? 0));
   const { gridMin, gridMax, span } = domain(values);
@@ -233,6 +253,9 @@ function renderLineLike(
     span,
     innerH,
     padBottom,
+    grid: style.grid,
+    ink: style.text,
+    inkMuted: style.textMuted,
     yTitle: style.yTitle,
     xTitle: style.xTitle,
   });
@@ -280,14 +303,14 @@ function renderLineLike(
     }
     if (tickAt.has(i)) {
       parts.push(
-        `<text class="x-tick" x="${x}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${TEXT_DARK}">${escapeXml(String(row[0] ?? ""))}</text>`,
+        `<text class="x-tick" x="${x}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${ink}">${escapeXml(String(row[0] ?? ""))}</text>`,
       );
     }
     if (labelAt.includes(i)) {
       // Dense series label only their extremes and the last
       // point, above the curve; sparse series label every point.
       parts.push(
-        `<text class="v-label" x="${x}" y="${(ys[i] ?? 0) - 8}" text-anchor="middle" font-size="11" font-weight="${dense ? 600 : 400}" fill="${TEXT_MUTED}">${fmt(values[i] ?? 0)}</text>`,
+        `<text class="v-label" x="${x}" y="${(ys[i] ?? 0) - 8}" text-anchor="middle" font-size="11" font-weight="${dense ? 600 : 400}" fill="${inkMuted}">${fmt(values[i] ?? 0)}</text>`,
       );
     }
   });
@@ -305,6 +328,7 @@ export function renderScatterChart(
   result: QueryResult,
   style: ChartStyle = {},
 ): RenderedChart {
+  const inkMuted = style.textMuted ?? TEXT_MUTED;
   const color = style.color ?? "#4c6ef5";
   const pts = result.rows.map((r) => {
     const x = Number(r[0]);
@@ -340,6 +364,9 @@ export function renderScatterChart(
     padBottom,
     yTitle: style.yTitle,
     xTitle: style.xTitle,
+    grid: style.grid,
+    ink: style.text,
+    inkMuted: style.textMuted,
   });
   const ticks = xTickIndices(pts.length);
   for (const i of ticks) {
@@ -347,7 +374,7 @@ export function renderScatterChart(
     if (!p) continue;
     const x = xOf(p.x);
     parts.push(
-      `<text class="x-tick" x="${x}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${TEXT_MUTED}">${fmt(p.x)}</text>`,
+      `<text class="x-tick" x="${x}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${inkMuted}">${fmt(p.x)}</text>`,
     );
   }
   for (const p of pts) {
@@ -381,6 +408,7 @@ export function renderPieChart(
   donut = false,
   style: ChartStyle = {},
 ): RenderedChart {
+  const ink = style.text ?? TEXT_DARK;
   const colors = style.colors?.length ? style.colors : PIE_FALLBACK_COLORS;
   const rows = result.rows.map((r) => ({
     label: String(r[0] ?? ""),
@@ -412,7 +440,7 @@ export function renderPieChart(
     const y2 = cy + r * Math.sin(angle + sweep);
     const large = sweep > Math.PI ? 1 : 0;
     parts.push(
-      `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${color}" stroke="#fff" stroke-width="1" />`,
+      `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${color}" stroke="${style.paper ?? "#ffffff"}" stroke-width="1.5" />`,
     );
     const pct = Math.round((row.value / total) * 100);
     const lx = cx + (r + 22) * Math.cos(mid);
@@ -420,12 +448,14 @@ export function renderPieChart(
     const anchor =
       Math.cos(mid) > 0.1 ? "start" : Math.cos(mid) < -0.1 ? "end" : "middle";
     parts.push(
-      `<text x="${lx.toFixed(2)}" y="${(ly + 4).toFixed(2)}" text-anchor="${anchor}" font-size="11" fill="${TEXT_DARK}">${escapeXml(row.label)} ${pct}%</text>`,
+      `<text x="${lx.toFixed(2)}" y="${(ly + 4).toFixed(2)}" text-anchor="${anchor}" font-size="11" fill="${ink}">${escapeXml(row.label)} ${pct}%</text>`,
     );
     angle += sweep;
   });
   if (donut) {
-    parts.push(`<circle cx="${cx}" cy="${cy}" r="${inner}" fill="#fff" />`);
+    parts.push(
+      `<circle cx="${cx}" cy="${cy}" r="${inner}" fill="${style.paper ?? "#ffffff"}" />`,
+    );
   }
   parts.push(`</svg>`);
   return { svg: parts.join("") };

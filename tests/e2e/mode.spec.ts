@@ -2,11 +2,12 @@ import { expect, test } from "@playwright/test";
 
 /**
  * Dark and light mode (spec: docs/specs/dark-light-mode.md): the
- * app chrome dresses from CSS variables - the DOCUMENT stays
- * paper (its look comes from its own theme). The toggle button
- * and the palette entry both flip the persisted choice; the
- * <head> script sets the attribute before first paint so a saved
- * dark choice survives a reload.
+ * app chrome dresses from CSS variables; every <folio-doc> gets
+ * the mode as an attribute and re-dresses its document in its
+ * THEME's own dark rendition. The toggle button and the palette
+ * entry both flip the persisted choice; the <head> script sets
+ * the attribute before first paint so a saved dark choice survives
+ * a reload.
  */
 
 test.describe("dark/light mode", () => {
@@ -73,15 +74,63 @@ test.describe("dark/light mode", () => {
     expect(await page.locator("html").getAttribute("data-mode")).toBe("dark");
   });
 
-  test("the document stays paper in dark mode", async ({ page }) => {
+  test("the document re-dresses in its theme's dark rendition", async ({
+    page,
+  }) => {
     await page.goto("/");
+    await page
+      .locator("folio-doc h1", { hasText: "Q3 Field Operations Review" })
+      .waitFor();
+    const article = page.locator("#the-doc article").first();
+    const handle = await article.elementHandle();
     await page.locator("#btn-mode").click();
-    // The rendered document keeps its own light paper - the app
-    // dims around it, the document does not.
-    const article = page.locator("folio-doc article").first();
-    const docBg = await article.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
+    await expect(page.locator("#the-doc")).toHaveAttribute("mode", "dark");
+    // The sample wears corporate-report: ITS dark paper and ink,
+    // not one generic dark for every theme.
+    await expect
+      .poll(() =>
+        article.evaluate((el) => getComputedStyle(el).backgroundColor),
+      )
+      .toBe("rgb(25, 32, 42)");
+    expect(await article.evaluate((el) => getComputedStyle(el).color)).toBe(
+      "rgb(223, 230, 238)",
     );
-    expect(docBg).toBe("rgb(255, 255, 255)"); // the paper it owns
+    // Chart ticks and series follow the theme's dark set.
+    const svg = page.locator("#the-doc .chart-holder svg").first();
+    await expect
+      .poll(() => svg.locator("text").first().getAttribute("fill"))
+      .toBe("#93a1b1");
+    expect(await svg.locator("rect").first().getAttribute("fill")).toBe(
+      "#7fa6d6",
+    );
+    // A mode switch re-dresses in place - no re-render, so the
+    // caret and any open inspector survive.
+    expect(
+      await page.evaluate(
+        (old) =>
+          document
+            .querySelector("#the-doc")
+            ?.shadowRoot?.querySelector("article") === old,
+        handle,
+      ),
+    ).toBe(true);
+  });
+
+  // Light paper draws the theme's palette exactly as designed - an
+  // interim "brighten until readable" pass once lightened series
+  // on WHITE paper too (green bars went near-invisible mint).
+  test("light mode draws the theme's palette verbatim", async ({ page }) => {
+    await page.goto("/");
+    await page
+      .locator("folio-doc h1", { hasText: "Q3 Field Operations Review" })
+      .waitFor();
+    const fills = await page
+      .locator("#the-doc .chart-holder svg")
+      .evaluateAll((svgs) =>
+        svgs
+          .slice(0, 2)
+          .map((s) => s.querySelector("rect")?.getAttribute("fill") ?? ""),
+      );
+    expect(fills).toEqual(["#1f3a5f", "#3f72a6"]);
   });
 });

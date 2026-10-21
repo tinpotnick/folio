@@ -1,7 +1,5 @@
 ---
 theme: corporate-report
-style:
-  table.style: "booktabs"
 ---
 
 # Half-year management accounts

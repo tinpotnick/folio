@@ -1,12 +1,3 @@
----
-theme: corporate-report
-style:
-  body.font.family: "Source Serif 4"
-  h1.font.size: 24pt
-  h2.font.size: 18pt
-  table.style: "booktabs"
----
-
 # folio help
 
 Everything in folio is one Markdown document: prose, typed tables,
@@ -92,10 +83,6 @@ document — written in the same renderer you are working with.
   instruments - stay silent here (the header shows no error, but
   those sounds are not in folio's offline kit); drop the `.bank(...)`
   to use folio's drums.
-- **Themes**: the document settings dialog (gear icon) has a
-  Theme select - default, corporate-report, technical, editorial.
-  It writes the `theme:` line at the top of the source; any
-  individual style setting still overrides the theme, key by key.
 - **Links** are standard inline Markdown: `[label](url)` in a
   paragraph. Clicking a link follows it - a `.md` path opens
   that document in place (the sample's "More examples" section
@@ -207,8 +194,10 @@ caption: "Quarter-on-quarter growth by region"
   column as x and the last as y, both numeric.
 - **caption** is the figure caption.
 
-Chart colors come from the document's style header:
-`chart.palette: "muted"` or `"corporate"`.
+Chart colors come from the theme. To pick a palette yourself, set
+`chart.palette` in the style header: `muted`, `corporate`, `ink`,
+`warm`, `sepia`, `vivid`, `news`, `jewel`, `mono`, or `swiss`. Each
+has a matching set for dark mode.
 
 ### Table formulas
 
@@ -281,8 +270,11 @@ rows they reference; formula cells are never editable by hand.
   mode") switches the app - toolbar, section browser, Markdown
   source, dialogs - between light and dark. The choice is
   remembered, and the first visit follows the system preference.
-  The document itself keeps its paper look in both modes: its
-  appearance comes from its theme, not from the app around it.
+  The document re-dresses with the app in its theme's OWN dark
+  colors (a Manuscript page goes warm brown-black, a Corporate
+  report deep navy), charts and diagrams included. The theme saved
+  in the document never changes, and printing always uses the light
+  version.
 
 ## Search
 
@@ -301,11 +293,27 @@ rows they reference; formula cells are never editable by hand.
   negative growth), and a technical paper (code, equations,
   diagrams).
 
+## Themes
+
+- A theme changes the whole look at once: fonts, heading style,
+  table style, colors, and chart palette, in light AND dark mode.
+  Search "theme" in the palette (**Change theme**), or open the
+  document settings (sliders icon) and pick a card: Folio,
+  Corporate report, Technical, Editorial, Manuscript, Modern,
+  Newsroom, Elegant, Academic, Swiss. Each card previews its paper,
+  title face, and colors.
+- Picking one writes the `theme:` line at the top of the source.
+- Individual settings below the cards still override the theme,
+  key by key. Overridden fields are marked, the dialog counts
+  them, and **Reset to theme** clears them all.
+
 ## Document settings
 
-- The gear button (toolbar, or search "settings") opens the
-  document settings: fonts, heading and body sizes, table style,
-  chart palette, and page-break behavior. Everything it edits is
+- The sliders button (toolbar, or search "settings") opens the
+  document settings: the theme picker first, then overrides for
+  fonts, heading and body sizes, table style (booktabs, plain,
+  striped, minimal, banded, ledger), chart palette, and page-break
+  behavior. Everything it edits is
   the style header at the top of the Markdown source — the dialog
   is just a friendlier way to write the same YAML.
 - **H1/H2 start a new page** applies when printing (and to PDF

@@ -347,6 +347,9 @@ test.describe("table inspector", () => {
     );
     const unit = th.locator(".unit");
     await expect(th).toHaveText("q2 (£k)");
+    const idleBg = await th.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
     await th.locator(".name").click();
     await expect(th).toHaveClass(/editing/);
     await expect(unit).toBeHidden();
@@ -361,7 +364,10 @@ test.describe("table inspector", () => {
     const thBg = await th.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
-    expect(thBg).toBe("rgba(76, 110, 245, 0.07)");
+    // (Its color is the table style's: a pale wash on light
+    // headers, a deeper band on banded ones - see "header
+    // legibility" below.)
+    expect(thBg).not.toBe(idleBg);
     const nameBg = await th
       .locator(".name")
       .evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -404,4 +410,87 @@ test.describe("table inspector", () => {
     await expect(inspector(page)).toBeVisible();
     await expect(inspector(page).locator(".insp-col")).toHaveValue("1");
   });
+});
+
+/**
+ * Regression: in a banded theme (the sample's corporate-report) the
+ * header text is paper-colored on an accent band. The hover and
+ * rename highlights replaced the band with a pale wash, so clicking
+ * a header made its text vanish (white on near-white).
+ */
+test.describe("header legibility across table styles", () => {
+  /** Contrast of the th's text against its painted background. */
+  function headerContrast(page: Page, col: string): Promise<number> {
+    return page.locator("#the-doc").evaluate((host, col) => {
+      const root = host.shadowRoot as ShadowRoot;
+      const th = root.querySelector(
+        `figure[data-table-id="regional-data"] th[data-col-index="${col}"]`,
+      ) as HTMLElement;
+      const article = root.querySelector("article") as HTMLElement;
+      const rgba = (s: string): number[] =>
+        (s.match(/[\d.]+/g) ?? []).map(Number).concat([1]).slice(0, 4);
+      const [pr, pg, pb] = rgba(getComputedStyle(article).backgroundColor);
+      const [r, g, b, a] = rgba(getComputedStyle(th).backgroundColor);
+      // The th's (possibly translucent) fill over the paper.
+      const bg = [
+        (r ?? 0) * (a ?? 1) + (pr ?? 0) * (1 - (a ?? 1)),
+        (g ?? 0) * (a ?? 1) + (pg ?? 0) * (1 - (a ?? 1)),
+        (b ?? 0) * (a ?? 1) + (pb ?? 0) * (1 - (a ?? 1)),
+      ];
+      const fg = rgba(getComputedStyle(th).color).slice(0, 3);
+      const lum = (c: number[]): number => {
+        const l = c.map((v) => {
+          const x = v / 255;
+          return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        });
+        return (
+          0.2126 * (l[0] ?? 0) + 0.7152 * (l[1] ?? 0) + 0.0722 * (l[2] ?? 0)
+        );
+      };
+      const [hi, lo] = [lum(fg), lum(bg)].sort((x, y) => y - x);
+      return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+    }, col);
+  }
+
+  for (const mode of ["light", "dark"]) {
+    for (const style of [
+      "banded",
+      "booktabs",
+      "plain",
+      "striped",
+      "minimal",
+      "ledger",
+    ]) {
+      test(`a ${style} header stays legible when hovered and renamed (${mode})`, async ({
+        page,
+      }) => {
+        await page.addInitScript(
+          (m) => localStorage.setItem("folio:mode", m),
+          mode,
+        );
+        await page.goto("/");
+        await page.locator("folio-doc h1").first().waitFor();
+        await page.evaluate(async (style) => {
+          const md = await (await fetch("/demo/sample-document.md")).text();
+          const next = md.replace(
+            /^theme: .*$/m,
+            `theme: corporate-report\nstyle:\n  table.style: "${style}"`,
+          );
+          await (
+            document.querySelector("#the-doc") as unknown as {
+              load(s: string): Promise<void>;
+            }
+          ).load(next);
+        }, style);
+        const th = page.locator(
+          '#the-doc figure[data-table-id="regional-data"] th[data-col-index="0"]',
+        );
+        await th.locator(".name").hover();
+        expect(await headerContrast(page, "0")).toBeGreaterThanOrEqual(4.5);
+        await th.locator(".name").click();
+        await expect(th).toHaveClass(/editing/);
+        expect(await headerContrast(page, "0")).toBeGreaterThanOrEqual(4.5);
+      });
+    }
+  }
 });

@@ -19,18 +19,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>folio — document-first workspace</title>
     <style>
-      /* Light is the default; dark is an attribute away. The
-         document itself stays PAPER (its look comes from its
-         theme, not the app) - dark mode dresses the app chrome
-         around it: toolbar, sidebar, Markdown editor, modals. */
+      /* Light is the default; dark is an attribute away. These
+         dress the APP CHROME; each <folio-doc> gets the mode as an
+         attribute and re-dresses its document in its theme's own
+         dark rendition (spec: docs/specs/dark-light-mode.md). */
       :root {
-        --bg: #fafbfc;
+        --bg: #f3f4f6;
         --surface: #ffffff;
-        --surface-2: #f3f4f6;
+        --surface-2: #f1f2f4;
         --surface-3: #f0f3f6;
         --text: #1f2328;
         --text-muted: #57606a;
-        --border: #e6e8eb;
+        --border: #e4e6ea;
         --border-strong: #d0d7de;
         --active-bg: #1f2328;
         --active-fg: #ffffff;
@@ -44,28 +44,37 @@
         --syntax-red: #cf222e;
         --rec-bg: #fbe4e4;
         --rec-fg: #b42318;
+        --page-shadow:
+          0 0 0 1px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.04),
+          0 6px 28px rgba(15, 23, 42, 0.06);
+        color-scheme: light;
       }
+      /* Dark: quiet neutral graphite - no blue cast, no pure black,
+         no pure white; one restrained accent. */
       html[data-mode="dark"] {
-        --bg: #0d1117;
-        --surface: #161b22;
-        --surface-2: #21262d;
-        --surface-3: #10151c;
-        --text: #e6edf3;
-        --text-muted: #9199a1;
-        --border: #30363d;
-        --border-strong: #3d444d;
-        --active-bg: #e6edf3;
-        --active-fg: #0d1117;
-        --accent-bg: #1b2a4a;
-        --accent-text: #6f9dff;
-        --gutter: #484f58;
-        --syntax-purple: #d2a8ff;
-        --syntax-orange: #ffa657;
-        --syntax-blue: #79c0ff;
-        --syntax-green: #7ee787;
-        --syntax-red: #ff7b72;
-        --rec-bg: #3d1a1a;
-        --rec-fg: #f85149;
+        --bg: #111113;
+        --surface: #18181b;
+        --surface-2: #232327;
+        --surface-3: #141416;
+        --text: #e4e4e7;
+        --text-muted: #a1a1aa;
+        --border: #26262a;
+        --border-strong: #3a3a40;
+        --active-bg: #e4e4e7;
+        --active-fg: #18181b;
+        --accent-bg: #23283a;
+        --accent-text: #a9bcf5;
+        --gutter: #52525b;
+        --syntax-purple: #c9b2f0;
+        --syntax-orange: #e8ac74;
+        --syntax-blue: #8fb8e8;
+        --syntax-green: #9cc99a;
+        --syntax-red: #f08d84;
+        --rec-bg: #3b1d1d;
+        --rec-fg: #f2836b;
+        --page-shadow:
+          0 0 0 1px rgba(255, 255, 255, 0.045), 0 10px 40px rgba(0, 0, 0, 0.45);
+        color-scheme: dark;
       }
       /* Author display rules beat the UA's [hidden] mapping. */
       [hidden] {
@@ -75,6 +84,7 @@
         margin: 0;
         font-family: system-ui, sans-serif;
         background: var(--bg);
+        color: var(--text);
       }
       header {
         border-bottom: 1px solid var(--border);
@@ -182,6 +192,7 @@
       button.plain {
         border: 1px solid var(--border-strong);
         background: var(--surface);
+        color: var(--text);
         border-radius: 8px;
         padding: 6px 12px;
         font-size: 13px;
@@ -277,9 +288,21 @@
         color: var(--text-muted);
       }
       main {
-        padding: 24px;
+        padding: 32px 24px 64px;
         flex: 1;
         min-width: 0;
+      }
+      /* The document is a page on the desk: the component owns the
+         paper, the host sets its margins and lift. */
+      #the-doc {
+        --folio-page-padding: 56px 72px 72px;
+        --folio-page-radius: 3px;
+        --folio-page-shadow: var(--page-shadow);
+      }
+      @media (max-width: 900px) {
+        #the-doc {
+          --folio-page-padding: 28px 22px 40px;
+        }
       }
       /* --- Markdown source editor: highlighted overlay --- */
       .md-wrap {
@@ -509,7 +532,11 @@
         color: var(--text-muted);
       }
       #settings-modal {
-        width: min(520px, calc(100vw - 48px));
+        width: min(680px, calc(100vw - 48px));
+        max-height: calc(100vh - 48px);
+        overflow-y: auto !important;
+        background: var(--surface);
+        color: var(--text);
         border: none;
         border-radius: 12px;
         padding: 0 0 8px;
@@ -538,6 +565,123 @@
         color: var(--text);
         white-space: nowrap;
       }
+      /* Theme picker: each card is a tiny page in the theme's own
+         paper, heading face, and palette - pick by LOOKING. */
+      #settings-form .theme-picker {
+        grid-column: 1 / -1;
+        border: none;
+        margin: 0;
+        padding: 0;
+        min-width: 0;
+      }
+      #settings-form .theme-picker legend,
+      #settings-form .settings-sub {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        padding: 0;
+        margin-bottom: 8px;
+      }
+      .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+        gap: 8px;
+      }
+      .theme-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 10px 9px;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        cursor: pointer;
+        white-space: normal !important;
+        transition: border-color 120ms, box-shadow 120ms;
+      }
+      .theme-card:hover {
+        border-color: var(--text-muted);
+      }
+      .theme-card:has(input:checked) {
+        border-color: var(--accent-text);
+        box-shadow: 0 0 0 1px var(--accent-text);
+      }
+      .theme-card:has(input:focus-visible) {
+        outline: 2px solid var(--accent-text);
+        outline-offset: 2px;
+      }
+      .theme-card input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .theme-card .tc-sample {
+        font-size: 26px;
+        line-height: 1;
+        padding: 10px 8px 8px;
+        border-radius: 4px;
+        border: 1px solid rgba(127, 127, 127, 0.18);
+      }
+      .theme-card .tc-swatches {
+        display: flex;
+        gap: 3px;
+        margin-top: 8px;
+      }
+      .theme-card .tc-swatches i {
+        width: 14px;
+        height: 6px;
+        border-radius: 2px;
+      }
+      .theme-card .tc-name {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .theme-card .tc-desc {
+        font-size: 11px;
+        line-height: 1.35;
+        color: var(--text-muted);
+      }
+      #settings-form .settings-sub {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        margin: 10px 0 0;
+        padding-top: 14px;
+        border-top: 1px solid var(--border);
+      }
+      #settings-override-note {
+        font-weight: 400;
+        letter-spacing: 0;
+        text-transform: none;
+        font-size: 12px;
+      }
+      #btn-settings-reset {
+        margin-left: auto;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0;
+        text-transform: none;
+        border: none;
+        background: none;
+        color: var(--accent-text);
+        cursor: pointer;
+        padding: 0;
+      }
+      #btn-settings-reset:disabled {
+        color: var(--text-muted);
+        opacity: 0.6;
+        cursor: default;
+      }
+      /* A field that overrides the theme says so at a glance. */
+      #settings-form .overridden {
+        border-color: var(--accent-text);
+        box-shadow: inset 3px 0 0 var(--accent-text);
+      }
       #settings-form select,
       #settings-form input {
         font: inherit;
@@ -546,6 +690,7 @@
         border: 1px solid var(--border-strong);
         border-radius: 8px;
         background: var(--surface);
+        color: var(--text);
         width: 100%;
         box-sizing: border-box;
       }
@@ -572,7 +717,8 @@
           display: none !important;
         }
         body {
-          background: var(--surface);
+          /* Print is light paper whatever the app mode. */
+          background: #ffffff;
         }
         .layout,
         main {
@@ -597,7 +743,9 @@
       >
         ☰
       </button>
-      <h1 title="folio — a document-first workspace: semantic Markdown documents, typed tables, query-driven charts">
+      <h1
+        title="folio — a document-first workspace: semantic Markdown documents, typed tables, query-driven charts"
+      >
         folio
       </h1>
       <div class="toolbar">
@@ -614,11 +762,12 @@
               stroke="currentColor"
               stroke-width="1.5"
             >
+              <path d="M3.5 7h6a3 3 0 1 1 0 6H6" stroke-linecap="round" />
               <path
-                d="M3.5 7h6a3 3 0 1 1 0 6H6"
+                d="M6 4L3.5 7 6 10"
                 stroke-linecap="round"
+                stroke-linejoin="round"
               />
-              <path d="M6 4L3.5 7 6 10" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
           <button
@@ -633,11 +782,12 @@
               stroke="currentColor"
               stroke-width="1.5"
             >
+              <path d="M12.5 7h-6a3 3 0 1 0 0 6H10" stroke-linecap="round" />
               <path
-                d="M12.5 7h-6a3 3 0 1 0 0 6H10"
+                d="M10 4l2.5 3L10 10"
                 stroke-linecap="round"
+                stroke-linejoin="round"
               />
-              <path d="M10 4l2.5 3L10 10" stroke-linecap="round" stroke-linejoin="round" />
             </svg>
           </button>
         </div>
@@ -747,10 +897,7 @@
                 d="M3 6.5v3h2.2l3.3 2.8V3.7L5.2 6.5H3z"
                 stroke-linejoin="round"
               />
-              <path
-                d="M11 5.5a3.2 3.2 0 010 5"
-                stroke-linecap="round"
-              />
+              <path d="M11 5.5a3.2 3.2 0 010 5" stroke-linecap="round" />
             </svg>
           </button>
           <button
@@ -904,11 +1051,14 @@
             stroke="currentColor"
             stroke-width="1.5"
           >
-            <circle cx="8" cy="8" r="2.25" />
+            <!-- Sliders, not a gear: a rayed gear read as a SUN
+                 beside the dark-mode moon. -->
             <path
-              d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4"
+              d="M2.5 4.5h3M8.5 4.5h5M2.5 11.5h6M11.5 11.5h2"
               stroke-linecap="round"
             />
+            <circle cx="7" cy="4.5" r="1.5" />
+            <circle cx="10" cy="11.5" r="1.5" />
           </svg>
         </button>
         <button
@@ -979,11 +1129,23 @@
         <h2>Document settings</h2>
       </div>
       <form id="settings-form">
-        <label for="set-theme">Theme</label>
-        <select id="set-theme"></select>
+        <fieldset class="theme-picker">
+          <legend>Theme</legend>
+          <div
+            id="set-theme"
+            class="theme-grid"
+            role="radiogroup"
+            aria-label="Theme"
+          ></div>
+        </fieldset>
+        <div class="settings-sub">
+          <span>Overrides</span>
+          <span id="settings-override-note"></span>
+          <button type="button" id="btn-settings-reset">Reset to theme</button>
+        </div>
         <label for="set-body-font">Body font</label>
         <select id="set-body-font"></select>
-        <label for="set-h1-font">Heading font</label>
+        <label for="set-h1-font">Title (H1) font</label>
         <select id="set-h1-font"></select>
         <label for="set-body-size">Body size</label>
         <input id="set-body-size" type="text" placeholder="17px" />
@@ -994,17 +1156,9 @@
         <label for="set-h3-size">H3 size</label>
         <input id="set-h3-size" type="text" placeholder="16pt" />
         <label for="set-table-style">Table style</label>
-        <select id="set-table-style">
-          <option value="default">Default (booktabs)</option>
-          <option value="booktabs">booktabs</option>
-          <option value="plain">plain</option>
-        </select>
+        <select id="set-table-style"></select>
         <label for="set-palette">Chart palette</label>
-        <select id="set-palette">
-          <option value="default">Default (muted)</option>
-          <option value="muted">muted</option>
-          <option value="corporate">corporate</option>
-        </select>
+        <select id="set-palette"></select>
         <label for="set-pb-h1">H1 starts a new page (print)</label>
         <select id="set-pb-h1">
           <option value="default">No</option>

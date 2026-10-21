@@ -18,7 +18,8 @@ import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import type { StrudelRepl } from "@strudel/web";
 import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
 import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
-import { themeFromDoc, themeCss } from "./render/theme.js";
+import { themeFromDoc, themeCss, type Mode } from "./render/theme.js";
+import { registerFonts } from "./render/fonts.js";
 import {
   renderAreaChart,
   renderBarChart,
@@ -127,7 +128,7 @@ const HISTORY_MAX = 100;
 
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ["src"];
+    return ["src", "mode"];
   }
 
   private doc: Doc | null = null;
@@ -197,6 +198,10 @@ export class FolioDoc extends HTMLElement {
   }
 
   connectedCallback(): void {
+    // The themes' typefaces ship with the component (ADR-0017);
+    // @font-face only works on the host document, not in a shadow
+    // root.
+    registerFonts(this.ownerDocument);
     this.load(this.getAttribute("src") ?? "");
   }
 
@@ -204,6 +209,7 @@ export class FolioDoc extends HTMLElement {
     if (name === "src" && old !== value && this.shadowRoot?.childNodes.length) {
       this.load(value);
     }
+    if (name === "mode" && old !== value) this.restyle();
   }
 
   /**
@@ -438,7 +444,8 @@ export class FolioDoc extends HTMLElement {
     const root = this.shadowRoot;
     root.innerHTML = "";
     const style = document.createElement("style");
-    style.textContent = themeCss(theme);
+    style.id = "folio-theme";
+    style.textContent = themeCss(theme, this.mode());
     root.appendChild(style);
 
     const host = document.createElement("article");
@@ -2477,6 +2484,39 @@ export class FolioDoc extends HTMLElement {
     input.addEventListener("blur", commit);
   }
 
+  /**
+   * The rendition (spec: docs/specs/dark-light-mode.md): the host's
+   * ambient mode, `<folio-doc mode="dark">`. Anything else is light
+   * - an unstyled host gets the light rendition.
+   */
+  private mode(): Mode {
+    return this.getAttribute("mode") === "dark" ? "dark" : "light";
+  }
+
+  /**
+   * Re-dress for a mode change WITHOUT a re-render: swap the theme
+   * stylesheet and re-paint the figures that bake colors in (charts,
+   * diagrams). The article, the caret, and any open inspector stay
+   * exactly where they were.
+   */
+  private restyle(): void {
+    const root = this.shadowRoot;
+    if (!this.doc || !root) return;
+    const style = root.querySelector("style#folio-theme");
+    if (style)
+      style.textContent = themeCss(themeFromDoc(this.doc), this.mode());
+    for (const fig of Array.from(
+      root.querySelectorAll<HTMLElement>("[data-chart-source]"),
+    )) {
+      this.drawChart(fig);
+    }
+    for (const fig of Array.from(
+      root.querySelectorAll<HTMLElement>("[data-diagram-id]"),
+    )) {
+      void this.drawDiagram(fig);
+    }
+  }
+
   private drawChart(figure: HTMLElement): void {
     if (!this.doc) return;
     // A chart figure is its BLOCK, not its source: several charts
@@ -2517,9 +2557,13 @@ export class FolioDoc extends HTMLElement {
       const ordinal = this.doc.blocks
         .filter((b) => b.kind === "chart")
         .indexOf(block);
-      const palette = theme.palette.length > 0 ? theme.palette : ["#4c6ef5"];
-      const seriesColor =
-        palette[ordinal % palette.length] ?? theme.palette[0] ?? "#4c6ef5";
+      // Each theme palette is hand-tuned for both renditions (the
+      // dark set is lighter, never neon); the axes take the theme's
+      // own ink so a chart sits in its page.
+      const mode = this.mode();
+      const palette = theme.palette[mode];
+      const ink = theme.colors[mode];
+      const seriesColor = palette[ordinal % palette.length] ?? "#3d5a98";
       const select = block.chart.query.select;
       const valueCol = select[select.length - 1] ?? "";
       const unit =
@@ -2527,7 +2571,11 @@ export class FolioDoc extends HTMLElement {
         undefined;
       const style: ChartStyle = {
         color: seriesColor,
-        colors: theme.palette,
+        colors: palette,
+        text: ink.ink,
+        textMuted: ink.muted,
+        grid: ink.hairline,
+        paper: ink.paper,
         xTitle: select[0],
         yTitle:
           valueCol === ""
@@ -2566,7 +2614,43 @@ export class FolioDoc extends HTMLElement {
     if (!block || block.kind !== "diagram" || !holder) return;
     try {
       const mermaid = (await import("mermaid")).default;
-      mermaid.initialize({ securityLevel: "strict", startOnLoad: false });
+      // Diagrams dress from the theme and the rendition: mermaid's
+      // `base` theme takes the page's own fonts and colors, so a
+      // diagram belongs to its document in either mode.
+      const theme = themeFromDoc(this.doc);
+      const c = theme.colors[this.mode()];
+      mermaid.initialize({
+        securityLevel: "strict",
+        startOnLoad: false,
+        theme: "base",
+        themeVariables: {
+          darkMode: this.mode() === "dark",
+          // A pale halo on every node reads as a glow on dark paper.
+          dropShadow: "none",
+          fontFamily: theme.bodyFont,
+          background: c.paper,
+          primaryColor: c.tint,
+          primaryTextColor: c.ink,
+          primaryBorderColor: c.accent,
+          secondaryColor: c.paper,
+          tertiaryColor: c.paper,
+          lineColor: c.muted,
+          textColor: c.ink,
+          mainBkg: c.tint,
+          nodeBorder: c.accent,
+          clusterBkg: c.paper,
+          clusterBorder: c.hairline,
+          edgeLabelBackground: c.paper,
+          noteBkgColor: c.tint,
+          noteTextColor: c.ink,
+          noteBorderColor: c.hairline,
+          actorBkg: c.tint,
+          actorBorder: c.accent,
+          actorTextColor: c.ink,
+          signalColor: c.ink,
+          signalTextColor: c.ink,
+        },
+      });
       const { svg } = await mermaid.render(
         `folio-diagram-${id}`,
         block.diagram.text,

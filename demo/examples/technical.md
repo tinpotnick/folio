@@ -1,7 +1,5 @@
 ---
-theme: corporate-report
-style:
-  body.font.family: "Source Serif 4"
+theme: academic
 ---
 
 # Compiling expressions: notes
