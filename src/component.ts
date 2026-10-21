@@ -125,6 +125,15 @@ function cloneBlocks(blocks: DocBlock[]): DocBlock[] {
 /** A plain number as people type it in a table (1,234.50, -3, .5). */
 const NUMERIC_RE = /^-?(?:\d{1,3}(?:,\d{3})+|\d*)(?:\.\d+)?$/;
 
+/**
+ * Tab, however the engine names it: WebKitGTK reports Shift+Tab (GTK's
+ * ISO_Left_Tab) as key "Unidentified" - only `code` says "Tab" - so a
+ * key-only check made Shift+Tab dead in the desktop app.
+ */
+function isTabKey(ev: KeyboardEvent): boolean {
+  return ev.key === "Tab" || ev.code === "Tab";
+}
+
 /** A list body as nested <ul>/<ol> (spec: docs/specs/lists.md). */
 function renderListBody(body: ListBody): HTMLElement {
   const el = document.createElement(body.ordered ? "ol" : "ul");
@@ -2985,7 +2994,7 @@ export class FolioDoc extends HTMLElement {
         ev.preventDefault();
         ev.stopPropagation();
         this.refreshDatasetBrowser();
-      } else if (ev.key === "Tab") {
+      } else if (isTabKey(ev)) {
         ev.preventDefault();
         commit();
         const cells = Array.from(
@@ -4151,17 +4160,32 @@ export class FolioDoc extends HTMLElement {
   private focusBlockStart(idx: number, atEnd = false): void {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     const child = (host?.children[idx] ?? null) as HTMLElement | null;
-    // A code figure's caret belongs in its body, not its header.
+    // A code figure's caret belongs in its body, not its header; a
+    // list's, in its first (or last) item.
     const el =
-      child?.querySelector<HTMLElement>("pre.folio-code > code") ?? child;
+      child?.querySelector<HTMLElement>("pre.folio-code > code") ??
+      (child && /^(UL|OL)$/.test(child.tagName)
+        ? child.querySelector<HTMLElement>(atEnd ? "li:last-of-type" : "li")
+        : null) ??
+      child;
     if (!el) return;
     el.focus();
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(!atEnd);
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
+    (host as HTMLElement | null)?.focus({ preventScroll: true });
+    // The caret goes in through setCaret: WebKit ignores addRange()
+    // inside a shadow root (the bullet button dropped focus on the
+    // desktop app).
+    let node: Node = el;
+    if (atEnd) {
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode(); t; t = w.nextNode()) node = t;
+      this.setCaret(
+        node,
+        node === el ? el.childNodes.length : (node.textContent ?? "").length,
+      );
+    } else {
+      this.setCaret(el, 0);
+    }
+    this.trackCaret();
   }
 
   /**
@@ -4327,7 +4351,7 @@ export class FolioDoc extends HTMLElement {
     }
     // Lists (spec: docs/specs/lists.md): Tab nests the caret's item,
     // Shift+Tab lifts it. Outside a list, Tab keeps its usual job.
-    if (ev.key === "Tab" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+    if (isTabKey(ev) && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
       const li = this.caretListItem();
       if (li) {
         ev.preventDefault();
@@ -4470,8 +4494,8 @@ export class FolioDoc extends HTMLElement {
       }
       return;
     }
-    if (ev.key !== "Enter" && ev.key !== "Tab") return;
-    if (ev.key === "Tab" && ev.shiftKey && th.previousElementSibling === null) {
+    if (ev.key !== "Enter" && !isTabKey(ev)) return;
+    if (isTabKey(ev) && ev.shiftKey && th.previousElementSibling === null) {
       // Before the first header: commit, and leave focus movement to
       // the browser exactly as cell navigation does.
       this.commitHeaderRename(span, figure, block, ci);
@@ -4555,7 +4579,7 @@ export class FolioDoc extends HTMLElement {
    * cell (and recalculates formulas) before moving.
    */
   private handleTableNav(ev: KeyboardEvent, td: HTMLTableCellElement): void {
-    if (ev.key !== "Tab" && ev.key !== "Enter") return;
+    if (!isTabKey(ev) && ev.key !== "Enter") return;
     const figure = td.closest("figure") as HTMLElement | null;
     if (!figure) return;
     const idx = Number(figure.dataset.blockIndex ?? -1);

@@ -23,6 +23,14 @@ await tick();
 art = root.querySelector("article");
 const list = art.querySelector(":scope > ul[data-block-index='3']");
 log.push("bullet lands on the NEW line: " + !!list);
+{
+  // Focus survives the bullet: the caret is IN the new list item.
+  const r = sel.getComposedRanges({ shadowRoots: [root] })[0];
+  log.push(
+    "bullet keeps the caret in the list: " +
+      !!(r && list?.contains(r.startContainer) && root.activeElement === art),
+  );
+}
 if (!list) return log.join(" | ");
 const li1 = list.querySelector("li");
 li1.textContent = "one";
@@ -46,4 +54,14 @@ log.push("Tab nests the item: " + (li3.parentElement?.parentElement === li2));
 log.push("Tab is handled: " + ev.defaultPrevented);
 const r = sel.getComposedRanges({ shadowRoots: [root] })[0];
 log.push("caret stays in the item: " + !!(r && li3.contains(r.startContainer)));
+const back = new KeyboardEvent("keydown", {
+  key: "Tab",
+  shiftKey: true,
+  bubbles: true,
+  cancelable: true,
+  composed: true,
+});
+art.dispatchEvent(back);
+await tick();
+log.push("Shift+Tab lifts it back: " + (li3.parentElement === list));
 return log.join(" | ");
