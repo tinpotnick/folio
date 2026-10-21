@@ -491,7 +491,9 @@
         margin-left: auto;
       }
       #help-modal folio-doc {
-        padding: 0 28px 28px;
+        /* Top padding: the document's first block has no top margin
+           of its own, so the title would sit flush on the header. */
+        padding: 24px 28px 28px;
         height: calc(100% - 50px);
         overflow-y: auto;
       }

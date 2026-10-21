@@ -1076,6 +1076,30 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-family: system-ui, sans-serif;
       font-size: 12px;
     }
+    /* Labelled fields (the chart bar): label over control, wrapping. */
+    .folio-inspector.labelled-bar {
+      flex-wrap: wrap;
+      align-items: flex-end;
+      row-gap: 6px;
+    }
+    .folio-inspector .insp-field {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 1 1 110px;
+      min-width: 0;
+    }
+    .folio-inspector .insp-field > select,
+    .folio-inspector .insp-field > input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .folio-inspector .insp-label {
+      font-size: 10.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--folio-ink-muted);
+    }
     .folio-inspector select,
     .folio-inspector input {
       font: inherit;
