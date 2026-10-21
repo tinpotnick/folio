@@ -18,6 +18,7 @@ import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import type { StrudelRepl } from "@strudel/web";
 import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
 import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
+import { onlineSampleSources } from "./audio/online-samples.js";
 import { themeFromDoc, themeCss, type Mode } from "./render/theme.js";
 import { registerFonts } from "./render/fonts.js";
 import { formatComputed } from "./render/number.js";
@@ -160,6 +161,8 @@ export class FolioDoc extends HTMLElement {
    */
   private dragRange: Range | null = null;
   private dragStart: { x: number; y: number } | null = null;
+  /** Online sample sources the user allowed this session (ADR-0019). */
+  private allowedSampleSources = new Set<string>();
   /** The live strudel REPL, once initStrudel has resolved. */
   private repl: StrudelRepl | null = null;
   /**
@@ -876,24 +879,73 @@ export class FolioDoc extends HTMLElement {
     stop.type = "button";
     stop.className = "insp-select strudel-stop";
     stop.textContent = "■ Stop";
-    play.addEventListener("click", () => {
+    // Online sample banks need consent (ADR-0019): a pattern's own
+    // samples('github:...') would download from the internet.
+    const consent = document.createElement("span");
+    consent.className = "strudel-consent";
+    consent.setAttribute("role", "alert");
+    consent.hidden = true;
+    const consentText = document.createElement("span");
+    const allow = document.createElement("button");
+    allow.type = "button";
+    allow.className = "insp-select consent-allow";
+    allow.textContent = "Download and play";
+    const skip = document.createElement("button");
+    skip.type = "button";
+    skip.className = "insp-select consent-skip";
+    skip.textContent = "Play without them";
+    consent.append(consentText, allow, skip);
+
+    const source = (): string | null => {
       const code = figure.querySelector<HTMLElement>(
         "pre.strudel-source > code",
       );
-      if (!code) return;
+      return code ? this.codeText(code) : null;
+    };
+    const start = (src: string, offline: boolean): void => {
+      consent.hidden = true;
       err.hidden = true;
       // Unlock audio SYNCHRONOUSLY, inside the gesture, BEFORE
       // the async import - the load must never eat the activation
       // window (the play-does-nothing bug on WebKitGTK).
       this.ensureStrudelAudio();
       play.textContent = PLAYING_LABEL;
-      void this.playStrudel(figure, this.codeText(code), err, play);
+      void this.playStrudel(figure, src, err, play, { offline });
+    };
+    play.addEventListener("click", () => {
+      const src = source();
+      if (src === null) return;
+      const pending = onlineSampleSources(src).filter(
+        (s) => !this.allowedSampleSources.has(s),
+      );
+      if (pending.length === 0) {
+        start(src, false);
+        return;
+      }
+      consentText.textContent =
+        `This pattern downloads sounds from the internet (${pending.join(", ")}). ` +
+        "It needs a connection and contacts an outside server; the rest of " +
+        "folio stays offline.";
+      err.hidden = true;
+      consent.hidden = false;
+    });
+    allow.addEventListener("click", () => {
+      const src = source();
+      if (src === null) return;
+      for (const s of onlineSampleSources(src))
+        this.allowedSampleSources.add(s);
+      start(src, false);
+    });
+    skip.addEventListener("click", () => {
+      const src = source();
+      if (src !== null) start(src, true);
     });
     stop.addEventListener("click", () => {
       err.hidden = true;
+      consent.hidden = true;
       void this.stopStrudel();
     });
-    return [play, stop, err];
+    return [play, stop, err, consent];
   }
 
   /**
@@ -934,6 +986,7 @@ export class FolioDoc extends HTMLElement {
     source: string,
     err: HTMLElement,
     play: HTMLElement,
+    opts: { offline?: boolean } = {},
   ): Promise<void> {
     try {
       const strudel = await import("@strudel/web");
@@ -976,10 +1029,34 @@ export class FolioDoc extends HTMLElement {
       this.strudelEvalError = (e) => {
         status.error = e ?? new Error("the pattern did not evaluate");
       };
+      // A pattern's own samples(...) calls (ADR-0019). "Play without
+      // them": no-ops - nothing is downloaded and those sounds stay
+      // silent. Allowed: a download that FAILS (offline, server
+      // down) is reported, never fatal - the rest still plays.
+      const g = globalThis as { samples?: unknown };
+      const realSamples = g.samples;
+      if (typeof realSamples === "function") {
+        const real = realSamples as (...a: unknown[]) => Promise<unknown>;
+        g.samples = opts.offline
+          ? (): Promise<void> => Promise.resolve()
+          : (...args: unknown[]): Promise<unknown> =>
+              Promise.resolve()
+                .then(() => real(...args))
+                .catch((e: unknown) => {
+                  if (err.isConnected) {
+                    err.textContent =
+                      "Couldn't download the online sounds (" +
+                      (e instanceof Error ? e.message : String(e)) +
+                      ") - playing the rest. Check the connection.";
+                    err.hidden = false;
+                  }
+                });
+      }
       try {
         await strudel.evaluate(source);
       } finally {
         this.strudelEvalError = null;
+        g.samples = realSamples;
       }
       if (status.error !== null) throw status.error;
       this.watchStrudelLog(err);

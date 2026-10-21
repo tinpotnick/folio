@@ -120,8 +120,13 @@ document — written in the same renderer you are working with.
   an online sample bank - `.bank("RolandTR808")`, pianos, other
   instruments - stay silent here, because those sounds are not in
   folio's offline kit; drop the `.bank(...)` to use folio's drums. An
-  example that calls `samples('github:...')` itself downloads that
-  bank when you're online, and its sounds fail offline.
+  example that loads its own sounds from the internet
+  (`samples('github:...')`, as many strudel.cc examples do) asks
+  first: pressing Play shows a warning naming what it would
+  download. **Download and play** fetches them (you need a
+  connection, and you're asked once per session); **Play without
+  them** plays everything else, fully offline. The *Amensister*
+  example works this way.
 - If something in a pattern fails while it plays (a sound that won't
   load, a scale name this version of Strudel rejects), the block's
   header says **Some sounds failed: ...** and the rest keeps playing.
