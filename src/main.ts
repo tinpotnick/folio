@@ -638,7 +638,7 @@ async function startRecording(): Promise<void> {
     const reader = new FileReader();
     reader.onload = (): void => {
       if (typeof reader.result !== "string") return;
-      el.insertAudio(reader.result, "recording");
+      el.insertAudio(reader.result, "Recording");
       flash(
         `Recorded ${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, "0")}`,
       );
@@ -651,7 +651,7 @@ async function startRecording(): Promise<void> {
   recTick = window.setInterval((): void => {
     const elapsed = Date.now() - recStartedAt;
     const secs = Math.floor(elapsed / 1000);
-    status.textContent = `Recording ${String(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")} - click the mic to stop`;
+    status.textContent = `Recording ${String(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")} - click Stop in the toolbar to finish`;
     status.classList.add("show");
     if (elapsed >= RECORD_MAX_MS) stopRecording();
   }, 500);
@@ -677,6 +677,8 @@ btnRecStop.addEventListener("click", () => {
 });
 new MutationObserver(() => {
   btnRecStop.hidden = !btnRecord.classList.contains("rec");
+  // It takes room in the bar: make the row fit again.
+  fitToolbar();
 }).observe(btnRecord, { attributes: true, attributeFilter: ["class"] });
 
 /* --- Import data from a file (CSV / JSON) --- */
@@ -2500,7 +2502,7 @@ function reflectStyleLabel(): void {
   );
   const block = active?.dataset.block ?? "p";
   styleLabel.textContent = STYLE_NAMES[block] ?? "Paragraph";
-  styleLabelShort.textContent = block === "p" ? "Text" : block.toUpperCase();
+  styleLabelShort.textContent = block.toUpperCase();
 }
 new MutationObserver(reflectStyleLabel).observe(
   requireEl<HTMLElement>("#style-menu"),
@@ -2531,6 +2533,7 @@ for (const c of collapsible) c.node.before(c.marker);
 function fitToolbar(): void {
   // Everything home first, then out again in rank order until it fits.
   for (const c of collapsible) c.marker.after(c.node);
+  overflowMenu.textContent = "";
   overflowWrap.hidden = true;
   const fits = (): boolean => toolbarEl.scrollWidth <= toolbarEl.clientWidth;
   if (fits()) {
@@ -2552,9 +2555,23 @@ function fitToolbar(): void {
     if (fits()) moved.delete(c);
     else c.node.remove();
   }
-  // In the menu, in their bar order.
-  for (const c of collapsible)
-    if (moved.has(c)) overflowMenu.appendChild(c.node);
+  // In the menu, in their bar order: a group as a labelled row
+  // ("Format  B I S U"), a lone button as a row with its own label.
+  for (const c of collapsible) {
+    if (!moved.has(c)) continue;
+    const label = c.node.dataset.label;
+    if (!label) {
+      overflowMenu.appendChild(c.node);
+      continue;
+    }
+    const row = document.createElement("div");
+    row.className = "overflow-row";
+    const name = document.createElement("span");
+    name.className = "overflow-label";
+    name.textContent = label;
+    row.append(name, c.node);
+    overflowMenu.appendChild(row);
+  }
 }
 new ResizeObserver(fitToolbar).observe(requireEl<HTMLElement>("header"));
 fitToolbar();

@@ -250,7 +250,7 @@ test.describe("recording", () => {
       .evaluate((el) => (el as HTMLAudioElement).src);
     expect(src).toMatch(/^data:audio\//);
     // The clip's alt seeds from the recording itself.
-    await expect(figure.locator(".folio-audio-label")).toHaveText("recording");
+    await expect(figure.locator(".folio-audio-label")).toHaveText("Recording");
     await expect(page.locator("#status")).toContainText("Recorded 0:0");
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();

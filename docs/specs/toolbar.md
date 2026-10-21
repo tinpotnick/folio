@@ -45,25 +45,34 @@ Same layout on web and desktop.
   overflow, which would otherwise cut them).
 - **Text style menu**: its trigger names the style at the caret
   ("Heading 2"; "Paragraph" when there is none) by mirroring the
-  items' `active` state. The current item is marked like the
-  sidebar's current section (surface plus an active-ink edge), not
-  the heavy toolbar pill.
+  items' `active` state. The current item is ticked, as in any menu.
 - **More tools**: groups carry a `data-overflow` rank (1 leaves
   first): dark mode, settings, view switch, history, format, file,
-  help. On every header resize, all groups go home, then leave in
-  rank order until the row fits; then any group that fits again
+  help, and - last resort, a phone while recording - search. On
+  every header resize, all groups go home, then leave in rank order
+  until the row fits; then any group that fits again
   comes back, most important first (undo/redo return once B I S U
-  have gone). Groups keep their bar order in the menu; a lone button
-  there shows its label as a menu row.
+  have gone). Groups keep their bar order in the menu, each as a
+  labelled row ("Format  B I S U", from `data-label`); a lone button
+  there shows its own label as a menu row. The Recording · Stop
+  button re-fits the row when it appears or goes.
+- **One height**: every control in the bar is 36px - a group's 28px
+  buttons in its padded, bordered box, and standalone buttons sized
+  to match. Every shape is a rounded rectangle (8px; no capsules),
+  every control an icon (help is a stroked question mark).
 - **Phone width** (≤ 560px): no wordmark, the style menu shows a
-  short name (Text, H1, H2, H3), Insert shows only its icon, and the
-  search button drops its Ctrl K hint (≤ 760px).
+  short name (P, H1, H2, H3), Insert shows only its icon, Recording
+  · Stop shortens to Stop, and the search button drops its Ctrl K
+  hint (≤ 760px).
 - **Recording**: Record audio lives in the Insert menu, so while it
   records the bar shows a pulsing **Recording · Stop** button that
   stops it.
 - **Focus**: pressing a header button never takes focus from the
   document (mousedown is cancelled), so typing after a click on dark
   mode still goes into the page. Tab still reaches every button.
+- **After an insert** the caret is not lost: a new equation opens its
+  editor with the placeholder selected (typing replaces it); a new
+  chart leaves the caret at the start of the block after it.
 - **Dark mode button** shows the mode it switches to: a moon in light
   mode, a sun in dark.
 - **Window title**: "<first H1, or Untitled> — folio", in the tab and

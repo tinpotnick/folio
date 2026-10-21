@@ -132,3 +132,82 @@ test.describe("toolbar", () => {
     await expect(stop).toBeHidden();
   });
 });
+
+test.describe("toolbar: first-contact eval fixes", () => {
+  test("every control in the bar is the same height", async ({ page }) => {
+    await open(page);
+    const heights = await page.evaluate(() =>
+      Array.from(document.querySelectorAll(".toolbar > *, header > button"))
+        .filter((n) => (n as HTMLElement).offsetParent !== null)
+        .filter((n) => !n.classList.contains("toolbar-spacer"))
+        .map((n) => Math.round(n.getBoundingClientRect().height)),
+    );
+    expect(new Set(heights)).toEqual(new Set([36]));
+  });
+
+  test("recording on a phone still fits, and Search comes back", async ({
+    page,
+  }) => {
+    await page.context().grantPermissions(["microphone"]);
+    await open(page, 390);
+    await page.locator("#the-doc p").first().click();
+    await insertFrom(page, "btn-record");
+    await expect(page.locator("#btn-rec-stop")).toBeInViewport();
+    await expect(page.locator("#btn-overflow")).toBeInViewport();
+    const fit = await page
+      .locator("header .toolbar")
+      .evaluate((t) => t.scrollWidth <= t.clientWidth);
+    expect(fit).toBe(true);
+    await page.locator("#btn-rec-stop").click();
+    await expect(page.locator("header .toolbar > #btn-search")).toBeVisible();
+  });
+
+  test("More tools labels its groups", async ({ page }) => {
+    await open(page, 800);
+    await page.locator("#btn-overflow").click();
+    await expect(
+      page.locator("#overflow-menu .overflow-row", { hasText: "Format" }),
+    ).toContainText("Format");
+  });
+
+  test("a new equation opens its editor; typing replaces the placeholder", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\nText.\n");
+    await page.locator("#the-doc p").click();
+    await insertFrom(page, "btn-equation");
+    await page.keyboard.type("a^2 + b^2");
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "$$\na^2 + b^2\n$$",
+    );
+  });
+
+  test("after a chart, typing carries on below it", async ({ page }) => {
+    await loadDoc(
+      page,
+      "# T\n\n::: table {#t}\ncolumns:\n  - {name: k, type: text}\n  - {name: v, type: number}\ndata:\n  - [a, 1]\n:::\n\nFirst.\n\nSecond.\n",
+    );
+    await page.locator("#the-doc p", { hasText: "First." }).click();
+    await page.locator("#btn-insert-menu").click();
+    await page.locator('#insert-menu [data-insert="Insert a chart"]').click();
+    await page.keyboard.type("Then ");
+    await expect(
+      page.locator("#the-doc p", { hasText: "Then Second." }),
+    ).toHaveCount(1);
+  });
+
+  test("an empty paragraph is a blank line, not a literal mark", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\nText.\n");
+    await page.locator("#the-doc p").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    const mark = await page
+      .locator("#the-doc p")
+      .last()
+      .evaluate((p) => getComputedStyle(p, "::before").content);
+    expect(["none", "normal"]).toContain(mark);
+  });
+});

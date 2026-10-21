@@ -17,14 +17,14 @@ ten themes, light or dark, online or off.
 This guide opens the first time you start folio. After that, folio
 opens on a new, blank document, ready to write in.
 
-1. **Start a document.** Press **Ctrl+K** and type "new" (or press
-   **Ctrl+N** in the desktop app). Type a title, press Enter, and
-   write.
-2. **Add structure.** The toolbar's **H1 H2 H3** buttons make
-   headings, and the list buttons make bullets and numbered lists.
-   Everything else — tables, charts, equations, images, diagrams —
-   is in the command palette: press **Ctrl+K** and say what you
-   want, such as "table", "chart" or "equation".
+1. **Start a document.** Press the **New** button at the start of the
+   toolbar (or **Ctrl+N** in the desktop app, or Ctrl+K and "new").
+   Type a title, press Enter, and write.
+2. **Add structure.** The toolbar's **Paragraph** menu makes
+   headings, and the list buttons beside it make bullets and
+   numbered lists. **+ Insert** adds everything else — tables,
+   charts, equations, images, diagrams, music. Or press **Ctrl+K**
+   and say what you want, such as "table", "chart" or "equation".
 3. **Change the look.** Press Ctrl+K and type "theme". Ten themes,
    each with a dark mode.
 4. **Open an example.** Press Ctrl+K and type "example", or pick one
