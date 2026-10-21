@@ -151,3 +151,73 @@ test.describe("JSCAD models", () => {
     expect(kids).toEqual(["H1", "P", "FIGURE"]);
   });
 });
+
+test.describe("JSCAD models fed by a dataset", () => {
+  const bracket = (page: Page) =>
+    page.locator("#the-doc figure.folio-jscad").first();
+
+  test("the header's row picker drives the model and writes row=", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/3d-models.md");
+    const fig = bracket(page);
+    const svg = fig.locator(".jscad-view svg");
+    await expect(svg).toBeVisible({ timeout: 10_000 });
+    const before = await svg.innerHTML();
+    await fig.locator(".jscad-view").click();
+    await fig.getByLabel("Dataset row").selectOption("3");
+    await expect
+      .poll(() => svg.innerHTML(), { timeout: 10_000 })
+      .not.toBe(before);
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "```jscad params=@bracket-sizes row=3",
+    );
+  });
+
+  test("editing the dataset redraws the model", async ({ page }) => {
+    await page.goto("/?doc=demo/examples/3d-models.md");
+    const svg = bracket(page).locator(".jscad-view svg");
+    await expect(svg).toBeVisible({ timeout: 10_000 });
+    const before = await svg.innerHTML();
+    // medium (row 2) hole radius 3 -> 9
+    const cell = page.locator(
+      '#the-doc figure[data-table-id="bracket-sizes"] td[data-row-index="1"][data-col-index="3"]',
+    );
+    await cell.click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("9");
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(() => svg.innerHTML(), { timeout: 10_000 })
+      .not.toBe(before);
+  });
+
+  test("a missing dataset says so, as the figure", async ({ page }) => {
+    await loadDoc(page, "# T\n\n```jscad params=@nope\n" + CUBE + "\n```\n");
+    await expect(page.locator("#the-doc .jscad-error")).toContainText(
+      "no dataset @nope",
+      { timeout: 10_000 },
+    );
+  });
+
+  test("Export STL downloads the drawn model", async ({ page }) => {
+    await loadDoc(page, model(CUBE));
+    const fig = page.locator("#the-doc figure.folio-jscad");
+    await expect(fig.locator(".jscad-view svg")).toBeVisible({
+      timeout: 10_000,
+    });
+    await fig.locator(".jscad-view").click();
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      fig.locator(".jscad-export").click(),
+    ]);
+    expect(download.suggestedFilename()).toBe("model-1.stl");
+    const path = await download.path();
+    const { readFileSync } = await import("node:fs");
+    const stl = readFileSync(path, "utf8");
+    expect(stl.startsWith("solid model-1")).toBe(true);
+    // A cube: 6 faces, 2 triangles each.
+    expect(stl.match(/facet normal/g)).toHaveLength(12);
+  });
+});

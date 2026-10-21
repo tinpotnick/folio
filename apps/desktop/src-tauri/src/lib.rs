@@ -117,6 +117,35 @@ async fn open_document(
     })
 }
 
+/// Save any text file the document exports (an STL model, ...): a
+/// native save dialog filtered to `extension`, starting in the last
+/// used folder.
+#[tauri::command]
+async fn save_text_file(
+    app: tauri::AppHandle,
+    text: String,
+    suggested: String,
+    filter_name: String,
+    extension: String,
+) -> Result<String, String> {
+    let mut dialog = app
+        .dialog()
+        .file()
+        .add_filter(&filter_name, &[extension.as_str()])
+        .set_file_name(&suggested);
+    if let Some(dir) = read_last_dir(&app) {
+        dialog = dialog.set_directory(dir);
+    }
+    let path = dialog
+        .blocking_save_file()
+        .ok_or("cancelled")?
+        .into_path()
+        .map_err(|e| e.to_string())?;
+    remember_dir(&app, &path);
+    std::fs::write(&path, &text).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 /// `suggested` defaults the file name (the open document's own when
 /// it has one), and the dialog starts in its folder — or the last
 /// used folder when the document is in-memory only.
@@ -164,7 +193,11 @@ pub fn run() {
             PermissionKind::Microphone => PermissionResponse::Allow,
             _ => PermissionResponse::Default,
         })
-        .invoke_handler(tauri::generate_handler![open_document, save_document])
+        .invoke_handler(tauri::generate_handler![
+            open_document,
+            save_document,
+            save_text_file
+        ])
         .run(tauri::generate_context!())
         .expect("error while running folio desktop");
 }

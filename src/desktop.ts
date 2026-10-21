@@ -52,3 +52,25 @@ export async function saveDocument(
     return null;
   }
 }
+
+/** Save an exported text file (an STL model, ...) through a native
+ * dialog. Returns the path, or null when cancelled / not desktop. */
+export async function saveTextFile(
+  text: string,
+  filename: string,
+  filterName: string,
+): Promise<string | null> {
+  if (!isDesktop()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const extension = filename.split(".").pop() ?? "txt";
+  try {
+    return await invoke<string>("save_text_file", {
+      text,
+      suggested: filename,
+      filterName,
+      extension,
+    });
+  } catch {
+    return null;
+  }
+}

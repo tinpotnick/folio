@@ -25,6 +25,8 @@ interface ParamDef {
 export function evaluateJscad(
   source: string,
   modeling: ModelingApi,
+  /** A dataset row's values, overriding parameter defaults by name. */
+  overrides: Record<string, unknown> = {},
 ): MeshPolygon[] {
   const module = { exports: {} as Record<string, unknown> };
   const require = (name: string): unknown => {
@@ -62,9 +64,10 @@ export function evaluateJscad(
       if (d.name) defaults[d.name] = d.initial ?? d.default ?? d.checked;
     }
   }
-  const result = (found.main as (p: Record<string, unknown>) => unknown)(
-    defaults,
-  );
+  const result = (found.main as (p: Record<string, unknown>) => unknown)({
+    ...defaults,
+    ...overrides,
+  });
   const shapes = (Array.isArray(result) ? result : [result]).flat(
     Infinity,
   ) as unknown[];

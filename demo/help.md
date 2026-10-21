@@ -57,6 +57,12 @@ document — written in the same renderer you are working with.
   defaults are used. The code runs sealed off: no network, no files,
   and at most five seconds. The *Parametric parts* example shows a
   bracket, a gear and a coloured assembly.
+- A model can take its sizes from a **dataset**: write
+  `params=@sizes row=2` after `jscad` on the fence, or pick the
+  dataset and row in the model's header. The row's columns replace
+  the parameter defaults by name, and editing the table redraws the
+  model. **Export STL** in the header saves the model for 3D
+  printing or CAD.
 
 ## Lists
 

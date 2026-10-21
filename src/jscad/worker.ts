@@ -38,10 +38,16 @@ for (const name of [
 
 self.addEventListener(
   "message",
-  (ev: MessageEvent<{ id: number; source: string }>) => {
-    const { id, source } = ev.data;
+  (
+    ev: MessageEvent<{
+      id: number;
+      source: string;
+      params?: Record<string, unknown>;
+    }>,
+  ) => {
+    const { id, source, params } = ev.data;
     try {
-      const polygons = evaluateJscad(source, modeling);
+      const polygons = evaluateJscad(source, modeling, params ?? {});
       self.postMessage({ id, polygons });
     } catch (e) {
       self.postMessage({

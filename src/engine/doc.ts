@@ -15,7 +15,14 @@ export type DocBlock =
   | { kind: "heading"; level: number; text: string }
   | { kind: "prose"; text: string }
   | ({ kind: "list" } & ListBody)
-  | { kind: "code"; lang?: string; text: string }
+  | {
+      kind: "code";
+      lang?: string;
+      /** The fence's info string after the language, kept verbatim
+       * (e.g. `params=@dims row=2` on a jscad block). */
+      info?: string;
+      text: string;
+    }
   | { kind: "math"; text: string }
   | { kind: "table"; table: Table }
   | { kind: "chart"; chart: Chart }
@@ -129,12 +136,18 @@ export function parseDoc(text: string): Doc {
       i = body.endLine + 1;
       continue;
     }
-    const fence = /^`{3,}(\S*)$/.exec(line.trim());
+    // The info string may carry more than the language (GitHub's
+    // ```js title="x", folio's ```jscad params=@dims). Matching only a
+    // bare language sent such fences to the paragraph collector, which
+    // stops at a ``` line WITHOUT consuming it - the parser looped
+    // forever on any fence with attributes.
+    const fence = /^`{3,}(\S*)(?:[ \t]+(.*))?$/.exec(line.trim());
     if (fence) {
       const end = findFenceEnd(lines, i + 1);
       doc.blocks.push({
         kind: "code",
         ...(fence[1] ? { lang: fence[1] } : {}),
+        ...(fence[2]?.trim() ? { info: fence[2].trim() } : {}),
         text: lines.slice(i + 1, end).join("\n"),
       });
       i = end + 1;
@@ -732,7 +745,14 @@ function serializeBlock(block: DocBlock): string {
     case "list":
       return serializeList(block);
     case "code":
-      return "```" + (block.lang ?? "") + "\n" + block.text + "\n```";
+      return (
+        "```" +
+        (block.lang ?? "") +
+        (block.info ? ` ${block.info}` : "") +
+        "\n" +
+        block.text +
+        "\n```"
+      );
     case "math":
       return "$$\n" + block.text + "\n$$";
     case "table":

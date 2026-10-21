@@ -49,6 +49,21 @@ The model is the figure; the code is how you edit it.
   code block's language picker.
 - **Print**: the model prints; the code does not (the header is
   hidden).
+- **Data** (phase 2): the fence info `params=@table row=N` binds the
+  model to a DATASET row (1-based; `row=` omitted means 1). The row's
+  values override `getParameterDefinitions` defaults BY COLUMN NAME,
+  so the script still runs standalone (on GitHub, or with no row).
+  The header has a **data** picker ("No data" or `@dataset`) and a
+  **row** picker ("Row 2: medium"), both writing the fence info
+  (`params=` before `row=`). Editing the dataset redraws the models
+  bound to it (`refreshDependents`: the one place a table's dependents
+  redraw). A missing dataset or row is a Model error naming it.
+- **Export STL** (phase 3): the header's **Export STL** writes the
+  drawn faces as ASCII STL (`src/render/stl.ts`: a triangle fan per
+  convex face, with normals, in model units), named `model-N.stl` or
+  `<dataset>-rowN.stl`. The component emits `folio-export` and the host
+  saves it: a native save dialog on the desktop (Tauri
+  `save_text_file`), a download on the web.
 
 ## Acceptance
 
