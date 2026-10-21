@@ -264,7 +264,7 @@ document — written in the same renderer you are working with.
 - **Import data**: the command palette (Ctrl+K) has "Import data
   from a file (CSV or JSON)" - or try it instantly with
   "Import the demo dataset", a shipped 72-row CSV (and a JSON one
-  at `demo/data/site-metrics.json`). The "Open example: report"
+  at `demo/data/site-metrics.json`). The "Open example: An imported data report"
   entry shows what a finished imported-data report looks like. The file becomes a typed table in
   the document - numeric columns are inferred, the header names
   become formula-usable column names, and `import: "file.csv"` in

@@ -3,7 +3,7 @@ name: math-functions-first-contact
 feature: math function catalog (formulas.md "Math function catalog")
 steps:
   - Start the demo host. Open the *Signals and spectra* example
-    (command palette, "Open example: signal-processing").
+    (command palette, "Open example: Signals and spectra").
   - In Document view, confirm the time-domain line chart, the two
     frequency-domain bar charts, and the equations render, and
     that the signal table's `mag` column peaks at 32 on the 5 Hz

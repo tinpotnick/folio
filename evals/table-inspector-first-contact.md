@@ -2,7 +2,7 @@
 name: table-inspector-first-contact
 feature: table-inspector
 steps:
-  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
+  - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review").
   - Click the growth column's formula cell (any row).
   - With the bar visible, change the formula from
     "(q3 - q2) / q2" to "q3 - q2" and press Enter.

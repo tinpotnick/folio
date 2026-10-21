@@ -2,7 +2,7 @@
 name: images-first-contact
 feature: images
 steps:
-  - Start the demo host and open the Field operations example (palette: "Open example: field-operations") and click into
+  - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review") and click into
     a paragraph.
   - Click the image button in the insert group (between diagram
     and equation) and pick a PNG from the file dialog.

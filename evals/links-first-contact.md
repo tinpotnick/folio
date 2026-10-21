@@ -2,7 +2,7 @@
 name: links-first-contact
 feature: links
 steps:
-  - Start the demo host and open the Field operations example (palette: "Open example: field-operations") and scroll to
+  - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review") and scroll to
     the "More examples" section.
   - Click the "A pure-prose poem" link.
   - Go back to the sample (reload) and click into a paragraph;

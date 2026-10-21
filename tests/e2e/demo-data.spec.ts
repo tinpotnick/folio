@@ -3,7 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 /**
  * Shipped demo data + the report example (spec: docs/specs/
  * data-import.md): the palette imports the demo CSV without a
- * file dialog, and "Open example: report" shows the finished
+ * file dialog, and "Open example: An imported data report" shows the finished
  * imported-data report - windowed table, running formulas, line
  * charts.
  */

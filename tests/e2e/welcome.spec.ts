@@ -182,4 +182,52 @@ test.describe("welcome page", () => {
     await page.locator("#unsaved-modal button", { hasText: "Cancel" }).click();
     await expect(page.locator("#the-doc h1").first()).toHaveText("Draft");
   });
+
+  test("trying the guide's live table is not unsaved work", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/welcome.md");
+    const fig = page.locator('#the-doc figure[data-table-id="launch-budget"]');
+    await fig
+      .locator('tbody tr[data-row-index="1"] td[data-col-index="1"]')
+      .click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("40");
+    await page.keyboard.press("Tab");
+    await page.locator("#the-doc a", { hasText: "Q3 Sales Review" }).click();
+    await expect(page.locator("#the-doc h1").first()).toHaveText(
+      "Q3 Sales Review",
+    );
+    await expect(page.locator("#unsaved-modal")).toBeHidden();
+  });
+
+  test("examples are named in the palette as the guide names them", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/poem.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    for (const [q, title] of [
+      ["parametric", "Open example: Parametric parts"],
+      ["field-operations", "Open example: Q3 Field Operations Review"],
+    ]) {
+      await page.keyboard.press("Control+k");
+      await page.locator("#palette-input").fill(q);
+      await expect(
+        page.locator("#palette-list .palette-item").first(),
+      ).toContainText(title);
+      await page.keyboard.press("Escape");
+    }
+  });
+
+  test("New document's unsaved check names what is happening", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/poem.md");
+    await page.locator("#the-doc p").first().click();
+    await page.keyboard.type("x");
+    await page.keyboard.press("Control+n");
+    await expect(page.locator("#unsaved-text")).toContainText(
+      "Starting a new document replaces it.",
+    );
+  });
 });

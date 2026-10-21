@@ -1600,14 +1600,16 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
        go on - gone as soon as there is anything to show. */
     article.folio-doc > h1:first-child:empty::before {
       content: "Untitled";
-      opacity: 0.45;
+      /* Quieter than ink, but louder than the hint under it - in
+         both modes (an opacity made it the dimmest thing on dark). */
+      color: color-mix(in srgb, var(--folio-ink) 38%, var(--folio-paper));
     }
     article.folio-doc:has(> h1:only-child:empty)::after,
     article.folio-doc:has(> h1:only-child:empty + br:last-child)::after {
       content: "Type a title, then press Enter to start writing. Ctrl+K finds tables, charts and everything else.";
       display: block;
       margin-top: 0.75em;
-      color: var(--folio-ink-muted);
+      color: color-mix(in srgb, var(--folio-ink-muted) 75%, var(--folio-paper));
       font-size: 0.95em;
       pointer-events: none;
     }

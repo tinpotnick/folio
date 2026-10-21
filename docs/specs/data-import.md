@@ -55,7 +55,7 @@ data exactly like hand-authored tables.
   for trying import - and for first-contact evals).
 - `demo/data/site-metrics.json` - 24 records, array-of-objects
   shape, for trying JSON.
-- `demo/examples/report.md` - "Open example: report": the
+- `demo/examples/report.md` - "Open example: An imported data report": the
   finished article - an imported 72-row table (with the growth
   running formula and a document-chosen `table.rows.show: 24`
   window), two line charts over it, and prose that reads like a

@@ -104,7 +104,11 @@ async function openShipped(
     unguarded?: boolean;
   } = {},
 ): Promise<boolean> {
-  if (!opts.unguarded && !(await confirmLeave())) return false;
+  if (
+    !opts.unguarded &&
+    !(await confirmLeave(path === null ? "Starting a new document" : undefined))
+  )
+    return false;
   let text = BLANK;
   if (path !== null) {
     const res = await fetch(path);
@@ -135,6 +139,7 @@ async function openShipped(
   if (mode === "push") history.pushState({ doc: path }, "", docUrl(path));
   if (mode === "replace") history.replaceState({ doc: path }, "", docUrl(path));
   shownUrl = window.location.href;
+  onGuide = path === WELCOME;
   markClean();
   // A new document is for writing: the caret waits in its title.
   if (path === null) el.focusStart();
@@ -1331,7 +1336,11 @@ function markClean(): void {
   cleanMarkdown = el.getMarkdown();
 }
 
+/** The guide is a playground: trying its live table is not "work". */
+let onGuide = false;
+
 function isDirty(): boolean {
+  if (onGuide) return false;
   const md = currentMarkdown();
   return cleanMarkdown !== null && md !== null && md !== cleanMarkdown;
 }
@@ -1458,71 +1467,84 @@ const paletteInput = requireEl<HTMLInputElement>("#palette-input");
 const paletteList = requireEl<HTMLElement>("#palette-list");
 const helpDoc = requireEl<FolioDoc>("#help-doc");
 
-const EXAMPLES: { id: string; file: string; blurb: string }[] = [
+const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
   {
     id: "field-operations",
+    title: "Q3 Field Operations Review",
     file: "/demo/examples/field-operations.md",
     blurb: "quarterly review report regional table growth chart cumulative",
   },
   {
     id: "poem",
+    title: "A pure-prose poem",
     file: "/demo/examples/poem.md",
     blurb: "pure prose and poetry",
   },
   {
     id: "accounts",
+    title: "Management accounts",
     file: "/demo/examples/accounts.md",
     blurb: "accounts running totals budget negative growth",
   },
   {
     id: "report",
+    title: "An imported data report",
     file: "/demo/examples/report.md",
     blurb: "data report import windowed table running formulas line charts",
   },
   {
     id: "technical",
+    title: "A technical paper",
     file: "/demo/examples/technical.md",
     blurb: "technical code equations benchmarks",
   },
   {
     id: "signal-processing",
+    title: "Signals and spectra",
     file: "/demo/examples/signal-processing.md",
     blurb: "signal processing fft dft filter spectrum math frequency",
   },
   {
     id: "music",
+    title: "A music document",
     file: "/demo/examples/music.md",
     blurb: "music strudel audio beats pattern fun player",
   },
   {
     id: "sales-review",
+    title: "Q3 Sales Review",
     file: "/demo/examples/sales-review.md",
     blurb:
       "sales quarterly review report revenue regions pipeline heatmap stacked",
   },
   {
     id: "design-review",
+    title: "Bracket design review",
     file: "/demo/examples/design-review.md",
     blurb:
       "engineering design review bracket variants 3d model stl requirements",
   },
   {
     id: "practice-journal",
+    title: "A practice journal",
     file: "/demo/examples/practice-journal.md",
     blurb: "music practice journal log sheet music exercises charts",
   },
   {
     id: "drawings",
+    title: "Drawings from text",
     file: "/demo/examples/drawings.md",
     blurb: "drawings graphviz dot graph diagram vega svg music notation",
   },
   {
     id: "3d-models",
+    title: "Parametric parts",
     file: "/demo/examples/3d-models.md",
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
     id: "amensister",
+    title: "Amensister",
     file: "/demo/examples/amensister.md",
     blurb: "music strudel amen break breakbeat online samples felix roos",
   },
@@ -1829,12 +1851,13 @@ function paletteEntries(): PaletteEntry[] {
   });
   for (const ex of EXAMPLES) {
     entries.push({
-      title: `Open example: ${ex.id}`,
+      // Named as the guide lists it; the short id still finds it.
+      title: `Open example: ${ex.title}`,
       group: "Command",
       keywords: `example demo document open load ${ex.id} ${ex.blurb}`,
       action: () => {
         void openShipped(ex.file).then((went) => {
-          if (went) flash(`Opened ${ex.id}`);
+          if (went) flash(`Opened ${ex.title}`);
         });
       },
     });

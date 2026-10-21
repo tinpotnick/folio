@@ -57,7 +57,11 @@ the north-star sample (docs/specs/sample-document.md).
   the guide; the palette has **Getting started guide** (keywords:
   guide, getting started, welcome, home, tour, examples).
 - **Examples**: links on the page and the palette's **Open example:
-  ...** entries load in place.
+  ...** entries load in place. The palette names each example as the
+  guide lists it ("Open example: Parametric parts"); its short id
+  ("3d-models") is a keyword.
+- **A playground**: edits to the guide (its live table) never count
+  as unsaved changes (docs/specs/unsaved-changes.md).
 - **History**: every shipped document opened in place (welcome,
   examples, followed links) is a browser history entry with its own
   `?doc=` address. Back and Forward move between documents instead

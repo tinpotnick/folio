@@ -4,6 +4,9 @@
 const host = document.querySelector("#the-doc");
 const root = host.shadowRoot;
 const tick = (ms = 100) => new Promise((r) => setTimeout(r, ms));
+// An example, not the guide (the guide's edits are play, never unsaved).
+root.querySelector('article a[href*="poem"]').click();
+await tick(1000);
 const p = root.querySelector("article > p");
 p.append(" EDITED");
 root
