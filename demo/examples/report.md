@@ -96,6 +96,17 @@ data:
   - [2025-12, Midlands, 38, 37.4]
 :::
 
+Every region at once - one line per region, split by the region
+column:
+
+::: chart {#regions-chart}
+source: @monthly-sales
+query: {select: [month, revenue]}
+type: line
+series: region
+caption: "Revenue by month, one line per region"
+:::
+
 ::: chart {#north-chart}
 source: @monthly-sales
 query: {select: [month, revenue], filter: "region == 'North'", sort: {by: month, order: asc}}

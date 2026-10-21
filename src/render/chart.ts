@@ -579,3 +579,193 @@ function escapeXml(s: string): string {
 export function cellText(c: Cell): string {
   return String(c);
 }
+
+/* --- Several series (spec: chart-rendering.md, "Several series") --- */
+
+export interface SeriesChartData {
+  categories: string[];
+  series: { name: string; values: (number | null)[] }[];
+}
+
+export interface RenderedSeriesChart extends RenderedChart {
+  /** Legend entries, in series order: the host draws the legend. */
+  legend: { name: string; color: string }[];
+}
+
+/**
+ * Bar (grouped, or stacked with `stack`), line (one line per series),
+ * or area (overlapping, or stacked with `stack`). Gaps (null) are
+ * skipped: a line breaks, a bar is absent, a stacked area treats a
+ * gap as zero.
+ */
+export function renderSeriesChart(
+  data: SeriesChartData,
+  type: "bar" | "line" | "area",
+  stack: boolean,
+  style: ChartStyle = {},
+): RenderedSeriesChart {
+  const ink = style.text ?? TEXT_DARK;
+  const inkMuted = style.textMuted ?? TEXT_MUTED;
+  const colors = style.colors?.length ? style.colors : PIE_FALLBACK_COLORS;
+  const colorOf = (i: number): string => colors[i % colors.length] ?? "#4c6ef5";
+  const n = data.categories.length || 1;
+  const stacked = stack && type !== "line";
+  // The domain covers every drawn value - stacked sums both ways.
+  const extent: number[] = [];
+  if (stacked) {
+    data.categories.forEach((_, c) => {
+      let pos = 0;
+      let neg = 0;
+      for (const s of data.series) {
+        const v = s.values[c] ?? 0;
+        if (v >= 0) pos += v;
+        else neg += v;
+      }
+      extent.push(pos, neg);
+    });
+  } else {
+    for (const s of data.series) {
+      for (const v of s.values) if (v !== null) extent.push(v);
+    }
+  }
+  const { gridMin, gridMax, span, ticks, step } = domain(extent);
+  const tickLabel = tickFormatter(step, style.valueFormat);
+  const valueLabel = valueFormatter(style.valueFormat);
+  const padBottom = style.xTitle ? 52 : 40;
+  const padLeft = style.yTitle ? 78 : 60;
+  const innerW = W - padLeft - PAD.right;
+  const innerH = H - PAD.top - padBottom;
+  const band = innerW / n;
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img">`,
+  ];
+  const yOf = drawFrame(parts, {
+    gridMin,
+    gridMax,
+    span,
+    ticks,
+    tickLabel,
+    innerH,
+    padBottom,
+    grid: style.grid,
+    ink: style.text,
+    inkMuted: style.textMuted,
+    yTitle: style.yTitle,
+    xTitle: style.xTitle,
+  });
+  const zeroY = yOf(0);
+  const xMid = (c: number): number => padLeft + band * c + band / 2;
+  const tickAt = new Set(xTickIndices(n));
+  data.categories.forEach((cat, c) => {
+    if (!tickAt.has(c)) return;
+    parts.push(
+      `<text class="x-tick" x="${xMid(c)}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${ink}">${escapeXml(cat)}</text>`,
+    );
+  });
+  const k = data.series.length;
+  if (type === "bar" && !stacked) {
+    // Grouped: the series side by side within each category's band.
+    const groupW = Math.min(band * 0.75, 28 * k + 12);
+    const barW = groupW / k;
+    const labels = k * n <= 12;
+    data.series.forEach((s, i) => {
+      s.values.forEach((v, c) => {
+        if (v === null) return;
+        const x = padLeft + band * c + (band - groupW) / 2 + barW * i;
+        const y = v >= 0 ? yOf(v) : zeroY;
+        const h = Math.abs(yOf(v) - zeroY);
+        parts.push(
+          `<rect class="series-${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW - 1.5).toFixed(1)}" height="${h.toFixed(1)}" fill="${colorOf(i)}" rx="1.5" />`,
+        );
+        if (labels) {
+          const ly = v >= 0 ? y - 4 : y + h + 12;
+          parts.push(
+            `<text class="v-label" x="${(x + barW / 2).toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-size="10" fill="${inkMuted}">${valueLabel(v)}</text>`,
+          );
+        }
+      });
+    });
+  } else if (type === "bar") {
+    // Stacked: positives build up from zero, negatives down; the
+    // TOTAL labels each stack.
+    const barW = Math.min(band * 0.6, 80);
+    data.categories.forEach((_, c) => {
+      let up = 0;
+      let down = 0;
+      const x = xMid(c) - barW / 2;
+      data.series.forEach((s, i) => {
+        const v = s.values[c] ?? 0;
+        if (v === 0) return;
+        const from = v >= 0 ? up : down;
+        const to = from + v;
+        if (v >= 0) up = to;
+        else down = to;
+        const y = Math.min(yOf(from), yOf(to));
+        const h = Math.abs(yOf(to) - yOf(from));
+        parts.push(
+          `<rect class="series-${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${colorOf(i)}" />`,
+        );
+      });
+      if (n <= 12) {
+        const total = up + down;
+        parts.push(
+          `<text class="v-label" x="${xMid(c).toFixed(1)}" y="${(yOf(up) - 4).toFixed(1)}" text-anchor="middle" font-size="11" fill="${inkMuted}">${valueLabel(total)}</text>`,
+        );
+      }
+    });
+  } else {
+    // Lines / areas. A stacked area's baseline is the series below.
+    const base = data.categories.map(() => 0);
+    data.series.forEach((s, i) => {
+      const color = colorOf(i);
+      const tops = s.values.map((v, c) =>
+        stacked ? (base[c] ?? 0) + (v ?? 0) : v,
+      );
+      if (type === "area") {
+        const lower = data.categories.map((_, c) =>
+          stacked ? (base[c] ?? 0) : 0,
+        );
+        const upper = tops.map((v) => v ?? 0);
+        const pts = [
+          ...upper.map((v, c) => `${xMid(c).toFixed(1)},${yOf(v).toFixed(1)}`),
+          ...lower
+            .map((v, c) => `${xMid(c).toFixed(1)},${yOf(v).toFixed(1)}`)
+            .reverse(),
+        ].join(" ");
+        parts.push(
+          `<polygon class="series-${i}" points="${pts}" fill="${color}" fill-opacity="${stacked ? 0.85 : 0.22}" />`,
+        );
+      }
+      // The line, broken at gaps.
+      let run: string[] = [];
+      const flush = (): void => {
+        if (run.length > 1) {
+          parts.push(
+            `<polyline class="series-${i}" points="${run.join(" ")}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`,
+          );
+        }
+        run = [];
+      };
+      tops.forEach((v, c) => {
+        if (v === null) {
+          flush();
+          return;
+        }
+        run.push(`${xMid(c).toFixed(1)},${yOf(v).toFixed(1)}`);
+        if (type === "line" && n <= 64) {
+          parts.push(
+            `<circle cx="${xMid(c).toFixed(1)}" cy="${yOf(v).toFixed(1)}" r="2.5" fill="${color}" />`,
+          );
+        }
+      });
+      flush();
+      if (stacked)
+        s.values.forEach((v, c) => (base[c] = (base[c] ?? 0) + (v ?? 0)));
+    });
+  }
+  parts.push("</svg>");
+  return {
+    svg: parts.join(""),
+    legend: data.series.map((s, i) => ({ name: s.name, color: colorOf(i) })),
+  };
+}

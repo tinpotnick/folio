@@ -30,8 +30,10 @@ import {
   renderLineChart,
   renderPieChart,
   renderScatterChart,
+  renderSeriesChart,
   type ChartStyle,
 } from "./render/chart.js";
+import { chartSeries } from "@folio/engine/series";
 import { inlineMarkdownToHtml, htmlToInlineMarkdown } from "./render/inline.js";
 
 type CodeBlock = Extract<DocBlock, { kind: "code" }>;
@@ -258,6 +260,13 @@ function scrollContainerOf(el: Element): Element {
     }
   }
   return document.scrollingElement ?? document.documentElement;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(
+    /[<>&"]/g,
+    (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c] ?? c,
+  );
 }
 
 /** A figure-bar control with a visible label (its accessible name). */
@@ -2476,6 +2485,10 @@ export class FolioDoc extends HTMLElement {
         };
       if (capInp.value.trim() === "") delete chart.caption;
       else chart.caption = capInp.value.trim();
+      if (splitSel.value === "") delete chart.series;
+      else chart.series = splitSel.value;
+      if (stackBox.checked) chart.stack = true;
+      else delete chart.stack;
       figure.dataset.chartSource = chart.source;
       const cap = figure.querySelector("figcaption");
       if (cap) cap.textContent = chart.caption ?? "";
@@ -2553,6 +2566,33 @@ export class FolioDoc extends HTMLElement {
       }
     });
 
+    // Several series: split by a column, and stack (bar/area).
+    const splitSel = document.createElement("select");
+    splitSel.className = "insp-series";
+    const fillSplit = (): void => {
+      splitSel.textContent = "";
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "(none)";
+      splitSel.appendChild(none);
+      const table = this.doc?.blocks.find(
+        (b) => b.kind === "table" && b.table.id === block.chart.source,
+      );
+      if (table?.kind === "table") {
+        for (const c of table.table.columns) {
+          const o = document.createElement("option");
+          o.value = c.name;
+          o.textContent = c.name;
+          splitSel.appendChild(o);
+        }
+      }
+    };
+    splitSel.addEventListener("change", () => patch());
+    const stackBox = document.createElement("input");
+    stackBox.type = "checkbox";
+    stackBox.className = "insp-stack";
+    stackBox.addEventListener("change", () => patch());
+
     const orderSel = document.createElement("select");
     orderSel.className = "insp-order";
     for (const t of ["asc", "desc"] as const) {
@@ -2587,6 +2627,9 @@ export class FolioDoc extends HTMLElement {
       sortInp.value = block.chart.query.sort?.by ?? "";
       orderSel.value = block.chart.query.sort?.order ?? "asc";
       capInp.value = block.chart.caption ?? "";
+      fillSplit();
+      splitSel.value = block.chart.series ?? "";
+      stackBox.checked = block.chart.stack === true;
       bar.hidden = false;
     };
     figure.addEventListener("mousedown", () => show());
@@ -2601,6 +2644,8 @@ export class FolioDoc extends HTMLElement {
       labelled("Filter", filterInp),
       labelled("Sort by", sortInp),
       labelled("Order", orderSel),
+      labelled("Split by", splitSel),
+      labelled("Stack", stackBox),
       labelled("Caption", capInp),
     );
     return bar;
@@ -3531,6 +3576,36 @@ export class FolioDoc extends HTMLElement {
             ? undefined
             : `${valueCol}${unit ? ` (${unit})` : ""}`,
       };
+      // Several series (spec: chart-rendering.md "Several series"):
+      // more than one value column, or a split-by column, on a bar,
+      // line or area chart. Pie/donut/scatter keep the first series.
+      const t = block.chart.type;
+      if (
+        (block.chart.series !== undefined || select.length > 2) &&
+        (t === "bar" || t === "line" || t === "area")
+      ) {
+        const data = chartSeries(recalced, block.chart);
+        const multi = renderSeriesChart(data, t, block.chart.stack === true, {
+          ...style,
+          // Several value columns share no single name: the axis says
+          // what the series are measured in, if they agree.
+          yTitle:
+            block.chart.series !== undefined
+              ? style.yTitle
+              : unit
+                ? `(${unit})`
+                : undefined,
+        });
+        holder.innerHTML =
+          multi.svg +
+          `<div class="chart-legend">${multi.legend
+            .map(
+              (l) =>
+                `<span class="legend-item"><i style="background:${l.color}"></i>${escapeHtml(l.name)}</span>`,
+            )
+            .join("")}</div>`;
+        return;
+      }
       holder.innerHTML =
         block.chart.type === "line"
           ? renderLineChart(result, style).svg

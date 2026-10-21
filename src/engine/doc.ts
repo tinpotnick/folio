@@ -323,6 +323,8 @@ function parseChartDirective(body: DirectiveBody, id: string): DocBlock {
     source: values["source"].replace(/^@/, ""),
     query: parseQuery(values["query"]),
     type: values["type"] as Chart["type"],
+    ...(values["series"] !== undefined ? { series: values["series"] } : {}),
+    ...(values["stack"] === "true" ? { stack: true } : {}),
     ...(values["caption"] !== undefined
       ? { caption: unquote(values["caption"]) }
       : {}),
@@ -817,6 +819,8 @@ function serializeChart(chart: Chart): string {
   }
   lines.push(`query: {${q.join(", ")}}`);
   lines.push(`type: ${chart.type}`);
+  if (chart.series !== undefined) lines.push(`series: ${chart.series}`);
+  if (chart.stack) lines.push("stack: true");
   if (chart.caption !== undefined) lines.push(`caption: "${chart.caption}"`);
   lines.push(":::");
   return lines.join("\n");
