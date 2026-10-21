@@ -7,7 +7,7 @@ import { expect, test, type Page } from "@playwright/test";
  * model, so round-trip identity holds.
  */
 async function loadDoc(page: Page, markdown: string): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?doc=demo/examples/field-operations.md");
   await expect(
     page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
   ).toBeVisible();

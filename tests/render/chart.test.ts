@@ -353,3 +353,37 @@ describe("a minimum on the plot floor", () => {
     expect(tickY - Number(m?.[1])).toBeGreaterThanOrEqual(14);
   });
 });
+
+describe("pie colors belong to categories", () => {
+  // Regression (first-contact eval): slices were colored by their
+  // position in the SORTED result, so editing a value that reordered
+  // the slices swapped their colors.
+  const fills = (svg: string): string[] =>
+    [...svg.matchAll(/<path [^>]*fill="([^"]+)"/g)].map((m) => m[1] ?? "");
+  it("a category keeps its color when the sort order changes", () => {
+    const style = {
+      colors: ["#111111", "#222222", "#333333"],
+      colorKeys: ["Engineering", "Design", "Marketing"],
+    };
+    const before = renderPieChart(
+      result([
+        ["Engineering", 30],
+        ["Design", 12],
+        ["Marketing", 9],
+      ]),
+      true,
+      style,
+    ).svg;
+    const after = renderPieChart(
+      result([
+        ["Design", 40],
+        ["Engineering", 30],
+        ["Marketing", 9],
+      ]),
+      true,
+      style,
+    ).svg;
+    expect(fills(before)).toEqual(["#111111", "#222222", "#333333"]);
+    expect(fills(after)).toEqual(["#222222", "#111111", "#333333"]);
+  });
+});

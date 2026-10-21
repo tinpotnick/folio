@@ -36,13 +36,73 @@ const mdWrap = requireEl<HTMLElement>("#md-wrap");
 const mdGutter = requireEl<HTMLElement>("#md-gutter");
 const mdView = requireEl<HTMLElement>("#md-view");
 
+/** The front page: what folio is, what it does, the examples. */
+const WELCOME = "/demo/welcome.md";
+
+/**
+ * The document to boot into (spec: docs/specs/welcome-page.md): the
+ * welcome page, or a shipped document named by `?doc=` - a link that
+ * opens folio on an example. Only same-origin `.md` paths; anything
+ * else falls back to the welcome page.
+ */
+function bootPath(): string {
+  const doc = new URLSearchParams(window.location.search).get("doc");
+  if (doc && /^\/?[\w./-]+\.md$/.test(doc) && !doc.includes("..")) {
+    return doc.startsWith("/") ? doc : `/${doc}`;
+  }
+  return WELCOME;
+}
+
 async function boot(): Promise<void> {
-  const res = await fetch("/demo/sample-document.md");
+  await openShipped(bootPath(), { history: "replace" });
+}
+
+/** The address bar for a shipped document: home is the bare URL. */
+function docUrl(path: string): string {
+  return path === WELCOME ? window.location.pathname : `?doc=${path.slice(1)}`;
+}
+
+/**
+ * Load a shipped document by path into the editor (in place). It
+ * opens at its TOP, and it becomes a browser history entry: Back
+ * returns to the previous document instead of leaving folio.
+ */
+async function openShipped(
+  path: string,
+  opts: { history?: "push" | "replace" | "none"; scroll?: number } = {},
+): Promise<void> {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
   const text = await res.text();
+  const mode = opts.history ?? "push";
+  // Remember where the reader was on the page they are leaving, so
+  // Back returns them there - not to its top.
+  if (mode === "push") {
+    history.replaceState(
+      { ...(history.state as object | null), scroll: window.scrollY },
+      "",
+    );
+  }
+  currentDocPath = null; // an in-memory doc has no folder
   await el.load(text);
   editor.value = text;
+  if (!mdWrap.hidden) renderHighlight();
   refreshOutline();
+  // No caret in the new document: no block or format is "current".
+  for (const b of Array.from(
+    document.querySelectorAll("#block-bar button, #fmt-bar button"),
+  )) {
+    b.classList.remove("active");
+  }
+  window.scrollTo(0, opts.scroll ?? 0);
+  if (mode === "push") history.pushState({ doc: path }, "", docUrl(path));
+  if (mode === "replace") history.replaceState({ doc: path }, "", docUrl(path));
 }
+
+window.addEventListener("popstate", (ev) => {
+  const scroll = (ev.state as { scroll?: number } | null)?.scroll ?? 0;
+  void openShipped(bootPath(), { history: "none", scroll });
+});
 
 function flash(msg: string): void {
   status.textContent = msg;
@@ -163,19 +223,41 @@ function docSelectionAnchor(
 }
 
 const blockBar = requireEl<HTMLElement>("#block-bar");
+
+/** Run a block-bar button as if pressed (palette: one implementation). */
+function clickBlockButton(block: string): void {
+  blockBar
+    .querySelector(`button[data-block="${block}"]`)
+    ?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+}
 blockBar.addEventListener("mousedown", (ev) => {
   const btn = (ev.target as HTMLElement).closest("button");
   if (!(btn instanceof HTMLButtonElement)) return;
   ev.preventDefault();
   if (currentEditable()) {
-    if (btn.dataset.block) {
+    const block = btn.dataset.block;
+    if (block === "ul" || block === "ol") {
+      // Spec: docs/specs/lists.md.
+      el.toggleList(block === "ol");
+    } else if (block) {
       // Model-level conversion: execCommand cannot act inside the
       // shadow tree.
-      el.setBlockKind(btn.dataset.block as "h1" | "h2" | "h3" | "p");
+      el.setBlockKind(block as "h1" | "h2" | "h3" | "p");
     }
   } else if (document.activeElement === editor) {
+    const block = btn.dataset.block;
     applyMdLinePrefix(
-      btn.dataset.block === "h1" ? "#" : btn.dataset.block === "h2" ? "##" : "",
+      block === "h1"
+        ? "#"
+        : block === "h2"
+          ? "##"
+          : block === "h3"
+            ? "###"
+            : block === "ul"
+              ? "-"
+              : block === "ol"
+                ? "1."
+                : "",
     );
   } else {
     flash("Click into the text first");
@@ -255,13 +337,7 @@ async function openLinkedDocument(href: string): Promise<void> {
       window.open(href, "_blank", "noopener");
       return;
     }
-    const res = await fetch(url.pathname);
-    if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
-    const text = await res.text();
-    currentDocPath = null; // an in-memory doc has no folder
-    await el.load(text);
-    editor.value = text;
-    refreshOutline();
+    await openShipped(url.pathname);
     flash("Opened linked document");
   } catch {
     flash(`Could not open ${href}`);
@@ -693,8 +769,11 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
   const line = v.slice(lineStart, lineEnd);
   const col = pos - lineStart;
   let block = "p";
-  if (line.startsWith("## ")) block = "h2";
+  if (line.startsWith("### ")) block = "h3";
+  else if (line.startsWith("## ")) block = "h2";
   else if (line.startsWith("# ")) block = "h1";
+  else if (/^[-*+] /.test(line)) block = "ul";
+  else if (/^\d+[.)] /.test(line)) block = "ol";
   blockButtons.forEach((b) =>
     b.classList.toggle("active", b.dataset.block === block),
   );
@@ -841,11 +920,20 @@ function mdLineBounds(pos: number): [number, number] {
   return [start, nl < 0 ? v.length : nl];
 }
 
-function applyMdLinePrefix(prefix: string): void {
+function applyMdLinePrefix(prefixIn: string): void {
+  let prefix = prefixIn;
   const v = editor.value;
   const caret = editor.selectionStart;
   const [start, end] = mdLineBounds(caret);
-  const stripped = v.slice(start, end).replace(/^#{1,6}\s+/, "");
+  const current = v.slice(start, end);
+  // A second press of the same list button removes the marker.
+  if (
+    (prefix === "-" && /^[-*+] /.test(current)) ||
+    (prefix === "1." && /^\d+[.)] /.test(current))
+  ) {
+    prefix = "";
+  }
+  const stripped = current.replace(/^(#{1,6}|[-*+]|\d+[.)])\s+/, "");
   const line = prefix === "" ? stripped : `${prefix} ${stripped}`;
   editor.value = v.slice(0, start) + line + v.slice(end);
   const delta = line.length - (end - start);
@@ -975,6 +1063,11 @@ el.onChange(() => {
 });
 
 boot();
+
+// The wordmark is the way home: the welcome page.
+requireEl<HTMLButtonElement>("#btn-home").addEventListener("click", () => {
+  void openShipped(WELCOME);
+});
 
 /* --- Section browser (left sidebar) --- */
 
@@ -1108,6 +1201,11 @@ const paletteList = requireEl<HTMLElement>("#palette-list");
 const helpDoc = requireEl<FolioDoc>("#help-doc");
 
 const EXAMPLES: { id: string; file: string; blurb: string }[] = [
+  {
+    id: "field-operations",
+    file: "/demo/examples/field-operations.md",
+    blurb: "quarterly review report regional table growth chart cumulative",
+  },
   {
     id: "poem",
     file: "/demo/examples/poem.md",
@@ -1311,6 +1409,31 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "settings style font theme frontmatter page break",
     action: () => openSettings(),
   });
+  for (const [block, title, keywords] of [
+    ["p", "Paragraph", "paragraph normal plain body text remove list unlist"],
+    ["h1", "Heading 1", "heading title h1 header"],
+    ["h2", "Heading 2", "heading section subheading h2 header"],
+    ["h3", "Heading 3", "heading subsection h3 header"],
+  ] as const) {
+    entries.push({
+      title,
+      group: "Command",
+      keywords,
+      action: () => clickBlockButton(block),
+    });
+  }
+  entries.push({
+    title: "Bulleted list",
+    group: "Command",
+    keywords: "bullet list bullets bulleted points unordered list ul dash -",
+    action: () => clickBlockButton("ul"),
+  });
+  entries.push({
+    title: "Numbered list",
+    group: "Command",
+    keywords: "numbered list ordered list numbers steps ol 1.",
+    action: () => clickBlockButton("ol"),
+  });
   entries.push({
     title: "Change theme",
     group: "Command",
@@ -1330,18 +1453,16 @@ function paletteEntries(): PaletteEntry[] {
       group: "Command",
       keywords: `example demo document open load ${ex.id} ${ex.blurb}`,
       action: () => {
-        void (async (): Promise<void> => {
-          const res = await fetch(ex.file);
-          const text = await res.text();
-          currentDocPath = null; // an in-memory doc has no folder
-          await el.load(text);
-          editor.value = text;
-          refreshOutline();
-          flash(`Opened ${ex.id}`);
-        })();
+        void openShipped(ex.file).then(() => flash(`Opened ${ex.id}`));
       },
     });
   }
+  entries.push({
+    title: "Open the welcome page",
+    group: "Command",
+    keywords: "welcome home start front page about intro overview examples",
+    action: () => void openShipped(WELCOME),
+  });
   if (!fileBar.hidden) {
     entries.push({
       title: "Open a document",

@@ -2,7 +2,7 @@
 name: markdown-highlight-first-contact
 feature: markdown-highlighting
 steps:
-  - Start the demo host with the sample document.
+  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
   - Switch to the Markdown view using the visible toolbar toggle.
   - Observe the source: frontmatter, headings, bold/italic/code and
     table directives must be visually distinguished by color, with a

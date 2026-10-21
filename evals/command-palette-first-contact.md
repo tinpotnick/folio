@@ -2,7 +2,7 @@
 name: command-palette-first-contact
 feature: command-palette
 steps:
-  - Start the demo host with the sample document. Press Ctrl+K with
+  - Start the demo host and open the Field operations example (palette: "Open example: field-operations"). Press Ctrl+K with
     no instruction.
   - Type "table" and press Enter.
   - Press Ctrl+K again. Type "regional summary" and press Enter.

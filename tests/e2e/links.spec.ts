@@ -8,7 +8,7 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 async function waitForDocument(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?doc=demo/examples/field-operations.md");
   await expect(
     page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
   ).toBeVisible();
@@ -89,7 +89,7 @@ test.describe("links", () => {
       .locator("folio-doc a", { hasText: "pure-prose poem" })
       .click({ position: { x: 2, y: 2 } });
     // The click OPENED the linked document; go back to the sample.
-    await page.goto("/");
+    await page.goto("/?doc=demo/examples/field-operations.md");
     await expect(
       page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
     ).toBeVisible();
@@ -116,7 +116,7 @@ test.describe("links", () => {
       page.locator("#the-doc a", { hasText: "pure-prose poem" }),
     ).toHaveCount(0);
     await expect(
-      page.locator("folio-doc p", { hasText: "pure-prose poem" }),
+      page.locator("folio-doc li", { hasText: "pure-prose poem" }),
     ).toBeVisible();
     await page.locator("#btn-markdown").click();
     expect(await page.locator("#editor").inputValue()).not.toContain("poem.md");

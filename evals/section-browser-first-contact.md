@@ -2,7 +2,7 @@
 name: section-browser-first-contact
 feature: section-browser
 steps:
-  - Start the demo host with the sample document.
+  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
   - Observe a section list on the left (or a visible toolbar control that reveals it).
   - Toggle the sidebar closed, then open it with the same control.
   - Click the "Regional summary" section.

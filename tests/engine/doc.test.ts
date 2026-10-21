@@ -306,3 +306,63 @@ After.`);
     expect(serializeDoc(parseDoc(serializeDoc(doc)))).toBe(serializeDoc(doc));
   });
 });
+
+describe("lists", () => {
+  const rt = (text: string): string => serializeDoc(parseDoc(text));
+
+  it("parses a bulleted list into one list block of inline items", () => {
+    const doc = parseDoc("Intro:\n\n- One **bold**\n- Two [link](x.md)\n");
+    expect(doc.blocks[1]).toEqual({
+      kind: "list",
+      ordered: false,
+      items: ["One **bold**", "Two [link](x.md)"],
+    });
+  });
+
+  it("parses a numbered list, keeping a non-1 start", () => {
+    expect(parseDoc("1. a\n2. b\n").blocks[0]).toEqual({
+      kind: "list",
+      ordered: true,
+      items: ["a", "b"],
+    });
+    expect(parseDoc("3. c\n4. d\n").blocks[0]).toMatchObject({ start: 3 });
+  });
+
+  it("indented continuation lines belong to their item", () => {
+    const doc = parseDoc("- A long item\n  that wraps\n- Next\n");
+    expect(doc.blocks[0]).toMatchObject({
+      items: ["A long item\nthat wraps", "Next"],
+    });
+  });
+
+  it("canonical lists round-trip byte-identically", () => {
+    for (const text of [
+      "- one\n- two\n",
+      "Intro\n\n- a\n  wrapped\n- b\n\nAfter\n",
+      "1. a\n2. b\n   wrapped\n",
+      "7. seven\n8. eight\n",
+      "- a\n\n- b\n",
+      "- a\n-\n- c\n",
+      "- top\n  - nested stays text\n",
+    ]) {
+      expect(rt(text), JSON.stringify(text)).toBe(text);
+    }
+  });
+
+  it("non-canonical markers canonicalize", () => {
+    expect(rt("* a\n+ b\n")).toBe("- a\n- b\n");
+    expect(rt("1) a\n1) b\n")).toBe("1. a\n2. b\n");
+  });
+
+  it("a dash line inside a paragraph stays paragraph text", () => {
+    const doc = parseDoc("Some prose\n- not a list\n");
+    expect(doc.blocks).toEqual([
+      { kind: "prose", text: "Some prose\n- not a list" },
+    ]);
+  });
+
+  it("emphasis and rules are not bullets", () => {
+    expect(parseDoc("*emphasis* first\n").blocks[0]?.kind).toBe("prose");
+    expect(parseDoc("2024 was a year\n").blocks[0]?.kind).toBe("prose");
+  });
+});

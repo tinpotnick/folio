@@ -10,7 +10,7 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 async function waitForDocument(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?doc=demo/examples/field-operations.md");
   await expect(
     page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
   ).toBeVisible();
@@ -468,10 +468,12 @@ test.describe("header legibility across table styles", () => {
           (m) => localStorage.setItem("folio:mode", m),
           mode,
         );
-        await page.goto("/");
+        await page.goto("/?doc=demo/examples/field-operations.md");
         await page.locator("folio-doc h1").first().waitFor();
         await page.evaluate(async (style) => {
-          const md = await (await fetch("/demo/sample-document.md")).text();
+          const md = await (
+            await fetch("/demo/examples/field-operations.md")
+          ).text();
           const next = md.replace(
             /^theme: .*$/m,
             `theme: corporate-report\nstyle:\n  table.style: "${style}"`,
@@ -493,4 +495,19 @@ test.describe("header legibility across table styles", () => {
       });
     }
   }
+});
+
+// Regression (first-contact eval): the ONE inspector contract says
+// "hide on ANY click outside" - a click on the desk around the page
+// (outside the component entirely) left the bar open.
+test("a click on the desk outside the page hides the inspector", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?doc=demo/examples/field-operations.md");
+  const fig = page.locator('#the-doc figure[data-table-id="regional-data"]');
+  await fig.locator("td").first().click();
+  await expect(fig.locator(".folio-inspector")).toBeVisible();
+  await page.mouse.click(40, 500);
+  await expect(fig.locator(".folio-inspector")).toBeHidden();
 });

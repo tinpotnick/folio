@@ -25,6 +25,33 @@ document — written in the same renderer you are working with.
 - The **☰** button (tooltip "Sections") toggles the outline
   sidebar. Click a section to jump straight to it.
 
+## Welcome page and examples
+
+- folio opens on its **welcome page**: what folio is, a live table
+  and chart to try, and links to every example document. Click the
+  **folio** wordmark (top left), or search "welcome" in the palette,
+  to come back to it.
+- Links to examples open in place, at the top of the document; the
+  browser's **Back** button returns to the previous one. A link such as
+  `?doc=demo/examples/poem.md` opens folio straight onto that
+  document.
+
+## Lists
+
+- Start a line with `- ` for a bulleted list or `1. ` for a numbered
+  one, in a new paragraph or in the source. The **Bulleted list** and
+  **Numbered list** buttons (beside P, or search "list" in the
+  palette) turn the paragraph at the caret into a list, switch
+  between the two kinds, and turn a list back into a paragraph.
+- **Enter** adds an item; **Enter** on an empty item ends the list.
+  Pressing the same list button again (or **P**, or searching
+  "paragraph" in the palette) turns each item back into its own
+  paragraph.
+  Items take bold, italic, code and links like any paragraph.
+- Numbered lists number themselves when saved. Lists are one level
+  deep for now: an indented `  - sub-item` is kept, but shows as
+  text.
+
 ## Opening and saving
 
 - **Desktop app:** the Open button (folder icon) loads a .md file
@@ -289,16 +316,10 @@ rows they reference; formula cells are never editable by hand.
   the search box. Type words you know — "insert table", "regional
   summary", "keyboard shortcuts" — and Enter runs the top result.
   It searches commands, help topics, and the document's sections.
-- **Open example: poem / accounts / technical** in the palette
-  loads example documents of different genres — pure prose and
-  poetry, management accounts (running totals, budget lookups,
-  negative growth), and a technical paper (code, equations,
-  diagrams).
-- **Open example: poem / accounts / technical** in the palette
-  loads example documents of different genres — pure prose and
-  poetry, management accounts (running totals, budget lookups,
-  negative growth), and a technical paper (code, equations,
-  diagrams).
+- **Open example: ...** in the palette loads any shipped example
+  (field-operations, poem, accounts, report, technical,
+  signal-processing, music); **Open the welcome page** goes back to
+  the front page.
 
 ## Themes
 

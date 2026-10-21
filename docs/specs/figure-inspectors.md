@@ -47,7 +47,12 @@ the source to change a filter or fix a Mermaid typo.
   button: the earlier × was an inconsistent second dismissal
   path, and the brief "figure bars persist across outside
   clicks" experiment made the two bar families behave
-  differently for no user-visible gain. Any NEW inspector must
+  differently for no user-visible gain. "Outside" means anywhere
+  that is not inside the figure: the rest of the page, AND the desk
+  around the page and the host's own UI. A document-level listener
+  catches presses that never reach the component's shadow tree
+  (e2e: "a click on the desk outside the page hides the
+  inspector"). Any NEW inspector must
   follow this same rule - it is checked in review
   (see AGENTS.md Working rules).
 

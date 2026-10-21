@@ -51,7 +51,7 @@ output by `src/render/chart.ts`. The contract for dense data:
   the theme's ink, muted and hairline colors; pie seams and the
   donut hole take its paper. Everything passes from `drawChart` via
   `ChartStyle`; the renderers stay pure and default to light-paper
-  constants. Chart text inherits the theme's text face. Each chart ROTATES through the palette
+  constants. Chart text inherits the theme's text face. A pie or donut slice takes the color of its CATEGORY's position in the source table (`colorKeys`), so an edit that re-sorts the slices never swaps their colors. Each chart ROTATES through the palette
   by its position among the document's chart blocks - the second
   chart on a page never wears the first chart's color, so same-
   shaped figures stay distinguishable.

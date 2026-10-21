@@ -4,7 +4,7 @@ feature: desktop-tauri-host
 steps:
   - On a machine with the prerequisites (apps/desktop/README.md), run
     `npm run dev:desktop`.
-  - The folio window opens with the sample document.
+  - The folio window opens on the welcome page.
   - Click the folder icon (tooltip "Open") and pick a .md
     file from disk.
   - Edit the document (edit a table cell).

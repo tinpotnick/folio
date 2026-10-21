@@ -12,7 +12,7 @@ interface Doc {
 }
 
 async function waitForDocument(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?doc=demo/examples/field-operations.md");
   await expect(
     page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
   ).toBeVisible();

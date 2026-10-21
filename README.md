@@ -35,10 +35,11 @@ npm install
 npm run dev
 ```
 
-Opens the demo host app: the sample document rendered as a polished
-report — headings, prose, a live table (edit a cell and every
-formula and the figure recalculate), and a chart generated from a
-query over the table. Toggle to **Markdown** to see and edit the
+Opens the demo host app on its welcome page: what folio is, a live
+table and chart to try (edit a cost and the formula column and the
+chart follow), and links to every example document. The north-star
+sample, a quarterly report, is the first example
+(`/?doc=demo/examples/field-operations.md` opens it directly). Toggle to **Markdown** to see and edit the
 source with code-editor highlighting; switch back to re-parse.
 **☰ Sections** (top left) toggles the section browser sidebar.
 **?** (also the `?` key or `F1`) opens the built-in help — which is
