@@ -14,7 +14,7 @@ test.describe("dark/light mode", () => {
   test("defaults to light and the button switches to dark", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/?doc=demo/examples/field-operations.md");
     await expect(
       page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
     ).toBeVisible();
@@ -41,7 +41,7 @@ test.describe("dark/light mode", () => {
   });
 
   test("the choice persists across reloads", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?doc=demo/examples/field-operations.md");
     await page.locator("#btn-mode").click();
     expect(await page.locator("html").getAttribute("data-mode")).toBe("dark");
     await page.reload();
@@ -60,7 +60,7 @@ test.describe("dark/light mode", () => {
   });
 
   test("the palette entry flips the mode too", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?doc=demo/examples/field-operations.md");
     await expect(
       page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
     ).toBeVisible();
@@ -77,7 +77,7 @@ test.describe("dark/light mode", () => {
   test("the document re-dresses in its theme's dark rendition", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/?doc=demo/examples/field-operations.md");
     await page
       .locator("folio-doc h1", { hasText: "Q3 Field Operations Review" })
       .waitFor();
@@ -120,7 +120,7 @@ test.describe("dark/light mode", () => {
   // interim "brighten until readable" pass once lightened series
   // on WHITE paper too (green bars went near-invisible mint).
   test("light mode draws the theme's palette verbatim", async ({ page }) => {
-    await page.goto("/");
+    await page.goto("/?doc=demo/examples/field-operations.md");
     await page
       .locator("folio-doc h1", { hasText: "Q3 Field Operations Review" })
       .waitFor();

@@ -2,13 +2,13 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * End-to-end coverage of the demo host page (index.html + src/main.ts)
- * against the sample document (demo/sample-document.md). Playwright
+ * against the sample document (demo/examples/field-operations.md, booted via ?doc=). Playwright
  * locators pierce the open shadow root of <folio-doc>, so component
  * internals are addressed with plain CSS selectors.
  */
 
 async function waitForDocument(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?doc=demo/examples/field-operations.md");
   await expect(
     page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
   ).toBeVisible();
@@ -194,7 +194,7 @@ test.describe("in-app help", () => {
     ).toBeVisible();
     await expect(page.locator("#help-doc figure table").first()).toBeVisible();
     await expect(
-      page.locator("#help-doc p", { hasText: "copy the source" }),
+      page.locator("#help-doc li", { hasText: "copy the source" }),
     ).toBeVisible();
 
     await page.locator("#btn-help-close").click();

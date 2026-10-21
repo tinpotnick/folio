@@ -14,6 +14,7 @@ export interface Frontmatter {
 export type DocBlock =
   | { kind: "heading"; level: number; text: string }
   | { kind: "prose"; text: string }
+  | { kind: "list"; ordered: boolean; start?: number; items: string[] }
   | { kind: "code"; lang?: string; text: string }
   | { kind: "math"; text: string }
   | { kind: "table"; table: Table }
@@ -142,6 +143,12 @@ export function parseDoc(text: string): Doc {
         text: heading[2] ?? "",
       });
       i++;
+      continue;
+    }
+    if (LIST_ITEM_RE.test(line)) {
+      const list = parseList(lines, i);
+      doc.blocks.push(list.block);
+      i = list.end;
       continue;
     }
     const proseEnd = collectProse(lines, i);
@@ -382,6 +389,64 @@ function parseInlineMap(raw: string): Record<string, string> {
   return out;
 }
 
+/** A list item line (spec: docs/specs/lists.md): an UNINDENTED
+ * bullet (`- `, `* `, `+ `, or a bare marker for an empty item) or
+ * number (`N. `, `N) `). */
+const LIST_ITEM_RE = /^(?:([-*+])|(\d{1,9})[.)])(?: (.*))?$/;
+
+/**
+ * A flat list starting at `start`: item lines plus their indented
+ * continuation lines, up to a blank line or an unindented non-item.
+ * The first line's marker decides bulleted vs numbered.
+ */
+function parseList(
+  lines: string[],
+  start: number,
+): { block: Extract<DocBlock, { kind: "list" }>; end: number } {
+  const first = LIST_ITEM_RE.exec(lines[start] ?? "");
+  const ordered = first?.[2] !== undefined;
+  const startNo = ordered ? Number(first?.[2]) : 1;
+  const items: string[] = [];
+  let i = start;
+  while (i < lines.length) {
+    const line = lines[i] ?? "";
+    if (line.trim() === "") break;
+    const m = LIST_ITEM_RE.exec(line);
+    if (m && (m[2] !== undefined) === ordered) {
+      items.push(m[3] ?? "");
+    } else if (/^\s/.test(line) && items.length > 0) {
+      items[items.length - 1] += "\n" + line.trimStart();
+    } else {
+      break;
+    }
+    i++;
+  }
+  return {
+    block: {
+      kind: "list",
+      ordered,
+      ...(ordered && startNo !== 1 ? { start: startNo } : {}),
+      items,
+    },
+    end: i,
+  };
+}
+
+function serializeList(block: Extract<DocBlock, { kind: "list" }>): string {
+  const first = block.start ?? 1;
+  return block.items
+    .map((item, n) => {
+      const marker = block.ordered ? `${String(first + n)}.` : "-";
+      const [head = "", ...rest] = item.split("\n");
+      const indent = " ".repeat(marker.length + 1);
+      return [
+        head === "" ? marker : `${marker} ${head}`,
+        ...rest.map((r) => indent + r),
+      ].join("\n");
+    })
+    .join("\n");
+}
+
 function collectProse(lines: string[], start: number): number {
   let i = start;
   while (i < lines.length) {
@@ -472,6 +537,8 @@ function serializeBlock(block: DocBlock): string {
       return `${"#".repeat(block.level)} ${block.text}`;
     case "prose":
       return block.text;
+    case "list":
+      return serializeList(block);
     case "code":
       return "```" + (block.lang ?? "") + "\n" + block.text + "\n```";
     case "math":

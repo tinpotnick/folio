@@ -2,7 +2,7 @@
 name: print-first-contact
 feature: print
 steps:
-  - Start the demo host with the sample document.
+  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
   - Press Ctrl+K, type "print", and press Enter (or press Ctrl+P
     directly). The OS print dialog opens.
   - In the dialog, choose "Save as PDF" as the destination and

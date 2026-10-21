@@ -120,6 +120,9 @@ function cloneBlocks(blocks: DocBlock[]): DocBlock[] {
   return blocks.map((b) => walk(b) as DocBlock);
 }
 
+/** Blocks whose text is inline Markdown: formats and links apply. */
+const INLINE_BLOCKS = new Set(["P", "UL", "OL"]);
+
 /** Undo grouping: same-label changes within this window are one step. */
 const COALESCE_MS = 600;
 /** Two changes this close are one user action, whatever their labels. */
@@ -198,7 +201,67 @@ export class FolioDoc extends HTMLElement {
     this.handleContextMenu = this.handleContextMenu.bind(this);
   }
 
+  /**
+   * The caret's block, tracked on EVERY selection change: commands
+   * that move focus out of the document (the palette) still act on
+   * the block the caret was in - not the last block clicked.
+   */
+  private trackCaret = (): void => {
+    const root = this.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+    let n: Node | null = root?.getSelection?.()?.anchorNode ?? null;
+    while (n !== null && !(n instanceof HTMLElement)) n = n.parentNode;
+    const block =
+      n instanceof HTMLElement
+        ? (n.closest(
+            "article.folio-doc > [data-block-index]",
+          ) as HTMLElement | null)
+        : null;
+    if (block) this.lastBlock = block;
+  };
+
+  /**
+   * Hide every open inspector bar except the one in `keep` (the
+   * figure the click landed in, if any).
+   */
+  private dismissInspectors(keep: HTMLElement | null): void {
+    for (const bar of Array.from(
+      this.shadowRoot?.querySelectorAll<HTMLElement>(
+        ".folio-inspector:not([hidden])",
+      ) ?? [],
+    )) {
+      const owner = bar.closest("figure");
+      if (owner === keep) continue;
+      bar.hidden = true;
+      // Leaving a code block: repaint its syntax colors for the
+      // edited text (never while the caret is inside).
+      if (owner?.classList.contains("folio-codeblock")) {
+        void this.highlightCode(owner as HTMLElement);
+      }
+    }
+  }
+
+  /** A press that lands on nothing INSIDE the shadow tree - the
+   * desk around the page (the host element itself), the host's own
+   * UI - is "outside" every figure: all bars hide. */
+  private outsidePress = (ev: Event): void => {
+    const inside = ev
+      .composedPath()
+      .some((n) => n instanceof Node && n.getRootNode() === this.shadowRoot);
+    if (!inside) this.dismissInspectors(null);
+  };
+
+  disconnectedCallback(): void {
+    document.removeEventListener("selectionchange", this.trackCaret);
+    document.removeEventListener("mousedown", this.outsidePress, true);
+  }
+
   connectedCallback(): void {
+    document.addEventListener("selectionchange", this.trackCaret);
+    // Native Enter (e.g. leaving a list) makes <p>, not <div>: the
+    // DOM matches what a render would build.
+    document.execCommand("defaultParagraphSeparator", false, "p");
+    document.addEventListener("mousedown", this.outsidePress, true);
     // The themes' typefaces ship with the component (ADR-0017);
     // @font-face only works on the host document, not in a shadow
     // root.
@@ -484,21 +547,9 @@ export class FolioDoc extends HTMLElement {
         // inside their figure and hide on any click outside it -
         // the table inspector's behavior. No close buttons: they
         // were an inconsistent second way to dismiss.
-        const hitFigure = el?.closest("figure") as HTMLElement | null;
-        for (const bar of Array.from(
-          this.shadowRoot?.querySelectorAll<HTMLElement>(
-            ".folio-inspector:not([hidden])",
-          ) ?? [],
-        )) {
-          const owner = bar.closest("figure");
-          if (owner === hitFigure) continue;
-          bar.hidden = true;
-          // Leaving a code block: repaint its syntax colors for
-          // the edited text (never while the caret is inside).
-          if (owner?.classList.contains("folio-codeblock")) {
-            void this.highlightCode(owner as HTMLElement);
-          }
-        }
+        this.dismissInspectors(
+          (el?.closest("figure") as HTMLElement | null) ?? null,
+        );
       },
       true,
     );
@@ -546,6 +597,21 @@ export class FolioDoc extends HTMLElement {
         const el = document.createElement("p");
         el.dataset.blockIndex = String(idx);
         el.innerHTML = inlineMarkdownToHtml(block.text);
+        return el;
+      }
+      case "list": {
+        // Spec: docs/specs/lists.md. Items are inline Markdown, like
+        // a paragraph; editing inside is native (Enter adds an item).
+        const el = document.createElement(block.ordered ? "ol" : "ul");
+        el.dataset.blockIndex = String(idx);
+        if (block.ordered && block.start !== undefined) {
+          (el as HTMLOListElement).start = block.start;
+        }
+        for (const item of block.items.length > 0 ? block.items : [""]) {
+          const li = document.createElement("li");
+          li.innerHTML = inlineMarkdownToHtml(item);
+          el.appendChild(li);
+        }
         return el;
       }
       case "code": {
@@ -2579,6 +2645,15 @@ export class FolioDoc extends HTMLElement {
         grid: ink.hairline,
         paper: ink.paper,
         valueFormat: valueColumn?.format,
+        // Slices keep their category's color through re-sorts.
+        colorKeys: (() => {
+          const ci = tableBlock.table.columns.findIndex(
+            (c) => c.name === select[0],
+          );
+          return ci < 0
+            ? undefined
+            : [...new Set(recalced.rows.map((r) => String(r[ci] ?? "")))];
+        })(),
         xTitle: select[0],
         yTitle:
           valueCol === ""
@@ -2770,6 +2845,19 @@ export class FolioDoc extends HTMLElement {
         });
         continue;
       }
+      if (el.tagName === "UL" || el.tagName === "OL") {
+        const start = (el as HTMLOListElement).start;
+        const items = Array.from(el.children)
+          .filter((c) => c.tagName === "LI")
+          .map((li) => htmlToInlineMarkdown(li.innerHTML).replace(/\n+$/, ""));
+        next.push({
+          kind: "list",
+          ordered: el.tagName === "OL",
+          ...(el.tagName === "OL" && start !== 1 ? { start } : {}),
+          items,
+        });
+        continue;
+      }
       const md = htmlToInlineMarkdown(el.innerHTML).replace(/\n+$/, "");
       next.push({ kind: "prose", text: md });
     }
@@ -2794,6 +2882,7 @@ export class FolioDoc extends HTMLElement {
       return;
     }
     this.syncFromDom();
+    this.autoformatList();
     this.commitCaretCell();
     this.freezeStrudelLights();
     this.emitChange("type");
@@ -3022,18 +3111,89 @@ export class FolioDoc extends HTMLElement {
     ) {
       return;
     }
-    const text = block.text;
+    // A list unlists into one block PER ITEM - merging its items
+    // into one paragraph would run them together on the page.
+    const texts = block.kind === "list" ? block.items : [block.text];
     if (kind === "p") {
       if (block.kind === "prose") return;
-      this.doc.blocks[idx] = { kind: "prose", text };
+      this.doc.blocks.splice(
+        idx,
+        1,
+        ...texts.map((text): DocBlock => ({ kind: "prose", text })),
+      );
     } else {
       const level = kind === "h1" ? 1 : kind === "h2" ? 2 : 3;
       if (block.kind === "heading" && block.level === level) return;
-      this.doc.blocks[idx] = { kind: "heading", level, text };
+      this.doc.blocks.splice(
+        idx,
+        1,
+        ...texts.map((text): DocBlock => ({ kind: "heading", level, text })),
+      );
     }
     this.render();
     this.emitChange();
     this.focusBlockStart(idx);
+  }
+
+  /**
+   * Toggle the caret's block as a list (spec: docs/specs/lists.md):
+   * a paragraph becomes a one-item list (its source line breaks are
+   * soft wraps, not items); a list of the same kind unlists into one
+   * paragraph per item; a list of the other kind switches between
+   * bulleted and numbered.
+   */
+  toggleList(ordered: boolean): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    if (idx < 0) return;
+    const block = this.doc.blocks[idx];
+    if (!block) return;
+    if (block.kind === "list") {
+      if (block.ordered === ordered) {
+        this.doc.blocks.splice(
+          idx,
+          1,
+          ...block.items.map((text): DocBlock => ({ kind: "prose", text })),
+        );
+      } else {
+        this.doc.blocks[idx] = { kind: "list", ordered, items: block.items };
+      }
+    } else if (block.kind === "prose" || block.kind === "heading") {
+      this.doc.blocks[idx] = { kind: "list", ordered, items: [block.text] };
+    } else {
+      return;
+    }
+    this.render();
+    this.emitChange();
+    this.focusBlockStart(idx, true);
+  }
+
+  /** Whether the caret sits in a list, and which kind. */
+  listAtCaret(): "bulleted" | "numbered" | null {
+    const block = this.doc?.blocks[this.blockIndexAtCaret()];
+    if (block?.kind !== "list") return null;
+    return block.ordered ? "numbered" : "bulleted";
+  }
+
+  /**
+   * The Markdown habit: `- ` (or `* `, `1. `) typed at the start of
+   * an otherwise empty paragraph turns it into a list.
+   */
+  private autoformatList(): boolean {
+    if (!this.doc) return false;
+    const idx = this.blockIndexAtCaret();
+    const block = this.doc.blocks[idx];
+    if (block?.kind !== "prose") return false;
+    const m = /^(?:([-*+])|(1)[.)])[ \u00a0]$/.exec(block.text);
+    if (!m) return false;
+    this.doc.blocks[idx] = {
+      kind: "list",
+      ordered: m[2] !== undefined,
+      items: [""],
+    };
+    this.render();
+    this.focusBlockStart(idx);
+    return true;
   }
 
   /**
@@ -3265,7 +3425,9 @@ export class FolioDoc extends HTMLElement {
         ? anchorNode
         : (anchorNode?.parentElement ?? null);
     const block = anchorEl?.closest("[data-block-index]") as HTMLElement | null;
-    if (!block || block.tagName !== "P" || !block.isConnected) return false;
+    if (!block || !INLINE_BLOCKS.has(block.tagName) || !block.isConnected) {
+      return false;
+    }
 
     const synonyms: Record<string, string[]> = {
       strong: ["STRONG", "B"],
@@ -3846,7 +4008,9 @@ export class FolioDoc extends HTMLElement {
     const n = this.firstPositionNodeInRange(range) ?? range.startContainer;
     const el = n instanceof Element ? n : (n?.parentElement ?? null);
     const block = el?.closest("[data-block-index]") as HTMLElement | null;
-    if (!block || block.tagName !== "P" || !block.isConnected) return false;
+    if (!block || !INLINE_BLOCKS.has(block.tagName) || !block.isConnected) {
+      return false;
+    }
     const existing = (el as Element).closest?.(
       "a[href]",
     ) as HTMLAnchorElement | null;

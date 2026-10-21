@@ -34,6 +34,9 @@ export interface ChartStyle {
   /** The value column's display format: "percent" labels 0.22 as
    * 22.0% (ticks and value labels), matching the table. */
   valueFormat?: "percent" | "currency" | undefined;
+  /** Category labels in their stable (source table) order: a pie
+   * slice takes the color of its category's position here. */
+  colorKeys?: string[] | undefined;
 }
 
 const W = 640;
@@ -527,7 +530,11 @@ export function renderPieChart(
   rows.forEach((row, i) => {
     const sweep = (row.value / total) * Math.PI * 2;
     const mid = angle + sweep / 2;
-    const color = colors[i % colors.length] ?? "#4c6ef5";
+    // A slice's color belongs to its CATEGORY (its place in the
+    // source table), not its place in the sorted result - otherwise
+    // an edit that reorders slices swaps their colors.
+    const key = style.colorKeys?.indexOf(row.label) ?? -1;
+    const color = colors[(key >= 0 ? key : i) % colors.length] ?? "#4c6ef5";
     const x1 = cx + r * Math.cos(angle);
     const y1 = cy + r * Math.sin(angle);
     const x2 = cx + r * Math.cos(angle + sweep);

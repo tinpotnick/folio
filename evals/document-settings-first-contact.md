@@ -4,7 +4,7 @@ feature: document-settings
 steps:
   - Open the document settings and pick the "Editorial" theme
     card; press Apply.
-  - Start the demo host with the sample document. Click the sliders
+  - Start the demo host and open the Field operations example (palette: "Open example: field-operations"). Click the sliders
     button in the toolbar (or press Ctrl+K and search "settings").
   - Change the body font to Literata and Apply.
   - Switch to Markdown view and look at the header.

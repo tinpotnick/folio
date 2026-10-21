@@ -2,7 +2,7 @@
 name: in-app-help-first-contact
 feature: in-app-help
 steps:
-  - Start the demo host with the sample document.
+  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
   - Without instructions, look for a way to learn the app.
   - Click the visible "?" toolbar button.
   - Read how to open and save documents; close the help window.

@@ -122,6 +122,14 @@
       header h1 {
         flex: none;
       }
+      #btn-home {
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+      }
       .seg {
         display: flex;
         border: 1px solid var(--border-strong);
@@ -162,9 +170,12 @@
         background: var(--active-bg);
         color: var(--active-fg);
       }
-      .seg svg {
+      .seg svg,
+      #block-bar svg {
         width: 16px;
         height: 16px;
+        display: block;
+        margin: 0 auto;
       }
       .fmt {
         display: flex;
@@ -613,7 +624,9 @@
         border-radius: 8px;
         cursor: pointer;
         white-space: normal !important;
-        transition: border-color 120ms, box-shadow 120ms;
+        transition:
+          border-color 120ms,
+          box-shadow 120ms;
       }
       .theme-card:hover {
         border-color: var(--text-muted);
@@ -757,10 +770,14 @@
       >
         ☰
       </button>
-      <h1
-        title="folio — a document-first workspace: semantic Markdown documents, typed tables, query-driven charts"
-      >
-        folio
+      <h1>
+        <button
+          id="btn-home"
+          title="folio — a document-first workspace. Open the welcome page"
+          aria-label="folio - open the welcome page"
+        >
+          folio
+        </button>
       </h1>
       <div class="toolbar">
         <div class="fmt" id="history-bar">
@@ -810,6 +827,49 @@
           <button data-block="h2" title="Heading 2">H2</button>
           <button data-block="h3" title="Heading 3">H3</button>
           <button data-block="p" title="Paragraph">P</button>
+          <button
+            data-block="ul"
+            title="Bulleted list"
+            aria-label="Bulleted list"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke-linecap="round" />
+              <circle cx="3" cy="4" r="0.9" fill="currentColor" stroke="none" />
+              <circle cx="3" cy="8" r="0.9" fill="currentColor" stroke="none" />
+              <circle
+                cx="3"
+                cy="12"
+                r="0.9"
+                fill="currentColor"
+                stroke="none"
+              />
+            </svg>
+          </button>
+          <button
+            data-block="ol"
+            title="Numbered list"
+            aria-label="Numbered list"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M6.5 4h7M6.5 8h7M6.5 12h7" stroke-linecap="round" />
+              <path
+                d="M2.2 2.8l1-.6v3.6M2.2 9.2c.2-.6 1.9-.8 1.9.3 0 .7-1.9 1.4-1.9 2.3h2"
+                stroke-width="1"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
         </div>
         <div class="fmt" id="fmt-bar">
           <button data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>

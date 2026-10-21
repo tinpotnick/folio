@@ -2,7 +2,7 @@
 name: toolbar-context-first-contact
 feature: toolbar-context
 steps:
-  - Start the demo host with the sample document.
+  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
   - Click into the H1 heading; watch the block buttons.
   - Click into a normal paragraph; click into bold text.
   - Switch to Markdown view; put the caret on the "# Q3..." line,

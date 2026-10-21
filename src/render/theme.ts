@@ -892,6 +892,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     article.folio-doc h1,
     article.folio-doc h2,
     article.folio-doc p,
+    article.folio-doc li,
     article.folio-doc figcaption,
     article.folio-doc td,
     article.folio-doc th {
@@ -1376,6 +1377,23 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-radius: 3px;
     }
     p { margin: 0.9em 0; }
+    /* Lists (spec: docs/specs/lists.md): the theme's rhythm, markers
+       in muted ink so the text leads. */
+    article.folio-doc ul,
+    article.folio-doc ol {
+      margin: 0.9em 0;
+      padding-inline-start: 1.6em;
+    }
+    article.folio-doc li {
+      margin: 0.3em 0;
+      padding-inline-start: 0.25em;
+    }
+    article.folio-doc li::marker {
+      color: var(--folio-ink-muted);
+    }
+    article.folio-doc ol > li::marker {
+      font-variant-numeric: tabular-nums;
+    }
     article.folio-doc[contenteditable="true"] { caret-color: var(--folio-ink, #1f2328); }
     article.folio-doc[contenteditable="true"]:focus { outline: none; }
     p:empty::before, h1:empty::before, h2:empty::before {
