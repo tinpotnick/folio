@@ -62,7 +62,8 @@ caption: "Where the budget goes"
 - **Charts as queries**: bar, line, area, scatter, pie and donut,
   filtered and sorted with the same expression language as formulas.
 - **Equations, code and diagrams**: LaTeX math, syntax-highlighted
-  code, and Mermaid diagrams, all rendered in the page.
+  code, Mermaid diagrams, and 3D models from JSCAD code, all rendered
+  in the page.
 - **Images and audio** embedded in the document itself, including
   recordings straight from the microphone.
 - **Music**: Strudel patterns that play right in the page.
@@ -86,6 +87,8 @@ Each one opens in place; the folio wordmark brings you back here.
 - [Signals and spectra](demo/examples/signal-processing.md) - a
   sampled signal, its FFT and a low-pass filter, every number a
   formula.
+- [Parametric parts](demo/examples/3d-models.md) - 3D models drawn
+  from a few lines of JSCAD code: a bracket, a gear, an assembly.
 - [A music document](demo/examples/music.md) - Strudel patterns that
   play in the page.
 - [Amensister](demo/examples/amensister.md) - a Strudel classic built

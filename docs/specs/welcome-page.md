@@ -47,7 +47,7 @@ the north-star sample (docs/specs/sample-document.md).
 ## Acceptance
 
 - e2e: `tests/e2e/welcome.spec.ts` (boots into the welcome page; the
-  live table recalculates on edit; eight example links in a list; a
+  live table recalculates on edit; nine example links in a list; a
   link opens the sample in place and the wordmark comes home; `?doc=`
   works and rejects junk; palette entries; an opened document starts
   at its top; Back returns home, to the reader's place, and Forward

@@ -23,6 +23,7 @@ import { onlineSampleSources } from "./audio/online-samples.js";
 import { themeFromDoc, themeCss, type Mode } from "./render/theme.js";
 import { registerFonts } from "./render/fonts.js";
 import { formatComputed } from "./render/number.js";
+import { meshToSvg, VIEWS, type MeshPolygon } from "./render/mesh-svg.js";
 import {
   renderAreaChart,
   renderBarChart,
@@ -193,6 +194,59 @@ function flattenList(body: ListBody): string[] {
     i.text,
     ...(i.children ? flattenList(i.children) : []),
   ]);
+}
+
+/** Blend two #rrggbb colours: `t` of the way from `a` to `b`. */
+function mixHex(a: string, b: string, t: number): string {
+  const rgb = (h: string): number[] =>
+    [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [rgb(a), rgb(b)];
+  return (
+    "#" +
+    x
+      .map((v, i) =>
+        Math.round(v + ((y[i] ?? v) - v) * t)
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")
+  );
+}
+
+/** A JSCAD script that runs longer than this is stopped (ADR-0020). */
+const JSCAD_TIMEOUT_MS = 5000;
+
+const JSCAD_STARTER = `const { cuboid, cylinder } = require('@jscad/modeling').primitives
+const { subtract } = require('@jscad/modeling').booleans
+
+const main = () => subtract(
+  cuboid({ size: [40, 30, 10] }),
+  cylinder({ radius: 8, height: 12, segments: 48 })
+)
+
+module.exports = { main }`;
+
+/**
+ * The caret's position as a count of characters from the start of
+ * `root` (a <br> counts as one, a newline): survives rebuilding the
+ * text as a single node.
+ */
+function textOffsetIn(root: Node, node: Node, offset: number): number {
+  let count = 0;
+  const target =
+    node.nodeType === Node.TEXT_NODE ? node : (node.childNodes[offset] ?? null);
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+  );
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n === target) {
+      return n.nodeType === Node.TEXT_NODE ? count + offset : count;
+    }
+    if (n.nodeType === Node.TEXT_NODE) count += (n.textContent ?? "").length;
+    else if ((n as Element).tagName === "BR") count += 1;
+  }
+  return count;
 }
 
 /** Blocks whose text is inline Markdown: formats and links apply. */
@@ -767,13 +821,28 @@ export class FolioDoc extends HTMLElement {
    */
   private renderCode(block: CodeBlock, idx: number): HTMLElement {
     const strudel = block.lang === "strudel";
+    const jscad = block.lang === "jscad";
     const figure = document.createElement("figure");
     figure.className = strudel
       ? "folio-codeblock folio-strudel"
-      : "folio-codeblock";
+      : jscad
+        ? "folio-codeblock folio-jscad"
+        : "folio-codeblock";
     figure.dataset.blockIndex = String(idx);
     if (block.lang !== undefined) figure.dataset.lang = block.lang;
     figure.appendChild(this.buildCodeInspector(figure, block));
+    if (jscad) {
+      // The MODEL is the figure (spec: docs/specs/jscad-blocks.md);
+      // its code shows only while the header is open.
+      const view = document.createElement("div");
+      view.className = "jscad-view";
+      view.contentEditable = "false";
+      view.setAttribute("role", "img");
+      view.setAttribute("aria-label", "3D model");
+      view.textContent = "Building the model…";
+      this.attachJscadRotate(figure, view);
+      figure.appendChild(view);
+    }
     const pre = document.createElement("pre");
     pre.className = strudel ? "folio-code strudel-source" : "folio-code";
     if (block.lang !== undefined) pre.dataset.lang = block.lang;
@@ -782,7 +851,270 @@ export class FolioDoc extends HTMLElement {
     pre.appendChild(code);
     figure.appendChild(pre);
     void this.highlightCode(figure);
+    if (jscad) void this.drawJscad(figure);
     return figure;
+  }
+
+  /* --- JSCAD models (spec: docs/specs/jscad-blocks.md, ADR-0020) --- */
+
+  /** The one sandbox worker, created on the first model. */
+  private jscadWorker: Worker | null = null;
+  private jscadSeq = 0;
+  private jscadPending = new Map<
+    number,
+    {
+      resolve: (p: MeshPolygon[]) => void;
+      reject: (e: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  /** Each model figure's last faces, re-projected on view changes. */
+  private jscadMesh = new WeakMap<HTMLElement, MeshPolygon[]>();
+  private jscadRedraw: ReturnType<typeof setTimeout> | null = null;
+
+  /** Evaluate a script in the sandbox: faces, or why not. */
+  private runJscad(source: string): Promise<MeshPolygon[]> {
+    if (!this.jscadWorker) {
+      const w = new Worker(new URL("./jscad/worker.ts", import.meta.url), {
+        type: "module",
+      });
+      w.addEventListener(
+        "message",
+        (
+          ev: MessageEvent<{
+            id: number;
+            polygons?: MeshPolygon[];
+            error?: string;
+          }>,
+        ) => {
+          const job = this.jscadPending.get(ev.data.id);
+          if (!job) return;
+          this.jscadPending.delete(ev.data.id);
+          clearTimeout(job.timer);
+          if (ev.data.error !== undefined) job.reject(new Error(ev.data.error));
+          else job.resolve(ev.data.polygons ?? []);
+        },
+      );
+      this.jscadWorker = w;
+    }
+    const worker = this.jscadWorker;
+    const id = ++this.jscadSeq;
+    return new Promise((resolve, reject) => {
+      // A script that never finishes (an endless loop) is stopped:
+      // the worker is replaced, and every waiting model says why.
+      const timer = setTimeout(() => {
+        worker.terminate();
+        if (this.jscadWorker === worker) this.jscadWorker = null;
+        for (const [k, job] of this.jscadPending) {
+          clearTimeout(job.timer);
+          job.reject(
+            new Error(
+              "the model took longer than 5 seconds and was stopped - check for an endless loop",
+            ),
+          );
+          this.jscadPending.delete(k);
+        }
+      }, JSCAD_TIMEOUT_MS);
+      this.jscadPending.set(id, { resolve, reject, timer });
+      worker.postMessage({ id, source });
+    });
+  }
+
+  /** Build (or rebuild) a model figure from its code. */
+  private async drawJscad(figure: HTMLElement): Promise<void> {
+    const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+    const view = figure.querySelector<HTMLElement>(".jscad-view");
+    if (!code || !view) return;
+    // While the script runs (up to 5 s), the old drawing dims.
+    view.classList.add("jscad-building");
+    view.title = "Building the model…";
+    try {
+      const mesh = await this.runJscad(this.codeText(code));
+      this.jscadMesh.set(figure, mesh);
+      this.paintJscad(figure);
+    } catch (e) {
+      this.jscadMesh.delete(figure);
+      view.textContent = `Model error: ${e instanceof Error ? e.message : String(e)}`;
+      view.classList.add("jscad-error");
+    } finally {
+      view.classList.remove("jscad-building");
+      view.title = "";
+    }
+  }
+
+  /** Typing in a model's code rebuilds it once the typing pauses. */
+  private scheduleJscadRedraw(): void {
+    const at = this.caretPoint()?.node ?? null;
+    const el = at instanceof Element ? at : (at?.parentElement ?? null);
+    const figure = el?.closest<HTMLElement>("figure.folio-jscad");
+    if (!figure) return;
+    if (this.jscadRedraw) clearTimeout(this.jscadRedraw);
+    this.jscadRedraw = setTimeout(() => {
+      this.jscadRedraw = null;
+      void this.drawJscad(figure);
+    }, 600);
+  }
+
+  /** Project the cached faces for the figure's current view. */
+  private paintJscad(figure: HTMLElement): void {
+    const view = figure.querySelector<HTMLElement>(".jscad-view");
+    const mesh = this.jscadMesh.get(figure);
+    if (!view || !mesh || !this.doc) return;
+    const theme = themeFromDoc(this.doc);
+    const angle = {
+      yaw: Number(figure.dataset.yaw ?? VIEWS["iso"]?.yaw ?? -35),
+      pitch: Number(figure.dataset.pitch ?? VIEWS["iso"]?.pitch ?? 28),
+    };
+    // The theme's first series colour - lifted toward the paper on a
+    // light page, where deep palette colours shade too dark to read.
+    const series = theme.palette[this.mode()][0] ?? "#5a7bb5";
+    const fill =
+      this.mode() === "light"
+        ? mixHex(series, theme.colors.light.paper, 0.35)
+        : series;
+    try {
+      view.innerHTML = meshToSvg(mesh, angle, { fill });
+      view.classList.remove("jscad-error");
+    } catch (e) {
+      view.textContent = `Model error: ${e instanceof Error ? e.message : String(e)}`;
+      view.classList.add("jscad-error");
+    }
+  }
+
+  /** Drag the model to turn it (presentation only - not saved). */
+  private attachJscadRotate(figure: HTMLElement, view: HTMLElement): void {
+    let from: { x: number; y: number; yaw: number; pitch: number } | null =
+      null;
+    let frame = 0;
+    view.addEventListener("pointerdown", (ev) => {
+      if (!this.jscadMesh.has(figure)) return;
+      from = {
+        x: ev.clientX,
+        y: ev.clientY,
+        yaw: Number(figure.dataset.yaw ?? VIEWS["iso"]?.yaw ?? -35),
+        pitch: Number(figure.dataset.pitch ?? VIEWS["iso"]?.pitch ?? 28),
+      };
+      view.setPointerCapture(ev.pointerId);
+    });
+    view.addEventListener("pointermove", (ev) => {
+      if (!from) return;
+      const start = from;
+      figure.dataset.yaw = String(start.yaw - (ev.clientX - start.x) * 0.5);
+      figure.dataset.pitch = String(
+        Math.max(-90, Math.min(90, start.pitch + (ev.clientY - start.y) * 0.5)),
+      );
+      const picker = figure.querySelector<HTMLSelectElement>(
+        "select.jscad-view-pick",
+      );
+      if (picker) picker.value = "";
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => this.paintJscad(figure));
+    });
+    const end = (): void => {
+      from = null;
+    };
+    view.addEventListener("pointerup", end);
+    view.addEventListener("pointercancel", end);
+  }
+
+  /** The view picker in a model's header. */
+  private buildJscadControls(figure: HTMLElement): HTMLElement[] {
+    const pick = document.createElement("select");
+    pick.className = "insp-select jscad-view-pick";
+    pick.title = "View - or drag the model to turn it";
+    pick.setAttribute("aria-label", "Model view");
+    const free = document.createElement("option");
+    free.value = "";
+    free.textContent = "Turned";
+    free.hidden = true;
+    pick.appendChild(free);
+    for (const [id, label] of [
+      ["iso", "Isometric"],
+      ["front", "Front"],
+      ["right", "Right"],
+      ["top", "Top"],
+    ] as const) {
+      const o = document.createElement("option");
+      o.value = id;
+      o.textContent = label;
+      pick.appendChild(o);
+    }
+    pick.value = "iso";
+    pick.addEventListener("change", () => {
+      const v = VIEWS[pick.value];
+      if (!v) return;
+      figure.dataset.yaw = String(v.yaw);
+      figure.dataset.pitch = String(v.pitch);
+      this.paintJscad(figure);
+    });
+    return [pick];
+  }
+
+  /**
+   * Where an inserted block goes: after the caret's block - or IN
+   * PLACE of it when it is an empty paragraph (the line the user made
+   * for it), so no stray empty line is left behind.
+   */
+  private insertionPoint(idx: number): { at: number; replace: number } {
+    const blocks = this.doc?.blocks ?? [];
+    const here = blocks[idx];
+    if (here?.kind === "prose" && here.text.trim() === "") {
+      return { at: idx, replace: 1 };
+    }
+    return { at: idx >= 0 ? idx + 1 : blocks.length, replace: 0 };
+  }
+
+  /** Insert a starter 3D model after the caret's block. */
+  insertJscad(): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const { at, replace } = this.insertionPoint(idx);
+    this.doc.blocks.splice(at, replace, {
+      kind: "code",
+      lang: "jscad",
+      text: JSCAD_STARTER,
+    });
+    this.render();
+    this.emitChange();
+  }
+
+  /**
+   * A code body is plain text: `<pre><code>text</code></pre>` with
+   * only the highlighter's spans inside. Native editing breaks that -
+   * typing into an EMPTY block lands in the <pre> beside the empty
+   * <code> (and was silently lost), and select-all + retype leaves
+   * the engine's <font>/style markup. Rebuild it as plain text, caret
+   * at the same text position. Returns the body's text.
+   */
+  private normalizeCodeBody(pre: HTMLElement): string {
+    const code = pre.querySelector(":scope > code");
+    const clean =
+      code !== null &&
+      pre.childNodes.length === 1 &&
+      code.querySelector("font, [style], div, p, b, i, u, strong, em") === null;
+    if (clean)
+      return code.isConnected
+        ? (code as HTMLElement).innerText
+        : (code.textContent ?? "");
+    const text = (
+      pre.isConnected ? pre.innerText : (pre.textContent ?? "")
+    ).replace(/\n$/, "");
+    const at = this.caretPoint();
+    const offset =
+      at && pre.contains(at.node)
+        ? textOffsetIn(pre, at.node, at.offset)
+        : null;
+    const fresh = document.createElement("code");
+    fresh.textContent = text;
+    pre.replaceChildren(fresh);
+    const figure = pre.closest<HTMLElement>("figure");
+    if (figure) this.painted.delete(figure);
+    if (offset !== null && fresh.firstChild) {
+      this.setCaret(fresh.firstChild, Math.min(offset, text.length));
+    } else if (offset !== null) {
+      this.setCaret(fresh, 0);
+    }
+    return text;
   }
 
   /** The code body's current text (rendered line breaks included). */
@@ -856,6 +1188,9 @@ export class FolioDoc extends HTMLElement {
     bar.appendChild(picker);
     if (block.lang === "strudel") {
       bar.append(...this.buildStrudelControls(figure));
+    }
+    if (block.lang === "jscad") {
+      bar.append(...this.buildJscadControls(figure));
     }
     figure.addEventListener("mousedown", () => {
       bar.hidden = false;
@@ -1320,8 +1655,8 @@ export class FolioDoc extends HTMLElement {
   insertStrudel(): void {
     if (!this.doc) return;
     const idx = this.blockIndexAtCaret();
-    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
-    this.doc.blocks.splice(at, 0, {
+    const { at, replace } = this.insertionPoint(idx);
+    this.doc.blocks.splice(at, replace, {
       kind: "code",
       lang: "strudel",
       text: 'note("c a f e")',
@@ -3040,6 +3375,12 @@ export class FolioDoc extends HTMLElement {
     )) {
       void this.drawDiagram(fig);
     }
+    // Models take the mode's palette too.
+    for (const fig of Array.from(
+      root.querySelectorAll<HTMLElement>("figure.folio-jscad"),
+    )) {
+      this.paintJscad(fig);
+    }
   }
 
   private drawChart(figure: HTMLElement): void {
@@ -3272,11 +3613,11 @@ export class FolioDoc extends HTMLElement {
         // from the DOM like prose. Syntax colors and strudel's
         // playing lights are spans over the text - innerText reads
         // through them.
-        const code = el.querySelector<HTMLElement>("pre.folio-code > code");
+        const pre = el.querySelector<HTMLElement>("pre.folio-code");
         next.push({
           kind: "code",
           ...(el.dataset.lang !== undefined ? { lang: el.dataset.lang } : {}),
-          text: code ? code.innerText : "",
+          text: pre ? this.normalizeCodeBody(pre) : "",
         });
         continue;
       }
@@ -3331,6 +3672,7 @@ export class FolioDoc extends HTMLElement {
       return;
     }
     this.syncFromDom();
+    this.scheduleJscadRedraw();
     this.autoformatList();
     this.commitCaretCell();
     this.freezeStrudelLights();
@@ -4367,6 +4709,28 @@ export class FolioDoc extends HTMLElement {
         this.emitChange("delete");
       }
       return;
+    }
+    // Ctrl/Cmd+A in a code body selects the CODE, never the whole
+    // document (where the next keystroke would replace everything).
+    if (
+      ev.key.toLowerCase() === "a" &&
+      (ev.ctrlKey || ev.metaKey) &&
+      !ev.altKey
+    ) {
+      const at = this.caretPoint()?.node ?? null;
+      const host = at instanceof Element ? at : (at?.parentElement ?? null);
+      const pre = host?.closest<HTMLElement>("pre.folio-code");
+      if (pre) {
+        ev.preventDefault();
+        const root = this.shadowRoot as
+          (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+        const sel =
+          typeof root?.getSelection === "function"
+            ? root.getSelection()
+            : document.getSelection();
+        sel?.setBaseAndExtent(pre, 0, pre, pre.childNodes.length);
+        return;
+      }
     }
     if (ev.key === "Backspace" && this.removeEmptyCodeBlock()) {
       ev.preventDefault();

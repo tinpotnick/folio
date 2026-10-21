@@ -1420,6 +1420,43 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-inspector .strudel-consent[hidden] { display: none; }
     figure.folio-codeblock > .code-inspector { flex-wrap: wrap; }
+    /* JSCAD (spec: jscad-blocks.md): the MODEL is the figure; its code
+       shows only while the header is open (the one inspector
+       contract: click to reveal, click away to hide). */
+    figure.folio-jscad > .folio-inspector[hidden] ~ pre.folio-code {
+      display: none;
+    }
+    figure.folio-jscad .jscad-view {
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      color: var(--folio-ink-muted);
+      font-size: 0.9em;
+      padding: 4px 0;
+    }
+    figure.folio-jscad .jscad-view:active { cursor: grabbing; }
+    figure.folio-jscad .jscad-view.jscad-building svg {
+      opacity: 0.45;
+      transition: opacity 200ms;
+    }
+    figure.folio-jscad select.jscad-view-pick { flex: none; }
+    figure.folio-jscad .jscad-view svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-height: 420px;
+    }
+    figure.folio-jscad .jscad-view.jscad-error {
+      color: var(--folio-unit);
+      cursor: default;
+      font-family: ${theme.monoFont};
+      font-size: 0.82em;
+      white-space: pre-wrap;
+    }
+    figure.folio-jscad > .folio-inspector:not([hidden]) ~ .jscad-view {
+      border-bottom: 1px dashed var(--folio-rule);
+      margin-bottom: 8px;
+    }
     .strudel-consent button { flex: none; }
     .folio-inspector .strudel-consent > span { flex: 1 1 260px; }
     .folio-inspector .strudel-error {

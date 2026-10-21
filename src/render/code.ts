@@ -33,6 +33,7 @@ export const CODE_LANGUAGES: CodeLanguage[] = [
   { id: "rust", label: "Rust" },
   { id: "sql", label: "SQL" },
   { id: "strudel", label: "Strudel (music)" },
+  { id: "jscad", label: "JSCAD (3D model)" },
   { id: "toml", label: "TOML" },
   { id: "typescript", label: "TypeScript" },
   { id: "xml", label: "XML" },
@@ -92,6 +93,8 @@ const GRAMMAR_FOR: Record<string, string> = {
   mjs: "javascript",
   // Strudel patterns are JavaScript with mini-notation strings.
   strudel: "javascript",
+  // JSCAD models are JavaScript (spec: docs/specs/jscad-blocks.md).
+  jscad: "javascript",
   json: "json",
   markdown: "markdown",
   md: "markdown",

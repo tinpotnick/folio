@@ -152,3 +152,48 @@ test.describe("code blocks: header and highlighting", () => {
     await expect(picker).toBeFocused();
   });
 });
+
+// Regressions from the JSCAD first-contact eval: they hit EVERY code
+// block, not just models.
+test.describe("code body integrity", () => {
+  test("text typed into a NEW (empty) code block is kept", async ({ page }) => {
+    await loadDoc(page, "# T\n\nIntro\n");
+    await page.locator("#the-doc p", { hasText: "Intro" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.locator("#btn-code").click();
+    await page.keyboard.type("line one");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("line two");
+    // innerText: Enter in code inserts a <br> (a newline to the model).
+    await expect
+      .poll(() =>
+        page
+          .locator("#the-doc pre.folio-code > code")
+          .evaluate((el) => (el as HTMLElement).innerText),
+      )
+      .toBe("line one\nline two");
+    expect(await source(page)).toContain("```\nline one\nline two\n```");
+  });
+
+  test("select-all + retype in a code body keeps plain text, no markup", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n```js\nconst a = 1\n```\n");
+    const code = page.locator("#the-doc pre.folio-code > code");
+    await code.click();
+    // Ctrl+A selects the CODE (not the document).
+    await page.keyboard.press("Control+a");
+    await page.keyboard.press("Backspace");
+    await expect(page.locator("#the-doc h1")).toHaveText("T");
+    await page.keyboard.type("let b = 2");
+    await expect(page.locator("#the-doc pre.folio-code > code")).toHaveText(
+      "let b = 2",
+    );
+    const html = await page
+      .locator("#the-doc pre.folio-code")
+      .evaluate((el) => el.innerHTML);
+    expect(html).not.toMatch(/<font|style=/);
+    expect(await source(page)).toContain("```js\nlet b = 2\n```");
+  });
+});
