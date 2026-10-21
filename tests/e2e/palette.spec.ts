@@ -58,7 +58,8 @@ test.describe("command palette", () => {
     await expect(page.locator("#palette-modal")).toBeHidden();
     await expect(page.locator("#the-doc figure")).toHaveCount(base + 1);
     await expect(
-      page.locator("#the-doc figure table", { hasText: "item" }),
+      // Insert gives a simple (pipe) table - docs/specs/simple-tables.md.
+      page.locator("#the-doc figure table", { hasText: "Column 1" }),
     ).toBeVisible();
   });
 

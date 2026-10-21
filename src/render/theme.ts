@@ -978,6 +978,54 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
        Specific enough to beat the bidi rule's text-align: start. */
     article.folio-doc td.num,
     article.folio-doc th.num { text-align: right; }
+    article.folio-doc td.align-center,
+    article.folio-doc th.align-center { text-align: center; }
+    /* The table bar names the table's kind (spec: simple-tables.md). */
+    .folio-inspector .insp-kind {
+      flex: none;
+      font-weight: 600;
+      color: var(--folio-ink-muted);
+      padding: 0 4px;
+      white-space: nowrap;
+    }
+    .folio-inspector .insp-convert {
+      flex: none;
+      margin-left: auto;
+      font: inherit;
+      font-size: 12px;
+      border: 1px solid var(--folio-rule-strong);
+      background: var(--folio-input-bg);
+      color: var(--folio-ink);
+      border-radius: 5px;
+      padding: 3px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .folio-inspector .insp-convert:hover:not(:disabled) {
+      background: var(--folio-hover);
+    }
+    .folio-inspector .insp-convert.blocked {
+      opacity: 0.6;
+    }
+    .folio-inspector .insp-chart {
+      flex: none;
+      font: inherit;
+      font-size: 12px;
+      border: 1px solid var(--folio-rule-strong);
+      background: var(--folio-input-bg);
+      color: var(--folio-ink);
+      border-radius: 5px;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+    .folio-inspector .insp-chart:hover { background: var(--folio-hover); }
+    .folio-inspector .insp-note {
+      flex-basis: 100%;
+      color: var(--folio-unit);
+      font-size: 12px;
+    }
+    /* A table bar wraps rather than running past the page. */
+    figure[data-table-kind] > .folio-inspector { flex-wrap: wrap; }
     .folio-table-scroll {
       overflow-x: auto;
       overscroll-behavior-x: contain;

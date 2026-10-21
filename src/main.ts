@@ -104,10 +104,17 @@ window.addEventListener("popstate", (ev) => {
   void openShipped(bootPath(), { history: "none", scroll });
 });
 
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
 function flash(msg: string): void {
   status.textContent = msg;
   status.classList.add("show");
-  setTimeout(() => status.classList.remove("show"), 1200);
+  // Long messages (a reason, a result) stay up long enough to read.
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(
+    () => status.classList.remove("show"),
+    Math.max(1200, msg.length * 60),
+  );
 }
 
 function renderHighlight(): void {
@@ -343,6 +350,12 @@ async function openLinkedDocument(href: string): Promise<void> {
     flash(`Could not open ${href}`);
   }
 }
+
+// The component's own short results ("Now a dataset ...").
+el.addEventListener("folio-status", (ev) => {
+  const message = (ev as CustomEvent<{ message: string }>).detail?.message;
+  if (message) flash(message);
+});
 
 el.addEventListener("folio-link", (ev) => {
   const href = (ev as CustomEvent<{ href: string }>).detail?.href;
@@ -1264,8 +1277,27 @@ function paletteEntries(): PaletteEntry[] {
   entries.push({
     title: "Insert a table",
     group: "Command",
-    keywords: "table insert new add dataset",
+    keywords: "table insert new add simple markdown pipe grid rows columns",
     action: () => btnTable.click(),
+  });
+  entries.push({
+    title: "Insert a chart",
+    group: "Command",
+    keywords: "chart graph plot bar line pie visualize visualise draw insert",
+    action: () => {
+      const why = el.insertChart();
+      flash(why ?? "Chart inserted");
+    },
+  });
+  entries.push({
+    title: "Insert a dataset",
+    group: "Command",
+    keywords:
+      "dataset data typed table formulas units chart source advanced database spreadsheet",
+    action: () => {
+      el.insertDataset();
+      flash("Dataset inserted");
+    },
   });
   entries.push({
     title: "Insert a Mermaid diagram",
@@ -1565,7 +1597,12 @@ function updatePalette(): void {
   const query = paletteInput.value.trim();
   const all = paletteEntries();
   if (!query) {
-    paletteFiltered = all.slice(0, 40);
+    // Every command, then a taste of each other group - a growing
+    // command list must never push sections and help out of sight.
+    const commands = all.filter((e) => e.group === "Command");
+    const sections = all.filter((e) => e.group === "Section").slice(0, 10);
+    const help = all.filter((e) => e.group === "Help").slice(0, 10);
+    paletteFiltered = [...commands, ...sections, ...help];
   } else {
     paletteFiltered = all
       .map((e) => ({

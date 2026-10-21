@@ -4,7 +4,7 @@
  * frontmatter, prose, headings, table and chart directive blocks.
  * serializeDoc(parseDoc(text)) === text for any canonical doc.
  */
-import type { Audio, Cell, Chart, Image, Table } from "./index.js";
+import type { Audio, Cell, Chart, Image, Table, TableAlign } from "./index.js";
 
 export interface Frontmatter {
   theme?: string;
@@ -45,6 +45,7 @@ export function parseDoc(text: string): Doc {
   const doc: Doc = { frontmatter: { style: [] }, blocks: [] };
   let i = 0;
   let imageCount = 0;
+  let simpleCount = 0;
 
   if (lines[0] === "---") {
     i = parseFrontmatter(lines, 1, doc);
@@ -143,6 +144,13 @@ export function parseDoc(text: string): Doc {
         text: heading[2] ?? "",
       });
       i++;
+      continue;
+    }
+    if (isPipeTableStart(lines, i)) {
+      simpleCount += 1;
+      const t = parsePipeTable(lines, i, `table-${String(simpleCount)}`);
+      doc.blocks.push(t.block);
+      i = t.end;
       continue;
     }
     if (LIST_ITEM_RE.test(line)) {
@@ -389,6 +397,132 @@ function parseInlineMap(raw: string): Record<string, string> {
   return out;
 }
 
+/* --- Simple tables: GitHub pipe tables (spec: docs/specs/
+ * simple-tables.md) --- */
+
+const DELIM_CELL_RE = /^:?-+:?$/;
+
+/** Split a pipe row into its cells: outer pipes dropped, `\|` is a
+ * literal pipe, each cell trimmed. */
+function pipeCells(line: string): string[] {
+  let s = line.trim();
+  if (s.startsWith("|")) s = s.slice(1);
+  if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
+  const cells: string[] = [];
+  let cur = "";
+  for (let k = 0; k < s.length; k++) {
+    const ch = s[k] ?? "";
+    if (ch === "\\" && s[k + 1] === "|") {
+      cur += "|";
+      k++;
+    } else if (ch === "|") {
+      cells.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+/** A table starts at a block start: a `|` row followed by a
+ * delimiter row (`| --- | :-: |`) - conservative, like lists. */
+function isPipeTableStart(lines: string[], i: number): boolean {
+  const head = lines[i] ?? "";
+  const delim = lines[i + 1] ?? "";
+  if (!head.trim().startsWith("|") || !delim.includes("-")) return false;
+  const cells = pipeCells(delim);
+  return (
+    cells.length === pipeCells(head).length &&
+    cells.every((c) => DELIM_CELL_RE.test(c))
+  );
+}
+
+function parsePipeTable(
+  lines: string[],
+  start: number,
+  id: string,
+): { block: DocBlock; end: number } {
+  const header = pipeCells(lines[start] ?? "");
+  const align = pipeCells(lines[start + 1] ?? "").map((c): TableAlign => {
+    const l = c.startsWith(":");
+    const r = c.endsWith(":");
+    return l && r ? "center" : r ? "right" : l ? "left" : "none";
+  });
+  const rows: Cell[][] = [];
+  let i = start + 2;
+  while (i < lines.length && (lines[i] ?? "").trim().startsWith("|")) {
+    const cells = pipeCells(lines[i] ?? "");
+    // GFM: short rows pad, excess cells are dropped.
+    rows.push(header.map((_, c) => cells[c] ?? ""));
+    i++;
+  }
+  const table: Table = {
+    id,
+    columns: header.map((name) => ({ name, type: "text" })),
+    rows,
+    simple: { align },
+  };
+  if (table.simple) {
+    table.simple.raw = lines.slice(start, i).join("\n");
+    table.simple.sig = pipeSignature(table);
+  }
+  return { block: { kind: "table", table }, end: i };
+}
+
+/** What a pipe table SAYS (names, alignments, cells), not how it is
+ * spaced - unchanged content keeps its author's layout. */
+function pipeSignature(table: Table): string {
+  return JSON.stringify([
+    table.columns.map((c) => c.name),
+    table.simple?.align ?? [],
+    table.rows.map((r) => r.map(String)),
+  ]);
+}
+
+/**
+ * A simple table in the canonical layout - Prettier's: every column
+ * padded to its widest cell (at least 3), content placed by its
+ * alignment, the delimiter row's dashes filling the width.
+ */
+function serializePipeTable(table: Table): string {
+  const raw = table.simple?.raw;
+  if (raw !== undefined && table.simple?.sig === pipeSignature(table)) {
+    return raw;
+  }
+  const align = table.simple?.align ?? [];
+  const esc = (v: Cell): string => String(v).replaceAll("|", "\\|");
+  const header = table.columns.map((c) => esc(c.name));
+  const body = table.rows.map((r) =>
+    table.columns.map((_, c) => esc(r[c] ?? "")),
+  );
+  const widths = header.map((h, c) =>
+    Math.max(3, [...h].length, ...body.map((r) => [...(r[c] ?? "")].length)),
+  );
+  const place = (text: string, c: number): string => {
+    const w = widths[c] ?? 3;
+    const gap = w - [...text].length;
+    const a = align[c] ?? "none";
+    if (a === "right") return " ".repeat(gap) + text;
+    if (a === "center") {
+      const left = Math.floor(gap / 2);
+      return " ".repeat(left) + text + " ".repeat(gap - left);
+    }
+    return text + " ".repeat(gap);
+  };
+  const row = (cells: string[]): string =>
+    `| ${cells.map((t, c) => place(t, c)).join(" | ")} |`;
+  const delim = widths.map((w, c) => {
+    const a = align[c] ?? "none";
+    if (a === "center") return ":" + "-".repeat(w - 2) + ":";
+    if (a === "right") return "-".repeat(w - 1) + ":";
+    if (a === "left") return ":" + "-".repeat(w - 1);
+    return "-".repeat(w);
+  });
+  return [row(header), `| ${delim.join(" | ")} |`, ...body.map(row)].join("\n");
+}
+
 /** A list item line (spec: docs/specs/lists.md): an UNINDENTED
  * bullet (`- `, `* `, `+ `, or a bare marker for an empty item) or
  * number (`N. `, `N) `). */
@@ -544,7 +678,9 @@ function serializeBlock(block: DocBlock): string {
     case "math":
       return "$$\n" + block.text + "\n$$";
     case "table":
-      return serializeTable(block.table);
+      return block.table.simple
+        ? serializePipeTable(block.table)
+        : serializeTable(block.table);
     case "chart":
       return serializeChart(block.chart);
     case "diagram":

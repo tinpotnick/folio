@@ -69,3 +69,23 @@ describe("link edge cases", () => {
     expect(html).toContain("![alt]");
   });
 });
+
+describe("code spans are literal", () => {
+  // Regression (first-contact eval): the help's `+ - * /` and
+  // `x * 100` turned a run of prose italic - emphasis ran INSIDE
+  // code spans.
+  it("emphasis, strike and links never apply inside code", () => {
+    expect(inlineMarkdownToHtml("ops `+ - * /`, and `a * 100` here")).toBe(
+      "ops <code>+ - * /</code>, and <code>a * 100</code> here",
+    );
+    expect(inlineMarkdownToHtml("`**not bold**` and `[x](y)`")).toBe(
+      "<code>**not bold**</code> and <code>[x](y)</code>",
+    );
+  });
+
+  it("formatting outside code still works next to it", () => {
+    expect(inlineMarkdownToHtml("*a* `*b*` **c**")).toBe(
+      "<em>a</em> <code>*b*</code> <strong>c</strong>",
+    );
+  });
+});

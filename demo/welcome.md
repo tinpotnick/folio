@@ -55,8 +55,10 @@ caption: "Where the budget goes"
 
 ## What it can do
 
-- **Typed tables** with number, text and formula columns, units in
-  the headers, and formulas that reach across rows and other tables.
+- **Tables two ways**: a plain Markdown table that GitHub shows as
+  is, or a **dataset** with typed columns, units in the headers, and
+  formulas that reach across rows and other tables. One click turns
+  a table into a dataset.
 - **Charts as queries**: bar, line, area, scatter, pie and donut,
   filtered and sorted with the same expression language as formulas.
 - **Equations, code and diagrams**: LaTeX math, syntax-highlighted
