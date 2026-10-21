@@ -60,6 +60,11 @@ document — written in the same renderer you are working with.
   `"data": {"name": "@my-dataset"}` to chart a folio dataset; the chart
   follows the table as you edit it. Data from URLs is not allowed:
   documents work offline. Search "vega" in the palette to insert one.
+- **SVG**: a block tagged `svg` is a hand-written drawing, shown as
+  it is. Use `currentColor` (the page's ink) or the theme's colours,
+  such as `var(--folio-accent)`, and it follows the theme and dark
+  mode. Scripts and anything loaded from the internet are removed.
+  Search "svg" in the palette to insert one.
 - The *Drawings from text* example shows each kind.
 
 ## 3D models

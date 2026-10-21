@@ -106,3 +106,34 @@ as a rule.
   ]
 }
 ```
+
+## SVG
+
+Sometimes the drawing is simplest to write by hand. An `svg` block
+is placed as it is: shapes and text in plain SVG. It takes the page's
+ink as `currentColor` and can use the theme's colours
+(`var(--folio-accent)`), so it changes with the theme and with dark
+mode. Scripts, and anything that would load from the internet, are
+removed.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 140" width="520">
+  <g fill="none" stroke="currentColor" stroke-width="1.5">
+    <rect x="10" y="40" width="120" height="60" rx="8"/>
+    <rect x="200" y="40" width="120" height="60" rx="8"/>
+    <rect x="390" y="40" width="120" height="60" rx="8"/>
+    <path d="M130 70 H195 M320 70 H385" marker-end="url(#arrow)"/>
+  </g>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g font-size="15" text-anchor="middle" fill="currentColor">
+    <text x="70" y="75">Write</text>
+    <text x="260" y="75">Draw</text>
+    <text x="450" y="75" fill="var(--folio-accent)">Publish</text>
+  </g>
+</svg>
+```

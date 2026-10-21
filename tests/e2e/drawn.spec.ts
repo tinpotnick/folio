@@ -131,3 +131,58 @@ test.describe("Vega-Lite", () => {
     ).toHaveCount(1, { timeout: 15_000 });
   });
 });
+
+test.describe("SVG drawings", () => {
+  test("the sample draws, following the theme's ink", async ({ page }) => {
+    await page.goto("/?doc=demo/examples/drawings.md");
+    const svg = page.locator("#the-doc figure.folio-svg .code-view svg");
+    await expect(svg).toBeVisible({ timeout: 10_000 });
+    const ink = await svg
+      .locator("text")
+      .first()
+      .evaluate((el) => getComputedStyle(el).fill);
+    const article = await page
+      .locator("#the-doc article")
+      .evaluate((el) => getComputedStyle(el).color);
+    expect(ink).toBe(article);
+  });
+
+  test("scripts, handlers and outside loads are removed", async ({ page }) => {
+    const remote: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("example.com")) remote.push(r.url());
+    });
+    let alerted = false;
+    page.on("dialog", (d) => {
+      alerted = true;
+      void d.dismiss();
+    });
+    await loadDoc(
+      page,
+      '# T\n\n```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><script>alert(1)</script><rect width="5" height="5" onclick="alert(2)"/><image href="https://example.com/x.png" width="5" height="5"/></svg>\n```\n',
+    );
+    const view = page.locator("#the-doc figure.folio-svg .code-view");
+    await expect(view.locator("rect")).toHaveCount(1);
+    const html = await view.innerHTML();
+    expect(html).not.toMatch(/script|onclick|example\.com/);
+    await view.locator("rect").click({ force: true });
+    expect(alerted).toBe(false);
+    expect(remote).toEqual([]);
+  });
+
+  test("markup that is not SVG says so; the palette inserts one", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n```svg\n<div>no</div>\n```\n\nIntro\n");
+    await expect(page.locator("#the-doc .drawn-error")).toContainText(
+      "Drawing error: not valid SVG",
+    );
+    await page.locator("#the-doc p", { hasText: "Intro" }).click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("svg drawing");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("#the-doc figure.folio-svg .code-view svg"),
+    ).toHaveCount(1);
+  });
+});

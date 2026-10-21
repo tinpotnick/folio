@@ -1463,6 +1463,15 @@ function paletteEntries(): PaletteEntry[] {
     action: () => btnTable.click(),
   });
   entries.push({
+    title: "Insert an SVG drawing",
+    group: "Command",
+    keywords: "svg drawing vector illustration figure shapes markup insert",
+    action: () => {
+      el.insertSvg();
+      flash("SVG drawing inserted");
+    },
+  });
+  entries.push({
     title: "Insert a Graphviz diagram (DOT)",
     group: "Command",
     keywords:

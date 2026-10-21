@@ -228,11 +228,19 @@ const DRAWN_LANGS: Record<string, string> = {
   dot: "Graphviz diagram",
   graphviz: "Graphviz diagram",
   "vega-lite": "Vega-Lite chart",
+  svg: "SVG drawing",
 };
 
 function isDrawnLang(lang: string | undefined): boolean {
   return lang !== undefined && lang in DRAWN_LANGS;
 }
+
+const SVG_STARTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" width="240">
+  <rect x="10" y="10" width="220" height="100" rx="12"
+        fill="none" stroke="currentColor" stroke-width="2"/>
+  <circle cx="70" cy="60" r="28" fill="var(--folio-accent)"/>
+  <text x="115" y="66" font-size="18" fill="currentColor">Hello</text>
+</svg>`;
 
 const VEGA_STARTER = `{
   "data": { "values": [
@@ -975,6 +983,7 @@ export class FolioDoc extends HTMLElement {
     if (lang === "jscad") return this.drawJscad(figure);
     if (lang === "dot" || lang === "graphviz") return this.drawGraphviz(figure);
     if (lang === "vega-lite") return this.drawVegaLite(figure);
+    if (lang === "svg") return this.drawSvg(figure);
     return Promise.resolve();
   }
 
@@ -982,6 +991,40 @@ export class FolioDoc extends HTMLElement {
   private drawnError(view: HTMLElement, what: string, e: unknown): void {
     view.textContent = `${what} error: ${e instanceof Error ? e.message : String(e)}`;
     view.classList.add("drawn-error");
+  }
+
+  /* --- SVG (spec: docs/specs/drawn-blocks.md) --- */
+
+  /**
+   * A hand-written SVG drawing, sanitized (no scripts, no handlers,
+   * nothing loaded from outside). It inherits the page's ink as
+   * `currentColor` and may use the theme's variables
+   * (`var(--folio-accent)` ...), so it follows the theme and the mode.
+   */
+  private drawSvg(figure: HTMLElement): Promise<void> {
+    const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+    const view = figure.querySelector<HTMLElement>(".code-view");
+    if (!code || !view) return Promise.resolve();
+    try {
+      view.innerHTML = sanitizeSvg(this.codeText(code));
+      view.classList.remove("drawn-error");
+    } catch (e) {
+      this.drawnError(view, "Drawing", e);
+    }
+    return Promise.resolve();
+  }
+
+  /** Insert a starter SVG drawing after the caret's block. */
+  insertSvg(): void {
+    if (!this.doc) return;
+    const { at, replace } = this.insertionPoint(this.blockIndexAtCaret());
+    this.doc.blocks.splice(at, replace, {
+      kind: "code",
+      lang: "svg",
+      text: SVG_STARTER,
+    });
+    this.render();
+    this.emitChange();
   }
 
   /* --- Vega-Lite (spec: docs/specs/drawn-blocks.md, ADR-0022) --- */
