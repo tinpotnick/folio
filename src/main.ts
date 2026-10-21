@@ -1324,6 +1324,23 @@ const EXAMPLES: { id: string; file: string; blurb: string }[] = [
     blurb: "music strudel audio beats pattern fun player",
   },
   {
+    id: "sales-review",
+    file: "/demo/examples/sales-review.md",
+    blurb:
+      "sales quarterly review report revenue regions pipeline heatmap stacked",
+  },
+  {
+    id: "design-review",
+    file: "/demo/examples/design-review.md",
+    blurb:
+      "engineering design review bracket variants 3d model stl requirements",
+  },
+  {
+    id: "practice-journal",
+    file: "/demo/examples/practice-journal.md",
+    blurb: "music practice journal log sheet music exercises charts",
+  },
+  {
     id: "drawings",
     file: "/demo/examples/drawings.md",
     blurb: "drawings graphviz dot graph diagram vega svg music notation",

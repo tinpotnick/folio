@@ -78,6 +78,14 @@ Each one opens in place; the folio wordmark brings you back here.
 - [Q3 Field Operations Review](demo/examples/field-operations.md) - a
   quarterly report with live regional figures, running totals and
   charts.
+- [Q3 Sales Review](demo/examples/sales-review.md) - regions, product
+  mix and targets as multi-series charts, a heatmap, and the sales
+  pipeline as a graph.
+- [Bracket design review](demo/examples/design-review.md) - three
+  variants in a table driving a 3D model, mass against stiffness, a
+  dimensioned sketch and a requirements trace.
+- [A practice journal](demo/examples/practice-journal.md) - a practice
+  log charted week by week, and two short studies you can play.
 - [Management accounts](demo/examples/accounts.md) - formulas,
   budgets and a chart that shows a decline.
 - [An imported data report](demo/examples/report.md) - 72 rows of
