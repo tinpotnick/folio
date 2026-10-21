@@ -25,6 +25,14 @@ document — written in the same renderer you are working with.
 - The **☰** button (tooltip "Sections") toggles the outline
   sidebar. Click a section to jump straight to it.
 
+## Unsaved changes
+
+- If you have edited a document and then open another one (an
+  example, a link, the welcome page, Back, or Open), folio asks
+  first: **Save...** (in the desktop app), **Discard changes**, or
+  **Cancel**. Closing the window or tab with unsaved edits asks too.
+  Undoing all your edits counts as unchanged.
+
 ## Welcome page and examples
 
 - folio opens on its **welcome page**: what folio is, a live table

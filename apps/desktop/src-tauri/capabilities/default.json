@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Main window capabilities for the folio desktop host",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-destroy",
+    "dialog:default"
+  ]
 }
