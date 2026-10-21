@@ -323,4 +323,48 @@ test.describe("nested lists", () => {
       await page.keyboard.press("Escape");
     }
   });
+
+  test("Shift+Tab on a top-level item makes it a paragraph; numbering continues", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n1. a\n2. b\n3. c\n");
+    await page.locator("#the-doc li", { hasText: /^b$/ }).click();
+    await page.keyboard.press("Shift+Tab");
+    await expect(
+      page.locator("#the-doc article > p", { hasText: "b" }),
+    ).toBeVisible();
+    // The caret stayed: typing goes into the new paragraph.
+    await page.keyboard.press("End");
+    await page.keyboard.type("!");
+    expect(await source(page)).toContain("1. a\n\nb!\n\n3. c\n");
+  });
+
+  test("Backspace at an item's start removes the bullet before merging", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n- one\n  - two\n- three\n");
+    await page.locator("#the-doc li li", { hasText: "two" }).click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Backspace");
+    // Nested: lifts a level first.
+    await expect(page.locator("#the-doc article > ul > li")).toHaveCount(3);
+    await page.keyboard.press("Backspace");
+    // Top level: becomes a paragraph between the two halves.
+    await expect(
+      page.locator("#the-doc article > p", { hasText: "two" }),
+    ).toBeVisible();
+    expect(await source(page)).toContain("- one\n\ntwo\n\n- three\n");
+  });
+
+  test("the bullet button stays lit after Tab and Shift+Tab", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n- one\n- two\n");
+    await page.locator("#the-doc li", { hasText: "two" }).click();
+    await page.keyboard.press("Tab");
+    const bullet = page.locator('#block-bar button[data-block="ul"]');
+    await expect(bullet).toHaveClass(/active/);
+    await page.keyboard.press("Shift+Tab");
+    await expect(bullet).toHaveClass(/active/);
+  });
 });

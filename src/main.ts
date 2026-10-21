@@ -187,7 +187,7 @@ type ShadowRootWithSelection = ShadowRoot & {
 };
 
 type SelectionWithComposedRanges = Selection & {
-  getComposedRanges?: () => { startContainer: Node }[];
+  getComposedRanges?: (...roots: unknown[]) => { startContainer: Node }[];
 };
 
 /**
@@ -215,10 +215,20 @@ function docSelectionAnchor(
   const docSel = document.getSelection();
   const docAnchor = inside(docSel?.anchorNode ?? null);
   if (docAnchor !== null) return docAnchor;
-  // Selection.getComposedRanges() pierces shadow roots where present.
-  for (const r of (
-    docSel as SelectionWithComposedRanges | null
-  )?.getComposedRanges?.() ?? []) {
+  // Selection.getComposedRanges() pierces shadow roots - but only the
+  // ones it is GIVEN: called bare, WebKit reports the caret on the
+  // host element, and the toolbar went stale after every keystroke
+  // in the desktop app.
+  const composed = (): { startContainer: Node }[] => {
+    const s = docSel as SelectionWithComposedRanges | null;
+    if (!s?.getComposedRanges || !root) return [];
+    try {
+      return s.getComposedRanges({ shadowRoots: [root] });
+    } catch {
+      return s.getComposedRanges(root);
+    }
+  };
+  for (const r of composed()) {
     const n = inside(r.startContainer);
     if (n !== null) return n;
   }

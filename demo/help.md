@@ -49,7 +49,10 @@ document — written in the same renderer you are working with.
   paragraph.
   Items take bold, italic, code and links like any paragraph.
 - **Tab** nests an item under the one above it; **Shift+Tab** lifts
-  it back out (or search "indent" / "outdent" in the palette). A
+  it back out, and on a top-level item turns it into a normal
+  paragraph (or search "indent" / "outdent" in the palette).
+  **Backspace** at the start of an item does the same step back
+  before it joins any lines. A
   nested list can be bulleted inside a numbered one, or the other way
   round: with the caret in the sub-list, press the Bulleted or
   Numbered list button (it changes just that sub-list), or type

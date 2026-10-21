@@ -3648,14 +3648,22 @@ export class FolioDoc extends HTMLElement {
    * caret inside the component. Without it every caret-aware command
    * acted on the last CLICKED block instead.
    */
-  private caretPoint(): { node: Node; offset: number } | null {
+  private caretPoint(): {
+    node: Node;
+    offset: number;
+    collapsed: boolean;
+  } | null {
     const root = this.shadowRoot as
       (ShadowRoot & { getSelection?: () => Selection | null }) | null;
     if (!root) return null;
     if (typeof root.getSelection === "function") {
       const sel = root.getSelection();
       return sel && sel.rangeCount > 0 && sel.anchorNode
-        ? { node: sel.anchorNode, offset: sel.anchorOffset }
+        ? {
+            node: sel.anchorNode,
+            offset: sel.anchorOffset,
+            collapsed: sel.isCollapsed,
+          }
         : null;
     }
     const ds = document.getSelection() as
@@ -3674,7 +3682,11 @@ export class FolioDoc extends HTMLElement {
     }
     const r = ranges[0];
     return r && root.contains(r.startContainer)
-      ? { node: r.startContainer, offset: r.startOffset }
+      ? {
+          node: r.startContainer,
+          offset: r.startOffset,
+          collapsed: r.collapsed,
+        }
       : null;
   }
 
@@ -3770,7 +3782,9 @@ export class FolioDoc extends HTMLElement {
     const li = this.caretListItem();
     const list = li?.parentElement;
     const parentLi = list?.parentElement;
-    if (!li || !list || parentLi?.tagName !== "LI") return false;
+    if (!li || !list) return false;
+    // On a TOP-level item, Shift+Tab steps out of the list entirely.
+    if (parentLi?.tagName !== "LI") return this.liftOutOfList(li);
     this.moveListItem(li, () => {
       // Later siblings stay AFTER it: they become its own sub-list.
       const followers = Array.from(list.children).filter(
@@ -3792,6 +3806,53 @@ export class FolioDoc extends HTMLElement {
       if (list.children.length === 0) list.remove();
     });
     return true;
+  }
+
+  /**
+   * Turn a TOP-level list item into a paragraph, splitting the list
+   * around it (spec: docs/specs/lists.md): items before stay, the
+   * item's own sub-list and the items after follow the paragraph as
+   * lists (a numbered tail keeps counting). The caret stays put.
+   */
+  private liftOutOfList(li: HTMLElement): boolean {
+    const list = li.parentElement;
+    if (!list?.parentElement?.matches("article.folio-doc")) return false;
+    const at = this.caretPoint();
+    const isSub = (c: Element): boolean => /^(UL|OL)$/.test(c.tagName);
+    const sub = Array.from(li.children).find(isSub) as HTMLElement | undefined;
+    const before = Array.from(list.children).indexOf(li);
+    const after = Array.from(list.children).slice(before + 1);
+    const p = document.createElement("p");
+    for (const n of Array.from(li.childNodes)) if (n !== sub) p.appendChild(n);
+    if (p.childNodes.length === 0) p.appendChild(document.createElement("br"));
+    const tail: HTMLElement[] = sub ? [sub] : [];
+    if (after.length > 0) {
+      const rest = document.createElement(list.tagName.toLowerCase());
+      if (list instanceof HTMLOListElement) {
+        (rest as HTMLOListElement).start = list.start + before + 1;
+      }
+      rest.append(...after);
+      tail.push(rest);
+    }
+    li.remove();
+    list.after(p, ...tail);
+    if (list.children.length === 0) list.remove();
+    if (at && p.contains(at.node)) this.setCaret(at.node, at.offset);
+    else this.setCaret(p, 0);
+    this.syncFromDom();
+    this.emitChange();
+    this.trackCaret();
+    return true;
+  }
+
+  /** Whether the caret is collapsed at the very start of `li`'s text. */
+  private caretAtItemStart(li: HTMLElement): boolean {
+    const at = this.caretPoint();
+    if (!at?.collapsed || !li.contains(at.node)) return false;
+    const r = document.createRange();
+    r.setStart(li, 0);
+    r.setEnd(at.node, at.offset);
+    return r.toString().replace(/\u200b/g, "") === "";
   }
 
   /** Whether the caret sits in a list, and which kind. */
@@ -4348,6 +4409,28 @@ export class FolioDoc extends HTMLElement {
       }
       this.handleTableNav(ev, cell);
       return;
+    }
+    // Lists: Backspace at the very START of an item removes its
+    // bullet first - a nested item lifts a level, a top-level one
+    // becomes a paragraph - like a word processor. Only a second
+    // Backspace merges lines.
+    if (
+      ev.key === "Backspace" &&
+      !ev.shiftKey &&
+      !ev.ctrlKey &&
+      !ev.metaKey &&
+      !ev.altKey
+    ) {
+      const li = this.caretListItem();
+      if (li && this.caretAtItemStart(li)) {
+        ev.preventDefault();
+        if (li.parentElement?.parentElement?.tagName === "LI") {
+          this.outdentListItem();
+        } else {
+          this.liftOutOfList(li);
+        }
+        return;
+      }
     }
     // Lists (spec: docs/specs/lists.md): Tab nests the caret's item,
     // Shift+Tab lifts it. Outside a list, Tab keeps its usual job.

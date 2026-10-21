@@ -77,8 +77,14 @@ code, links), and may contain `\n` from a wrapped source line.
   that item's sub-list, or starting one of the same kind); it does
   nothing on a list's first item. **Shift+Tab** lifts a nested item
   one level, placing it right after its parent and taking its later
-  siblings along as its own sub-list (order is kept). The caret
-  stays put. The palette has **Indent list item (Tab)** and
+  siblings along as its own sub-list (order is kept). On a TOP-level
+  item, Shift+Tab steps out of the list: the item becomes a
+  paragraph and the list splits around it (a numbered tail keeps
+  counting). The caret stays put.
+- **Backspace at the very start of an item** removes the bullet
+  before anything merges, like a word processor: a nested item lifts
+  a level, and a top-level item becomes a paragraph (as Shift+Tab).
+  Only a further Backspace merges lines. The palette has **Indent list item (Tab)** and
   **Outdent list item (Shift+Tab)** (also found by "demote",
   "promote", "increase/decrease indent", "level").
 - **In a sub-list, the list buttons act on THAT sub-list**: Bulleted

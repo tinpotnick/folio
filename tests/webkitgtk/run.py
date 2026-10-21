@@ -6,7 +6,9 @@ exercises. Each `*.js` case is an async function body that returns a
 string; a case passes when every "| name: value" check it reports is
 "true". A case whose first line is `// native-key: shift+ISO_Left_Tab`
 (modifiers joined with +) gets that REAL GTK key press after its body
-runs, and its result is then read from `window.__folioCheck()` -
+runs (several presses: separate them with spaces, e.g.
+`// native-key: o n e Return Tab shift+ISO_Left_Tab`), and its result
+is then read from `window.__folioCheck()` -
 synthetic DOM events cannot catch how the engine names real keys. Needs: python3-gobject, webkit2gtk-4.1, a display, and the dev
 server (`npm run dev`) on http://localhost:5173.
 
@@ -69,8 +71,17 @@ def run_case(path, done):
             out = f"error: {e}"
         if native and not out.startswith("error"):
             view.grab_focus()
-            send_native(view, native)
-            GLib.timeout_add(600, check)
+            presses = native.split()
+
+            def press(i=0):
+                if i >= len(presses):
+                    GLib.timeout_add(600, check)
+                    return False
+                send_native(view, presses[i])
+                GLib.timeout_add(120, press, i + 1)
+                return False
+
+            press()
             return
         win.destroy()
         done(out)
