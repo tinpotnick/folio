@@ -34,6 +34,7 @@ export const CODE_LANGUAGES: CodeLanguage[] = [
   { id: "sql", label: "SQL" },
   { id: "strudel", label: "Strudel (music)" },
   { id: "jscad", label: "JSCAD (3D model)" },
+  { id: "dot", label: "Graphviz (DOT diagram)" },
   { id: "toml", label: "TOML" },
   { id: "typescript", label: "TypeScript" },
   { id: "xml", label: "XML" },

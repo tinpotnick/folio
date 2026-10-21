@@ -25,6 +25,7 @@ import { registerFonts } from "./render/fonts.js";
 import { formatComputed } from "./render/number.js";
 import { meshToSvg, VIEWS, type MeshPolygon } from "./render/mesh-svg.js";
 import { meshToStl } from "./render/stl.js";
+import { sanitizeSvg } from "./render/svg-sanitize.js";
 import {
   renderAreaChart,
   renderBarChart,
@@ -215,6 +216,27 @@ function mixHex(a: string, b: string, t: number): string {
       .join("")
   );
 }
+
+/**
+ * Code languages whose block is DRAWN (spec: docs/specs/
+ * drawn-blocks.md): the figure is the picture, the code shows on
+ * click. Value: the picture's accessible name.
+ */
+const DRAWN_LANGS: Record<string, string> = {
+  jscad: "3D model",
+  dot: "Graphviz diagram",
+  graphviz: "Graphviz diagram",
+};
+
+function isDrawnLang(lang: string | undefined): boolean {
+  return lang !== undefined && lang in DRAWN_LANGS;
+}
+
+const GRAPHVIZ_STARTER = `digraph {
+  rankdir=LR
+  draft -> review -> publish
+  review -> draft [label="changes"]
+}`;
 
 /** A JSCAD script that runs longer than this is stopped (ADR-0020). */
 const JSCAD_TIMEOUT_MS = 5000;
@@ -892,11 +914,12 @@ export class FolioDoc extends HTMLElement {
   private renderCode(block: CodeBlock, idx: number): HTMLElement {
     const strudel = block.lang === "strudel";
     const jscad = block.lang === "jscad";
+    const drawn = isDrawnLang(block.lang);
     const figure = document.createElement("figure");
     figure.className = strudel
       ? "folio-codeblock folio-strudel"
-      : jscad
-        ? "folio-codeblock folio-jscad"
+      : drawn
+        ? `folio-codeblock folio-drawn folio-${block.lang ?? ""}`
         : "folio-codeblock";
     figure.dataset.blockIndex = String(idx);
     if (block.lang !== undefined) figure.dataset.lang = block.lang;
@@ -904,16 +927,19 @@ export class FolioDoc extends HTMLElement {
     // DOM -> model sync keeps it (it was dropped on every keystroke).
     if (block.info !== undefined) figure.dataset.info = block.info;
     figure.appendChild(this.buildCodeInspector(figure, block));
-    if (jscad) {
-      // The MODEL is the figure (spec: docs/specs/jscad-blocks.md);
+    if (drawn) {
+      // The DRAWING is the figure (spec: docs/specs/drawn-blocks.md);
       // its code shows only while the header is open.
       const view = document.createElement("div");
-      view.className = "jscad-view";
+      view.className = jscad ? "code-view jscad-view" : "code-view";
       view.contentEditable = "false";
       view.setAttribute("role", "img");
-      view.setAttribute("aria-label", "3D model");
-      view.textContent = "Building the model…";
-      this.attachJscadRotate(figure, view);
+      view.setAttribute(
+        "aria-label",
+        DRAWN_LANGS[block.lang ?? ""] ?? "drawing",
+      );
+      view.textContent = "Drawing…";
+      if (jscad) this.attachJscadRotate(figure, view);
       figure.appendChild(view);
     }
     const pre = document.createElement("pre");
@@ -924,8 +950,81 @@ export class FolioDoc extends HTMLElement {
     pre.appendChild(code);
     figure.appendChild(pre);
     void this.highlightCode(figure);
-    if (jscad) void this.drawJscad(figure);
+    if (drawn) void this.drawDrawn(figure);
     return figure;
+  }
+
+  /** Draw a drawn-language figure from its code (by language). */
+  private drawDrawn(figure: HTMLElement): Promise<void> {
+    const lang = figure.dataset.lang ?? "";
+    if (lang === "jscad") return this.drawJscad(figure);
+    if (lang === "dot" || lang === "graphviz") return this.drawGraphviz(figure);
+    return Promise.resolve();
+  }
+
+  /** Show a drawn figure's error as its content. */
+  private drawnError(view: HTMLElement, what: string, e: unknown): void {
+    view.textContent = `${what} error: ${e instanceof Error ? e.message : String(e)}`;
+    view.classList.add("drawn-error");
+  }
+
+  /* --- Graphviz (spec: docs/specs/drawn-blocks.md) --- */
+
+  private vizReady: Promise<{
+    renderString(src: string, opts: Record<string, unknown>): string;
+  }> | null = null;
+
+  /**
+   * Lay out and draw DOT with Graphviz (WebAssembly, bundled, lazily
+   * loaded). The theme supplies DEFAULT attributes - fonts, ink,
+   * node fill, edge colour - which a graph's own attributes override.
+   * The SVG is sanitized: DOT's URL/href attributes become links.
+   */
+  private async drawGraphviz(figure: HTMLElement): Promise<void> {
+    const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+    const view = figure.querySelector<HTMLElement>(".code-view");
+    if (!code || !view || !this.doc) return;
+    try {
+      const { instance } = await import("@viz-js/viz");
+      this.vizReady ??= instance();
+      const viz = await this.vizReady;
+      const theme = themeFromDoc(this.doc);
+      const c = theme.colors[this.mode()];
+      const font = /^"([^"]+)"/.exec(theme.bodyFont)?.[1] ?? "sans-serif";
+      const raw = viz.renderString(this.codeText(code), {
+        format: "svg",
+        graphAttributes: {
+          bgcolor: "transparent",
+          fontname: font,
+          fontcolor: c.ink,
+          color: c.rule,
+          pad: "0.15",
+        },
+        nodeAttributes: {
+          fontname: font,
+          fontcolor: c.ink,
+          color: c.accent,
+          fillcolor: c.tint,
+          style: "filled",
+          penwidth: "1.2",
+          // Graphviz measures text with its own metrics, not the
+          // theme's face: a little more room keeps labels off the edge.
+          margin: "0.16,0.07",
+        },
+        edgeAttributes: {
+          fontname: font,
+          fontcolor: c.muted,
+          color: c.muted,
+          arrowsize: "0.7",
+        },
+      });
+      // Natural size (Graphviz's own), shrunk only when wider than the
+      // page (CSS max-width) - small graphs must not blow up.
+      view.innerHTML = sanitizeSvg(raw);
+      view.classList.remove("drawn-error");
+    } catch (e) {
+      this.drawnError(view, "Diagram", e);
+    }
   }
 
   /* --- JSCAD models (spec: docs/specs/jscad-blocks.md, ADR-0020) --- */
@@ -1084,16 +1183,16 @@ export class FolioDoc extends HTMLElement {
     void this.drawJscad(figure);
   }
 
-  /** Typing in a model's code rebuilds it once the typing pauses. */
+  /** Typing in a drawing's code redraws it once the typing pauses. */
   private scheduleJscadRedraw(): void {
     const at = this.caretPoint()?.node ?? null;
     const el = at instanceof Element ? at : (at?.parentElement ?? null);
-    const figure = el?.closest<HTMLElement>("figure.folio-jscad");
+    const figure = el?.closest<HTMLElement>("figure.folio-drawn");
     if (!figure) return;
     if (this.jscadRedraw) clearTimeout(this.jscadRedraw);
     this.jscadRedraw = setTimeout(() => {
       this.jscadRedraw = null;
-      void this.drawJscad(figure);
+      void this.drawDrawn(figure);
     }, 600);
   }
 
@@ -1291,6 +1390,19 @@ export class FolioDoc extends HTMLElement {
       return { at: idx, replace: 1 };
     }
     return { at: idx >= 0 ? idx + 1 : blocks.length, replace: 0 };
+  }
+
+  /** Insert a starter Graphviz diagram after the caret's block. */
+  insertGraphviz(): void {
+    if (!this.doc) return;
+    const { at, replace } = this.insertionPoint(this.blockIndexAtCaret());
+    this.doc.blocks.splice(at, replace, {
+      kind: "code",
+      lang: "dot",
+      text: GRAPHVIZ_STARTER,
+    });
+    this.render();
+    this.emitChange();
   }
 
   /** Insert a starter 3D model after the caret's block. */
@@ -3652,11 +3764,12 @@ export class FolioDoc extends HTMLElement {
     )) {
       void this.drawDiagram(fig);
     }
-    // Models take the mode's palette too.
+    // Drawings take the mode's palette too (models only re-project).
     for (const fig of Array.from(
-      root.querySelectorAll<HTMLElement>("figure.folio-jscad"),
+      root.querySelectorAll<HTMLElement>("figure.folio-drawn"),
     )) {
-      this.paintJscad(fig);
+      if (fig.dataset.lang === "jscad") this.paintJscad(fig);
+      else void this.drawDrawn(fig);
     }
   }
 

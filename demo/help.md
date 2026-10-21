@@ -44,6 +44,18 @@ document — written in the same renderer you are working with.
   `?doc=demo/examples/poem.md` opens folio straight onto that
   document.
 
+## Drawings from text
+
+- Some code blocks draw a picture instead of showing code. The
+  drawing is the figure; click it to see and edit its source (it
+  redraws as you type).
+- **Graphviz**: a block tagged `dot` draws a graph laid out by
+  [Graphviz](https://graphviz.org). List the nodes and edges
+  (`a -> b`); Graphviz places them. Search "graphviz" in the palette
+  to insert one. The theme sets its fonts and colours unless the
+  graph sets its own.
+- The *Drawings from text* example shows each kind.
+
 ## 3D models
 
 - A code block tagged `jscad` draws a **3D model** from
