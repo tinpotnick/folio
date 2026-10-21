@@ -62,6 +62,14 @@ see.
   expressions are free Jexl text and do not — a rename that
   orphans a formula reference surfaces as the table's error
   line, never a crash.
+- **Layout**: a table never runs past its page. The table sits
+  in a `.folio-table-scroll` wrapper that scrolls sideways INSIDE
+  the measure when the columns are wider than the page; numeric
+  cells never wrap mid-value. Number and formula columns
+  right-align, header included (ADR-0002: alignment derives from
+  the column type). The rule is specific enough to beat the bidi
+  `text-align: start` rule, which had silently left-aligned every
+  number. e2e: `tests/e2e/table-layout.spec.ts`.
 - **Guarded table render**: `renderTable` wraps `recalcTable` in
   try/catch. A broken formula (renamed column, bad reference,
   bad Jexl) renders the figure as an error line ("Table error:

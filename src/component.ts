@@ -20,6 +20,7 @@ import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
 import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
 import { themeFromDoc, themeCss, type Mode } from "./render/theme.js";
 import { registerFonts } from "./render/fonts.js";
+import { formatComputed } from "./render/number.js";
 import {
   renderAreaChart,
   renderBarChart,
@@ -1185,10 +1186,7 @@ export class FolioDoc extends HTMLElement {
         if (col.type === "formula") {
           td.classList.add("folio-formula");
           td.contentEditable = "false";
-          td.textContent =
-            col.format === "percent" && typeof v === "number"
-              ? `${(v * 100).toFixed(1)}%`
-              : String(v ?? "");
+          td.textContent = formatComputed(v, col.format);
           if (typeof v === "number") td.classList.add("num");
         } else {
           if (col.type === "number") {
@@ -1309,7 +1307,12 @@ export class FolioDoc extends HTMLElement {
         }
       }
     });
-    figure.appendChild(table);
+    // A table wider than the page scrolls sideways INSIDE it -
+    // never past the paper's edge.
+    const scroller = document.createElement("div");
+    scroller.className = "folio-table-scroll";
+    scroller.appendChild(table);
+    figure.appendChild(scroller);
     if (shownRows < totalRows) {
       const more = document.createElement("div");
       more.className = "folio-table-more";
@@ -2390,10 +2393,8 @@ export class FolioDoc extends HTMLElement {
         const v = recalced.rows[modelRow]?.[c];
         if (col.type === "formula") {
           cell.classList.add("computed");
-          cell.textContent =
-            col.format === "percent" && typeof v === "number"
-              ? `${(v * 100).toFixed(1)}%`
-              : String(v ?? "");
+          cell.textContent = formatComputed(v, col.format);
+          if (typeof v === "number") cell.classList.add("num");
         } else {
           if (typeof v === "number") cell.classList.add("num");
           cell.textContent = String(v ?? "");
@@ -2566,9 +2567,10 @@ export class FolioDoc extends HTMLElement {
       const seriesColor = palette[ordinal % palette.length] ?? "#3d5a98";
       const select = block.chart.query.select;
       const valueCol = select[select.length - 1] ?? "";
-      const unit =
-        tableBlock.table.columns.find((c) => c.name === valueCol)?.unit ??
-        undefined;
+      const valueColumn = tableBlock.table.columns.find(
+        (c) => c.name === valueCol,
+      );
+      const unit = valueColumn?.unit ?? undefined;
       const style: ChartStyle = {
         color: seriesColor,
         colors: palette,
@@ -2576,6 +2578,7 @@ export class FolioDoc extends HTMLElement {
         textMuted: ink.muted,
         grid: ink.hairline,
         paper: ink.paper,
+        valueFormat: valueColumn?.format,
         xTitle: select[0],
         yTitle:
           valueCol === ""
@@ -2907,10 +2910,8 @@ export class FolioDoc extends HTMLElement {
           );
           if (!cell) continue;
           const v = recalcedOther.rows[row]?.[c];
-          cell.textContent =
-            col.format === "percent" && typeof v === "number"
-              ? `${(v * 100).toFixed(1)}%`
-              : String(v ?? "");
+          cell.textContent = formatComputed(v, col.format);
+          if (typeof v === "number") cell.classList.add("num");
           cell.classList.toggle("num", typeof v === "number");
         }
       });

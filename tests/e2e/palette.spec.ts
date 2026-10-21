@@ -199,7 +199,7 @@ test.describe("example documents", () => {
     const svg = await page
       .locator('figure[data-chart-source="pl"] svg')
       .textContent();
-    expect(svg).toContain("-0.15");
+    expect(svg).toContain("-15.3%"); // labeled like the table
   });
 
   test("Open example: technical renders code, math, and a diagram", async ({

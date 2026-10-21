@@ -28,7 +28,7 @@ $$
 C = \sum_{i=1}^{n} r_i \cdot f_c
 $$
 
-where *r* is rows and *f<sub>c</sub>* the cost per column.
+where *r* is the row count and *f_c* the cost per column.
 
 ::: table {#bench}
 caption: "Recalc cost vs document size (milliseconds)"

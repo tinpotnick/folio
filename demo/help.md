@@ -194,7 +194,9 @@ caption: "Quarter-on-quarter growth by region"
   column as x and the last as y, both numeric.
 - **caption** is the figure caption.
 
-Chart colors come from the theme. To pick a palette yourself, set
+Charts label values the way the table does: a `format: percent`
+column reads `21.6%` on the chart too. Chart colors come from the
+theme. To pick a palette yourself, set
 `chart.palette` in the style header: `muted`, `corporate`, `ink`,
 `warm`, `sepia`, `vivid`, `news`, `jewel`, `mono`, or `swiss`. Each
 has a matching set for dark mode.
@@ -220,6 +222,11 @@ at(k)`): `sum`, `count`, `mean`, `median`, `stdev`, `first`,
 `last`, `at`, `dftRe`, `dftIm`, `dftMag`, `dftPhase`, `fft`,
 `sma`. See the *Signals and spectra* example for a full
 walkthrough.
+
+Computed cells show at most six decimal places (`0.006213`, not
+`0.0062132653273250064`); the exact value is still what formulas,
+charts and exports use. A table wider than the page scrolls
+sideways inside the page.
 
 Formulas may reference other rows and other tables, all through
 the same namespaced references (plain Jexl context objects - rows

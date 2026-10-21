@@ -140,6 +140,20 @@ formula cell in place (text-only updates, no structural re-render,
 caret untouched), then refreshes every OTHER table's formula cells
 that may reference it, plus dependent charts.
 
+## Display
+
+A formula result is a float; printed raw it reads
+`0.0062132653273250064`, which is noise in a report and pushes a
+table past its page. Computed cells (in the document AND the
+dataset browser) DISPLAY at most six decimal places with trailing
+zeros trimmed (`0.006213`, `0.5`); integers print as-is; a non-zero
+value too small for six places keeps three significant figures
+(`1.23e-9`), so it never shows as a false `0`; `format: percent`
+keeps its one-decimal percentage. This is display only: the model,
+formulas, chart queries and exports see the exact value. Typed
+number cells show exactly what was typed. (`formatComputed` in
+src/render/number.ts; unit tests in `tests/render/number.test.ts`.)
+
 ## Syntax note
 
 `_prev`/`_rN` (an earlier draft of this language) were renamed to
