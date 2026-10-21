@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { insertFrom } from "./toolbar-helpers";
 
 /**
  * Strudel music blocks (ADR-0014, spec: docs/specs/
@@ -350,7 +351,7 @@ test.describe("strudel music blocks", () => {
     // The button needs an editable caret: give the doc a paragraph.
     await loadDoc(page, "# T\n\nsome prose\n");
     await page.locator("#the-doc p").first().click();
-    await page.locator("#btn-strudel").click();
+    await insertFrom(page, "btn-strudel");
     await expect(page.locator("#the-doc figure.folio-strudel")).toBeVisible();
   });
 

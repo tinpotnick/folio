@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { insertFrom } from "./toolbar-helpers";
 
 /**
  * The code header and syntax highlighting (spec: docs/specs/
@@ -161,7 +162,7 @@ test.describe("code body integrity", () => {
     await page.locator("#the-doc p", { hasText: "Intro" }).click();
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
-    await page.locator("#btn-code").click();
+    await insertFrom(page, "btn-code");
     await page.keyboard.type("line one");
     await page.keyboard.press("Enter");
     await page.keyboard.type("line two");

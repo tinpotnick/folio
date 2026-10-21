@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { insertFrom } from "./toolbar-helpers";
 
 /**
  * Simple tables vs datasets (spec: docs/specs/simple-tables.md): a
@@ -67,7 +68,7 @@ test.describe("simple tables", () => {
   }) => {
     await loadDoc(page, "# T\n\nIntro\n");
     await page.locator("#the-doc p", { hasText: "Intro" }).click();
-    await page.locator("#btn-table").click();
+    await insertFrom(page, "btn-table");
     await expect(
       page.locator('#the-doc figure[data-table-kind="table"]'),
     ).toHaveCount(1);
@@ -138,7 +139,7 @@ test.describe("simple tables: first-contact regressions", () => {
     const p = page.locator("#the-doc article > p").first();
     await p.click();
     await page.keyboard.press("End");
-    await page.locator("#btn-table").click();
+    await insertFrom(page, "btn-table");
     const next = await page
       .locator("#the-doc article > p")
       .first()

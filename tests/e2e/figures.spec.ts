@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { pickStyle, insertFrom } from "./toolbar-helpers";
 
 /**
  * Insert-group equation, H3 support, header-click inspector, and
@@ -27,7 +28,7 @@ test.describe("insert equation", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-equation").click();
+    await insertFrom(page, "btn-equation");
     await expect(page.locator("#the-doc figure.folio-math .katex")).toBeVisible(
       { timeout: 10_000 },
     );
@@ -54,7 +55,7 @@ test.describe("H3 support", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator('#block-bar button[data-block="h3"]').click();
+    await pickStyle(page, "h3");
     await expect(
       page.locator("#the-doc h3", { hasText: "Revenue recovered" }),
     ).toBeVisible();

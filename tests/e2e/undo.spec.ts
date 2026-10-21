@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { insertFrom } from "./toolbar-helpers";
 
 /**
  * Undo/redo (spec: docs/specs/undo-redo.md): snapshots of the
@@ -59,7 +60,7 @@ test.describe("undo/redo", () => {
     await waitForDocument(page);
     const before = await page.locator("#the-doc figure").count();
     await focusIntroEnd(page);
-    await page.locator("#btn-table").click();
+    await insertFrom(page, "btn-table");
     await expect(page.locator("#the-doc figure")).toHaveCount(before + 1);
     await page.keyboard.press("Control+z");
     await expect(page.locator("#the-doc figure")).toHaveCount(before);

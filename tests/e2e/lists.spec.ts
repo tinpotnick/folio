@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { pickStyle } from "./toolbar-helpers";
 
 /**
  * Lists (spec: docs/specs/lists.md): `- ` / `1. ` blocks render as
@@ -157,7 +158,7 @@ test.describe("lists", () => {
   }) => {
     await loadDoc(page, "# T\n\n- Apples\n- Pears\n- Plums\n");
     await page.locator("#the-doc li", { hasText: "Pears" }).click();
-    await page.locator('#block-bar button[data-block="p"]').click();
+    await pickStyle(page, "p");
     await expect(page.locator("#the-doc article > p")).toHaveText([
       "Apples",
       "Pears",

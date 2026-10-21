@@ -57,3 +57,14 @@ function body reporting `| check: true` results; a first line
 synthetic DOM events cannot catch how the engine names keys). Run it
 for any
 change touching the caret, selection, or keyboard handling.
+
+## Toolbar and title (2026-10-21)
+
+- New, Open and Save are one toolbar group, first in the bar; New
+  shows on the web too, Open and Save only on the desktop.
+- The wordmark is hidden on the desktop (`html.desktop`): the
+  window's title bar names the app and the document ("Q3 Sales
+  Review — folio"), set through `getCurrentWindow().setTitle()`
+  (capability `core:window:allow-set-title`).
+- Ctrl+N / Ctrl+O / Ctrl+S: new, open, save. See
+  docs/specs/toolbar.md.

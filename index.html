@@ -103,15 +103,15 @@
         font-weight: 700;
       }
       .toolbar {
-        margin-left: auto;
+        flex: 1;
         display: flex;
         gap: 8px;
         align-items: center;
-        /* On a narrow screen the toolbar scrolls within its own row;
-           it never widens the page. */
+        /* It never widens the page: what does not fit moves into the
+           "More tools" menu (main.ts), and anything still too wide is
+           clipped - "clip", not "auto", so the menus can hang below. */
         min-width: 0;
-        overflow-x: auto;
-        scrollbar-width: none;
+        overflow-x: clip;
       }
       .toolbar::-webkit-scrollbar {
         display: none;
@@ -119,6 +119,208 @@
       .toolbar > * {
         flex: none;
       }
+      .toolbar > .toolbar-spacer {
+        flex: 1;
+        min-width: 0;
+      }
+      /* The desktop window's title bar names the app (and the
+         document): no wordmark in the toolbar there. */
+      html.desktop header h1 {
+        display: none;
+      }
+      /* --- Menus: the text-style and Insert menus, and the overflow
+         ("More tools") that takes whatever does not fit. --- */
+      .menu-wrap {
+        position: relative;
+        display: flex;
+      }
+      .menu-wrap[hidden] {
+        display: none;
+      }
+      .fmt .menu-trigger {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 8px 0 10px;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      #btn-style-menu {
+        min-width: 112px;
+        justify-content: space-between;
+      }
+      .menu-trigger svg {
+        width: 14px;
+        height: 14px;
+        flex: none;
+        margin: 0;
+      }
+      #block-bar .menu-trigger .chev,
+      .menu-trigger .chev {
+        width: 10px;
+        height: 10px;
+        margin: 0;
+        opacity: 0.7;
+      }
+      .fmt .menu-trigger[aria-expanded="true"] {
+        background: var(--surface-2);
+      }
+      /* Placed against the window by main.ts (kept on screen, below
+         its trigger): the toolbar clips sideways overflow, and a menu
+         hanging out of it must not be cut. */
+      .menu {
+        position: fixed;
+        z-index: 40;
+        overflow-y: auto;
+        min-width: 210px;
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        border-radius: 10px;
+        box-shadow:
+          0 12px 32px rgba(15, 20, 30, 0.14),
+          0 2px 6px rgba(15, 20, 30, 0.08);
+      }
+      .menu[hidden] {
+        display: none;
+      }
+      .menu > button,
+      .menu-col > button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        min-height: 32px;
+        height: auto;
+        padding: 0 10px;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .menu > button svg,
+      .menu-col > button svg {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        margin: 0;
+        color: var(--text-muted);
+      }
+      .menu > button:hover,
+      .menu-col > button:hover {
+        background: var(--surface-2);
+      }
+      /* The current style: marked like the sidebar's current section,
+         not the heavy toolbar pill. */
+      .fmt .menu > button.active,
+      .fmt .menu > button.active:hover {
+        background: var(--surface-2);
+        color: var(--text);
+        box-shadow: inset 2px 0 0 var(--active-bg);
+      }
+      .menu-heading {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        padding: 8px 10px 4px;
+      }
+      .menu-insert {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+        max-width: calc(100vw - 16px);
+      }
+      .menu-col {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        min-width: 210px;
+      }
+      #style-menu .st-p {
+        font-size: 14px;
+      }
+      #style-menu .st-h1 {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      #style-menu .st-h2 {
+        font-size: 17px;
+        font-weight: 650;
+      }
+      #style-menu .st-h3 {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      #style-menu button {
+        min-height: 36px;
+      }
+      /* The overflow holds whole toolbar groups, laid out as they are
+         in the bar. */
+      /* A lone button in "More tools" is a menu row that says what
+         it does. */
+      .menu-overflow > button.plain {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 10px;
+        border-color: transparent;
+        background: transparent;
+      }
+      .menu-overflow > button.plain:hover {
+        background: var(--surface-2);
+      }
+      .menu-overflow > button.plain::after {
+        content: attr(aria-label);
+      }
+      .menu-overflow > * {
+        flex: none;
+      }
+      .menu-overflow {
+        min-width: 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding: 8px;
+        width: max-content;
+        max-width: min(420px, calc(100vw - 32px));
+      }
+      @media (max-width: 760px) {
+        header {
+          padding: 8px 12px;
+          gap: 10px;
+        }
+        #btn-search .kbd-hint {
+          display: none;
+        }
+      }
+      #style-label-short {
+        display: none;
+      }
+      /* Phone width: the essentials only - the style menu shortens to
+         its level, Insert to its icon, the wordmark goes (the tab and
+         the guide still name folio). */
+      @media (max-width: 560px) {
+        header h1,
+        #btn-insert-menu > span,
+        #style-label {
+          display: none;
+        }
+        #style-label-short {
+          display: inline;
+        }
+        #btn-style-menu {
+          min-width: 0;
+        }
+      }
+
       header h1 {
         flex: none;
       }
@@ -239,6 +441,30 @@
       }
       button.plain:hover {
         background: var(--surface-2);
+      }
+      #btn-rec-stop {
+        background: var(--rec-bg);
+        color: var(--rec-fg);
+        border-color: transparent;
+        animation: rec-pulse 1.2s ease-in-out infinite;
+      }
+      #btn-rec-stop[hidden] {
+        display: none;
+      }
+      .rec-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      /* The mode button shows the mode it switches TO: a moon in
+         light mode, a sun in dark. */
+      #btn-mode .icon-sun,
+      html[data-mode="dark"] #btn-mode .icon-moon {
+        display: none;
+      }
+      html[data-mode="dark"] #btn-mode .icon-sun {
+        display: block;
       }
       /* A toggle that is on (the open sidebar) reads as pressed. */
       button.plain[aria-pressed="true"] {
@@ -861,7 +1087,52 @@
         </button>
       </h1>
       <div class="toolbar">
-        <div class="fmt" id="history-bar">
+        <div class="fmt" id="file-bar" data-overflow="6">
+          <button
+            id="btn-new"
+            title="New document (Ctrl+N)"
+            aria-label="New document"
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M9.5 1.5h-6v13h9v-10z M9.5 1.5v3h3"
+                stroke-linejoin="round"
+              />
+              <path d="M8 7.5v4M6 9.5h4" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button id="btn-open" title="Open (Ctrl+O)" aria-label="Open" hidden>
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path d="M1.5 12.5v-9h4L7 5h6.5v7.5z" stroke-linejoin="round" />
+            </svg>
+          </button>
+          <button id="btn-save" title="Save (Ctrl+S)" aria-label="Save" hidden>
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                d="M2.5 13.5v-11h8.5l2.5 2.5v8.5z"
+                stroke-linejoin="round"
+              />
+              <path d="M5 13.5V9.5h6v4" stroke-linejoin="round" />
+              <path d="M5 2.5v3h4.5v-3" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
+        <div class="fmt" id="history-bar" data-overflow="4">
           <button
             id="btn-undo"
             title="Undo (Ctrl+Z)"
@@ -904,10 +1175,45 @@
           </button>
         </div>
         <div class="fmt" id="block-bar">
-          <button data-block="h1" title="Heading 1">H1</button>
-          <button data-block="h2" title="Heading 2">H2</button>
-          <button data-block="h3" title="Heading 3">H3</button>
-          <button data-block="p" title="Paragraph">P</button>
+          <div class="menu-wrap">
+            <button
+              class="menu-trigger"
+              id="btn-style-menu"
+              title="Text style: paragraph or heading"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            >
+              <span id="style-label">Paragraph</span>
+              <span id="style-label-short" aria-hidden="true">Text</span>
+              <svg
+                class="chev"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+              >
+                <path
+                  d="M2.5 4l2.5 2.5L7.5 4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <div class="menu" id="style-menu" role="menu" hidden>
+              <button data-block="p" role="menuitem" title="Paragraph">
+                <span class="mi-label st-p">Paragraph</span>
+              </button>
+              <button data-block="h1" role="menuitem" title="Heading 1">
+                <span class="mi-label st-h1">Heading 1</span>
+              </button>
+              <button data-block="h2" role="menuitem" title="Heading 2">
+                <span class="mi-label st-h2">Heading 2</span>
+              </button>
+              <button data-block="h3" role="menuitem" title="Heading 3">
+                <span class="mi-label st-h3">Heading 3</span>
+              </button>
+            </div>
+          </div>
           <button
             data-block="ul"
             title="Bulleted list"
@@ -952,7 +1258,7 @@
             </svg>
           </button>
         </div>
-        <div class="fmt" id="fmt-bar">
+        <div class="fmt" id="fmt-bar" data-overflow="5">
           <button data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
           <button data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
           <button data-cmd="strike" title="Strikethrough"><s>S</s></button>
@@ -977,160 +1283,404 @@
           </button>
         </div>
         <div class="fmt" id="insert-bar">
-          <button
-            id="btn-table"
-            title="Insert a table"
-            aria-label="Insert a table"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
+          <div class="menu-wrap">
+            <button
+              class="menu-trigger"
+              id="btn-insert-menu"
+              title="Insert a table, chart, image, equation, diagram..."
+              aria-haspopup="menu"
+              aria-expanded="false"
             >
-              <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
-              <path
-                d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-          <button
-            id="btn-diagram"
-            title="Insert a Mermaid diagram"
-            aria-label="Insert a Mermaid diagram"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <circle cx="4" cy="4" r="2" />
-              <circle cx="12" cy="12" r="2" />
-              <path d="M5.4 5.4l5.2 5.2" stroke-linecap="round" />
-            </svg>
-          </button>
-          <button
-            id="btn-image"
-            title="Insert an image"
-            aria-label="Insert an image"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
-              <circle
-                cx="5.8"
-                cy="6"
-                r="1.1"
-                fill="currentColor"
-                stroke="none"
-              />
-              <path
-                d="M3 11l3.2-3.2 2.3 2.3 2.5-2.5L13.5 11.5"
-                stroke-linejoin="round"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-          <button
-            id="btn-audio"
-            title="Insert an embedded audio clip"
-            aria-label="Insert an embedded audio clip"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M3 6.5v3h2.2l3.3 2.8V3.7L5.2 6.5H3z"
-                stroke-linejoin="round"
-              />
-              <path d="M11 5.5a3.2 3.2 0 010 5" stroke-linecap="round" />
-            </svg>
-          </button>
-          <button
-            id="btn-record"
-            title="Record audio from the microphone"
-            aria-label="Record audio from the microphone"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M8 2a2 2 0 0 1 2 2v3.5a2 2 0 1 1-4 0V4a2 2 0 0 1 2-2z"
-                stroke-linejoin="round"
-              />
-              <path d="M4.5 8a3.5 3.5 0 0 0 7 0" stroke-linecap="round" />
-              <path d="M8 11.5V13.5" stroke-linecap="round" />
-            </svg>
-          </button>
-          <button
-            id="btn-equation"
-            title="Insert an equation"
-            aria-label="Insert an equation"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M2.5 10.5h5M2.5 12.5h5M9 3l-3.5 10M10.5 3h4M10.5 13h4"
-                stroke-linecap="round"
-              />
-            </svg>
-          </button>
-          <button
-            id="btn-strudel"
-            title="Insert a Strudel music block"
-            aria-label="Insert a Strudel music block"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M13.5 2.5l-6.5 1.7v7.1"
-                stroke-linejoin="round"
-                stroke-linecap="round"
-              />
-              <circle cx="5" cy="11.5" r="2.5" />
-              <circle cx="13.5" cy="10" r="2" />
-            </svg>
-          </button>
-          <button
-            id="btn-code"
-            title="Code block"
-            aria-label="Toggle a code block"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+              >
+                <path d="M8 3v10M3 8h10" stroke-linecap="round" />
+              </svg>
+              <span>Insert</span>
+              <svg
+                class="chev"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+              >
+                <path
+                  d="M2.5 4l2.5 2.5L7.5 4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <div class="menu menu-insert" id="insert-menu" role="menu" hidden>
+              <div class="menu-col">
+                <div class="menu-heading">Tables and charts</div>
+                <button
+                  role="menuitem"
+                  id="btn-table"
+                  title="Insert a table"
+                  aria-label="Insert a table"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+                    <path
+                      d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Table</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a dataset"
+                  title="Insert a dataset"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" />
+                    <path
+                      d="M1.5 6.5h13M1.5 10h13M6.5 6.5v7"
+                      stroke-linecap="round"
+                    />
+                    <path d="M10 9h3" stroke-linecap="round" />
+                  </svg>
+                  <span class="mi-label">Dataset (typed, with formulas)</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a chart"
+                  title="Insert a chart"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path d="M2 13.5h12" stroke-linecap="round" />
+                    <path
+                      d="M4 13V8M8 13V4M12 13V9.5"
+                      stroke-linecap="round"
+                      stroke-width="2"
+                    />
+                  </svg>
+                  <span class="mi-label">Chart from a dataset</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a Vega-Lite chart"
+                  title="Insert a Vega-Lite chart"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path d="M2 13.5h12M2 2.5v11" stroke-linecap="round" />
+                    <circle
+                      cx="5.5"
+                      cy="9.5"
+                      r="1"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <circle
+                      cx="8.5"
+                      cy="6"
+                      r="1"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <circle
+                      cx="12"
+                      cy="4.5"
+                      r="1"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                  </svg>
+                  <span class="mi-label">Vega-Lite chart</span>
+                </button>
+                <div class="menu-heading">Media</div>
+                <button
+                  role="menuitem"
+                  id="btn-image"
+                  title="Insert an image"
+                  aria-label="Insert an image"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <rect x="2" y="2.5" width="12" height="11" rx="1.5" />
+                    <circle
+                      cx="5.8"
+                      cy="6"
+                      r="1.1"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <path
+                      d="M3 11l3.2-3.2 2.3 2.3 2.5-2.5L13.5 11.5"
+                      stroke-linejoin="round"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Image</span>
+                </button>
+                <button
+                  role="menuitem"
+                  id="btn-audio"
+                  title="Insert an embedded audio clip"
+                  aria-label="Insert an embedded audio clip"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M3 6.5v3h2.2l3.3 2.8V3.7L5.2 6.5H3z"
+                      stroke-linejoin="round"
+                    />
+                    <path d="M11 5.5a3.2 3.2 0 010 5" stroke-linecap="round" />
+                  </svg>
+                  <span class="mi-label">Audio clip</span>
+                </button>
+                <button
+                  role="menuitem"
+                  id="btn-record"
+                  title="Record audio from the microphone"
+                  aria-label="Record audio from the microphone"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M8 2a2 2 0 0 1 2 2v3.5a2 2 0 1 1-4 0V4a2 2 0 0 1 2-2z"
+                      stroke-linejoin="round"
+                    />
+                    <path d="M4.5 8a3.5 3.5 0 0 0 7 0" stroke-linecap="round" />
+                    <path d="M8 11.5V13.5" stroke-linecap="round" />
+                  </svg>
+                  <span class="mi-label">Record audio</span>
+                </button>
+              </div>
+              <div class="menu-col">
+                <div class="menu-heading">Technical</div>
+                <button
+                  role="menuitem"
+                  id="btn-equation"
+                  title="Insert an equation"
+                  aria-label="Insert an equation"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M2.5 10.5h5M2.5 12.5h5M9 3l-3.5 10M10.5 3h4M10.5 13h4"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Equation</span>
+                </button>
+                <button
+                  role="menuitem"
+                  id="btn-code"
+                  title="Code block"
+                  aria-label="Toggle a code block"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M5.5 4L2 8l3.5 4M10.5 4L14 8l-3.5 4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Code block</span>
+                </button>
+                <button
+                  role="menuitem"
+                  id="btn-diagram"
+                  title="Insert a Mermaid diagram"
+                  aria-label="Insert a Mermaid diagram"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <circle cx="4" cy="4" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <path d="M5.4 5.4l5.2 5.2" stroke-linecap="round" />
+                  </svg>
+                  <span class="mi-label">Mermaid diagram</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a Graphviz diagram (DOT)"
+                  title="Insert a Graphviz diagram (DOT)"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <circle cx="4" cy="4" r="2" />
+                    <circle cx="12" cy="4" r="2" />
+                    <circle cx="8" cy="12" r="2" />
+                    <path d="M5.5 5.5L7 10.3M10.5 5.5L9 10.3M6 4h4" />
+                  </svg>
+                  <span class="mi-label">Graphviz diagram</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert an SVG drawing"
+                  title="Insert an SVG drawing"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M2.5 13.5l3-1 7.5-7.5-2-2-7.5 7.5z"
+                      stroke-linejoin="round"
+                    />
+                    <path d="M9.5 4.5l2 2" />
+                  </svg>
+                  <span class="mi-label">SVG drawing</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a 3D model (JSCAD)"
+                  title="Insert a 3D model (JSCAD)"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M8 1.5l5.5 3v7L8 14.5l-5.5-3v-7z"
+                      stroke-linejoin="round"
+                    />
+                    <path
+                      d="M2.5 4.5L8 7.5l5.5-3M8 7.5v7"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span class="mi-label">3D model (JSCAD)</span>
+                </button>
+                <div class="menu-heading">Music</div>
+                <button
+                  role="menuitem"
+                  id="btn-strudel"
+                  title="Insert a Strudel music block"
+                  aria-label="Insert a Strudel music block"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M13.5 2.5l-6.5 1.7v7.1"
+                      stroke-linejoin="round"
+                      stroke-linecap="round"
+                    />
+                    <circle cx="5" cy="11.5" r="2.5" />
+                    <circle cx="13.5" cy="10" r="2" />
+                  </svg>
+                  <span class="mi-label">Strudel music</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert sheet music (ABC)"
+                  title="Insert sheet music (ABC)"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M1.5 4.5h13M1.5 7h13M1.5 9.5h13M1.5 12h13"
+                      stroke-width="0.8"
+                    />
+                    <ellipse
+                      cx="6"
+                      cy="11.3"
+                      rx="1.6"
+                      ry="1.1"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <path d="M7.5 11V3.5" />
+                  </svg>
+                  <span class="mi-label">Sheet music (ABC)</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="seg" id="view-switch">
+        <!-- While recording: the record button is in the Insert menu,
+             so the bar shows that a recording is running, and stops it. -->
+        <button id="btn-rec-stop" class="plain" title="Stop recording" hidden>
+          <span class="rec-dot" aria-hidden="true"></span>
+          Recording · Stop
+        </button>
+        <div class="toolbar-spacer"></div>
+        <div class="menu-wrap" id="overflow-wrap" hidden>
+          <button
+            class="plain menu-trigger"
+            id="btn-overflow"
+            title="More tools"
+            aria-label="More tools"
+            aria-haspopup="menu"
+            aria-expanded="false"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <circle cx="3.5" cy="8" r="1.3" />
+              <circle cx="8" cy="8" r="1.3" />
+              <circle cx="12.5" cy="8" r="1.3" />
+            </svg>
+          </button>
+          <div class="menu menu-overflow" id="overflow-menu" hidden></div>
+        </div>
+        <div class="seg" id="view-switch" data-overflow="3">
           <button id="btn-view" class="active" title="Document view">
             <svg
               viewBox="0 0 16 16"
@@ -1147,33 +1697,6 @@
               <path
                 d="M2 12V4h2l2 2.5L8 4h2v8H8V7.5L6 10 4 7.5V12H2zm11.5 0L10 8h2V4h2v4h2l-2.5 4z"
               />
-            </svg>
-          </button>
-        </div>
-        <div class="seg" id="file-bar" hidden>
-          <button id="btn-open" title="Open" aria-label="Open">
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path d="M1.5 12.5v-9h4L7 5h6.5v7.5z" stroke-linejoin="round" />
-            </svg>
-          </button>
-          <button id="btn-save" title="Save" aria-label="Save">
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <path
-                d="M2.5 13.5v-11h8.5l2.5 2.5v8.5z"
-                stroke-linejoin="round"
-              />
-              <path d="M5 13.5V9.5h6v4" stroke-linejoin="round" />
-              <path d="M5 2.5v3h4.5v-3" stroke-linejoin="round" />
             </svg>
           </button>
         </div>
@@ -1197,6 +1720,7 @@
         <button
           id="btn-settings"
           class="plain"
+          data-overflow="2"
           title="Document settings"
           aria-label="Document settings"
         >
@@ -1219,10 +1743,12 @@
         <button
           id="btn-mode"
           class="plain"
+          data-overflow="1"
           title="Switch to dark mode"
           aria-label="Switch to dark mode"
         >
           <svg
+            class="icon-moon"
             viewBox="0 0 16 16"
             fill="none"
             stroke="currentColor"
@@ -1233,8 +1759,29 @@
               stroke-linejoin="round"
             />
           </svg>
+          <svg
+            class="icon-sun"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          >
+            <circle cx="8" cy="8" r="2.75" />
+            <path
+              d="M8 1.75v1.5M8 12.75v1.5M1.75 8h1.5M12.75 8h1.5M3.6 3.6l1.05 1.05M11.35 11.35l1.05 1.05M3.6 12.4l1.05-1.05M11.35 4.65l1.05-1.05"
+              stroke-linecap="round"
+            />
+          </svg>
         </button>
-        <button id="btn-help" class="plain" title="Help (?)">?</button>
+        <button
+          id="btn-help"
+          class="plain"
+          title="Help (?)"
+          aria-label="Help"
+          data-overflow="7"
+        >
+          ?
+        </button>
       </div>
     </header>
     <div class="layout">

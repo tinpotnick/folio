@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { insertFrom } from "./toolbar-helpers";
 
 /**
  * Audio embeds (spec: docs/specs/audio-embeds.md): a recorded sound
@@ -234,13 +235,13 @@ test.describe("recording", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-record").click();
+    await insertFrom(page, "btn-record");
     // The button pulses while capture runs, and the status counts.
     await expect(page.locator("#btn-record")).toHaveClass(/rec/);
     await expect(page.locator("#status")).toContainText("Recording 0:0");
     await page.waitForTimeout(1200);
     // The same button stops the capture.
-    await page.locator("#btn-record").click();
+    await insertFrom(page, "btn-record");
     await expect(page.locator("#btn-record")).not.toHaveClass(/rec/);
     const figure = page.locator("#the-doc figure.folio-audio");
     await expect(figure).toHaveCount(1);
@@ -271,7 +272,7 @@ test.describe("recording", () => {
     await expect(
       page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
     ).toBeVisible();
-    await page.locator("#btn-record").click();
+    await insertFrom(page, "btn-record");
     await expect(page.locator("#status")).toContainText(
       /Microphone unavailable|permission/,
     );
