@@ -14,7 +14,8 @@ hand, never a second representation.
 
 ## Contract
 
-- **UI**: a gear button in the toolbar, a palette command
+- **UI**: a sliders button in the toolbar (not a rayed gear, which
+  read as a sun beside the dark-mode moon), a palette command
   ("Document settings"), and `<dialog id="settings-modal">` with a
   form of typed controls. Cancel/Close/Esc discard; Apply writes.
 - **Values**: "default" and empty fields REMOVE the key so the
@@ -26,15 +27,25 @@ hand, never a second representation.
   reload the component, refresh the source editor. The theme
   re-renders immediately; the caret is not preserved across an
   Apply (the document reloads).
+- **Theme picker** (first): one card per shipped theme, previewing
+  its paper, title face and palette in the current mode; writes the
+  `theme:` line. See docs/specs/themes.md.
+- **Overrides** (below the picker): each "Theme default (...)"
+  option and size placeholder names the SELECTED theme's value.
+  Each field that overrides the theme is marked (an accent edge), a
+  note counts them, and **Reset to
+  theme** clears every override field.
 - **Controls** (style keys):
-  - `body.font.family`, `h1.font.family` - font dropdown
-    (Source Serif 4, Merriweather, Georgia, Arial, system-ui, plus
-    the current value if custom).
-  - `body.font.size` (17px), `h1.font.size` (28pt),
-    `h2.font.size` (20pt) - free text, placeholder shows the
-    default.
-  - `table.style` - booktabs (default) or plain (full grid).
-  - `chart.palette` - muted (default) or corporate.
+  - `body.font.family` ("Body font"), `h1.font.family` ("Title (H1)
+    font"): a dropdown of the bundled faces (ADR-0017), plus the
+    current value if it is custom.
+  - `body.font.size`, `h1.font.size`, `h2.font.size`,
+    `h3.font.size`: free text; the placeholder shows the theme's
+    value.
+  - `table.style`: booktabs, plain, striped, minimal, banded, or
+    ledger (docs/specs/themes.md).
+  - `chart.palette`: muted, corporate, ink, warm, sepia, vivid,
+    news, jewel, mono, or swiss.
   - `pagebreak.h1`, `pagebreak.h2` - "before" or unset. Maps to
     `break-before: page` (plus the legacy alias) on the heading,
     guarded by `:not(:first-child)` so the first heading never

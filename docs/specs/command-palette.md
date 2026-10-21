@@ -36,7 +36,8 @@ magnifier button in the toolbar.
   scores a large bonus, so "poem" ranks the poem example over a
   command whose keywords merely contain p...o...e...m scattered
   about. Empty query lists everything, commands first, capped at
-  30 rows.
+  40 rows (enough that the commands never push every section and
+  help topic out of the empty state).
 - **Command actions reuse the toolbar handlers** (`.click()` on the
   existing buttons): the palette is a discovery layer, never a
   second implementation of an action.

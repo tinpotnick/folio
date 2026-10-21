@@ -30,9 +30,13 @@ output by `src/render/chart.ts`. The contract for dense data:
   `data-block-index`; `drawChart` resolves the block by that
   index, never by source alone.
 - **Theme dressing**: the series color and the pie slice palette
-  come from the document's `chart.palette` theme key (passed from
-  `drawChart` via `ChartStyle`); the renderers stay pure and
-  default to folio blue. Each chart ROTATES through the palette
+  come from the theme's palette, or from the document's
+  `chart.palette` key when set, using the set for the current mode
+  (docs/specs/dark-light-mode.md). Axis ink, ticks and grid take
+  the theme's ink, muted and hairline colors; pie seams and the
+  donut hole take its paper. Everything passes from `drawChart` via
+  `ChartStyle`; the renderers stay pure and default to light-paper
+  constants. Chart text inherits the theme's text face. Each chart ROTATES through the palette
   by its position among the document's chart blocks - the second
   chart on a page never wears the first chart's color, so same-
   shaped figures stay distinguishable.

@@ -261,7 +261,8 @@ type: pie
     // A donut is a pie (3 slices for 3 regions) with a
     // punched-out white center.
     await expect(figure.locator("svg path")).toHaveCount(3);
-    await expect(figure.locator("svg circle[fill='#fff']")).toHaveCount(1);
+    // The hole is the page's own paper (the theme's, per mode).
+    await expect(figure.locator("svg circle[fill='#ffffff']")).toHaveCount(1);
     await page.locator("#btn-markdown").click();
     expect(await page.locator("#editor").inputValue()).toContain("type: donut");
   });

@@ -9,7 +9,14 @@ import { parseDoc, serializeDoc } from "./engine/doc.js";
 import { importedTable, parseImport } from "./engine/ingest.js";
 import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
-import { themeNames } from "./render/theme.js";
+import {
+  PALETTES,
+  TABLE_STYLES,
+  presetTheme,
+  themeInfo,
+  themeNames,
+} from "./render/theme.js";
+import { BUNDLED_FONTS } from "./render/fonts.js";
 import { isDesktop, openDocument, saveDocument } from "./desktop.js";
 
 function requireEl<T extends HTMLElement>(selector: string): T {
@@ -887,6 +894,46 @@ btnTable.addEventListener("click", () => {
   flash("Table inserted");
 });
 
+/* --- Dark / light mode (spec: docs/specs/dark-light-mode.md) ---
+ * The app chrome dresses from CSS variables; every <folio-doc>
+ * gets the same mode as an attribute and re-dresses its document
+ * in the theme's own dark rendition. The choice persists in
+ * localStorage and defaults to the system preference. */
+const MODE_KEY = "folio:mode";
+const btnMode = requireEl<HTMLButtonElement>("#btn-mode");
+
+function currentMode(): "dark" | "light" {
+  return document.documentElement.dataset.mode === "dark" ? "dark" : "light";
+}
+
+function reflectMode(): void {
+  const dark = currentMode() === "dark";
+  btnMode.title = dark ? "Switch to light mode" : "Switch to dark mode";
+  btnMode.setAttribute("aria-label", btnMode.title);
+  for (const doc of Array.from(document.querySelectorAll("folio-doc"))) {
+    doc.setAttribute("mode", currentMode());
+  }
+}
+
+function setMode(mode: "dark" | "light"): void {
+  document.documentElement.dataset.mode = mode;
+  localStorage.setItem(MODE_KEY, mode);
+  reflectMode();
+}
+
+(function initMode(): void {
+  // The <head> script set the attribute before first paint
+  // (saved choice, else the system preference); the documents and
+  // the button follow it.
+  reflectMode();
+})();
+
+function toggleMode(): void {
+  setMode(currentMode() === "dark" ? "light" : "dark");
+}
+
+btnMode.addEventListener("click", toggleMode);
+
 /* --- Undo/redo (spec: docs/specs/undo-redo.md) --- */
 
 const btnUndo = requireEl<HTMLButtonElement>("#btn-undo");
@@ -1217,6 +1264,12 @@ function paletteEntries(): PaletteEntry[] {
     action: () => audioFile.click(),
   });
   entries.push({
+    title: "Toggle dark mode",
+    group: "Command",
+    keywords: "dark light theme mode night appearance contrast toggle",
+    action: () => toggleMode(),
+  });
+  entries.push({
     title: "Undo",
     group: "Command",
     keywords: "undo revert back history step z",
@@ -1257,6 +1310,13 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords: "settings style font theme frontmatter page break",
     action: () => openSettings(),
+  });
+  entries.push({
+    title: "Change theme",
+    group: "Command",
+    keywords:
+      "theme look style design appearance fonts colours colors palette template",
+    action: () => openSettings({ focusTheme: true }),
   });
   entries.push({
     title: "Print the document",
@@ -1384,7 +1444,7 @@ function updatePalette(): void {
   const query = paletteInput.value.trim();
   const all = paletteEntries();
   if (!query) {
-    paletteFiltered = all.slice(0, 30);
+    paletteFiltered = all.slice(0, 40);
   } else {
     paletteFiltered = all
       .map((e) => ({
@@ -1446,39 +1506,87 @@ const setBodySize = requireEl<HTMLInputElement>("#set-body-size");
 const setH1Size = requireEl<HTMLInputElement>("#set-h1-size");
 const setH2Size = requireEl<HTMLInputElement>("#set-h2-size");
 const setH3Size = requireEl<HTMLInputElement>("#set-h3-size");
-const setTheme = requireEl<HTMLSelectElement>("#set-theme");
-// The shipped themes (spec: docs/specs/themes.md); the dialog
-// writes the `theme:` frontmatter line, individual settings
-// below still override the theme per key.
-for (const name of themeNames()) {
-  const o = document.createElement("option");
-  o.value = name;
-  o.textContent = name;
-  setTheme.appendChild(o);
-}
+const themeGrid = requireEl<HTMLElement>("#set-theme");
 const setTableStyle = requireEl<HTMLSelectElement>("#set-table-style");
 const setPalette = requireEl<HTMLSelectElement>("#set-palette");
 const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
 const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
+const overrideNote = requireEl<HTMLElement>("#settings-override-note");
+const btnSettingsReset = requireEl<HTMLButtonElement>("#btn-settings-reset");
 
-const FONT_OPTIONS = [
-  "Source Serif 4",
-  "Merriweather",
-  "Georgia",
-  "Arial",
-  "system-ui",
-];
+/** The family name at the head of a CSS font stack. */
+function familyOf(stack: string): string {
+  return /^"([^"]+)"/.exec(stack)?.[1] ?? stack.split(",")[0] ?? stack;
+}
 
-function fillFontSelect(
+/**
+ * The shipped themes as cards (spec: docs/specs/themes.md): each is
+ * a tiny page in the theme's own paper, heading face, and palette,
+ * for the CURRENT mode - you pick a theme by looking at it. The
+ * dialog writes the `theme:` frontmatter line; the override fields
+ * below still win, key by key.
+ */
+function buildThemeCards(selected: string): void {
+  const mode = currentMode();
+  themeGrid.textContent = "";
+  for (const name of themeNames()) {
+    const look = presetTheme(name);
+    const info = themeInfo(name);
+    const c = look.colors[mode];
+    const card = document.createElement("label");
+    card.className = "theme-card";
+    card.dataset.theme = name;
+    card.title = `${info.label} - ${info.description}`;
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "theme";
+    input.value = name;
+    input.checked = name === selected;
+    input.setAttribute("aria-label", info.label);
+    input.addEventListener("change", reflectThemeDefaults);
+    const sample = document.createElement("span");
+    sample.className = "tc-sample";
+    sample.style.background = c.paper;
+    sample.style.color = c.heading;
+    sample.style.fontFamily = look.h1Font;
+    sample.style.fontWeight = String(look.headingWeight);
+    sample.textContent = "Aa";
+    const swatches = document.createElement("span");
+    swatches.className = "tc-swatches";
+    for (const color of look.palette[mode].slice(0, 5)) {
+      const sw = document.createElement("i");
+      sw.style.background = color;
+      swatches.appendChild(sw);
+    }
+    sample.appendChild(swatches);
+    const label = document.createElement("span");
+    label.className = "tc-name";
+    label.textContent = info.label;
+    const desc = document.createElement("span");
+    desc.className = "tc-desc";
+    desc.textContent = info.description;
+    card.append(input, sample, label, desc);
+    themeGrid.appendChild(card);
+  }
+}
+
+function selectedTheme(): string {
+  return (
+    themeGrid.querySelector<HTMLInputElement>("input:checked")?.value ??
+    "default"
+  );
+}
+
+function fillOptions(
   sel: HTMLSelectElement,
+  values: readonly string[],
   current: string | undefined,
 ): void {
   sel.textContent = "";
   const def = document.createElement("option");
   def.value = "default";
-  def.textContent = "Theme default (Source Serif 4)";
   sel.appendChild(def);
-  const options = [...FONT_OPTIONS];
+  const options = [...values];
   if (current && !options.includes(current)) options.push(current);
   for (const name of options) {
     const o = document.createElement("option");
@@ -1489,29 +1597,95 @@ function fillFontSelect(
   sel.value = current ?? "default";
 }
 
+/**
+ * The "default" entries and placeholders name what the SELECTED
+ * theme gives, so leaving a field alone visibly means "the theme's".
+ */
+function reflectThemeDefaults(): void {
+  const look = presetTheme(selectedTheme());
+  const named = (sel: HTMLSelectElement, value: string): void => {
+    const def = sel.querySelector<HTMLOptionElement>('option[value="default"]');
+    if (def) def.textContent = `Theme default (${value})`;
+  };
+  named(setBodyFont, familyOf(look.bodyFont));
+  named(setH1Font, familyOf(look.h1Font));
+  named(setTableStyle, look.tableStyle);
+  const paletteName =
+    Object.entries(PALETTES).find(([, p]) => p === look.palette)?.[0] ??
+    "muted";
+  named(setPalette, paletteName);
+  setBodySize.placeholder = look.bodySize;
+  setH1Size.placeholder = look.h1Size;
+  setH2Size.placeholder = look.h2Size;
+  setH3Size.placeholder = look.h3Size;
+  reflectOverrides();
+}
+
+const overrideFields = (): (HTMLSelectElement | HTMLInputElement)[] => [
+  setBodyFont,
+  setH1Font,
+  setBodySize,
+  setH1Size,
+  setH2Size,
+  setH3Size,
+  setTableStyle,
+  setPalette,
+];
+
+/** Say how many fields override the theme - they would mask it. */
+function reflectOverrides(): void {
+  let n = 0;
+  for (const f of overrideFields()) {
+    const on = f.value !== "" && f.value !== "default";
+    f.classList.toggle("overridden", on);
+    f.title = on ? "Overrides the theme - Reset to theme clears it" : "";
+    if (on) n++;
+  }
+  overrideNote.textContent =
+    n === 0
+      ? "none - the theme decides"
+      : `${String(n)} setting${n === 1 ? "" : "s"} override the theme`;
+  btnSettingsReset.disabled = n === 0;
+}
+
+for (const f of overrideFields()) {
+  f.addEventListener("change", reflectOverrides);
+  f.addEventListener("input", reflectOverrides);
+}
+
+btnSettingsReset.addEventListener("click", () => {
+  for (const f of overrideFields())
+    f.value = f instanceof HTMLSelectElement ? "default" : "";
+  reflectOverrides();
+});
+
 function fillSettings(): void {
   const doc = el.getDoc();
   const style = new Map(doc?.frontmatter.style ?? []);
-  setTheme.value = doc?.frontmatter.theme ?? "default";
-  fillFontSelect(setBodyFont, style.get("body.font.family"));
-  fillFontSelect(setH1Font, style.get("h1.font.family"));
+  buildThemeCards(doc?.frontmatter.theme ?? "default");
+  fillOptions(setBodyFont, BUNDLED_FONTS, style.get("body.font.family"));
+  fillOptions(setH1Font, BUNDLED_FONTS, style.get("h1.font.family"));
   setBodySize.value = style.get("body.font.size") ?? "";
   setH1Size.value = style.get("h1.font.size") ?? "";
   setH2Size.value = style.get("h2.font.size") ?? "";
-  setTableStyle.value = style.get("table.style") ?? "default";
-  setPalette.value = style.get("chart.palette") ?? "default";
+  setH3Size.value = style.get("h3.font.size") ?? "";
+  fillOptions(setTableStyle, TABLE_STYLES, style.get("table.style"));
+  fillOptions(setPalette, Object.keys(PALETTES), style.get("chart.palette"));
   setPbH1.value = style.get("pagebreak.h1") === "before" ? "before" : "default";
   setPbH2.value = style.get("pagebreak.h2") === "before" ? "before" : "default";
+  reflectThemeDefaults();
 }
 
-function openSettings(): void {
+function openSettings(opts?: { focusTheme?: boolean }): void {
   fillSettings();
   if (!settingsModal.open) settingsModal.showModal();
+  if (opts?.focusTheme) {
+    themeGrid.querySelector<HTMLInputElement>("input:checked")?.focus();
+  }
 }
 
-requireEl<HTMLButtonElement>("#btn-settings").addEventListener(
-  "click",
-  openSettings,
+requireEl<HTMLButtonElement>("#btn-settings").addEventListener("click", () =>
+  openSettings(),
 );
 requireEl<HTMLButtonElement>("#btn-settings-cancel").addEventListener(
   "click",
@@ -1544,8 +1718,9 @@ settingsForm.addEventListener("submit", (ev) => {
     };
     // The theme name rides the `theme:` frontmatter line;
     // "default" removes it so the fallback look applies.
-    if (setTheme.value !== "default") {
-      doc.frontmatter.theme = setTheme.value;
+    const theme = selectedTheme();
+    if (theme !== "default") {
+      doc.frontmatter.theme = theme;
     } else {
       delete doc.frontmatter.theme;
     }

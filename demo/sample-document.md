@@ -1,12 +1,5 @@
 ---
 theme: corporate-report
-style:
-  h1.font.family: "Merriweather"
-  h1.font.size: 28pt
-  h2.font.size: 20pt
-  body.font.family: "Source Serif 4"
-  table.style: "booktabs"
-  chart.palette: "muted"
 ---
 
 # Q3 Field Operations Review
