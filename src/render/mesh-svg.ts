@@ -3,7 +3,8 @@
  * ADR-0020). Orthographic projection, back faces culled, painter's
  * order, one light from the viewer's upper left. Pure: no DOM, no
  * WebGL - the same drawing in Chromium, WebKitGTK and print, themed
- * like the charts.
+ * like the charts. Faces paint in an exact back-to-front order from a
+ * BSP tree (built once per mesh).
  */
 
 export type Vec3 = [number, number, number];
@@ -29,6 +30,15 @@ export const VIEWS: Record<string, MeshView> = {
   top: { yaw: 0, pitch: 90 },
 };
 
+/**
+ * Up to this many faces the painting order is EXACT (a BSP tree,
+ * built once in about 0.3 s at the limit). A BSP over a large smooth
+ * solid costs O(n^2) to build - and a smooth convex shape barely
+ * needs ordering (culling alone draws it right) - so above the
+ * limit faces are sorted by their centre's depth instead.
+ */
+export const EXACT_ORDER_LIMIT = 2500;
+
 /** More than this and the SVG becomes sluggish: say so instead. */
 export const MAX_POLYGONS = 60000;
 
@@ -51,6 +61,164 @@ function hexRgb(hex: string): [number, number, number] {
 
 const to255 = (x: number): number =>
   Math.max(0, Math.min(255, Math.round(x * 255)));
+
+/* --- Exact back-to-front order: a BSP tree ---
+ * Sorting faces by their centre's depth fails where a long face sits
+ * partly behind a small one (gear teeth, the walls of a hole). A BSP
+ * tree splits faces by each other's planes so that, for ANY view, a
+ * walk visiting the far side of each plane first paints in a correct
+ * order. Built once per mesh; turning the model only re-walks it. */
+
+interface Plane {
+  n: Vec3;
+  w: number;
+}
+
+interface BspNode {
+  plane: Plane;
+  faces: MeshPolygon[];
+  front: BspNode | null;
+  back: BspNode | null;
+}
+
+const EPS = 1e-5;
+
+/** The plane of a face (Newell's method: robust for any convex face). */
+function planeOf(p: MeshPolygon): Plane | null {
+  let nx = 0;
+  let ny = 0;
+  let nz = 0;
+  const vs = p.vertices;
+  for (let i = 0; i < vs.length; i++) {
+    const a = vs[i] as Vec3;
+    const b = vs[(i + 1) % vs.length] as Vec3;
+    nx += (a[1] - b[1]) * (a[2] + b[2]);
+    ny += (a[2] - b[2]) * (a[0] + b[0]);
+    nz += (a[0] - b[0]) * (a[1] + b[1]);
+  }
+  const len = Math.hypot(nx, ny, nz);
+  if (len < 1e-12) return null;
+  const n: Vec3 = [nx / len, ny / len, nz / len];
+  const v0 = vs[0] as Vec3;
+  return { n, w: n[0] * v0[0] + n[1] * v0[1] + n[2] * v0[2] };
+}
+
+/** Split a convex face by a plane into its front and back parts. */
+function splitFace(
+  p: MeshPolygon,
+  plane: Plane,
+  coplanar: MeshPolygon[],
+  front: MeshPolygon[],
+  back: MeshPolygon[],
+): void {
+  const dist = p.vertices.map(
+    (v) => plane.n[0] * v[0] + plane.n[1] * v[1] + plane.n[2] * v[2] - plane.w,
+  );
+  let types = 0;
+  const kinds = dist.map((d) => (d < -EPS ? 2 : d > EPS ? 1 : 0));
+  for (const k of kinds) types |= k;
+  if (types === 0) {
+    coplanar.push(p);
+    return;
+  }
+  if (types === 1) {
+    front.push(p);
+    return;
+  }
+  if (types === 2) {
+    back.push(p);
+    return;
+  }
+  const f: Vec3[] = [];
+  const b: Vec3[] = [];
+  const vs = p.vertices;
+  for (let i = 0; i < vs.length; i++) {
+    const j = (i + 1) % vs.length;
+    const ki = kinds[i] ?? 0;
+    const kj = kinds[j] ?? 0;
+    const vi = vs[i] as Vec3;
+    const vj = vs[j] as Vec3;
+    if (ki !== 2) f.push(vi);
+    if (ki !== 1) b.push(vi);
+    if ((ki | kj) === 3) {
+      const di = dist[i] ?? 0;
+      const dj = dist[j] ?? 0;
+      const t = di / (di - dj);
+      const cut: Vec3 = [
+        vi[0] + (vj[0] - vi[0]) * t,
+        vi[1] + (vj[1] - vi[1]) * t,
+        vi[2] + (vj[2] - vi[2]) * t,
+      ];
+      f.push(cut);
+      b.push(cut);
+    }
+  }
+  if (f.length >= 3) front.push({ ...p, vertices: f });
+  if (b.length >= 3) back.push({ ...p, vertices: b });
+}
+
+function buildBsp(faces: MeshPolygon[]): BspNode | null {
+  const usable = faces.filter((f) => planeOf(f) !== null);
+  const first = usable[0];
+  if (!first) return null;
+  const root = makeNode(first);
+  const jobs: { node: BspNode; faces: MeshPolygon[] }[] = [
+    { node: root, faces: usable.slice(1) },
+  ];
+  for (let job = jobs.pop(); job; job = jobs.pop()) {
+    const fronts: MeshPolygon[] = [];
+    const backs: MeshPolygon[] = [];
+    for (const f of job.faces) {
+      splitFace(f, job.node.plane, job.node.faces, fronts, backs);
+    }
+    const nf = fronts[0];
+    if (nf) {
+      job.node.front = makeNode(nf);
+      jobs.push({ node: job.node.front, faces: fronts.slice(1) });
+    }
+    const nb = backs[0];
+    if (nb) {
+      job.node.back = makeNode(nb);
+      jobs.push({ node: job.node.back, faces: backs.slice(1) });
+    }
+  }
+  return root;
+}
+
+function makeNode(face: MeshPolygon): BspNode {
+  return {
+    plane: planeOf(face) ?? { n: [0, 0, 1], w: 0 },
+    faces: [face],
+    front: null,
+    back: null,
+  };
+}
+
+/** Faces in painting order (far first) for viewing direction `into`. */
+function backToFront(root: BspNode | null, into: Vec3): MeshPolygon[] {
+  const out: MeshPolygon[] = [];
+  // An explicit stack: [node, phase] - 0 = expand, 1 = emit the node.
+  const stack: [BspNode, number][] = root ? [[root, 0]] : [];
+  while (stack.length > 0) {
+    const [node, phase] = stack.pop() as [BspNode, number];
+    if (phase === 1) {
+      out.push(...node.faces);
+      continue;
+    }
+    const n = node.plane.n;
+    // The viewer is on the FRONT side when the normal faces it.
+    const viewerInFront = n[0] * into[0] + n[1] * into[1] + n[2] * into[2] < 0;
+    const far = viewerInFront ? node.back : node.front;
+    const near = viewerInFront ? node.front : node.back;
+    // Pushed in reverse: far subtree, then this node, then near.
+    if (near) stack.push([near, 0]);
+    stack.push([node, 1]);
+    if (far) stack.push([far, 0]);
+  }
+  return out;
+}
+
+const bspCache = new WeakMap<MeshPolygon[], BspNode | null>();
 
 /**
  * Project and shade. Screen axes: x right, d INTO the screen, u up.
@@ -87,9 +255,27 @@ export function meshToSvg(
   })();
   const base = hexRgb(style.fill);
 
-  type Face = { pts: Vec3[]; depth: number; rgb: [number, number, number] };
+  type Face = { pts: Vec3[]; rgb: [number, number, number] };
   const faces: Face[] = [];
-  for (const poly of polygons) {
+  // The viewing direction INTO the screen, in model space.
+  const into: Vec3 = [sy * cp, cy * cp, -sp];
+  let ordered: MeshPolygon[];
+  if (polygons.length <= EXACT_ORDER_LIMIT) {
+    let tree = bspCache.get(polygons);
+    if (tree === undefined) {
+      tree = buildBsp(polygons);
+      bspCache.set(polygons, tree);
+    }
+    ordered = backToFront(tree, into);
+  } else {
+    const depth = (p: MeshPolygon): number =>
+      p.vertices.reduce(
+        (s, v) => s + v[0] * into[0] + v[1] * into[1] + v[2] * into[2],
+        0,
+      ) / p.vertices.length;
+    ordered = [...polygons].sort((a, b) => depth(b) - depth(a));
+  }
+  for (const poly of ordered) {
     if (poly.vertices.length < 3) continue;
     const pts = poly.vertices.map(project);
     const [a, b, c] = pts as [Vec3, Vec3, Vec3];
@@ -116,8 +302,7 @@ export function meshToSvg(
     const rgb: [number, number, number] = own
       ? [own[0] * shade, own[1] * shade, own[2] * shade]
       : [base[0] * shade, base[1] * shade, base[2] * shade];
-    const depth = pts.reduce((s, p) => s + p[1], 0) / pts.length;
-    faces.push({ pts, depth, rgb });
+    faces.push({ pts, rgb });
   }
   if (faces.length === 0) {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(W)} ${String(H)}" role="img"></svg>`;
@@ -142,8 +327,7 @@ export function meshToSvg(
   );
   const ox = (W - (maxX - minX) * scale) / 2 - minX * scale;
   const oy = (H - (maxY - minY) * scale) / 2 - minY * scale;
-  // Painter's order: far faces first.
-  faces.sort((a, b) => b.depth - a.depth);
+  // Already in painting order (far first): the BSP walk above.
   const parts = faces.map((f) => {
     const d = f.pts
       .map(

@@ -226,6 +226,29 @@ const main = () => subtract(
 
 module.exports = { main }`;
 
+/**
+ * The caret's position as a count of characters from the start of
+ * `root` (a <br> counts as one, a newline): survives rebuilding the
+ * text as a single node.
+ */
+function textOffsetIn(root: Node, node: Node, offset: number): number {
+  let count = 0;
+  const target =
+    node.nodeType === Node.TEXT_NODE ? node : (node.childNodes[offset] ?? null);
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+  );
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n === target) {
+      return n.nodeType === Node.TEXT_NODE ? count + offset : count;
+    }
+    if (n.nodeType === Node.TEXT_NODE) count += (n.textContent ?? "").length;
+    else if ((n as Element).tagName === "BR") count += 1;
+  }
+  return count;
+}
+
 /** Blocks whose text is inline Markdown: formats and links apply. */
 const INLINE_BLOCKS = new Set(["P", "UL", "OL"]);
 
@@ -902,6 +925,9 @@ export class FolioDoc extends HTMLElement {
     const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
     const view = figure.querySelector<HTMLElement>(".jscad-view");
     if (!code || !view) return;
+    // While the script runs (up to 5 s), the old drawing dims.
+    view.classList.add("jscad-building");
+    view.title = "Building the model…";
     try {
       const mesh = await this.runJscad(this.codeText(code));
       this.jscadMesh.set(figure, mesh);
@@ -910,6 +936,9 @@ export class FolioDoc extends HTMLElement {
       this.jscadMesh.delete(figure);
       view.textContent = `Model error: ${e instanceof Error ? e.message : String(e)}`;
       view.classList.add("jscad-error");
+    } finally {
+      view.classList.remove("jscad-building");
+      view.title = "";
     }
   }
 
@@ -1021,18 +1050,71 @@ export class FolioDoc extends HTMLElement {
     return [pick];
   }
 
+  /**
+   * Where an inserted block goes: after the caret's block - or IN
+   * PLACE of it when it is an empty paragraph (the line the user made
+   * for it), so no stray empty line is left behind.
+   */
+  private insertionPoint(idx: number): { at: number; replace: number } {
+    const blocks = this.doc?.blocks ?? [];
+    const here = blocks[idx];
+    if (here?.kind === "prose" && here.text.trim() === "") {
+      return { at: idx, replace: 1 };
+    }
+    return { at: idx >= 0 ? idx + 1 : blocks.length, replace: 0 };
+  }
+
   /** Insert a starter 3D model after the caret's block. */
   insertJscad(): void {
     if (!this.doc) return;
     const idx = this.blockIndexAtCaret();
-    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
-    this.doc.blocks.splice(at, 0, {
+    const { at, replace } = this.insertionPoint(idx);
+    this.doc.blocks.splice(at, replace, {
       kind: "code",
       lang: "jscad",
       text: JSCAD_STARTER,
     });
     this.render();
     this.emitChange();
+  }
+
+  /**
+   * A code body is plain text: `<pre><code>text</code></pre>` with
+   * only the highlighter's spans inside. Native editing breaks that -
+   * typing into an EMPTY block lands in the <pre> beside the empty
+   * <code> (and was silently lost), and select-all + retype leaves
+   * the engine's <font>/style markup. Rebuild it as plain text, caret
+   * at the same text position. Returns the body's text.
+   */
+  private normalizeCodeBody(pre: HTMLElement): string {
+    const code = pre.querySelector(":scope > code");
+    const clean =
+      code !== null &&
+      pre.childNodes.length === 1 &&
+      code.querySelector("font, [style], div, p, b, i, u, strong, em") === null;
+    if (clean)
+      return code.isConnected
+        ? (code as HTMLElement).innerText
+        : (code.textContent ?? "");
+    const text = (
+      pre.isConnected ? pre.innerText : (pre.textContent ?? "")
+    ).replace(/\n$/, "");
+    const at = this.caretPoint();
+    const offset =
+      at && pre.contains(at.node)
+        ? textOffsetIn(pre, at.node, at.offset)
+        : null;
+    const fresh = document.createElement("code");
+    fresh.textContent = text;
+    pre.replaceChildren(fresh);
+    const figure = pre.closest<HTMLElement>("figure");
+    if (figure) this.painted.delete(figure);
+    if (offset !== null && fresh.firstChild) {
+      this.setCaret(fresh.firstChild, Math.min(offset, text.length));
+    } else if (offset !== null) {
+      this.setCaret(fresh, 0);
+    }
+    return text;
   }
 
   /** The code body's current text (rendered line breaks included). */
@@ -1573,8 +1655,8 @@ export class FolioDoc extends HTMLElement {
   insertStrudel(): void {
     if (!this.doc) return;
     const idx = this.blockIndexAtCaret();
-    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
-    this.doc.blocks.splice(at, 0, {
+    const { at, replace } = this.insertionPoint(idx);
+    this.doc.blocks.splice(at, replace, {
       kind: "code",
       lang: "strudel",
       text: 'note("c a f e")',
@@ -3531,11 +3613,11 @@ export class FolioDoc extends HTMLElement {
         // from the DOM like prose. Syntax colors and strudel's
         // playing lights are spans over the text - innerText reads
         // through them.
-        const code = el.querySelector<HTMLElement>("pre.folio-code > code");
+        const pre = el.querySelector<HTMLElement>("pre.folio-code");
         next.push({
           kind: "code",
           ...(el.dataset.lang !== undefined ? { lang: el.dataset.lang } : {}),
-          text: code ? code.innerText : "",
+          text: pre ? this.normalizeCodeBody(pre) : "",
         });
         continue;
       }
@@ -4627,6 +4709,28 @@ export class FolioDoc extends HTMLElement {
         this.emitChange("delete");
       }
       return;
+    }
+    // Ctrl/Cmd+A in a code body selects the CODE, never the whole
+    // document (where the next keystroke would replace everything).
+    if (
+      ev.key.toLowerCase() === "a" &&
+      (ev.ctrlKey || ev.metaKey) &&
+      !ev.altKey
+    ) {
+      const at = this.caretPoint()?.node ?? null;
+      const host = at instanceof Element ? at : (at?.parentElement ?? null);
+      const pre = host?.closest<HTMLElement>("pre.folio-code");
+      if (pre) {
+        ev.preventDefault();
+        const root = this.shadowRoot as
+          (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+        const sel =
+          typeof root?.getSelection === "function"
+            ? root.getSelection()
+            : document.getSelection();
+        sel?.setBaseAndExtent(pre, 0, pre, pre.childNodes.length);
+        return;
+      }
     }
     if (ev.key === "Backspace" && this.removeEmptyCodeBlock()) {
       ev.preventDefault();

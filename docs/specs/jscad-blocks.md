@@ -28,7 +28,12 @@ The model is the figure; the code is how you edit it.
   faces come back.
 - **Rendering** (`src/render/mesh-svg.ts`): orthographic; yaw about
   Z, then pitch; back faces and edge-on faces culled; light from the
-  viewer's upper left; far faces first; fitted to a 640x400 viewBox.
+  viewer's upper left; fitted to a 640x400 viewBox. Painting order is
+  EXACT up to 2,500 faces: a BSP tree, built once per model, walked
+  back to front for each view. Centroid sorting misordered gear teeth
+  and hole walls. Above 2,500 faces (where a BSP costs O(n^2) to
+  build, and smooth shapes barely need ordering) faces are sorted by
+  centre depth.
   The default fill is the theme's first series colour, lifted toward
   the paper in light mode; dark mode repaints with the dark palette.
 - **Header** (the one inspector contract): click the model to reveal
@@ -36,7 +41,9 @@ The model is the figure; the code is how you edit it.
   Front, Right, Top) AND the code; click away to hide both. Dragging
   the model turns it. View and angle are presentation only, never
   saved.
-- **Editing** the code redraws the model 600 ms after typing pauses.
+- **Editing** the code redraws the model 600 ms after typing pauses;
+  while it builds, the old drawing dims. A model inserted on an empty
+  line takes that line's place.
 - **Insert**: the palette's **Insert a 3D model (JSCAD)** adds a
   starter part (a block with a bore); "JSCAD (3D model)" is in every
   code block's language picker.

@@ -132,4 +132,22 @@ test.describe("JSCAD models", () => {
       page.locator("#the-doc figure.folio-jscad .jscad-view svg"),
     ).toBeVisible({ timeout: 10_000 });
   });
+
+  // Regression (first-contact eval): inserting from an empty line
+  // left that empty paragraph behind, above the model.
+  test("inserting on an empty line takes that line's place", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\nIntro\n");
+    await page.locator("#the-doc p", { hasText: "Intro" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("3d model");
+    await page.keyboard.press("Enter");
+    const kids = await page
+      .locator("#the-doc article")
+      .evaluate((a) => Array.from(a.children).map((c) => c.tagName));
+    expect(kids).toEqual(["H1", "P", "FIGURE"]);
+  });
 });

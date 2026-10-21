@@ -113,3 +113,17 @@ flattened back to prose - nothing durable happened.
   when the caret leaves; the sticky header stays in view inside a
   long block; the palette command focuses the picker.
 - First-contact eval: `evals/code-blocks-first-contact.md`.
+
+## Code body integrity (2026-10-21)
+
+A code body is plain text: `<pre><code>text</code></pre>`, with only
+the highlighter's spans inside. Native editing breaks that in two
+ways. Typing into an EMPTY block lands in the `<pre>` beside the empty
+`<code>`, and that text was silently lost from the source.
+Select-all + retype leaves the engine's `<font>`/`style` markup (inline
+styling, breaking non-negotiable #1). On every edit, the structural
+sync rebuilds such a body as plain text, caret at the same text
+position (`normalizeCodeBody`). Ctrl/Cmd+A inside a code body selects
+the CODE, never the whole document. e2e: `tests/e2e/code-blocks.spec.ts`
+"code body integrity".
+

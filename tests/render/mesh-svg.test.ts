@@ -137,4 +137,62 @@ describe("meshToSvg", () => {
       /lower its segments/,
     );
   });
+
+  // Regression (first-contact eval): centroid sorting drew gear teeth
+  // and the bracket's hole walls in the wrong order. A long slanted
+  // face (centre FAR) partly behind a small face (centre NEARER than
+  // that part, but farther than the long face's centre).
+  it("draws a small near face after a long slanted face behind it", () => {
+    const red: [number, number, number, number] = [1, 0, 0, 1];
+    const green: [number, number, number, number] = [0, 1, 0, 1];
+    const slanted: MeshPolygon = {
+      // From x=-10 at depth 0 to x=10 at depth 20 (front view: depth = y).
+      vertices: [
+        [-10, 0, -2],
+        [10, 20, -2],
+        [10, 20, 2],
+        [-10, 0, 2],
+      ],
+      color: red,
+      twoSided: true,
+    };
+    const small: MeshPolygon = {
+      // At x=8 the slanted face is at depth 18; this one sits at 15.
+      vertices: [
+        [7, 15, -1],
+        [9, 15, -1],
+        [9, 15, 1],
+        [7, 15, 1],
+      ],
+      color: green,
+      twoSided: true,
+    };
+    const svg = meshToSvg([slanted, small], view("front"), { fill: "#3366cc" });
+    const order = [...svg.matchAll(/fill="rgb\((\d+),(\d+),/g)].map((m) =>
+      Number(m[1]) > 0 ? "red" : "green",
+    );
+    // The green face is nearer: it must be painted LAST (on top).
+    expect(order[order.length - 1]).toBe("green");
+  });
+
+  it("a large smooth mesh still draws quickly (approximate order)", () => {
+    // A 4,000-face convex band: past the exact-order limit.
+    const faces: MeshPolygon[] = [];
+    const n = 4000;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      const b = ((k + 1) / n) * Math.PI * 2;
+      faces.push({
+        vertices: [
+          [Math.cos(a), Math.sin(a), -1],
+          [Math.cos(b), Math.sin(b), -1],
+          [Math.cos(b), Math.sin(b), 1],
+          [Math.cos(a), Math.sin(a), 1],
+        ],
+      });
+    }
+    const t = performance.now();
+    meshToSvg(faces, view("iso"), { fill: "#3366cc" });
+    expect(performance.now() - t).toBeLessThan(500);
+  });
 });

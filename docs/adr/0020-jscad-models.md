@@ -43,7 +43,8 @@ Linux desktop app).
 
 - Documents cannot use JSCAD features that need the network or files
   (importing STL or SVG, remote libraries), by design.
-- Drawing far faces first can misorder interlocking faces in rare
-  spots; large meshes (over 60k faces) are refused with a hint to
-  lower `segments`. Both are acceptable for document figures.
+- Painting order is exact (a BSP tree) up to 2,500 faces; above
+  that it is approximate (centre depth), which is fine for smooth
+  shapes. Meshes over 60k faces are refused with a hint to lower
+  `segments`.
 - Future phases: parameters driven by a dataset row, and STL export.

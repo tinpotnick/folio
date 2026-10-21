@@ -1435,6 +1435,11 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       padding: 4px 0;
     }
     figure.folio-jscad .jscad-view:active { cursor: grabbing; }
+    figure.folio-jscad .jscad-view.jscad-building svg {
+      opacity: 0.45;
+      transition: opacity 200ms;
+    }
+    figure.folio-jscad select.jscad-view-pick { flex: none; }
     figure.folio-jscad .jscad-view svg {
       display: block;
       width: 100%;
