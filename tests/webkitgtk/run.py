@@ -25,7 +25,10 @@ gi.require_version("WebKit2", "4.1")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, WebKit2, GLib, Gdk  # noqa: E402
 
-BASE = os.environ.get("FOLIO_URL", "http://localhost:5173/")
+# The guide, named: a bare address opens it only on the FIRST launch
+# (the webview keeps localStorage between runs), and the cases expect
+# its content.
+BASE = os.environ.get("FOLIO_URL", "http://localhost:5173/?doc=demo/welcome.md")
 here = os.path.dirname(os.path.abspath(__file__))
 cases = sorted(glob.glob(os.path.join(here, "*.js")))
 results = {}

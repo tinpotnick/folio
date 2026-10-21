@@ -861,6 +861,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       padding: var(--folio-page-padding, 0);
       border-radius: var(--folio-page-radius, 0);
       box-shadow: var(--folio-page-shadow, none);
+      min-height: var(--folio-page-min-height, 0);
+      box-sizing: border-box;
       font-optical-sizing: auto;
       text-rendering: optimizeLegibility;
     }
@@ -1593,6 +1595,21 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     p:empty::before, h1:empty::before, h2:empty::before {
       content: "…";
       color: var(--folio-ink-muted, #b0b8c1);
+    }
+    /* A new document: an untitled title, and one line saying how to
+       go on - gone as soon as there is anything to show. */
+    article.folio-doc > h1:first-child:empty::before {
+      content: "Untitled";
+      opacity: 0.45;
+    }
+    article.folio-doc:has(> h1:only-child:empty)::after,
+    article.folio-doc:has(> h1:only-child:empty + br:last-child)::after {
+      content: "Type a title, then press Enter to start writing. Ctrl+K finds tables, charts and everything else.";
+      display: block;
+      margin-top: 0.75em;
+      color: var(--folio-ink-muted);
+      font-size: 0.95em;
+      pointer-events: none;
     }
     article.folio-doc a {
       color: var(--folio-accent);

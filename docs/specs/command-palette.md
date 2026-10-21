@@ -37,7 +37,11 @@ magnifier button in the toolbar.
   plus a keyword string; a query appearing VERBATIM in an entry
   scores a large bonus, so "poem" ranks the poem example over a
   command whose keywords merely contain p...o...e...m scattered
-  about. Empty query lists EVERY command, then the first ten
+  about. A verbatim match is scored as one contiguous run (plus a
+  word-start bonus), not letter by letter - the letter walk took the
+  first "g" for "guide" and lost "Getting started guide" to help
+  topics. A query found in an entry's TITLE scores above the same
+  query among keywords ("new" is New document). Empty query lists EVERY command, then the first ten
   sections and the first ten help topics: one global cap let each
   new command push sections and help out of the empty state.
 - **Command actions reuse the toolbar handlers** (`.click()` on the

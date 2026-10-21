@@ -45,36 +45,58 @@ const mdView = requireEl<HTMLElement>("#md-view");
 /** The front page: what folio is, what it does, the examples. */
 const WELCOME = "/demo/welcome.md";
 
+/** A new document: an empty title, the caret in it. */
+const BLANK = "# \n";
+
+/** Set once the first-run guide has been shown (per browser/app). */
+const GUIDED_KEY = "folio.guided";
+
 /**
- * The document to boot into (spec: docs/specs/welcome-page.md): the
- * welcome page, or a shipped document named by `?doc=` - a link that
- * opens folio on an example. Only same-origin `.md` paths; anything
- * else falls back to the welcome page.
+ * The shipped document the address names (`?doc=`), or null for the
+ * bare address - a blank document. Only same-origin `.md` paths;
+ * anything else is ignored.
  */
-function bootPath(): string {
+function bootPath(): string | null {
   const doc = new URLSearchParams(window.location.search).get("doc");
   if (doc && /^\/?[\w./-]+\.md$/.test(doc) && !doc.includes("..")) {
     return doc.startsWith("/") ? doc : `/${doc}`;
   }
-  return WELCOME;
-}
-
-async function boot(): Promise<void> {
-  await openShipped(bootPath(), { history: "replace", unguarded: true });
-}
-
-/** The address bar for a shipped document: home is the bare URL. */
-function docUrl(path: string): string {
-  return path === WELCOME ? window.location.pathname : `?doc=${path.slice(1)}`;
+  return null;
 }
 
 /**
- * Load a shipped document by path into the editor (in place). It
- * opens at its TOP, and it becomes a browser history entry: Back
- * returns to the previous document instead of leaving folio.
+ * Boot (spec: docs/specs/welcome-page.md): a `?doc=` link opens that
+ * document; the very first launch opens the getting-started guide;
+ * every launch after that opens a blank document.
+ */
+async function boot(): Promise<void> {
+  let path = bootPath();
+  if (path === null) {
+    let guided = true;
+    try {
+      guided = localStorage.getItem(GUIDED_KEY) !== null;
+      localStorage.setItem(GUIDED_KEY, "1");
+    } catch {
+      // No storage (private window): a blank page, never a loop of guides.
+    }
+    if (!guided) path = WELCOME;
+  }
+  await openShipped(path, { history: "replace", unguarded: true });
+}
+
+/** The address bar: a shipped document's `?doc=`, else the bare URL. */
+function docUrl(path: string | null): string {
+  return path === null ? window.location.pathname : `?doc=${path.slice(1)}`;
+}
+
+/**
+ * Load a shipped document by path into the editor (in place), or a
+ * new blank document for `null`. It opens at its TOP, and it becomes
+ * a browser history entry: Back returns to the previous document
+ * instead of leaving folio.
  */
 async function openShipped(
-  path: string,
+  path: string | null,
   opts: {
     history?: "push" | "replace" | "none";
     scroll?: number;
@@ -83,9 +105,12 @@ async function openShipped(
   } = {},
 ): Promise<boolean> {
   if (!opts.unguarded && !(await confirmLeave())) return false;
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
-  const text = await res.text();
+  let text = BLANK;
+  if (path !== null) {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
+    text = await res.text();
+  }
   const mode = opts.history ?? "push";
   // Remember where the reader was on the page they are leaving, so
   // Back returns them there - not to its top.
@@ -111,6 +136,8 @@ async function openShipped(
   if (mode === "replace") history.replaceState({ doc: path }, "", docUrl(path));
   shownUrl = window.location.href;
   markClean();
+  // A new document is for writing: the caret waits in its title.
+  if (path === null) el.focusStart();
   return true;
 }
 
@@ -1164,8 +1191,6 @@ el.onChange(() => {
   refreshOutline();
 });
 
-boot();
-
 // The wordmark is the way home: the welcome page.
 requireEl<HTMLButtonElement>("#btn-home").addEventListener("click", () => {
   void openShipped(WELCOME);
@@ -1735,7 +1760,7 @@ function paletteEntries(): PaletteEntry[] {
   entries.push({
     title: "Open the help document",
     group: "Command",
-    keywords: "help reference guide how to",
+    keywords: "help reference manual documentation how to",
     action: () => openHelp(),
   });
   entries.push({
@@ -1815,9 +1840,16 @@ function paletteEntries(): PaletteEntry[] {
     });
   }
   entries.push({
-    title: "Open the welcome page",
+    title: "New document",
     group: "Command",
-    keywords: "welcome home start front page about intro overview examples",
+    keywords: "new blank empty untitled create start fresh document file",
+    action: () => void openShipped(null),
+  });
+  entries.push({
+    title: "Getting started guide",
+    group: "Command",
+    keywords:
+      "guide getting started welcome home tour intro overview about front page examples learn",
     action: () => void openShipped(WELCOME),
   });
   if (!fileBar.hidden) {
@@ -1870,7 +1902,17 @@ function fuzzyScore(needle: string, haystack: string): number {
   // The query appearing VERBATIM beats any scattered-letter
   // match: "poem" must rank the poem example over a command whose
   // keywords merely contain p...o...e...m somewhere.
-  let score = h.includes(n) ? 10 : 0;
+  // Scored as the contiguous run it is - walking letter by letter
+  // took the FIRST g for "guide" (in "Getting") and scattered the
+  // rest, so "Getting started guide" lost to any help topic.
+  const at = h.indexOf(n);
+  if (at >= 0) {
+    const wordAt = new RegExp(
+      `(^|[ .:-])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+    ).exec(h);
+    return 10 + 3 * n.length + (wordAt ? 4 : 0);
+  }
+  let score = 0;
   let hi = 0;
   let last = -2;
   for (const ch of n) {
@@ -1941,6 +1983,11 @@ function updatePalette(): void {
         e,
         s: Math.max(
           fuzzyScore(query, `${e.title} ${e.keywords}`),
+          // Words in the TITLE beat the same words among the keywords:
+          // "new" is New document, not every command tagged "new".
+          e.title.toLowerCase().includes(query.toLowerCase())
+            ? fuzzyScore(query, e.title) + 5
+            : -1,
           // A help topic whose TEXT contains the query verbatim: found,
           // but ranked below title/keyword matches.
           e.body?.includes(query.toLowerCase()) ? 6 : -1,
@@ -1981,6 +2028,12 @@ document.addEventListener("keydown", (ev) => {
   if (key === "p") {
     ev.preventDefault();
     window.print();
+  }
+  // Ctrl+N: a new document. (A browser keeps Ctrl+N for a new window;
+  // the desktop app has no such binding, so there it is folio's.)
+  if (key === "n") {
+    ev.preventDefault();
+    void openShipped(null);
   }
 });
 
@@ -2276,3 +2329,7 @@ window.addEventListener("beforeprint", () => {
 });
 
 refreshOutline();
+
+// Last: booting can finish synchronously (a blank document fetches
+// nothing), so everything above must exist first.
+void boot();

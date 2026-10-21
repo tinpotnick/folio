@@ -162,12 +162,14 @@ export function parseDoc(text: string): Doc {
       i = end + 1;
       continue;
     }
-    const heading = /^(#{1,6}) (.+)$/.exec(line);
+    // `#` alone (or `# `) is an EMPTY heading, as in CommonMark - a
+    // new document's untitled title.
+    const heading = /^(#{1,6})(?:[ \t]+(.*))?$/.exec(line);
     if (heading) {
       doc.blocks.push({
         kind: "heading",
         level: (heading[1] ?? "#").length,
-        text: heading[2] ?? "",
+        text: (heading[2] ?? "").trimEnd(),
       });
       i++;
       continue;
@@ -653,7 +655,10 @@ function serializeList(block: Extract<DocBlock, { kind: "list" }>): string {
 }
 
 function collectProse(lines: string[], start: number): number {
-  let i = start;
+  // The first line is prose whatever it starts with: nothing else
+  // claimed it (`#hashtag`, `####### seven`), and stopping on it
+  // looped the parser forever.
+  let i = start + 1;
   while (i < lines.length) {
     const line = lines[i] ?? "";
     if (

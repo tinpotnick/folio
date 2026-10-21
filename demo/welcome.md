@@ -2,7 +2,7 @@
 theme: modern
 ---
 
-# folio
+# Welcome to folio
 
 Documents that calculate like a spreadsheet and read like a finished
 report.
@@ -11,6 +11,25 @@ folio is a document-first workspace. You write in plain Markdown;
 tables are typed datasets with live formulas; charts are queries over
 those tables; and the page always renders like a polished report - in
 ten themes, light or dark, online or off.
+
+## Getting started
+
+This guide opens the first time you start folio. After that, folio
+opens on a new, blank document, ready to write in.
+
+1. **Start a document.** Press **Ctrl+K** and type "new" (or press
+   **Ctrl+N** in the desktop app). Type a title, press Enter, and
+   write.
+2. **Add structure.** The toolbar's **H1 H2 H3** buttons make
+   headings, and the list buttons make bullets and numbered lists.
+   Everything else - tables, charts, equations, images, diagrams -
+   is in the command palette: press **Ctrl+K** and say what you
+   want, such as "table", "chart" or "equation".
+3. **Change the look.** Press Ctrl+K and type "theme". Ten themes,
+   each with a dark mode.
+4. **Open an example.** Press Ctrl+K and type "example", or pick one
+   from the list at the end of this page.
+5. **Come back to this guide.** Press Ctrl+K and type "guide".
 
 ## Try it on this page
 
@@ -73,7 +92,8 @@ caption: "Where the budget goes"
 
 ## Example documents
 
-Each one opens in place; the folio wordmark brings you back here.
+Each one opens in place, and **Back** returns here. Find them again
+later from the palette: Ctrl+K, then "example".
 
 - [Q3 Field Operations Review](demo/examples/field-operations.md) - a
   quarterly report with live regional figures, running totals and
@@ -110,6 +130,6 @@ Each one opens in place; the folio wordmark brings you back here.
 ## Getting around
 
 - **Ctrl+K** opens the command palette. Search for what you want in
-  your own words: "table", "theme", "print", "dark".
+  your own words: "new", "table", "theme", "print", "dark", "guide".
 - **?** opens the help document.
 - **The M↓ button** switches to the Markdown source and back.

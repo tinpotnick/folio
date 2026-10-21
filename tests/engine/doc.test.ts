@@ -525,3 +525,24 @@ describe("fence info beyond the language", () => {
     expect(serializeDoc(doc)).toBe(text);
   });
 });
+
+describe("lines that start with # but are not titled headings", () => {
+  // Each looped the parser forever (out of memory) before the fix.
+  it("an untitled heading (a new document) parses and round-trips", () => {
+    const doc = parseDoc("# \n");
+    expect(doc.blocks).toEqual([{ kind: "heading", level: 1, text: "" }]);
+    expect(serializeDoc(doc)).toBe("# \n");
+    expect(parseDoc("##\n").blocks).toEqual([
+      { kind: "heading", level: 2, text: "" },
+    ]);
+  });
+
+  it("#hashtag and seven hashes are prose", () => {
+    expect(parseDoc("#hashtag here\n").blocks).toEqual([
+      { kind: "prose", text: "#hashtag here" },
+    ]);
+    expect(parseDoc("####### seven\n").blocks).toEqual([
+      { kind: "prose", text: "####### seven" },
+    ]);
+  });
+});
