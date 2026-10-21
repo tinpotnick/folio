@@ -1460,6 +1460,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       padding: 4px 0;
       overflow-x: auto;
     }
+    /* SVG drawings inherit the page's ink as currentColor. */
+    figure.folio-svg .code-view { color: var(--folio-ink); }
     figure.folio-drawn .code-view > svg {
       display: block;
       max-width: 100%;

@@ -62,6 +62,15 @@ follow), so each new language adds only its own drawing function.
   the page's width.
 - Rendered headless (`vega` `none` renderer) to SVG, then sanitized.
 
+## SVG (`svg`)
+
+- The block's markup, sanitized, is the drawing ("Drawing error: not
+  valid SVG ..." when there is no `<svg>`).
+- It inherits the page's ink as `currentColor`, and may use the
+  theme's variables (`var(--folio-accent)`, `--folio-ink-muted`, ...),
+  so a hand-drawn figure follows the theme and the mode.
+- Natural size, shrunk only when wider than the page.
+
 ## Acceptance
 
 - Unit: `tests/render/svg-sanitize.test.ts`,
@@ -70,7 +79,8 @@ follow), so each new language adds only its own drawing function.
   face, code hidden; editing redraws; a syntax error is the figure;
   DOT links cannot run script; the palette inserts one; Vega-Lite reads
   a dataset and follows its edits, refuses URL data with no request,
-  reports invalid JSON). The JSCAD
+  reports invalid JSON; SVG follows the theme's ink, scripts, handlers
+  and outside loads are removed, non-SVG is reported). The JSCAD
   suite still passes on the shared path.
 - Sample: `demo/examples/drawings.md`. First-contact eval:
   `evals/drawn-blocks-first-contact.md`.
