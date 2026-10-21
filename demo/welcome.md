@@ -87,8 +87,9 @@ Each one opens in place; the folio wordmark brings you back here.
 - [Signals and spectra](demo/examples/signal-processing.md) - a
   sampled signal, its FFT and a low-pass filter, every number a
   formula.
-- [Drawings from text](demo/examples/drawings.md) - graphs laid out by
-  Graphviz, drawn from a few lines of text.
+- [Drawings from text](demo/examples/drawings.md) - Graphviz graphs,
+  Vega-Lite heatmaps, hand-written SVG and playable sheet music, each
+  drawn from a few lines of text.
 - [Parametric parts](demo/examples/3d-models.md) - 3D models drawn
   from a few lines of JSCAD code: a bracket, a gear, an assembly.
 - [A music document](demo/examples/music.md) - Strudel patterns that

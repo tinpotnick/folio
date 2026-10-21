@@ -57,6 +57,11 @@ document — written in the same renderer you are working with.
   such as `var(--folio-accent)`, and it follows the theme and dark
   mode. Scripts and anything loaded from the internet are removed.
   Search "svg" in the palette to insert one.
+- **Sheet music**: a block tagged `abc` is a tune in
+  [ABC notation](https://abcnotation.com), engraved as a score. Click
+  it and press **Play** to hear it, through folio's own simple
+  synthesizer (nothing is downloaded). Search "sheet music" in the
+  palette to insert one.
 - The *Drawings from text* example shows each kind.
 
 ## 3D models

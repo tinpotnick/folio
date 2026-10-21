@@ -1370,6 +1370,16 @@ function paletteEntries(): PaletteEntry[] {
     action: () => btnTable.click(),
   });
   entries.push({
+    title: "Insert sheet music (ABC)",
+    group: "Command",
+    keywords:
+      "sheet music abc notation score notes stave staff tune melody song insert",
+    action: () => {
+      el.insertAbc();
+      flash("Sheet music inserted");
+    },
+  });
+  entries.push({
     title: "Insert an SVG drawing",
     group: "Command",
     keywords: "svg drawing vector illustration figure shapes markup insert",

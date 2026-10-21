@@ -37,6 +37,7 @@ export const CODE_LANGUAGES: CodeLanguage[] = [
   { id: "dot", label: "Graphviz (DOT diagram)" },
   { id: "vega-lite", label: "Vega-Lite (chart spec)" },
   { id: "svg", label: "SVG (drawing)" },
+  { id: "abc", label: "ABC (sheet music)" },
   { id: "toml", label: "TOML" },
   { id: "typescript", label: "TypeScript" },
   { id: "xml", label: "XML" },

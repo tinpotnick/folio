@@ -71,16 +71,32 @@ follow), so each new language adds only its own drawing function.
   so a hand-drawn figure follows the theme and the mode.
 - Natural size, shrunk only when wider than the page.
 
+## ABC sheet music (`abc`, ADR-0023)
+
+- Engraved by abcjs, responsive to the column, in the theme's ink
+  (`foregroundColor`) and body face (title, tempo, chords, lyrics).
+- A tune with no music lines is "Music error: ..."; abcjs warnings
+  (an unknown symbol, an overlong bar) show under the score as "Music
+  warning: ...".
+- **Play / Stop** in the header: abcjs gives the note sequence (MIDI
+  pitch; start and duration in whole notes at the tune's `Q:` tempo),
+  and folio's offline synth plays it. No soundfont is fetched. The
+  figure carries `data-playing` while it plays; a full re-render stops
+  it.
+
 ## Acceptance
 
-- Unit: `tests/render/svg-sanitize.test.ts`,
+- Unit: `tests/render/tone-synth.test.ts`,
+  `tests/render/svg-sanitize.test.ts`,
   `tests/render/vega-data.test.ts`.
 - e2e: `tests/e2e/drawn.spec.ts` (the sample draws, in the theme's
   face, code hidden; editing redraws; a syntax error is the figure;
   DOT links cannot run script; the palette inserts one; Vega-Lite reads
   a dataset and follows its edits, refuses URL data with no request,
   reports invalid JSON; SVG follows the theme's ink, scripts, handlers
-  and outside loads are removed, non-SVG is reported). The JSCAD
+  and outside loads are removed, non-SVG is reported; ABC engraves,
+  plays with no request and stops, a tune with no music is
+  reported). The JSCAD
   suite still passes on the shared path.
 - Sample: `demo/examples/drawings.md`. First-contact eval:
   `evals/drawn-blocks-first-contact.md`.
