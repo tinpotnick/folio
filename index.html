@@ -568,6 +568,44 @@
         box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
         overflow: hidden;
       }
+      #unsaved-modal {
+        width: min(440px, calc(100vw - 48px));
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
+      }
+      #unsaved-modal::backdrop {
+        background: rgba(31, 35, 40, 0.4);
+      }
+      .unsaved-body {
+        padding: 18px 20px 16px;
+      }
+      .unsaved-body h2 {
+        margin: 0 0 6px;
+        font-size: 15px;
+      }
+      .unsaved-body p {
+        margin: 0 0 16px;
+        font-size: 13px;
+        color: var(--text-muted);
+        line-height: 1.5;
+      }
+      .unsaved-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      button.plain.danger {
+        color: var(--rec-fg);
+      }
+      button.plain.primary {
+        background: var(--active-bg);
+        color: var(--active-fg);
+        border-color: var(--active-bg);
+      }
       #settings-modal::backdrop {
         background: rgba(31, 35, 40, 0.4);
       }
@@ -1197,6 +1235,26 @@
       />
       <div id="palette-list" role="listbox" aria-label="Results"></div>
       <div class="palette-foot">Enter to run · ↑ ↓ to move · Esc to close</div>
+    </dialog>
+    <dialog id="unsaved-modal" aria-label="Unsaved changes">
+      <form method="dialog" class="unsaved-body">
+        <h2>Unsaved changes</h2>
+        <p id="unsaved-text">
+          This document has changes that are not saved. Opening another document
+          replaces it.
+        </p>
+        <div class="unsaved-actions">
+          <button value="cancel" class="plain" id="btn-unsaved-cancel">
+            Cancel
+          </button>
+          <button value="discard" class="plain danger" id="btn-unsaved-discard">
+            Discard changes
+          </button>
+          <button value="save" class="plain primary" id="btn-unsaved-save">
+            Save…
+          </button>
+        </div>
+      </form>
     </dialog>
     <dialog id="settings-modal" aria-label="Document settings">
       <div class="settings-head">

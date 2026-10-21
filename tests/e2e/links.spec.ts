@@ -76,6 +76,9 @@ test.describe("links", () => {
       page.locator("#the-doc a", { hasText: "Revenue" }),
     ).toHaveAttribute("href", "demo/examples/accounts.md");
     await page.locator("#the-doc a", { hasText: "Revenue" }).click();
+    // Adding the link was an unsaved edit: following it asks first
+    // (docs/specs/unsaved-changes.md).
+    await page.locator("#btn-unsaved-discard").click();
     await expect(
       page.locator("folio-doc h1", {
         hasText: "Half-year management accounts",

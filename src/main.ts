@@ -54,7 +54,7 @@ function bootPath(): string {
 }
 
 async function boot(): Promise<void> {
-  await openShipped(bootPath(), { history: "replace" });
+  await openShipped(bootPath(), { history: "replace", unguarded: true });
 }
 
 /** The address bar for a shipped document: home is the bare URL. */
@@ -69,8 +69,14 @@ function docUrl(path: string): string {
  */
 async function openShipped(
   path: string,
-  opts: { history?: "push" | "replace" | "none"; scroll?: number } = {},
-): Promise<void> {
+  opts: {
+    history?: "push" | "replace" | "none";
+    scroll?: number;
+    /** Skip the unsaved-changes check (boot: nothing to lose). */
+    unguarded?: boolean;
+  } = {},
+): Promise<boolean> {
+  if (!opts.unguarded && !(await confirmLeave())) return false;
   const res = await fetch(path);
   if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
   const text = await res.text();
@@ -97,11 +103,20 @@ async function openShipped(
   window.scrollTo(0, opts.scroll ?? 0);
   if (mode === "push") history.pushState({ doc: path }, "", docUrl(path));
   if (mode === "replace") history.replaceState({ doc: path }, "", docUrl(path));
+  shownUrl = window.location.href;
+  markClean();
+  return true;
 }
+
+/** The address of the document on screen (Back may be cancelled). */
+let shownUrl = window.location.href;
 
 window.addEventListener("popstate", (ev) => {
   const scroll = (ev.state as { scroll?: number } | null)?.scroll ?? 0;
-  void openShipped(bootPath(), { history: "none", scroll });
+  void openShipped(bootPath(), { history: "none", scroll }).then((went) => {
+    // Cancelled: the browser already moved the address - put it back.
+    if (!went) history.pushState(null, "", shownUrl);
+  });
 });
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
@@ -354,8 +369,7 @@ async function openLinkedDocument(href: string): Promise<void> {
       window.open(href, "_blank", "noopener");
       return;
     }
-    await openShipped(url.pathname);
-    flash("Opened linked document");
+    if (await openShipped(url.pathname)) flash("Opened linked document");
   } catch {
     flash(`Could not open ${href}`);
   }
@@ -1172,28 +1186,107 @@ const btnSave = requireEl<HTMLButtonElement>("#btn-save");
  * - and in-memory docs (examples, links, imports) clear it. */
 let currentDocPath: string | null = null;
 
+/* --- Unsaved changes (spec: docs/specs/unsaved-changes.md) ---
+ * The document as of its last load or save, serialized: anything that
+ * would REPLACE the document asks first when the current Markdown
+ * differs from it (undoing back to it counts as clean). */
+let cleanMarkdown: string | null = null;
+
+function currentMarkdown(): string | null {
+  return mdWrap.hidden ? el.getMarkdown() : editor.value;
+}
+
+/** Call after a document is loaded or saved: it is now "clean". */
+function markClean(): void {
+  cleanMarkdown = el.getMarkdown();
+}
+
+function isDirty(): boolean {
+  const md = currentMarkdown();
+  return cleanMarkdown !== null && md !== null && md !== cleanMarkdown;
+}
+
+const unsavedModal = requireEl<HTMLDialogElement>("#unsaved-modal");
+const unsavedText = requireEl<HTMLElement>("#unsaved-text");
+const btnUnsavedSave = requireEl<HTMLButtonElement>("#btn-unsaved-save");
+
+/**
+ * Before replacing (or closing) the document: true to go ahead. Clean
+ * documents go ahead at once; otherwise the user chooses Save (desktop
+ * - only a completed save goes ahead), Discard changes, or Cancel.
+ */
+async function confirmLeave(
+  action = "Opening another document",
+): Promise<boolean> {
+  if (!isDirty()) return true;
+  unsavedText.textContent = `This document has changes that are not saved. ${action} replaces it.`;
+  btnUnsavedSave.hidden = !isDesktop();
+  unsavedModal.returnValue = "cancel";
+  unsavedModal.showModal();
+  (isDesktop()
+    ? btnUnsavedSave
+    : requireEl<HTMLButtonElement>("#btn-unsaved-cancel")
+  ).focus();
+  const choice = await new Promise<string>((resolve) => {
+    unsavedModal.addEventListener(
+      "close",
+      () => resolve(unsavedModal.returnValue || "cancel"),
+      { once: true },
+    );
+  });
+  if (choice === "discard") return true;
+  if (choice === "save") return saveCurrent();
+  return false;
+}
+
+/** Save through the desktop dialog; true when it was written. */
+async function saveCurrent(): Promise<boolean> {
+  const md = currentMarkdown();
+  if (md === null) return false;
+  const path = await saveDocument(md, currentDocPath ?? undefined);
+  if (path === null) return false;
+  currentDocPath = path;
+  cleanMarkdown = md;
+  flash(`Saved ${path}`);
+  return true;
+}
+
+// Closing or reloading the tab: the browser's own prompt.
+window.addEventListener("beforeunload", (ev) => {
+  if (isDirty()) ev.preventDefault();
+});
+
+// Closing the desktop window: the same Save / Discard / Cancel.
+if (isDesktop()) {
+  void (async (): Promise<void> => {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    const win = getCurrentWindow();
+    await win.onCloseRequested(async (ev) => {
+      if (!isDirty()) return;
+      ev.preventDefault();
+      if (await confirmLeave("Closing the window")) await win.destroy();
+    });
+  })();
+}
+
 if (isDesktop()) {
   fileBar.hidden = false;
 }
 
 btnOpen.addEventListener("click", async () => {
+  if (!(await confirmLeave())) return;
   const res = await openDocument(currentDocPath ?? undefined);
   if (res === null) return;
   currentDocPath = res.path;
   await el.load(res.text);
   editor.value = res.text;
   refreshOutline();
+  markClean();
   flash("Opened document");
 });
 
-btnSave.addEventListener("click", async () => {
-  const md = el.getMarkdown();
-  if (md === null) return;
-  const path = await saveDocument(md, currentDocPath ?? undefined);
-  if (path !== null) {
-    currentDocPath = path;
-    flash(`Saved ${path}`);
-  }
+btnSave.addEventListener("click", () => {
+  void saveCurrent();
 });
 
 /* --- In-app help (spec: docs/specs/in-app-help.md) --- */
@@ -1532,7 +1625,9 @@ function paletteEntries(): PaletteEntry[] {
       group: "Command",
       keywords: `example demo document open load ${ex.id} ${ex.blurb}`,
       action: () => {
-        void openShipped(ex.file).then(() => flash(`Opened ${ex.id}`));
+        void openShipped(ex.file).then((went) => {
+          if (went) flash(`Opened ${ex.id}`);
+        });
       },
     });
   }
