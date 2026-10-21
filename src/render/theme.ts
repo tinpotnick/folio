@@ -1447,8 +1447,30 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     /* JSCAD (spec: jscad-blocks.md): the MODEL is the figure; its code
        shows only while the header is open (the one inspector
        contract: click to reveal, click away to hide). */
-    figure.folio-jscad > .folio-inspector[hidden] ~ pre.folio-code {
+    figure.folio-drawn > .folio-inspector[hidden] ~ pre.folio-code {
       display: none;
+    }
+    figure.folio-drawn > .folio-inspector:not([hidden]) ~ .code-view {
+      border-bottom: 1px dashed var(--folio-rule);
+      margin-bottom: 8px;
+    }
+    figure.folio-drawn .code-view {
+      color: var(--folio-ink-muted);
+      font-size: 0.9em;
+      padding: 4px 0;
+      overflow-x: auto;
+    }
+    figure.folio-drawn .code-view > svg {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      margin: 0 auto;
+    }
+    figure.folio-drawn .code-view.drawn-error {
+      color: var(--folio-unit);
+      font-family: ${theme.monoFont};
+      font-size: 0.82em;
+      white-space: pre-wrap;
     }
     figure.folio-jscad .jscad-view {
       cursor: grab;

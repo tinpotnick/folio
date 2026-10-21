@@ -1324,6 +1324,11 @@ const EXAMPLES: { id: string; file: string; blurb: string }[] = [
     blurb: "music strudel audio beats pattern fun player",
   },
   {
+    id: "drawings",
+    file: "/demo/examples/drawings.md",
+    blurb: "drawings graphviz dot graph diagram vega svg music notation",
+  },
+  {
     id: "3d-models",
     file: "/demo/examples/3d-models.md",
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
@@ -1363,6 +1368,16 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords: "table insert new add simple markdown pipe grid rows columns",
     action: () => btnTable.click(),
+  });
+  entries.push({
+    title: "Insert a Graphviz diagram (DOT)",
+    group: "Command",
+    keywords:
+      "graphviz dot graph diagram network tree dependency flow nodes edges insert",
+    action: () => {
+      el.insertGraphviz();
+      flash("Graphviz diagram inserted");
+    },
   });
   entries.push({
     title: "Insert a 3D model (JSCAD)",
