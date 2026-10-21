@@ -46,6 +46,12 @@ document — written in the same renderer you are working with.
   (`a -> b`); Graphviz places them. Search "graphviz" in the palette
   to insert one. The theme sets its fonts and colours unless the
   graph sets its own.
+- **Vega-Lite**: a block tagged `vega-lite` holds a
+  [Vega-Lite](https://vega.github.io/vega-lite/) chart spec (JSON) for
+  heatmaps, layered charts and small multiples. Write
+  `"data": {"name": "@my-dataset"}` to chart a folio dataset; the chart
+  follows the table as you edit it. Data from URLs is not allowed:
+  documents work offline. Search "vega" in the palette to insert one.
 - The *Drawings from text* example shows each kind.
 
 ## 3D models

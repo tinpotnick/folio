@@ -26,6 +26,7 @@ import { formatComputed } from "./render/number.js";
 import { meshToSvg, VIEWS, type MeshPolygon } from "./render/mesh-svg.js";
 import { meshToStl } from "./render/stl.js";
 import { sanitizeSvg } from "./render/svg-sanitize.js";
+import { bindVegaData, vegaDataRefs } from "./render/vega-data.js";
 import {
   renderAreaChart,
   renderBarChart,
@@ -226,11 +227,25 @@ const DRAWN_LANGS: Record<string, string> = {
   jscad: "3D model",
   dot: "Graphviz diagram",
   graphviz: "Graphviz diagram",
+  "vega-lite": "Vega-Lite chart",
 };
 
 function isDrawnLang(lang: string | undefined): boolean {
   return lang !== undefined && lang in DRAWN_LANGS;
 }
+
+const VEGA_STARTER = `{
+  "data": { "values": [
+    { "item": "A", "value": 28 },
+    { "item": "B", "value": 55 },
+    { "item": "C", "value": 43 }
+  ] },
+  "mark": "bar",
+  "encoding": {
+    "x": { "field": "item", "type": "nominal" },
+    "y": { "field": "value", "type": "quantitative" }
+  }
+}`;
 
 const GRAPHVIZ_STARTER = `digraph {
   rankdir=LR
@@ -959,6 +974,7 @@ export class FolioDoc extends HTMLElement {
     const lang = figure.dataset.lang ?? "";
     if (lang === "jscad") return this.drawJscad(figure);
     if (lang === "dot" || lang === "graphviz") return this.drawGraphviz(figure);
+    if (lang === "vega-lite") return this.drawVegaLite(figure);
     return Promise.resolve();
   }
 
@@ -966,6 +982,132 @@ export class FolioDoc extends HTMLElement {
   private drawnError(view: HTMLElement, what: string, e: unknown): void {
     view.textContent = `${what} error: ${e instanceof Error ? e.message : String(e)}`;
     view.classList.add("drawn-error");
+  }
+
+  /* --- Vega-Lite (spec: docs/specs/drawn-blocks.md, ADR-0022) --- */
+
+  /**
+   * Draw a Vega-Lite JSON spec, headless, to SVG. `"data": {"name":
+   * "@dataset"}` reads the live dataset; URL data is refused and the
+   * loader can fetch nothing (offline). The theme is Vega-Lite's
+   * default config, which the spec's own config overrides.
+   */
+  private async drawVegaLite(figure: HTMLElement): Promise<void> {
+    const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+    const view = figure.querySelector<HTMLElement>(".code-view");
+    if (!code || !view || !this.doc) return;
+    try {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(this.codeText(code));
+      } catch (e) {
+        throw new Error(
+          `the spec is not valid JSON (${e instanceof Error ? e.message : String(e)})`,
+        );
+      }
+      const spec = bindVegaData(parsed, (id) => this.datasetRows(id)) as Record<
+        string,
+        unknown
+      >;
+      const [vega, vl] = await Promise.all([
+        import("vega"),
+        import("vega-lite"),
+      ]);
+      const theme = themeFromDoc(this.doc);
+      const mode = this.mode();
+      const c = theme.colors[mode];
+      const font = /^"([^"]+)"/.exec(theme.bodyFont)?.[1] ?? "sans-serif";
+      const width = Math.max(
+        200,
+        Math.min(620, (view.clientWidth || 640) - 90),
+      );
+      const config = {
+        background: null,
+        font,
+        view: { stroke: null, continuousWidth: width, continuousHeight: 240 },
+        title: { color: c.heading, fontWeight: 600 },
+        axis: {
+          labelColor: c.muted,
+          titleColor: c.ink,
+          gridColor: c.hairline,
+          domainColor: c.rule,
+          tickColor: c.rule,
+          titleFontWeight: 500,
+        },
+        // Horizontal x labels (Vega rotates discrete ones by default).
+        axisX: { labelAngle: 0 },
+        legend: { labelColor: c.ink, titleColor: c.ink },
+        header: { labelColor: c.ink, titleColor: c.ink },
+        range: {
+          category: theme.palette[mode],
+          // Sequential scales run from the page's tint to its accent.
+          heatmap: [c.tint, c.accent],
+          ramp: [c.tint, c.accent],
+        },
+        mark: { color: theme.palette[mode][0] },
+        // Rules and text default to black - invisible on dark paper.
+        rule: { color: c.ink },
+        text: { color: c.ink },
+        ...(spec["config"] as Record<string, unknown> | undefined),
+      };
+      // A single chart (or layer) with no width of its own fills the
+      // page: discrete axes otherwise use a narrow fixed step.
+      if (
+        spec["width"] === undefined &&
+        ("mark" in spec || "layer" in spec) &&
+        !("facet" in spec) &&
+        !("repeat" in spec)
+      ) {
+        spec["width"] = width;
+      }
+      const compiled = vl.compile(spec as never, {
+        config: config as never,
+      }).spec;
+      const refuse = (): Promise<never> =>
+        Promise.reject(
+          new Error("folio documents render offline - nothing is loaded"),
+        );
+      const runtime = new vega.View(vega.parse(compiled), {
+        renderer: "none",
+        loader: {
+          load: refuse,
+          sanitize: refuse,
+          http: refuse,
+          file: refuse,
+        } as never,
+      });
+      const svg = await runtime.toSVG();
+      runtime.finalize();
+      view.innerHTML = sanitizeSvg(svg);
+      view.classList.remove("drawn-error");
+    } catch (e) {
+      this.drawnError(view, "Chart", e);
+    }
+  }
+
+  /** A dataset's recalculated rows as objects (column -> value). */
+  private datasetRows(id: string): Record<string, unknown>[] | undefined {
+    const t = this.doc?.blocks.find(
+      (b) => b.kind === "table" && !b.table.simple && b.table.id === id,
+    );
+    if (t?.kind !== "table") return undefined;
+    const recalced = recalcTable(t.table, this.tablePool());
+    return recalced.rows.map((r) =>
+      Object.fromEntries(t.table.columns.map((col, i) => [col.name, r[i]])),
+    );
+  }
+
+  /** Insert a starter Vega-Lite chart after the caret's block. */
+  insertVegaLite(): void {
+    if (!this.doc) return;
+    const { at, replace } = this.insertionPoint(this.blockIndexAtCaret());
+    this.doc.blocks.splice(at, replace, {
+      kind: "code",
+      lang: "vega-lite",
+      text: VEGA_STARTER,
+    });
+    this.render();
+    this.emitChange();
   }
 
   /* --- Graphviz (spec: docs/specs/drawn-blocks.md) --- */
@@ -4309,6 +4451,19 @@ export class FolioDoc extends HTMLElement {
       host?.querySelectorAll<HTMLElement>("figure.folio-jscad") ?? [],
     )) {
       if (this.jscadParams(mf)?.table === tableId) void this.drawJscad(mf);
+    }
+    // Vega-Lite charts reading this dataset ("name": "@table").
+    for (const vf of Array.from(
+      host?.querySelectorAll<HTMLElement>("figure.folio-vega-lite") ?? [],
+    )) {
+      const src = vf.querySelector<HTMLElement>("pre.folio-code > code");
+      let refs: string[] = [];
+      try {
+        refs = vegaDataRefs(JSON.parse(src ? this.codeText(src) : ""));
+      } catch {
+        continue;
+      }
+      if (refs.includes(tableId)) void this.drawVegaLite(vf);
     }
   }
 

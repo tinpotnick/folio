@@ -6,6 +6,7 @@ steps:
   - Add a node to the first graph.
   - Insert your own Graphviz diagram in a document without reading
     docs, then break it on purpose.
+  - In "Drawings from text", change a number in the visits table.
 expected:
   - The graphs render as themed figures in light and dark mode; no
     code shows until a figure is clicked.
@@ -13,4 +14,5 @@ expected:
   - Searching the palette for "graph", "graphviz" or "diagram" finds
     Insert a Graphviz diagram; a broken graph shows "Diagram error:
     ..." in place of the picture.
+  - The Vega-Lite heatmap and bar chart follow the table edit.
 ---

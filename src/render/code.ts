@@ -35,6 +35,7 @@ export const CODE_LANGUAGES: CodeLanguage[] = [
   { id: "strudel", label: "Strudel (music)" },
   { id: "jscad", label: "JSCAD (3D model)" },
   { id: "dot", label: "Graphviz (DOT diagram)" },
+  { id: "vega-lite", label: "Vega-Lite (chart spec)" },
   { id: "toml", label: "TOML" },
   { id: "typescript", label: "TypeScript" },
   { id: "xml", label: "XML" },
@@ -96,6 +97,7 @@ const GRAMMAR_FOR: Record<string, string> = {
   strudel: "javascript",
   // JSCAD models are JavaScript (spec: docs/specs/jscad-blocks.md).
   jscad: "javascript",
+  "vega-lite": "json",
   json: "json",
   markdown: "markdown",
   md: "markdown",

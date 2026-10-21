@@ -45,12 +45,32 @@ follow), so each new language adds only its own drawing function.
 - Natural size, shrunk only when wider than the page.
 - DOT `URL`/`href` attributes become sanitized links.
 
+## Vega-Lite (`vega-lite`, ADR-0022)
+
+- The block is a Vega-Lite JSON spec; invalid JSON is "Chart error:
+  the spec is not valid JSON (...)".
+- `"data": {"name": "@dataset"}`, at any depth, reads the dataset's
+  recalculated rows (`bindVegaData`, `src/render/vega-data.ts`).
+  Editing the dataset redraws every Vega-Lite chart that names it
+  (`refreshDependents`). An unknown dataset, or any `"data": {"url"}`,
+  is an error naming the problem; the loader fetches nothing.
+- Theme config (overridden by the spec's own `config`): the body face;
+  ink for titles, axes, legends and headers; hairline grid; the theme
+  palette as the category range; heatmaps and ramps run from the
+  theme's tint to its accent; rules and text in ink; horizontal x
+  labels. A single or layered chart with no `width` of its own takes
+  the page's width.
+- Rendered headless (`vega` `none` renderer) to SVG, then sanitized.
+
 ## Acceptance
 
-- Unit: `tests/render/svg-sanitize.test.ts`.
+- Unit: `tests/render/svg-sanitize.test.ts`,
+  `tests/render/vega-data.test.ts`.
 - e2e: `tests/e2e/drawn.spec.ts` (the sample draws, in the theme's
   face, code hidden; editing redraws; a syntax error is the figure;
-  DOT links cannot run script; the palette inserts one). The JSCAD
+  DOT links cannot run script; the palette inserts one; Vega-Lite reads
+  a dataset and follows its edits, refuses URL data with no request,
+  reports invalid JSON). The JSCAD
   suite still passes on the shared path.
 - Sample: `demo/examples/drawings.md`. First-contact eval:
   `evals/drawn-blocks-first-contact.md`.
