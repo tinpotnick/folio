@@ -13,9 +13,24 @@ output by `src/render/chart.ts`. The contract for dense data:
 - **Tick thinning**: at most eight x tick labels (plus the last
   point, always labeled). A 24-month series shows 7 labels, not
   24 clumped ones.
+- **Y ticks on nice steps**: the step is 1, 2, 2.5 or 5 x 10^n,
+  aiming at about four intervals; the grid runs from a whole step
+  at or below the minimum to one at or above the maximum, and zero
+  is always a tick. No quarters of an arbitrary range (0.18 / 0.05
+  / -0.07).
+- **Value formats**: when the value column has `format: percent`,
+  ticks and value labels read as percentages (`20%`, `21.6%`),
+  matching the table. A chart never shows 0.22 beside a table
+  that says 22%.
 - **Value labels**: a sparse series (<= 12 points) labels every
   point; a dense one labels only its maximum, minimum, and last
-  point (bold) - the extremes are the story.
+  point (bold) - the extremes are the story. Labels never
+  collide: a label that would overlap another gives way (the last
+  point wins, then the extremes). A dense minimum hangs its label
+  BELOW the point; on the plot's floor, where the x ticks live, it
+  sits BESIDE the point instead. A negative bar's label hangs under
+  the bar; when that would hit the x tick labels, the floor drops
+  one step to make room.
 - **Markers**: a sparse line/area series (<= 64 points) draws a
   marker on every point; a dense one draws markers only at the
   x-tick positions - a marker per point on a 512-sample curve is
@@ -43,7 +58,9 @@ output by `src/render/chart.ts`. The contract for dense data:
 - **Line and area charts** carry a soft gradient fill hugging the
   curve (unique gradient id per chart - several charts share a
   page); area fills to the zero baseline, the line's fill is a
-  whisper.
+  whisper that hangs BELOW the curve to the plot's floor. (An
+  earlier version closed the polygon at the highest point, which
+  shaded ABOVE the line.)
 - **Negative domains** keep the zero baseline visible; pie/donut
   reject negative values (the error contract).
 - SVG classes are part of the test surface: `.x-tick`, `.v-label`,
@@ -51,8 +68,10 @@ output by `src/render/chart.ts`. The contract for dense data:
 
 ## Acceptance
 
-- Unit: `tests/render/chart.test.ts` (16 tests: domain rules,
-  thinning, sparse/dense labeling, axis titles, style colors,
-  unique gradients).
+- Unit: `tests/render/chart.test.ts` (domain rules, nice ticks,
+  percent formats, label collisions and floor placement, negative
+  bar label clearance, line fill below the curve, thinning,
+  sparse/dense labeling, axis titles, style colors, unique
+  gradients).
 - e2e: the report example's 24-month charts assert thinned ticks,
   sparse labels, and axis titles (`tests/e2e/demo-data.spec.ts`).

@@ -1344,7 +1344,7 @@ test.describe("table navigation extras", () => {
     await page.keyboard.press("Tab");
     await expect(
       page.locator('#the-doc figure[data-chart-source="regional-data"] svg'),
-    ).toContainText("0.25");
+    ).toContainText("25.3%"); // growth is a percent column
   });
 });
 

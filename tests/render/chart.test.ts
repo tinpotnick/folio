@@ -238,3 +238,118 @@ describe("dense-data rendering (the clumping fix)", () => {
     expect(idA).not.toBe(idB);
   });
 });
+
+/** The y tick label values, top to bottom. */
+function yTicks(svg: string): string[] {
+  return [...svg.matchAll(/class="tick-y"[^>]*>([^<]*)</g)].map(
+    (m) => m[1] ?? "",
+  );
+}
+
+describe("readable axes and labels (report-quality fixes)", () => {
+  it("y ticks fall on nice steps, not quarters of the range", () => {
+    const svg = renderBarChart(
+      result([
+        ["North", 0.22],
+        ["South", 0.02],
+        ["East", -0.15],
+      ]),
+    ).svg;
+    // Before: 0.30 / 0.18 / 0.05 / -0.07 / -0.20.
+    for (const t of yTicks(svg)) {
+      expect(Number(t) * 20, t).toBeCloseTo(Math.round(Number(t) * 20), 6);
+    }
+    expect(yTicks(svg)).toContain("0");
+  });
+
+  it("percent value columns label as percentages", () => {
+    const svg = renderBarChart(
+      result([
+        ["North", 0.22],
+        ["East", -0.15],
+      ]),
+      { valueFormat: "percent" },
+    ).svg;
+    expect(svg).toContain(">22.0%<");
+    expect(svg).toContain(">-15.0%<");
+    expect(yTicks(svg).every((t) => t.endsWith("%"))).toBe(true);
+  });
+
+  it("a negative bar's label clears the x tick labels", () => {
+    const svg = renderBarChart(
+      result([
+        ["Apr", 120],
+        ["May", -40],
+        ["Jun", 95],
+      ]),
+      { xTitle: "month" },
+    ).svg;
+    const vY = Number(
+      /class="v-label"[^>]*y="([^"]+)"[^>]*>-40</.exec(svg)?.[1],
+    );
+    const tickY = Number(
+      /class="x-tick"[^>]*y="([^"]+)"[^>]*>May</.exec(svg)?.[1],
+    );
+    expect(tickY - vY).toBeGreaterThanOrEqual(14);
+  });
+
+  it("a line chart's fill hangs BELOW the curve, down to the axis", () => {
+    const svg = renderLineChart(
+      result([
+        ["a", 41],
+        ["b", 45],
+        ["c", 55],
+      ]),
+    ).svg;
+    const pts = /<polygon points="([^"]+)"/.exec(svg)?.[1]?.split(" ") ?? [];
+    const firstY = Number(pts[0]?.split(",")[1]);
+    const curveYs = pts.slice(1, -1).map((p) => Number(p.split(",")[1]));
+    // SVG y grows downward: the base must be below every point.
+    expect(firstY).toBeGreaterThanOrEqual(Math.max(...curveYs));
+  });
+
+  it("dense value labels never overlap each other", () => {
+    // The report's North series: the max is the second-to-last
+    // point, right next to the always-labeled last point.
+    const vals = [
+      41.3, 40.2, 43.4, 43.6, 43.3, 43.4, 44.5, 42.9, 44.2, 43.6, 48.9, 50.2,
+      44.9, 45.7, 49.9, 50.0, 47.3, 48.8, 50.0, 48.1, 50.9, 51.0, 55.6, 55.5,
+    ];
+    const svg = renderLineChart({
+      columns: ["month", "revenue"],
+      rows: vals.map((v, i) => [`m${String(i)}`, v]),
+    }).svg;
+    const labels = [
+      ...svg.matchAll(/class="v-label" x="([^"]+)" y="([^"]+)"/g),
+    ].map((m) => [Number(m[1]), Number(m[2])] as const);
+    for (const [i, a] of labels.entries()) {
+      for (const b of labels.slice(i + 1)) {
+        const apart =
+          Math.abs(a[0] - b[0]) >= 40 || Math.abs(a[1] - b[1]) >= 14;
+        expect(apart, `${String(a)} vs ${String(b)}`).toBe(true);
+      }
+    }
+  });
+});
+
+describe("a minimum on the plot floor", () => {
+  it("labels beside the point, clear of the x ticks", () => {
+    // The report's Midlands growth: the minimum is the first point
+    // and lands on the floor gridline.
+    const vals = [
+      -0.378, 0, 0.07, 0.01, -0.02, 0.06, 0, 0.02, -0.01, 0.05, 0.08, 0.03,
+      -0.04, 0, 0.06, 0.02, -0.02, 0.01, -0.02, 0.01, 0.04, 0.02, 0.114, 0.062,
+    ];
+    const svg = renderLineChart(
+      { columns: ["m", "g"], rows: vals.map((v, i) => [`m${String(i)}`, v]) },
+      { valueFormat: "percent", xTitle: "month" },
+    ).svg;
+    const m =
+      /class="v-label" x="[^"]+" y="([^"]+)" text-anchor="([^"]+)"[^>]*>-37\.8%</.exec(
+        svg,
+      );
+    const tickY = Number(/class="x-tick"[^>]*y="([^"]+)"/.exec(svg)?.[1]);
+    expect(m?.[2]).toBe("start");
+    expect(tickY - Number(m?.[1])).toBeGreaterThanOrEqual(14);
+  });
+});

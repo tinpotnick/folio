@@ -973,7 +973,17 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
         ? `@media print { article.folio-doc > h2:not(:first-child) { break-before: page; page-break-before: always; } }`
         : ""
     }
-    td.num, th.num { text-align: right; }
+    /* Numbers right-align (ADR-0002, derived from the column type).
+       Specific enough to beat the bidi rule's text-align: start. */
+    article.folio-doc td.num,
+    article.folio-doc th.num { text-align: right; }
+    .folio-table-scroll {
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+    }
+    /* Long numbers never wrap mid-value; the scroller takes the
+       width instead. */
+    table.folio-table td.num { white-space: nowrap; }
     td.folio-formula {
       font-feature-settings: "tnum";
       color: var(--folio-ink-muted, #57606a);

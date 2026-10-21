@@ -31,6 +31,9 @@ export interface ChartStyle {
   grid?: string | undefined;
   /** The page behind the chart: pie seams and the donut hole. */
   paper?: string | undefined;
+  /** The value column's display format: "percent" labels 0.22 as
+   * 22.0% (ticks and value labels), matching the table. */
+  valueFormat?: "percent" | "currency" | undefined;
 }
 
 const W = 640;
@@ -88,6 +91,8 @@ function drawFrame(
     gridMin: number;
     gridMax: number;
     span: number;
+    ticks: number[];
+    tickLabel: (v: number) => string;
     innerH: number;
     padBottom: number;
     yTitle?: string | undefined;
@@ -103,12 +108,11 @@ function drawFrame(
   const padLeft = opts.yTitle ? 78 : 60;
   const yOf = (v: number): number =>
     PAD.top + ((opts.gridMax - v) / opts.span) * opts.innerH;
-  for (let i = 0; i <= 4; i++) {
-    const y = PAD.top + (opts.innerH * i) / 4;
-    const v = opts.gridMax - (opts.span * i) / 4;
+  for (const v of opts.ticks) {
+    const y = yOf(v);
     parts.push(
       `<line x1="${padLeft}" y1="${y}" x2="${W - PAD.right}" y2="${y}" stroke="${grid}" />`,
-      `<text class="tick-y" x="${padLeft - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="${inkMuted}">${fmt(v)}</text>`,
+      `<text class="tick-y" x="${padLeft - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="${inkMuted}">${opts.tickLabel(v)}</text>`,
     );
   }
   const zeroY = yOf(0);
@@ -130,17 +134,60 @@ function drawFrame(
   return yOf;
 }
 
+/** The 1-2-2.5-5 x 10^n step nearest above `raw`. */
+function niceStep(raw: number): number {
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / mag;
+  const nice = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10;
+  return nice * mag;
+}
+
+/**
+ * The y domain on NICE ticks (0.05, 25, 500 - never quarters of an
+ * arbitrary range like 0.18 / 0.05 / -0.07). Zero is always a
+ * tick.
+ */
 function domain(values: number[]): {
   gridMin: number;
   gridMax: number;
   span: number;
+  ticks: number[];
+  step: number;
 } {
-  const max = Math.max(...values, 0.000001);
+  const max = Math.max(...values, 0);
   const min = Math.min(...values, 0);
-  const gridMax = niceCeil(max);
-  const gridMin = min < 0 ? -niceCeil(-min) : 0;
-  const span = gridMax - gridMin || 1;
-  return { gridMin, gridMax, span };
+  const step = niceStep((max - min) / 4 || 1);
+  const gridMax = Math.max(step, Math.ceil(max / step - 1e-9) * step);
+  const gridMin = Math.floor(min / step + 1e-9) * step;
+  const ticks: number[] = [];
+  const decimals = Math.max(0, -Math.floor(Math.log10(step)) + 1);
+  for (let v = gridMax; v >= gridMin - step / 2; v -= step) {
+    const t = Number(v.toFixed(decimals));
+    ticks.push(t === 0 ? 0 : t);
+  }
+  return { gridMin, gridMax, span: gridMax - gridMin || 1, ticks, step };
+}
+
+/** Tick labels: as many decimals as the step needs, no more. */
+function tickFormatter(
+  step: number,
+  format: ChartStyle["valueFormat"],
+): (v: number) => string {
+  const scaled = format === "percent" ? step * 100 : step;
+  const decimals = Math.max(0, Math.ceil(-Math.log10(scaled) - 1e-9));
+  const d = Number.isInteger(scaled) ? 0 : Math.min(decimals + 1, 4);
+  return (v) => {
+    const x = format === "percent" ? v * 100 : v;
+    const txt = x.toFixed(d).replace(/\.0+$/, "");
+    return `${txt === "-0" ? "0" : txt}${format === "percent" ? "%" : ""}`;
+  };
+}
+
+/** Value labels: the table's own formatting for percentages. */
+function valueFormatter(
+  format: ChartStyle["valueFormat"],
+): (v: number) => string {
+  return format === "percent" ? (v) => `${(v * 100).toFixed(1)}%` : fmt;
 }
 
 export function renderBarChart(
@@ -151,10 +198,20 @@ export function renderBarChart(
   const inkMuted = style.textMuted ?? TEXT_MUTED;
   const color = style.color ?? "#4c6ef5";
   const values = result.rows.map((r) => Number(r[1] ?? 0));
-  const { gridMin, gridMax, span } = domain(values);
   const padBottom = style.xTitle ? 52 : 40;
-  const innerW = W - (style.yTitle ? 78 : 60) - PAD.right;
   const innerH = H - PAD.top - padBottom;
+  // A negative bar's label hangs under the bar's end: when that
+  // would run into the x tick labels, the floor drops one step.
+  let dom = domain(values);
+  const lowest = Math.min(...values, 0);
+  if (lowest < 0) {
+    const roomPx = ((lowest - dom.gridMin) / dom.span) * innerH;
+    if (roomPx < 11) dom = domain([...values, dom.gridMin - dom.step / 2]);
+  }
+  const { gridMin, gridMax, span, ticks, step } = dom;
+  const tickLabel = tickFormatter(step, style.valueFormat);
+  const valueLabel = valueFormatter(style.valueFormat);
+  const innerW = W - (style.yTitle ? 78 : 60) - PAD.right;
   const n = result.rows.length || 1;
   const band = innerW / n;
   const barW = Math.min(band * 0.6, 80);
@@ -167,6 +224,8 @@ export function renderBarChart(
     gridMin,
     gridMax,
     span,
+    ticks,
+    tickLabel,
     innerH,
     padBottom,
     grid: style.grid,
@@ -199,7 +258,7 @@ export function renderBarChart(
       const valueY =
         value >= 0 ? y - 4 : Math.min(zeroY + height + 12, H - PAD.top);
       parts.push(
-        `<text class="v-label" x="${x + barW / 2}" y="${valueY}" text-anchor="middle" font-size="11" fill="${inkMuted}">${fmt(value)}</text>`,
+        `<text class="v-label" x="${x + barW / 2}" y="${valueY}" text-anchor="middle" font-size="11" fill="${inkMuted}">${valueLabel(value)}</text>`,
       );
     }
   });
@@ -235,7 +294,9 @@ function renderLineLike(
   const inkMuted = style.textMuted ?? TEXT_MUTED;
   const color = style.color ?? "#4c6ef5";
   const values = result.rows.map((r) => Number(r[1] ?? 0));
-  const { gridMin, gridMax, span } = domain(values);
+  const { gridMin, gridMax, span, ticks, step } = domain(values);
+  const tickLabel = tickFormatter(step, style.valueFormat);
+  const valueLabel = valueFormatter(style.valueFormat);
   const padBottom = style.xTitle ? 52 : 40;
   const padLeft = style.yTitle ? 78 : 60;
   const innerW = W - padLeft - PAD.right;
@@ -251,6 +312,8 @@ function renderLineLike(
     gridMin,
     gridMax,
     span,
+    ticks,
+    tickLabel,
     innerH,
     padBottom,
     grid: style.grid,
@@ -275,9 +338,10 @@ function renderLineLike(
         `</linearGradient></defs>`,
     );
     // An area chart fills to the zero baseline; a line chart's
-    // fill hugs the curve down to the same baseline but is a
-    // whisper (the gradient), not a statement.
-    const baseY = areaMode ? zeroY : Math.min(...ys, zeroY);
+    // fill hangs below the curve down to the plot's floor, a
+    // whisper (the gradient), not a statement. (SVG y grows
+    // DOWNWARD: the floor is the LARGEST y.)
+    const baseY = areaMode ? zeroY : PAD.top + innerH;
     fillParts.push(
       `<polygon points="${xs[0]},${baseY} ${points} ${xs[xs.length - 1]},${baseY}" fill="url(#${gid})" />`,
     );
@@ -289,7 +353,20 @@ function renderLineLike(
   }
   parts.push(...fillParts);
 
-  const { indices: labelAt, dense } = valueLabelIndices(values);
+  const { indices: picked, dense } = valueLabelIndices(values);
+  // Labels that would collide give way: the last point (the
+  // series' end) wins, then the extremes in order.
+  const labelAt: number[] = [];
+  for (const i of [...picked].sort((a, b) =>
+    a === n - 1 ? -1 : b === n - 1 ? 1 : 0,
+  )) {
+    const clash = labelAt.some(
+      (j) =>
+        Math.abs((xs[i] ?? 0) - (xs[j] ?? 0)) < 40 &&
+        Math.abs((ys[i] ?? 0) - (ys[j] ?? 0)) < 14,
+    );
+    if (!clash) labelAt.push(i);
+  }
   const tickAt = new Set(xTickIndices(n));
   // Dense series draw a marker per x-TICK only: a marker on every
   // point turns a smooth 512-sample line into a bead necklace.
@@ -309,8 +386,25 @@ function renderLineLike(
     if (labelAt.includes(i)) {
       // Dense series label only their extremes and the last
       // point, above the curve; sparse series label every point.
+      // A dense series' minimum hangs its label BELOW the point
+      // (above it, the label sits on the line climbing out).
+      const below =
+        dense &&
+        i !== n - 1 &&
+        (values[i] ?? 0) === Math.min(...values) &&
+        (values[i] ?? 0) !== Math.max(...values);
+      // On the plot's floor there is no room below (the x ticks
+      // live there): the label sits beside the point instead.
+      const floorY = PAD.top + innerH;
+      const beside = below && (ys[i] ?? 0) + 17 > floorY - 4;
+      const labelY = beside
+        ? (ys[i] ?? 0) + 4
+        : below
+          ? (ys[i] ?? 0) + 17
+          : (ys[i] ?? 0) - 8;
+      const labelX = beside ? x + 8 : x;
       parts.push(
-        `<text class="v-label" x="${x}" y="${(ys[i] ?? 0) - 8}" text-anchor="middle" font-size="11" font-weight="${dense ? 600 : 400}" fill="${inkMuted}">${fmt(values[i] ?? 0)}</text>`,
+        `<text class="v-label" x="${labelX}" y="${labelY}" text-anchor="${beside ? "start" : "middle"}" font-size="11" font-weight="${dense ? 600 : 400}" fill="${inkMuted}">${valueLabel(values[i] ?? 0)}</text>`,
       );
     }
   });
@@ -347,9 +441,7 @@ export function renderScatterChart(
   const yMinRaw = Math.min(...pts.map((p) => p.y));
   const yMaxRaw = Math.max(...pts.map((p) => p.y));
   const xSpan = xMaxRaw - xMinRaw || 1;
-  const yMax = niceCeil(yMaxRaw);
-  const yMin = yMinRaw < 0 ? -niceCeil(-yMinRaw) : 0;
-  const ySpan = yMax - yMin || 1;
+  const yDom = domain([yMinRaw, yMaxRaw]);
   const xOf = (v: number): number => padLeft + ((v - xMinRaw) / xSpan) * innerW;
 
   const parts: string[] = [];
@@ -357,9 +449,11 @@ export function renderScatterChart(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img">`,
   );
   const yOf = drawFrame(parts, {
-    gridMin: yMin,
-    gridMax: yMax,
-    span: ySpan,
+    gridMin: yDom.gridMin,
+    gridMax: yDom.gridMax,
+    span: yDom.span,
+    ticks: yDom.ticks,
+    tickLabel: tickFormatter(yDom.step, style.valueFormat),
     innerH,
     padBottom,
     yTitle: style.yTitle,
@@ -459,12 +553,6 @@ export function renderPieChart(
   }
   parts.push(`</svg>`);
   return { svg: parts.join("") };
-}
-
-function niceCeil(v: number): number {
-  if (v <= 0) return 1;
-  const mag = Math.pow(10, Math.floor(Math.log10(v)));
-  return Math.ceil(v / mag) * mag;
 }
 
 function fmt(v: number): string {
