@@ -29,7 +29,9 @@ magnifier button in the toolbar.
     running one reveals the section (`revealBlock`).
   - Help topics: every heading of the help document, via the help
     component instance's `getOutline()`; running one opens the
-    help window and reveals that topic.
+    help window and reveals that topic. A help topic also matches
+    when the query appears anywhere in its section's text, so
+    "stacked" finds the charts topic though no heading says it.
 - **Matching** is a dependency-free subsequence fuzzy match with
   bonuses for adjacent characters and word starts, over the title
   plus a keyword string; a query appearing VERBATIM in an entry

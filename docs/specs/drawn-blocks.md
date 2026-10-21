@@ -56,9 +56,11 @@ follow), so each new language adds only its own drawing function.
   is an error naming the problem; the loader fetches nothing.
 - Theme config (overridden by the spec's own `config`): the body face;
   ink for titles, axes, legends and headers; hairline grid; the theme
-  palette as the category range; heatmaps and ramps run from the
-  theme's tint to its accent; rules and text in ink; horizontal x
-  labels. A single or layered chart with no `width` of its own takes
+  palette as the category range; heatmaps and ramps run from a
+  visible start (the accent mixed 18% into the paper, so the lowest
+  cells never vanish on dark paper) to the accent; rules and text in
+  ink; horizontal x labels; type at folio's own chart sizes (axis
+  labels and legends 11px, titles 12px, chart title 14px). A single or layered chart with no `width` of its own takes
   the page's width.
 - Rendered headless (`vega` `none` renderer) to SVG, then sanitized.
 
@@ -82,7 +84,9 @@ follow), so each new language adds only its own drawing function.
   pitch; start and duration in whole notes at the tune's `Q:` tempo),
   and folio's offline synth plays it. No soundfont is fetched. The
   figure carries `data-playing` while it plays; a full re-render stops
-  it.
+  it. **Stop** is disabled until something is playing. Header buttons
+  (Play, Stop, Export STL) are styled as the bar's controls, sized to
+  their label.
 
 ## Acceptance
 

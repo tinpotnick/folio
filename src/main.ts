@@ -1454,6 +1454,8 @@ interface PaletteEntry {
   title: string;
   group: "Command" | "Help" | "Section";
   keywords: string;
+  /** Body text matched VERBATIM only (a help topic's words). */
+  body?: string;
   action: () => void;
 }
 
@@ -1792,6 +1794,9 @@ function paletteEntries(): PaletteEntry[] {
       title: `Help: ${topic.text}`,
       group: "Help",
       keywords: "help how to documentation guide",
+      // What the topic SAYS: "stacked", "grouped bar" find the chart
+      // help even though its title is "Charts and the query language".
+      body: helpDoc.sectionText(topic.blockIndex).toLowerCase(),
       action: () => {
         openHelp();
         helpDoc.revealBlock(topic.blockIndex);
@@ -1881,7 +1886,12 @@ function updatePalette(): void {
     paletteFiltered = all
       .map((e) => ({
         e,
-        s: fuzzyScore(query, `${e.title} ${e.keywords}`),
+        s: Math.max(
+          fuzzyScore(query, `${e.title} ${e.keywords}`),
+          // A help topic whose TEXT contains the query verbatim: found,
+          // but ranked below title/keyword matches.
+          e.body?.includes(query.toLowerCase()) ? 6 : -1,
+        ),
       }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s)

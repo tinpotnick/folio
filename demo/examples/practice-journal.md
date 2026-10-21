@@ -47,8 +47,8 @@ recovered the week after.
 
 ## Exercises
 
-Two short studies written for this month. Click a score and press
-**Play** to hear it.
+Two short studies written for this month. Click a score to show its
+**Play** button, and press it to hear the study.
 
 A bowing study in D, string crossings in even quavers:
 

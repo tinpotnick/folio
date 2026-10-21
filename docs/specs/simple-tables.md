@@ -65,8 +65,12 @@ is no caption.
   simple table right after the caret's block, scroll it into view,
   and put the caret in its first cell; "Insert a dataset" does the
   same for a dataset. **Insert a chart** (palette) charts the dataset
-  at the caret or the nearest one above, or says that charts are
-  drawn from a dataset.
+  at the caret or the nearest one above, placing the chart after the
+  caret's block (or in place of an empty line), or says that charts
+  are drawn from a dataset. When the label column repeats (a long
+  table: one row per month and region) the chart is split by the
+  first other text column (`series:`), so it starts as one series
+  per region rather than a bar per row.
 
 ## Acceptance
 

@@ -143,8 +143,8 @@ removed.
 
 [ABC notation](https://abcnotation.com) writes music as text: one
 letter per note, bars marked with `|`. folio engraves it as a score,
-and **Play** in the score's header sounds it with folio's own simple
-synthesizer: offline, nothing downloaded. This is a traditional
+and its **Play** button (click the score to show it) sounds it with
+folio's own simple synthesizer: offline, nothing downloaded. This is a traditional
 reel, *The Silver Spear* (public domain):
 
 ```abc
