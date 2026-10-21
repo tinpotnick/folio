@@ -31,3 +31,29 @@ document because vite only serves `demo/` from the repo root in
 dev. Embedded content has no disk folder to offer the dialogs, so
 release first runs still see the platform default.
 
+
+## WebKitGTK has no shadow-root selection (2026-10-21)
+
+The desktop app renders with WebKitGTK, which has NO
+`shadowRoot.getSelection()`. Anything that reads or sets the caret
+inside `<folio-doc>` must go through the component's `caretPoint()` /
+`setCaret()`. They use the shadow selection where it exists
+(Chromium), else the standard `getComposedRanges({ shadowRoots })` to
+read and `setBaseAndExtent()` to write (WebKit silently IGNORES
+`addRange()` for a range inside a shadow root). Before this, the
+list buttons acted on the last CLICKED paragraph and Tab never
+nested, in the desktop app only, while every Chromium test passed.
+
+WebKitGTK also names Shift+Tab (GTK's ISO_Left_Tab) as key
+**"Unidentified"**; only `code` is "Tab". Every Tab check goes through
+`isTabKey(ev)` (`key` OR `code`). Before this, Shift+Tab was dead in
+lists and tables on the desktop only.
+
+**Contract tests in the real engine**: `just test-webkitgtk` (with
+`npm run dev` running) drives WebKitGTK through PyGObject
+(`tests/webkitgtk/run.py`; each `*.js` case is a page-evaluated
+function body reporting `| check: true` results; a first line
+`// native-key: shift+ISO_Left_Tab` sends that REAL key press, since
+synthetic DOM events cannot catch how the engine names keys). Run it
+for any
+change touching the caret, selection, or keyboard handling.

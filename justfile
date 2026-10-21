@@ -35,3 +35,7 @@ verify-agent:
     just test
     just build
     echo "All contracts green."
+
+# The Linux desktop's real engine (WebKitGTK); needs `npm run dev`.
+test-webkitgtk:
+    python3 tests/webkitgtk/run.py

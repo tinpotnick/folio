@@ -11,10 +11,12 @@ export default tseslint.config(
       "@typescript-eslint/consistent-type-imports": "error",
       "no-console": ["error", { allow: ["warn", "error"] }],
       eqeqeq: ["error", "always"],
-      "prefer-const": "error"
-    }
+      "prefer-const": "error",
+    },
   },
   {
-    ignores: ["dist/**", "node_modules/**"]
-  }
+    // WebKitGTK cases are page-evaluated function BODIES (top-level
+    // await/return, browser globals), not modules - run.py feeds them.
+    ignores: ["dist/**", "node_modules/**", "tests/webkitgtk/**"],
+  },
 );

@@ -14,7 +14,7 @@ export interface Frontmatter {
 export type DocBlock =
   | { kind: "heading"; level: number; text: string }
   | { kind: "prose"; text: string }
-  | { kind: "list"; ordered: boolean; start?: number; items: string[] }
+  | ({ kind: "list" } & ListBody)
   | { kind: "code"; lang?: string; text: string }
   | { kind: "math"; text: string }
   | { kind: "table"; table: Table }
@@ -22,6 +22,19 @@ export type DocBlock =
   | { kind: "diagram"; diagram: { id: string; text: string } }
   | { kind: "image"; image: Image }
   | { kind: "audio"; audio: Audio };
+
+/** A list's items (spec: docs/specs/lists.md): bulleted or
+ * numbered, each item inline Markdown with an optional sub-list. */
+export interface ListBody {
+  ordered: boolean;
+  start?: number;
+  items: ListItem[];
+}
+
+export interface ListItem {
+  text: string;
+  children?: ListBody;
+}
 
 export interface Doc {
   frontmatter: Frontmatter;
@@ -523,62 +536,105 @@ function serializePipeTable(table: Table): string {
   return [row(header), `| ${delim.join(" | ")} |`, ...body.map(row)].join("\n");
 }
 
-/** A list item line (spec: docs/specs/lists.md): an UNINDENTED
- * bullet (`- `, `* `, `+ `, or a bare marker for an empty item) or
+/** A list item (spec: docs/specs/lists.md), after its indent: a
+ * bullet (`- `, `* `, `+ `, or a bare marker for an empty item) or a
  * number (`N. `, `N) `). */
 const LIST_ITEM_RE = /^(?:([-*+])|(\d{1,9})[.)])(?: (.*))?$/;
 
+/** Leading spaces (a tab counts as four). */
+function indentOf(line: string): number {
+  let n = 0;
+  for (const ch of line) {
+    if (ch === " ") n += 1;
+    else if (ch === "\t") n += 4;
+    else break;
+  }
+  return n;
+}
+
 /**
- * A flat list starting at `start`: item lines plus their indented
- * continuation lines, up to a blank line or an unindented non-item.
- * The first line's marker decides bulleted vs numbered.
+ * A list starting at `start` (an unindented item), nested by indent:
+ * an item indented deeper than its list's markers starts (or
+ * continues) the previous item's sub-list; a continuation line joins
+ * the deepest open item whose content column it reaches. A blank
+ * line, or an unindented non-item, ends the list; so does an
+ * unindented item of the other kind (a new list).
  */
 function parseList(
   lines: string[],
   start: number,
 ): { block: Extract<DocBlock, { kind: "list" }>; end: number } {
   const first = LIST_ITEM_RE.exec(lines[start] ?? "");
-  const ordered = first?.[2] !== undefined;
-  const startNo = ordered ? Number(first?.[2]) : 1;
-  const items: string[] = [];
+  const root: ListBody = { ordered: first?.[2] !== undefined, items: [] };
+  if (root.ordered && Number(first?.[2]) !== 1) root.start = Number(first?.[2]);
+  // Open lists, outermost first: marker column, and the content
+  // column of the list's last item.
+  const stack: { body: ListBody; col: number; content: number }[] = [
+    { body: root, col: 0, content: 0 },
+  ];
   let i = start;
-  while (i < lines.length) {
+  for (; i < lines.length; i++) {
     const line = lines[i] ?? "";
     if (line.trim() === "") break;
-    const m = LIST_ITEM_RE.exec(line);
-    if (m && (m[2] !== undefined) === ordered) {
-      items.push(m[3] ?? "");
-    } else if (/^\s/.test(line) && items.length > 0) {
-      items[items.length - 1] += "\n" + line.trimStart();
-    } else {
-      break;
+    const indent = indentOf(line);
+    const m = LIST_ITEM_RE.exec(line.trimStart());
+    if (m) {
+      const ordered = m[2] !== undefined;
+      if (indent === 0 && ordered !== root.ordered) break;
+      let top = stack[stack.length - 1];
+      if (top && indent > top.col && top.body.items.length > 0) {
+        // Deeper: the previous item's sub-list.
+        const parent = top.body.items[top.body.items.length - 1];
+        if (parent) {
+          if (!parent.children) {
+            parent.children = { ordered, items: [] };
+            if (ordered && Number(m[2]) !== 1)
+              parent.children.start = Number(m[2]);
+          }
+          top = { body: parent.children, col: indent, content: 0 };
+          stack.push(top);
+        }
+      } else {
+        while (
+          stack.length > 1 &&
+          indent < (stack[stack.length - 1]?.col ?? 0)
+        ) {
+          stack.pop();
+        }
+        top = stack[stack.length - 1];
+      }
+      if (!top) break;
+      top.body.items.push({ text: m[3] ?? "" });
+      top.content = indent + (m[1] ?? `${m[2] ?? ""}.`).length + 1;
+      continue;
     }
-    i++;
+    if (indent === 0) break;
+    // A continuation line: the deepest open item it reaches.
+    const owner =
+      [...stack].reverse().find((f) => indent >= f.content) ?? stack[0];
+    const item = owner?.body.items[owner.body.items.length - 1];
+    if (!item) break;
+    item.text += "\n" + line.trimStart();
   }
-  return {
-    block: {
-      kind: "list",
-      ordered,
-      ...(ordered && startNo !== 1 ? { start: startNo } : {}),
-      items,
-    },
-    end: i,
-  };
+  return { block: { kind: "list", ...root }, end: i };
+}
+
+function serializeListBody(body: ListBody, pad: string): string[] {
+  const first = body.start ?? 1;
+  return body.items.flatMap((item, n) => {
+    const marker = body.ordered ? `${String(first + n)}.` : "-";
+    const [head = "", ...rest] = item.text.split("\n");
+    const inner = pad + " ".repeat(marker.length + 1);
+    return [
+      head === "" ? pad + marker : `${pad}${marker} ${head}`,
+      ...rest.map((r) => inner + r),
+      ...(item.children ? serializeListBody(item.children, inner) : []),
+    ];
+  });
 }
 
 function serializeList(block: Extract<DocBlock, { kind: "list" }>): string {
-  const first = block.start ?? 1;
-  return block.items
-    .map((item, n) => {
-      const marker = block.ordered ? `${String(first + n)}.` : "-";
-      const [head = "", ...rest] = item.split("\n");
-      const indent = " ".repeat(marker.length + 1);
-      return [
-        head === "" ? marker : `${marker} ${head}`,
-        ...rest.map((r) => indent + r),
-      ].join("\n");
-    })
-    .join("\n");
+  return serializeListBody(block, "").join("\n");
 }
 
 function collectProse(lines: string[], start: number): number {

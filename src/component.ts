@@ -10,6 +10,7 @@ import {
   serializeDoc,
   type Doc,
   type DocBlock,
+  type ListBody,
 } from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import { recalcTable, type TablePool } from "@folio/engine/recalc";
@@ -124,6 +125,76 @@ function cloneBlocks(blocks: DocBlock[]): DocBlock[] {
 /** A plain number as people type it in a table (1,234.50, -3, .5). */
 const NUMERIC_RE = /^-?(?:\d{1,3}(?:,\d{3})+|\d*)(?:\.\d+)?$/;
 
+/**
+ * Tab, however the engine names it: WebKitGTK reports Shift+Tab (GTK's
+ * ISO_Left_Tab) as key "Unidentified" - only `code` says "Tab" - so a
+ * key-only check made Shift+Tab dead in the desktop app.
+ */
+function isTabKey(ev: KeyboardEvent): boolean {
+  return ev.key === "Tab" || ev.code === "Tab";
+}
+
+/** A list body as nested <ul>/<ol> (spec: docs/specs/lists.md). */
+function renderListBody(body: ListBody): HTMLElement {
+  const el = document.createElement(body.ordered ? "ol" : "ul");
+  if (body.ordered && body.start !== undefined) {
+    (el as HTMLOListElement).start = body.start;
+  }
+  for (const item of body.items.length > 0 ? body.items : [{ text: "" }]) {
+    const li = document.createElement("li");
+    li.innerHTML = inlineMarkdownToHtml(item.text);
+    if (item.children) li.appendChild(renderListBody(item.children));
+    el.appendChild(li);
+  }
+  return el;
+}
+
+/**
+ * Read a <ul>/<ol> back into the model: each <li>'s own text (its
+ * nested lists excluded) and its sub-list. A list placed DIRECTLY in
+ * a list (some engines' native indent) belongs to the item before it.
+ */
+function readListBody(el: Element): ListBody {
+  const body: ListBody = { ordered: el.tagName === "OL", items: [] };
+  const start = (el as HTMLOListElement).start;
+  if (body.ordered && start !== 1) body.start = start;
+  for (const child of Array.from(el.children)) {
+    if (child.tagName === "LI") {
+      const own = child.cloneNode(true) as Element;
+      for (const sub of Array.from(own.children)) {
+        if (sub.tagName === "UL" || sub.tagName === "OL") sub.remove();
+      }
+      const sub = Array.from(child.children).find(
+        (c) => c.tagName === "UL" || c.tagName === "OL",
+      );
+      body.items.push({
+        text: htmlToInlineMarkdown(own.innerHTML).replace(/\n+$/, ""),
+        ...(sub ? { children: readListBody(sub) } : {}),
+      });
+    } else if (child.tagName === "UL" || child.tagName === "OL") {
+      const prev = body.items[body.items.length - 1];
+      if (prev) prev.children = readListBody(child);
+    }
+  }
+  return body;
+}
+
+/** Turn a <ul> into an <ol> (or back), keeping its items. */
+function swapListTag(list: HTMLElement, tag: "UL" | "OL"): HTMLElement {
+  const next = document.createElement(tag.toLowerCase());
+  next.append(...Array.from(list.childNodes));
+  list.replaceWith(next);
+  return next;
+}
+
+/** Every item's text, depth first (a list unlisted into paragraphs). */
+function flattenList(body: ListBody): string[] {
+  return body.items.flatMap((i) => [
+    i.text,
+    ...(i.children ? flattenList(i.children) : []),
+  ]);
+}
+
 /** Blocks whose text is inline Markdown: formats and links apply. */
 const INLINE_BLOCKS = new Set(["P", "UL", "OL"]);
 
@@ -213,9 +284,7 @@ export class FolioDoc extends HTMLElement {
    * the block the caret was in - not the last block clicked.
    */
   private trackCaret = (): void => {
-    const root = this.shadowRoot as
-      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
-    let n: Node | null = root?.getSelection?.()?.anchorNode ?? null;
+    let n: Node | null = this.caretPoint()?.node ?? null;
     while (n !== null && !(n instanceof HTMLElement)) n = n.parentNode;
     const block =
       n instanceof HTMLElement
@@ -224,7 +293,12 @@ export class FolioDoc extends HTMLElement {
           ) as HTMLElement | null)
         : null;
     if (block) this.lastBlock = block;
+    const li = n instanceof HTMLElement ? n.closest("li") : null;
+    this.lastLi = li && block?.contains(li) ? li : block ? null : this.lastLi;
   };
+
+  /** The list item the caret is (or was last) in. */
+  private lastLi: HTMLElement | null = null;
 
   /**
    * Hide every open inspector bar except the one in `keep` (the
@@ -608,16 +682,8 @@ export class FolioDoc extends HTMLElement {
       case "list": {
         // Spec: docs/specs/lists.md. Items are inline Markdown, like
         // a paragraph; editing inside is native (Enter adds an item).
-        const el = document.createElement(block.ordered ? "ol" : "ul");
+        const el = renderListBody(block);
         el.dataset.blockIndex = String(idx);
-        if (block.ordered && block.start !== undefined) {
-          (el as HTMLOListElement).start = block.start;
-        }
-        for (const item of block.items.length > 0 ? block.items : [""]) {
-          const li = document.createElement("li");
-          li.innerHTML = inlineMarkdownToHtml(item);
-          el.appendChild(li);
-        }
         return el;
       }
       case "code": {
@@ -2928,7 +2994,7 @@ export class FolioDoc extends HTMLElement {
         ev.preventDefault();
         ev.stopPropagation();
         this.refreshDatasetBrowser();
-      } else if (ev.key === "Tab") {
+      } else if (isTabKey(ev)) {
         ev.preventDefault();
         commit();
         const cells = Array.from(
@@ -3238,16 +3304,7 @@ export class FolioDoc extends HTMLElement {
         continue;
       }
       if (el.tagName === "UL" || el.tagName === "OL") {
-        const start = (el as HTMLOListElement).start;
-        const items = Array.from(el.children)
-          .filter((c) => c.tagName === "LI")
-          .map((li) => htmlToInlineMarkdown(li.innerHTML).replace(/\n+$/, ""));
-        next.push({
-          kind: "list",
-          ordered: el.tagName === "OL",
-          ...(el.tagName === "OL" && start !== 1 ? { start } : {}),
-          items,
-        });
+        next.push({ kind: "list", ...readListBody(el) });
         continue;
       }
       const md = htmlToInlineMarkdown(el.innerHTML).replace(/\n+$/, "");
@@ -3508,7 +3565,7 @@ export class FolioDoc extends HTMLElement {
     }
     // A list unlists into one block PER ITEM - merging its items
     // into one paragraph would run them together on the page.
-    const texts = block.kind === "list" ? block.items : [block.text];
+    const texts = block.kind === "list" ? flattenList(block) : [block.text];
     if (kind === "p") {
       if (block.kind === "prose") return;
       this.doc.blocks.splice(
@@ -3539,6 +3596,18 @@ export class FolioDoc extends HTMLElement {
    */
   toggleList(ordered: boolean): void {
     if (!this.doc) return;
+    // In a SUB-list, the buttons switch that sub-list's kind - the
+    // outer list is left alone (a bulleted list under a numbered
+    // item). The same kind again is a no-op there.
+    const li = this.caretListItem();
+    const list = li?.parentElement;
+    if (li && list && list.parentElement?.tagName === "LI") {
+      const want = ordered ? "OL" : "UL";
+      if (list.tagName !== want) {
+        this.moveListItem(li, () => swapListTag(list, want));
+      }
+      return;
+    }
     const idx = this.blockIndexAtCaret();
     if (idx < 0) return;
     const block = this.doc.blocks[idx];
@@ -3548,19 +3617,242 @@ export class FolioDoc extends HTMLElement {
         this.doc.blocks.splice(
           idx,
           1,
-          ...block.items.map((text): DocBlock => ({ kind: "prose", text })),
+          ...flattenList(block).map((text): DocBlock => ({
+            kind: "prose",
+            text,
+          })),
         );
       } else {
+        // Only the top level switches kind; sub-lists keep theirs.
         this.doc.blocks[idx] = { kind: "list", ordered, items: block.items };
       }
     } else if (block.kind === "prose" || block.kind === "heading") {
-      this.doc.blocks[idx] = { kind: "list", ordered, items: [block.text] };
+      this.doc.blocks[idx] = {
+        kind: "list",
+        ordered,
+        items: [{ text: block.text }],
+      };
     } else {
       return;
     }
     this.render();
     this.emitChange();
     this.focusBlockStart(idx, true);
+  }
+
+  /**
+   * The caret inside this shadow root. Chromium has
+   * `shadowRoot.getSelection()`; WebKit (the Linux desktop's
+   * WebKitGTK) does not - there, the standard
+   * `getComposedRanges({ shadowRoots })` is the only way to see a
+   * caret inside the component. Without it every caret-aware command
+   * acted on the last CLICKED block instead.
+   */
+  private caretPoint(): {
+    node: Node;
+    offset: number;
+    collapsed: boolean;
+  } | null {
+    const root = this.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+    if (!root) return null;
+    if (typeof root.getSelection === "function") {
+      const sel = root.getSelection();
+      return sel && sel.rangeCount > 0 && sel.anchorNode
+        ? {
+            node: sel.anchorNode,
+            offset: sel.anchorOffset,
+            collapsed: sel.isCollapsed,
+          }
+        : null;
+    }
+    const ds = document.getSelection() as
+      | (Selection & { getComposedRanges?: (...a: unknown[]) => StaticRange[] })
+      | null;
+    if (!ds?.getComposedRanges) return null;
+    let ranges: StaticRange[] = [];
+    try {
+      ranges = ds.getComposedRanges({ shadowRoots: [root] });
+    } catch {
+      try {
+        ranges = ds.getComposedRanges(root);
+      } catch {
+        return null;
+      }
+    }
+    const r = ranges[0];
+    return r && root.contains(r.startContainer)
+      ? {
+          node: r.startContainer,
+          offset: r.startOffset,
+          collapsed: r.collapsed,
+        }
+      : null;
+  }
+
+  /** Put the caret at `node`/`offset`: the shadow selection where it
+   * exists (Chromium), else the document selection (WebKit accepts a
+   * shadow node there). */
+  private setCaret(node: Node, offset: number): void {
+    const root = this.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+    const sel =
+      typeof root?.getSelection === "function"
+        ? root.getSelection()
+        : document.getSelection();
+    if (!sel) return;
+    const max =
+      node.nodeType === Node.TEXT_NODE
+        ? (node.textContent ?? "").length
+        : node.childNodes.length;
+    const at = Math.min(offset, max);
+    // setBaseAndExtent, not addRange: WebKit silently IGNORES
+    // addRange() for a range inside a shadow root.
+    sel.setBaseAndExtent(node, at, node, at);
+  }
+
+  /** The caret as it was when the host's UI took focus. */
+  private savedCaret: { node: Node; offset: number } | null = null;
+
+  /**
+   * Remember the caret before the host's UI (the command palette)
+   * takes focus; `restoreCaret` puts it back after. Closing a dialog
+   * refocuses the article with the caret at its START - commands run
+   * from the palette would otherwise act on the first block.
+   */
+  saveCaret(): void {
+    this.savedCaret = this.caretPoint();
+  }
+
+  restoreCaret(): void {
+    const at = this.savedCaret;
+    if (!at || !at.node.isConnected) return;
+    this.shadowRoot
+      ?.querySelector<HTMLElement>("article.folio-doc")
+      ?.focus({ preventScroll: true });
+    this.setCaret(at.node, at.offset);
+    this.trackCaret();
+  }
+
+  /** The caret's list item, if it is in one (and still attached). */
+  private caretListItem(): HTMLElement | null {
+    this.trackCaret();
+    const li = this.lastLi;
+    return li?.isConnected && li.closest("article.folio-doc") ? li : null;
+  }
+
+  /**
+   * Move a list item in the DOM, keeping the caret where it was, then
+   * sync the model (spec: docs/specs/lists.md, Tab / Shift+Tab).
+   */
+  private moveListItem(li: HTMLElement, move: () => void): void {
+    const at = this.caretPoint();
+    move();
+    if (at && li.contains(at.node)) this.setCaret(at.node, at.offset);
+    this.syncFromDom();
+    this.emitChange();
+  }
+
+  /** Put the caret at the start of `el`. */
+  private placeCaret(el: HTMLElement): void {
+    this.setCaret(el, 0);
+  }
+
+  /** Tab: nest the caret's item under the item above it. */
+  indentListItem(): boolean {
+    const li = this.caretListItem();
+    const prev = li?.previousElementSibling;
+    const list = li?.parentElement;
+    if (!li || !list || prev?.tagName !== "LI") return false;
+    this.moveListItem(li, () => {
+      let sub = Array.from(prev.children).find(
+        (c) => c.tagName === "UL" || c.tagName === "OL",
+      );
+      if (!sub) {
+        sub = document.createElement(list.tagName.toLowerCase());
+        prev.appendChild(sub);
+      }
+      sub.appendChild(li);
+    });
+    return true;
+  }
+
+  /** Shift+Tab: lift the caret's item one level, keeping order. */
+  outdentListItem(): boolean {
+    const li = this.caretListItem();
+    const list = li?.parentElement;
+    const parentLi = list?.parentElement;
+    if (!li || !list) return false;
+    // On a TOP-level item, Shift+Tab steps out of the list entirely.
+    if (parentLi?.tagName !== "LI") return this.liftOutOfList(li);
+    this.moveListItem(li, () => {
+      // Later siblings stay AFTER it: they become its own sub-list.
+      const followers = Array.from(list.children).filter(
+        (c) =>
+          c !== li &&
+          li.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+      if (followers.length > 0) {
+        let own = Array.from(li.children).find(
+          (c) => c.tagName === "UL" || c.tagName === "OL",
+        );
+        if (!own) {
+          own = document.createElement(list.tagName.toLowerCase());
+          li.appendChild(own);
+        }
+        for (const f of followers) own.appendChild(f);
+      }
+      parentLi.after(li);
+      if (list.children.length === 0) list.remove();
+    });
+    return true;
+  }
+
+  /**
+   * Turn a TOP-level list item into a paragraph, splitting the list
+   * around it (spec: docs/specs/lists.md): items before stay, the
+   * item's own sub-list and the items after follow the paragraph as
+   * lists (a numbered tail keeps counting). The caret stays put.
+   */
+  private liftOutOfList(li: HTMLElement): boolean {
+    const list = li.parentElement;
+    if (!list?.parentElement?.matches("article.folio-doc")) return false;
+    const at = this.caretPoint();
+    const isSub = (c: Element): boolean => /^(UL|OL)$/.test(c.tagName);
+    const sub = Array.from(li.children).find(isSub) as HTMLElement | undefined;
+    const before = Array.from(list.children).indexOf(li);
+    const after = Array.from(list.children).slice(before + 1);
+    const p = document.createElement("p");
+    for (const n of Array.from(li.childNodes)) if (n !== sub) p.appendChild(n);
+    if (p.childNodes.length === 0) p.appendChild(document.createElement("br"));
+    const tail: HTMLElement[] = sub ? [sub] : [];
+    if (after.length > 0) {
+      const rest = document.createElement(list.tagName.toLowerCase());
+      if (list instanceof HTMLOListElement) {
+        (rest as HTMLOListElement).start = list.start + before + 1;
+      }
+      rest.append(...after);
+      tail.push(rest);
+    }
+    li.remove();
+    list.after(p, ...tail);
+    if (list.children.length === 0) list.remove();
+    if (at && p.contains(at.node)) this.setCaret(at.node, at.offset);
+    else this.setCaret(p, 0);
+    this.syncFromDom();
+    this.emitChange();
+    this.trackCaret();
+    return true;
+  }
+
+  /** Whether the caret is collapsed at the very start of `li`'s text. */
+  private caretAtItemStart(li: HTMLElement): boolean {
+    const at = this.caretPoint();
+    if (!at?.collapsed || !li.contains(at.node)) return false;
+    const r = document.createRange();
+    r.setStart(li, 0);
+    r.setEnd(at.node, at.offset);
+    return r.toString().replace(/\u200b/g, "") === "";
   }
 
   /** Whether the caret sits in a list, and which kind. */
@@ -3576,6 +3868,30 @@ export class FolioDoc extends HTMLElement {
    */
   private autoformatList(): boolean {
     if (!this.doc) return false;
+    // Inside a list item: `- ` / `1. ` typed into an EMPTY item sets
+    // that list's kind - the Markdown habit, at any depth.
+    const li = this.caretListItem();
+    const own = li
+      ? Array.from(li.childNodes)
+          .filter((n) => !(n instanceof Element && /^(UL|OL)$/.test(n.tagName)))
+          .map((n) => n.textContent ?? "")
+          .join("")
+      : "";
+    const lm = /^(?:([-*+])|(\d{1,9})[.)])[ \u00a0]$/.exec(own);
+    if (li && lm) {
+      const list = li.parentElement;
+      this.moveListItem(li, () => {
+        for (const n of Array.from(li.childNodes)) {
+          if (!(n instanceof Element && /^(UL|OL)$/.test(n.tagName)))
+            n.remove();
+        }
+        li.prepend(document.createElement("br"));
+        const want = lm[2] !== undefined ? "OL" : "UL";
+        if (list && list.tagName !== want) swapListTag(list, want);
+      });
+      this.placeCaret(li);
+      return true;
+    }
     const idx = this.blockIndexAtCaret();
     const block = this.doc.blocks[idx];
     if (block?.kind !== "prose") return false;
@@ -3584,7 +3900,7 @@ export class FolioDoc extends HTMLElement {
     this.doc.blocks[idx] = {
       kind: "list",
       ordered: m[2] !== undefined,
-      items: [""],
+      items: [{ text: "" }],
     };
     this.render();
     this.focusBlockStart(idx);
@@ -3905,17 +4221,32 @@ export class FolioDoc extends HTMLElement {
   private focusBlockStart(idx: number, atEnd = false): void {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     const child = (host?.children[idx] ?? null) as HTMLElement | null;
-    // A code figure's caret belongs in its body, not its header.
+    // A code figure's caret belongs in its body, not its header; a
+    // list's, in its first (or last) item.
     const el =
-      child?.querySelector<HTMLElement>("pre.folio-code > code") ?? child;
+      child?.querySelector<HTMLElement>("pre.folio-code > code") ??
+      (child && /^(UL|OL)$/.test(child.tagName)
+        ? child.querySelector<HTMLElement>(atEnd ? "li:last-of-type" : "li")
+        : null) ??
+      child;
     if (!el) return;
     el.focus();
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(!atEnd);
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(range);
+    (host as HTMLElement | null)?.focus({ preventScroll: true });
+    // The caret goes in through setCaret: WebKit ignores addRange()
+    // inside a shadow root (the bullet button dropped focus on the
+    // desktop app).
+    let node: Node = el;
+    if (atEnd) {
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let t = w.nextNode(); t; t = w.nextNode()) node = t;
+      this.setCaret(
+        node,
+        node === el ? el.childNodes.length : (node.textContent ?? "").length,
+      );
+    } else {
+      this.setCaret(el, 0);
+    }
+    this.trackCaret();
   }
 
   /**
@@ -3924,12 +4255,7 @@ export class FolioDoc extends HTMLElement {
    * hit testing, which pierces in every engine).
    */
   private blockIndexAtCaret(): number {
-    const root = this.shadowRoot as
-      | (ShadowRoot & {
-          getSelection?: () => Selection | null;
-        })
-      | null;
-    let n: Node | null = root?.getSelection?.()?.anchorNode ?? null;
+    let n: Node | null = this.caretPoint()?.node ?? null;
     while (n !== null && !(n instanceof HTMLElement)) {
       n = n.parentNode;
     }
@@ -4084,6 +4410,39 @@ export class FolioDoc extends HTMLElement {
       this.handleTableNav(ev, cell);
       return;
     }
+    // Lists: Backspace at the very START of an item removes its
+    // bullet first - a nested item lifts a level, a top-level one
+    // becomes a paragraph - like a word processor. Only a second
+    // Backspace merges lines.
+    if (
+      ev.key === "Backspace" &&
+      !ev.shiftKey &&
+      !ev.ctrlKey &&
+      !ev.metaKey &&
+      !ev.altKey
+    ) {
+      const li = this.caretListItem();
+      if (li && this.caretAtItemStart(li)) {
+        ev.preventDefault();
+        if (li.parentElement?.parentElement?.tagName === "LI") {
+          this.outdentListItem();
+        } else {
+          this.liftOutOfList(li);
+        }
+        return;
+      }
+    }
+    // Lists (spec: docs/specs/lists.md): Tab nests the caret's item,
+    // Shift+Tab lifts it. Outside a list, Tab keeps its usual job.
+    if (isTabKey(ev) && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      const li = this.caretListItem();
+      if (li) {
+        ev.preventDefault();
+        if (ev.shiftKey) this.outdentListItem();
+        else this.indentListItem();
+        return;
+      }
+    }
     if (ev.key !== "Enter") return;
     let idx = -1;
     if (ev.target instanceof Element) {
@@ -4218,8 +4577,8 @@ export class FolioDoc extends HTMLElement {
       }
       return;
     }
-    if (ev.key !== "Enter" && ev.key !== "Tab") return;
-    if (ev.key === "Tab" && ev.shiftKey && th.previousElementSibling === null) {
+    if (ev.key !== "Enter" && !isTabKey(ev)) return;
+    if (isTabKey(ev) && ev.shiftKey && th.previousElementSibling === null) {
       // Before the first header: commit, and leave focus movement to
       // the browser exactly as cell navigation does.
       this.commitHeaderRename(span, figure, block, ci);
@@ -4303,7 +4662,7 @@ export class FolioDoc extends HTMLElement {
    * cell (and recalculates formulas) before moving.
    */
   private handleTableNav(ev: KeyboardEvent, td: HTMLTableCellElement): void {
-    if (ev.key !== "Tab" && ev.key !== "Enter") return;
+    if (!isTabKey(ev) && ev.key !== "Enter") return;
     const figure = td.closest("figure") as HTMLElement | null;
     if (!figure) return;
     const idx = Number(figure.dataset.blockIndex ?? -1);
