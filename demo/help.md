@@ -36,6 +36,20 @@ document — written in the same renderer you are working with.
   `?doc=demo/examples/poem.md` opens folio straight onto that
   document.
 
+## 3D models
+
+- A code block tagged `jscad` draws a **3D model** from
+  [JSCAD](https://openjscad.xyz) code: search "3D model" in the
+  palette, or pick "JSCAD (3D model)" as a code block's language. The
+  model is the figure; click it to see and edit its code (it redraws
+  as you type), drag it to turn it, or pick Front / Right / Top in its
+  header.
+- Write `main()` returning shapes from `require('@jscad/modeling')`,
+  the way JSCAD's own examples do; `getParameterDefinitions`
+  defaults are used. The code runs sealed off: no network, no files,
+  and at most five seconds. The *Parametric parts* example shows a
+  bracket, a gear and a coloured assembly.
+
 ## Lists
 
 - Start a line with `- ` for a bulleted list or `1. ` for a numbered

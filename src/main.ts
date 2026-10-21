@@ -1272,6 +1272,11 @@ const EXAMPLES: { id: string; file: string; blurb: string }[] = [
     blurb: "music strudel audio beats pattern fun player",
   },
   {
+    id: "3d-models",
+    file: "/demo/examples/3d-models.md",
+    blurb: "3d models jscad cad parts gear bracket parametric drawing",
+  },
+  {
     id: "amensister",
     file: "/demo/examples/amensister.md",
     blurb: "music strudel amen break breakbeat online samples felix roos",
@@ -1306,6 +1311,16 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords: "table insert new add simple markdown pipe grid rows columns",
     action: () => btnTable.click(),
+  });
+  entries.push({
+    title: "Insert a 3D model (JSCAD)",
+    group: "Command",
+    keywords:
+      "3d model jscad cad part solid shape openscad design drawing mechanical insert",
+    action: () => {
+      el.insertJscad();
+      flash("3D model inserted");
+    },
   });
   entries.push({
     title: "Insert a chart",
