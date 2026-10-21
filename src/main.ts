@@ -1492,6 +1492,16 @@ function paletteEntries(): PaletteEntry[] {
     },
   });
   entries.push({
+    title: "Insert a Vega-Lite chart",
+    group: "Command",
+    keywords:
+      "vega lite vega-lite chart heatmap facet layered visualization spec json insert",
+    action: () => {
+      el.insertVegaLite();
+      flash("Vega-Lite chart inserted");
+    },
+  });
+  entries.push({
     title: "Insert a dataset",
     group: "Command",
     keywords:

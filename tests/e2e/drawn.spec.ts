@@ -73,3 +73,61 @@ test.describe("Graphviz", () => {
     ).toBeVisible({ timeout: 10_000 });
   });
 });
+
+test.describe("Vega-Lite", () => {
+  test("the sample's charts read the dataset, and follow its edits", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/drawings.md");
+    const views = page.locator(
+      "#the-doc figure.folio-vega-lite .code-view svg",
+    );
+    await expect(views).toHaveCount(2, { timeout: 20_000 });
+    await expect(page.locator("#the-doc .drawn-error")).toHaveCount(0);
+    const heat = views.first();
+    const before = await heat.innerHTML();
+    const cell = page.locator(
+      '#the-doc figure[data-table-id="visits"] td[data-row-index="0"][data-col-index="2"]',
+    );
+    await cell.click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("400");
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(() => heat.innerHTML(), { timeout: 10_000 })
+      .not.toBe(before);
+  });
+
+  test("URL data is refused: documents render offline", async ({ page }) => {
+    const remote: string[] = [];
+    page.on("request", (r) => {
+      if (r.url().includes("example.com")) remote.push(r.url());
+    });
+    await loadDoc(
+      page,
+      '# T\n\n```vega-lite\n{"data": {"url": "https://example.com/d.csv"}, "mark": "point"}\n```\n',
+    );
+    await expect(page.locator("#the-doc .drawn-error")).toContainText(
+      "render offline",
+      { timeout: 15_000 },
+    );
+    expect(remote).toEqual([]);
+  });
+
+  test("invalid JSON says so, and the palette inserts a chart", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n```vega-lite\n{ nope\n```\n\nIntro\n");
+    await expect(page.locator("#the-doc .drawn-error")).toContainText(
+      "not valid JSON",
+      { timeout: 15_000 },
+    );
+    await page.locator("#the-doc p", { hasText: "Intro" }).click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("vega");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("#the-doc figure.folio-vega-lite .code-view svg"),
+    ).toHaveCount(1, { timeout: 15_000 });
+  });
+});
