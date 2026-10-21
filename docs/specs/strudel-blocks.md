@@ -50,8 +50,8 @@ text }` - the existing fence block (docs/specs/
   Stop removes the atom spans and restores plain syntax colors;
   the spans never reach the model (it reads `innerText`).
 - **Offline (ADR-0005)**: the library is bundled and lazily
-  imported, never fetched. No external sample banks are loaded:
-  melodic sounds are synthesized, and drums come from folio's
+  imported, never fetched. folio loads no external sample banks
+  itself: melodic sounds are synthesized, and drums come from folio's
   bundled CC0 kit (ADR-0016) under the standard names - `bd`
   (kick), `sd` (snare), `hh` (closed hat), `oh` (open hat), `cp`
   (clap/snap), `rim`, `lt`/`mt`/`ht` (toms), `cr` (crash), `rd`
@@ -60,6 +60,25 @@ text }` - the existing fence block (docs/specs/
   (`prebake`), so the first beats are never skipped as late. Kit
   files are hashed assets emitted next to the bundle and loaded
   from the app's own origin.
+  KNOWN EXCEPTION (policy pending): a pattern's OWN
+  `samples('github:...')` call, as in strudel.cc examples like
+  "Amensister", is passed through to strudel, which fetches that bank
+  from the internet when online. Offline, those sounds fail, and the
+  failure now shows in the header (below).
+- **Audio worklets load at setup**: `prebake` calls strudel's
+  `initAudio()`, which loads the AudioWorklet effects (`shape`,
+  `crush`, `coarse`, ...). `initStrudel` alone defers that to the
+  NEXT mousedown on the page; folio initialises inside the Play
+  click, so those effects failed on every note until the user
+  happened to click again ("Amensister" played silent).
+- **Playback errors reach the header**: errors raised DURING
+  playback (a scale name the bundled strudel rejects, a sound that
+  will not load, a worklet failure) are logged per note by strudel
+  and never reject. While a block plays, folio listens to strudel's
+  `strudel.log` event and shows the latest error in that block's
+  header, e.g. "Some sounds failed: Scale name G0 is incomplete...".
+  Playback continues. Before this, the console was the only place
+  they appeared.
 - **Markdown view**: ```strudel fences highlight with the standard
   fence/code tokens - no new token kinds.
 - **Language picker**: "Strudel (music)" in any code block's
@@ -126,6 +145,10 @@ release), not DOM `dispatchEvent`. Only GTK input events carry user
 activation, so a DOM-dispatched click leaves the context suspended.
 
 ## Acceptance
+
+- e2e (`tests/e2e/strudel.spec.ts`): worklet effects (`shape`) play
+  on the FIRST press with no AudioWorkletNode errors; an error during
+  playback shows in the header.
 
 - `just lint`, `just test`, `just build` green; engine fence tests
   unchanged and passing (a strudel fence round-trips byte-identical).

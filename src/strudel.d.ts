@@ -52,6 +52,9 @@ declare module "@strudel/web" {
     loadBuffer(url: string, ctx: BaseAudioContext): Promise<AudioBuffer>;
     /** The AudioContext strudel plays through. */
     getAudioContext(): AudioContext;
+    /** superdough's audio setup: resume the context and load the
+     * AudioWorklet effects (shape, crush, coarse, ...). */
+    initAudio(options?: { disableWorklets?: boolean }): Promise<void>;
   }
   const strudel: StrudelWeb;
   export = strudel;
