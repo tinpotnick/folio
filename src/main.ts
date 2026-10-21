@@ -1249,6 +1249,11 @@ const EXAMPLES: { id: string; file: string; blurb: string }[] = [
     file: "/demo/examples/music.md",
     blurb: "music strudel audio beats pattern fun player",
   },
+  {
+    id: "amensister",
+    file: "/demo/examples/amensister.md",
+    blurb: "music strudel amen break breakbeat online samples felix roos",
+  },
 ];
 
 interface PaletteEntry {

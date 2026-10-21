@@ -444,3 +444,102 @@ test.describe("engine audio failure", () => {
     await figure.locator(".folio-inspector .strudel-stop").click();
   });
 });
+
+// Online sample banks need consent (ADR-0019): a pattern's own
+// samples('github:...') downloads from the internet - folio asks
+// first, in the block's header.
+test.describe("online samples need consent", () => {
+  const ONLINE =
+    '# T\n\n```strudel\nsamples(\'github:tidalcycles/dirt-samples\')\nstack(s("amencutup*4"), note("c3 e3 g3").s("sawtooth"))\n```\n';
+
+  async function watchGithub(page: Page): Promise<string[]> {
+    const hits: string[] = [];
+    await page.route("https://raw.githubusercontent.com/**", (route) => {
+      hits.push(route.request().url());
+      return route.abort();
+    });
+    return hits;
+  }
+
+  test("Play asks first, and downloads nothing until allowed", async ({
+    page,
+  }) => {
+    const hits = await watchGithub(page);
+    await loadDoc(page, ONLINE);
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".strudel-play").click();
+    const consent = figure.locator(".strudel-consent");
+    await expect(consent).toBeVisible();
+    await expect(consent).toContainText("github:tidalcycles/dirt-samples");
+    await expect(consent).toContainText("internet");
+    await page.waitForTimeout(800);
+    expect(hits).toEqual([]);
+    await expect(figure.locator(".strudel-play")).not.toContainText("Playing");
+  });
+
+  test("Download and play fetches the bank, and asks once per session", async ({
+    page,
+  }) => {
+    const hits = await watchGithub(page);
+    await loadDoc(page, ONLINE);
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".strudel-play").click();
+    await figure.locator(".strudel-consent .consent-allow").click();
+    await expect(figure.locator(".strudel-consent")).toBeHidden();
+    await expect
+      .poll(() => hits.length, { timeout: 10_000 })
+      .toBeGreaterThan(0);
+    // The download failed (aborted here, like being offline): it is
+    // REPORTED, and the rest of the pattern still plays.
+    await expect(figure.locator(".strudel-play")).toContainText("Playing");
+    await expect(figure.locator(".strudel-error")).toContainText(
+      "Couldn't download the online sounds",
+    );
+    await figure.locator(".strudel-stop").click();
+    await figure.locator(".strudel-play").click();
+    await expect(figure.locator(".strudel-consent")).toBeHidden();
+    await expect(figure.locator(".strudel-play")).toContainText("Playing");
+    await figure.locator(".strudel-stop").click();
+  });
+
+  test("Play without them plays the rest, fully offline", async ({ page }) => {
+    const hits = await watchGithub(page);
+    await loadDoc(page, ONLINE);
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".strudel-play").click();
+    await figure.locator(".strudel-consent .consent-skip").click();
+    await expect(figure.locator(".strudel-on").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(1000);
+    expect(hits).toEqual([]);
+    await figure.locator(".strudel-stop").click();
+  });
+});
+
+test("the Amensister example asks before downloading, then plays offline-only on request", async ({
+  page,
+}) => {
+  const hits: string[] = [];
+  await page.route("https://raw.githubusercontent.com/**", (route) => {
+    hits.push(route.request().url());
+    return route.abort();
+  });
+  await page.goto("/?doc=demo/examples/amensister.md");
+  const figure = page.locator("#the-doc figure.folio-strudel");
+  await figure.click();
+  await figure.locator(".strudel-play").click();
+  await expect(figure.locator(".strudel-consent")).toBeVisible();
+  await figure.locator(".consent-skip").click();
+  await expect(figure.locator(".strudel-on").first()).toBeVisible({
+    timeout: 10_000,
+  });
+  await page.waitForTimeout(1500);
+  expect(hits).toEqual([]);
+  // The adapted scale plays: no scale error in the header.
+  await expect(figure.locator(".strudel-error")).not.toContainText("Scale");
+  await figure.locator(".strudel-stop").click();
+});

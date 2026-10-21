@@ -88,6 +88,8 @@ Each one opens in place; the folio wordmark brings you back here.
   formula.
 - [A music document](demo/examples/music.md) - Strudel patterns that
   play in the page.
+- [Amensister](demo/examples/amensister.md) - a Strudel classic built
+  on an amen break, with online samples you choose to download.
 - [A pure-prose poem](demo/examples/poem.md) - typography only, no
   data at all.
 

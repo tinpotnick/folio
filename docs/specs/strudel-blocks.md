@@ -60,11 +60,17 @@ text }` - the existing fence block (docs/specs/
   (`prebake`), so the first beats are never skipped as late. Kit
   files are hashed assets emitted next to the bundle and loaded
   from the app's own origin.
-  KNOWN EXCEPTION (policy pending): a pattern's OWN
-  `samples('github:...')` call, as in strudel.cc examples like
-  "Amensister", is passed through to strudel, which fetches that bank
-  from the internet when online. Offline, those sounds fail, and the
-  failure now shows in the header (below).
+- **Online samples, by consent (ADR-0019)**: a pattern's OWN
+  `samples('github:...' | 'https://...' | 'shabda:...')` call, as in
+  strudel.cc examples like "Amensister", downloads from the internet.
+  Before evaluating such a pattern, Play shows a warning row
+  (`.strudel-consent`) in the header. It names the sources and
+  offers **Download and play** (allowed per source, for the session)
+  or **Play without them** (`samples()` becomes a no-op: nothing is
+  fetched, and the rest plays). An allowed download that fails is
+  reported in the header ("Couldn't download the online sounds ...
+  playing the rest") and never stops the pattern. The shipped
+  example `demo/examples/amensister.md` exercises it.
 - **Audio worklets load at setup**: `prebake` calls strudel's
   `initAudio()`, which loads the AudioWorklet effects (`shape`,
   `crush`, `coarse`, ...). `initStrudel` alone defers that to the
@@ -146,6 +152,12 @@ activation, so a DOM-dispatched click leaves the context suspended.
 
 ## Acceptance
 
+- e2e (`tests/e2e/strudel.spec.ts`, "online samples need consent"):
+  Play asks first and fetches nothing until allowed; Download and
+  play fetches, asks once per session, and reports a failed download
+  while the rest plays; Play without them plays with zero requests;
+  the Amensister example plays offline on request with its adapted
+  scale. Unit: `tests/render/online-samples.test.ts`.
 - e2e (`tests/e2e/strudel.spec.ts`): worklet effects (`shape`) play
   on the FIRST press with no AudioWorkletNode errors; an error during
   playback shows in the header.

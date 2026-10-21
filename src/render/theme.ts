@@ -1405,6 +1405,23 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       box-shadow: 0 0 0 1px rgba(130, 80, 223, 0.55);
       transition-duration: 0ms;
     }
+    /* The online-samples consent (ADR-0019): a warning row of its own. */
+    .folio-inspector .strudel-consent {
+      flex-basis: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      padding: 6px 8px;
+      border-radius: 5px;
+      background: color-mix(in srgb, var(--folio-unit) 14%, transparent);
+      color: var(--folio-ink);
+      font-size: 12px;
+    }
+    .folio-inspector .strudel-consent[hidden] { display: none; }
+    figure.folio-codeblock > .code-inspector { flex-wrap: wrap; }
+    .strudel-consent button { flex: none; }
+    .folio-inspector .strudel-consent > span { flex: 1 1 260px; }
     .folio-inspector .strudel-error {
       color: var(--folio-sy-red, #b3261e);
       font-size: 12px;
