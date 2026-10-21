@@ -1460,6 +1460,13 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       padding: 4px 0;
       overflow-x: auto;
     }
+    /* Sheet music (abcjs): the score fills the column. */
+    figure.folio-abc .abc-score svg { width: 100%; height: auto; }
+    figure.folio-abc .abc-warnings {
+      color: var(--folio-unit);
+      font-size: 0.8em;
+      margin-top: 4px;
+    }
     /* SVG drawings inherit the page's ink as currentColor. */
     figure.folio-svg .code-view { color: var(--folio-ink); }
     figure.folio-drawn .code-view > svg {

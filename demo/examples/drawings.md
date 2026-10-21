@@ -122,7 +122,8 @@ removed.
     <rect x="10" y="40" width="120" height="60" rx="8"/>
     <rect x="200" y="40" width="120" height="60" rx="8"/>
     <rect x="390" y="40" width="120" height="60" rx="8"/>
-    <path d="M130 70 H195 M320 70 H385" marker-end="url(#arrow)"/>
+    <path d="M130 70 H195" marker-end="url(#arrow)"/>
+    <path d="M320 70 H385" marker-end="url(#arrow)"/>
   </g>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
@@ -136,4 +137,26 @@ removed.
     <text x="450" y="75" fill="var(--folio-accent)">Publish</text>
   </g>
 </svg>
+```
+
+## Sheet music
+
+[ABC notation](https://abcnotation.com) writes music as text: one
+letter per note, bars marked with `|`. folio engraves it as a score,
+and **Play** in the score's header sounds it with folio's own simple
+synthesizer: offline, nothing downloaded. This is a traditional
+reel, *The Silver Spear* (public domain):
+
+```abc
+X:1
+T:The Silver Spear
+R:reel
+M:4/4
+L:1/8
+Q:1/4=150
+K:D
+A|FA (3AAA BAFA|dfed BddB|FA (3AAA BAFA|dfed BdAd|
+FA (3AAA BAFA|dfed BddB|FA (3AAA BAFA|dfed Bd d2||
+fa (3aaa bafa|fa (3aaa bafa|fa (3aaa beef|gfed Bd d2|
+fa (3aaa bafa|fa (3aaa bafa|fa (3aaa beef|gfed Bd d2|]
 ```

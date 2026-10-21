@@ -20,6 +20,7 @@ import type { StrudelRepl } from "@strudel/web";
 import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
 import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
 import { onlineSampleSources } from "./audio/online-samples.js";
+import { notesFromAbc, playNotes, type Playback } from "./audio/tone-synth.js";
 import { themeFromDoc, themeCss, type Mode } from "./render/theme.js";
 import { registerFonts } from "./render/fonts.js";
 import { formatComputed } from "./render/number.js";
@@ -229,11 +230,20 @@ const DRAWN_LANGS: Record<string, string> = {
   graphviz: "Graphviz diagram",
   "vega-lite": "Vega-Lite chart",
   svg: "SVG drawing",
+  abc: "Sheet music",
 };
 
 function isDrawnLang(lang: string | undefined): boolean {
   return lang !== undefined && lang in DRAWN_LANGS;
 }
+
+const ABC_STARTER = `X:1
+T:A small tune
+M:4/4
+L:1/8
+Q:1/4=110
+K:G
+GABc d2 B2 | c2 A2 B4 | ABcd e2 c2 | B2 G2 G4 |]`;
 
 const SVG_STARTER = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" width="240">
   <rect x="10" y="10" width="220" height="100" rx="12"
@@ -753,6 +763,7 @@ export class FolioDoc extends HTMLElement {
     // (only once the library was ever loaded - never import it
     // for a document that plays nothing).
     if (this.repl !== null) void this.stopStrudel();
+    this.stopAbc();
     const theme = themeFromDoc(this.doc);
     const root = this.shadowRoot;
     root.innerHTML = "";
@@ -984,6 +995,7 @@ export class FolioDoc extends HTMLElement {
     if (lang === "dot" || lang === "graphviz") return this.drawGraphviz(figure);
     if (lang === "vega-lite") return this.drawVegaLite(figure);
     if (lang === "svg") return this.drawSvg(figure);
+    if (lang === "abc") return this.drawAbc(figure);
     return Promise.resolve();
   }
 
@@ -991,6 +1003,147 @@ export class FolioDoc extends HTMLElement {
   private drawnError(view: HTMLElement, what: string, e: unknown): void {
     view.textContent = `${what} error: ${e instanceof Error ? e.message : String(e)}`;
     view.classList.add("drawn-error");
+  }
+
+  /* --- ABC music (spec: docs/specs/drawn-blocks.md, ADR-0023) --- */
+
+  /** The one music context, made inside a Play click (autoplay). */
+  private abcCtx: AudioContext | null = null;
+  private abcPlaying: {
+    figure: HTMLElement;
+    playback: Playback;
+    timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+
+  /**
+   * Engrave ABC notation as a score (abcjs, bundled, lazy) in the
+   * theme's ink and fonts. abcjs's own warnings (an unknown symbol, a
+   * bar too long) show under the score.
+   */
+  private async drawAbc(figure: HTMLElement): Promise<void> {
+    const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+    const view = figure.querySelector<HTMLElement>(".code-view");
+    if (!code || !view || !this.doc) return;
+    try {
+      const abcjs = (await import("abcjs")).default;
+      const theme = themeFromDoc(this.doc);
+      const c = theme.colors[this.mode()];
+      const font = /^"([^"]+)"/.exec(theme.bodyFont)?.[1] ?? "serif";
+      view.textContent = "";
+      view.classList.remove("drawn-error");
+      const score = document.createElement("div");
+      score.className = "abc-score";
+      view.appendChild(score);
+      const tunes = abcjs.renderAbc(score, this.codeText(code), {
+        responsive: "resize",
+        add_classes: true,
+        foregroundColor: c.ink,
+        paddingtop: 4,
+        paddingbottom: 4,
+        paddingleft: 0,
+        paddingright: 0,
+        format: {
+          titlefont: `"${font}" 17`,
+          subtitlefont: `"${font}" 13`,
+          composerfont: `"${font}" 12`,
+          tempofont: `"${font}" 11`,
+          gchordfont: `"${font}" 12`,
+          annotationfont: `"${font}" 12`,
+          vocalfont: `"${font}" 12`,
+          wordsfont: `"${font}" 12`,
+        },
+      });
+      const tune = tunes[0];
+      const warnings = (tune?.warnings ?? []).map((w) =>
+        String(w).replace(/<[^>]+>/g, ""),
+      );
+      if (!tune || tune.lines.length === 0) {
+        throw new Error(
+          warnings[0] ?? "no music found - an ABC tune starts with X: and K:",
+        );
+      }
+      if (warnings.length > 0) {
+        const warn = document.createElement("div");
+        warn.className = "abc-warnings";
+        warn.textContent = `Music warning: ${warnings.join("; ")}`;
+        view.appendChild(warn);
+      }
+    } catch (e) {
+      this.drawnError(view, "Music", e);
+    }
+  }
+
+  /** Play / Stop in a score's header: folio's offline synth. */
+  private buildAbcControls(figure: HTMLElement): HTMLElement[] {
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "insp-select abc-play";
+    play.textContent = PLAY_LABEL;
+    const stop = document.createElement("button");
+    stop.type = "button";
+    stop.className = "insp-select abc-stop";
+    stop.textContent = "■ Stop";
+    play.addEventListener("click", () => {
+      // The context is created and resumed INSIDE the click: WebKit's
+      // autoplay policy only lets a gesture start audio.
+      if (this.abcCtx === null) {
+        try {
+          this.abcCtx = new AudioContext();
+        } catch {
+          return;
+        }
+      }
+      void this.abcCtx.resume();
+      const ctx = this.abcCtx;
+      const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
+      if (!code) return;
+      void import("abcjs").then(({ default: abcjs }) => {
+        this.stopAbc();
+        const tune = abcjs.parseOnly(this.codeText(code))[0];
+        if (!tune) return;
+        const audio = tune.setUpAudio({}) as {
+          tempo: number;
+          tracks: Parameters<typeof notesFromAbc>[0];
+        };
+        const playback = playNotes(
+          ctx,
+          notesFromAbc(audio.tracks, audio.tempo),
+        );
+        play.textContent = PLAYING_LABEL;
+        figure.dataset.playing = "true";
+        const timer = setTimeout(
+          () => this.stopAbc(),
+          playback.length * 1000 + 200,
+        );
+        this.abcPlaying = { figure, playback, timer };
+      });
+    });
+    stop.addEventListener("click", () => this.stopAbc());
+    return [play, stop];
+  }
+
+  private stopAbc(): void {
+    const p = this.abcPlaying;
+    if (!p) return;
+    clearTimeout(p.timer);
+    p.playback.stop();
+    delete p.figure.dataset.playing;
+    const btn = p.figure.querySelector<HTMLElement>(".abc-play");
+    if (btn) btn.textContent = PLAY_LABEL;
+    this.abcPlaying = null;
+  }
+
+  /** Insert a starter tune after the caret's block. */
+  insertAbc(): void {
+    if (!this.doc) return;
+    const { at, replace } = this.insertionPoint(this.blockIndexAtCaret());
+    this.doc.blocks.splice(at, replace, {
+      kind: "code",
+      lang: "abc",
+      text: ABC_STARTER,
+    });
+    this.render();
+    this.emitChange();
   }
 
   /* --- SVG (spec: docs/specs/drawn-blocks.md) --- */
@@ -1717,6 +1870,9 @@ export class FolioDoc extends HTMLElement {
     }
     if (block.lang === "jscad") {
       bar.append(...this.buildJscadControls(figure));
+    }
+    if (block.lang === "abc") {
+      bar.append(...this.buildAbcControls(figure));
     }
     figure.addEventListener("mousedown", () => {
       bar.hidden = false;

@@ -186,3 +186,52 @@ test.describe("SVG drawings", () => {
     ).toHaveCount(1);
   });
 });
+
+test.describe("ABC sheet music", () => {
+  test("the sample engraves a score in the theme's ink", async ({ page }) => {
+    await page.goto("/?doc=demo/examples/drawings.md");
+    const score = page.locator("#the-doc figure.folio-abc .abc-score svg");
+    await expect(score).toBeVisible({ timeout: 15_000 });
+    expect(await score.locator(".abcjs-note").count()).toBeGreaterThan(20);
+    await expect(
+      page.locator("#the-doc figure.folio-abc .drawn-error"),
+    ).toHaveCount(0);
+  });
+
+  test("Play sounds it offline; Stop silences it", async ({ page }) => {
+    const remote: string[] = [];
+    page.on("request", (r) => {
+      if (!r.url().includes("localhost")) remote.push(r.url());
+    });
+    await page.goto("/?doc=demo/examples/drawings.md");
+    const fig = page.locator("#the-doc figure.folio-abc");
+    await expect(fig.locator(".abc-score svg")).toBeVisible({
+      timeout: 15_000,
+    });
+    await fig.locator(".code-view").click();
+    await fig.locator(".abc-play").click();
+    await expect(fig).toHaveAttribute("data-playing", "true");
+    await expect(fig.locator(".abc-play")).toContainText("Playing");
+    await fig.locator(".abc-stop").click();
+    await expect(fig).not.toHaveAttribute("data-playing", "true");
+    // No soundfont (or anything else) was fetched.
+    expect(remote).toEqual([]);
+  });
+
+  test("text that is not a tune says so; the palette inserts one", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n```abc\nT:Only a title\n```\n\nIntro\n");
+    await expect(page.locator("#the-doc .drawn-error")).toContainText(
+      "Music error",
+      { timeout: 10_000 },
+    );
+    await page.locator("#the-doc p", { hasText: "Intro" }).click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("sheet music");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("#the-doc figure.folio-abc .abc-score svg"),
+    ).toHaveCount(1, { timeout: 10_000 });
+  });
+});
