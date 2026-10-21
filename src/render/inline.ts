@@ -10,8 +10,16 @@ export function inlineMarkdownToHtml(text: string): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
+  // Code spans are LITERAL: lift them out before any other rule runs
+  // (a `*` inside backticks must never start italics), then put them
+  // back. U+E000 (private use) stands in for each span.
+  const spans: string[] = [];
+  const lifted = escaped.replace(/`([^`]+)`/g, (_m, code: string) => {
+    spans.push(`<code>${code}</code>`);
+    return `\uE000${String(spans.length - 1)}\uE000`;
+  });
   return (
-    escaped
+    lifted
       // Links first: the label then still gets the inline format
       // rules applied INSIDE the anchor (bold link text works).
       .replace(
@@ -23,7 +31,7 @@ export function inlineMarkdownToHtml(text: string): string {
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
       .replace(/~~([^~]+)~~/g, "<del>$1</del>")
       .replace(/\+\+([^+]+)\+\+/g, "<ins>$1</ins>")
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\uE000(\d+)\uE000/g, (_m, n: string) => spans[Number(n)] ?? "")
   );
 }
 

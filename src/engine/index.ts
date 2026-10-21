@@ -29,7 +29,23 @@ export interface Table {
   import?: string;
   columns: Column[];
   rows: Cell[][];
+  /**
+   * Present when this is a SIMPLE table (spec: docs/specs/
+   * simple-tables.md): a standard GitHub pipe table, stored as one.
+   * Cells are text exactly as written; `align` is the delimiter
+   * row's per-column alignment. Absent: a dataset (`::: table`).
+   */
+  simple?: {
+    align: TableAlign[];
+    /** The table's source lines as written, and a signature of the
+     * content they encode: while the content is unchanged the
+     * author's own formatting is re-emitted verbatim. */
+    raw?: string;
+    sig?: string;
+  };
 }
+
+export type TableAlign = "none" | "left" | "right" | "center";
 
 export interface Document {
   version: 1;

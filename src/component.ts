@@ -120,6 +120,9 @@ function cloneBlocks(blocks: DocBlock[]): DocBlock[] {
   return blocks.map((b) => walk(b) as DocBlock);
 }
 
+/** A plain number as people type it in a table (1,234.50, -3, .5). */
+const NUMERIC_RE = /^-?(?:\d{1,3}(?:,\d{3})+|\d*)(?:\.\d+)?$/;
+
 /** Blocks whose text is inline Markdown: formats and links apply. */
 const INLINE_BLOCKS = new Set(["P", "UL", "OL"]);
 
@@ -1169,6 +1172,9 @@ export class FolioDoc extends HTMLElement {
     const figure = document.createElement("figure");
     figure.dataset.blockIndex = String(idx);
     figure.dataset.tableId = block.table.id;
+    // Simple table (a GitHub pipe table) or dataset (`::: table`):
+    // spec docs/specs/simple-tables.md.
+    figure.dataset.tableKind = block.table.simple ? "table" : "dataset";
     const inspector = this.buildInspector(figure, block);
     figure.appendChild(inspector);
     // A broken formula (a rename that orphaned a reference, bad
@@ -1229,6 +1235,9 @@ export class FolioDoc extends HTMLElement {
       if (col.type === "number" || col.type === "formula") {
         th.classList.add("num");
       }
+      const simpleAlign = this.simpleAlign(block.table, ci);
+      if (simpleAlign === "right") th.classList.add("num");
+      if (simpleAlign === "center") th.classList.add("align-center");
       headRow.appendChild(th);
     });
     thead.appendChild(headRow);
@@ -1258,6 +1267,9 @@ export class FolioDoc extends HTMLElement {
           if (col.type === "number") {
             td.classList.add("num");
           }
+          const simpleAlign = this.simpleAlign(block.table, c);
+          if (simpleAlign === "right") td.classList.add("num");
+          if (simpleAlign === "center") td.classList.add("align-center");
           td.textContent = String(v ?? "");
           // Nested editable, focusable leaf: the cell (not the
           // article) holds focus while it is edited, so blur-based
@@ -1439,8 +1451,69 @@ export class FolioDoc extends HTMLElement {
 
     const colSel = document.createElement("select");
     colSel.className = "insp-col";
+    colSel.title = "Column";
+    colSel.setAttribute("aria-label", "Column");
     colSel.addEventListener("change", () => {
       this.showInspector(figure, block, Math.max(colSel.selectedIndex, 0));
+    });
+
+    // The bar says WHICH kind of table this is, and offers the way to
+    // the other kind (spec: docs/specs/simple-tables.md).
+    const kind = document.createElement("span");
+    kind.className = "insp-kind";
+    const convert = document.createElement("button");
+    convert.type = "button";
+    convert.className = "insp-convert";
+    convert.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+    if (block.table.simple) {
+      kind.textContent = "Table";
+      kind.title =
+        "A simple table: a standard Markdown pipe table, readable on GitHub";
+      convert.textContent = "Make it a dataset";
+      convert.title =
+        "Give it an id, typed columns, units, formulas and a caption - and let charts use it. Saved as a ::: table block.";
+      convert.addEventListener("click", () => this.tableToDataset(block));
+      bar.append(kind, colSel, convert);
+      return bar;
+    }
+    kind.textContent = `Dataset · ${block.table.id}`;
+    kind.title =
+      "A dataset: typed columns, units, formulas and a caption; charts and other tables refer to it by id";
+    const blocker = this.simpleBlocker(block.table);
+    convert.textContent = "Convert to simple table";
+    convert.classList.toggle("blocked", blocker !== null);
+    convert.title =
+      blocker ??
+      "Save it as a standard Markdown pipe table (nothing is lost: it has no formulas, units, caption or references)";
+    // A blocked conversion SAYS why, visibly, on press - a disabled
+    // button with a hover-only reason is invisible on touch.
+    const note = document.createElement("span");
+    note.className = "insp-note";
+    note.setAttribute("role", "status");
+    note.hidden = true;
+    convert.addEventListener("click", () => {
+      const why = this.simpleBlocker(block.table);
+      if (why === null) {
+        this.tableToSimple(block);
+        return;
+      }
+      note.textContent = `Can't convert: ${why}`;
+      note.hidden = false;
+    });
+    const chartBtn = document.createElement("button");
+    chartBtn.type = "button";
+    chartBtn.className = "insp-chart";
+    chartBtn.textContent = "Chart it";
+    chartBtn.title = "Insert a chart of this dataset below it";
+    chartBtn.addEventListener("mousedown", (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+    });
+    chartBtn.addEventListener("click", () => {
+      this.chartTable(block.table.id);
     });
 
     const typeSel = document.createElement("select");
@@ -1562,8 +1635,209 @@ export class FolioDoc extends HTMLElement {
     dsBtn.addEventListener("click", () => {
       this.openDataset(block.table.id);
     });
-    bar.append(dsBtn, colSel, typeSel, unitInp, fmtSel, fx, exprInp, capInp);
+    bar.append(
+      kind,
+      dsBtn,
+      colSel,
+      typeSel,
+      unitInp,
+      fmtSel,
+      fx,
+      exprInp,
+      capInp,
+      chartBtn,
+      convert,
+      note,
+    );
     return bar;
+  }
+
+  /**
+   * A simple table's display alignment for column `c`: the
+   * delimiter row's marker, or - unmarked - right when every
+   * non-empty cell is a number (ADR-0002: alignment derives from the
+   * data). Datasets return null (their column type decides).
+   */
+  private simpleAlign(
+    table: Table,
+    c: number,
+  ): "left" | "right" | "center" | null {
+    if (!table.simple) return null;
+    const a = table.simple.align[c] ?? "none";
+    if (a !== "none") return a;
+    const cells = table.rows
+      .map((r) => String(r[c] ?? "").trim())
+      .filter((v) => v !== "");
+    return cells.length > 0 && cells.every((v) => NUMERIC_RE.test(v))
+      ? "right"
+      : null;
+  }
+
+  /** Why a dataset cannot become a simple table without losing
+   * something - or null when it can. */
+  private simpleBlocker(table: Table): string | null {
+    const names = (pred: (c: Table["columns"][number]) => boolean): string =>
+      table.columns
+        .filter(pred)
+        .map((c) => c.name)
+        .join(", ");
+    const formulas = names((c) => c.type === "formula");
+    if (formulas) {
+      return `${formulas} ${formulas.includes(",") ? "are formulas" : "is a formula"}, and formulas need a dataset`;
+    }
+    const typed = names((c) => c.type !== "text" && c.type !== "number");
+    if (typed) return `${typed} has a type only a dataset can hold`;
+    const units = names((c) => c.unit !== undefined || c.format !== undefined);
+    if (units) return `${units} has a unit or format, which needs a dataset`;
+    if (table.caption !== undefined) return "its caption needs a dataset";
+    if (table.import !== undefined) return "imported data stays a dataset";
+    const charts = (this.doc?.blocks ?? []).filter(
+      (b) => b.kind === "chart" && b.chart.source === table.id,
+    ).length;
+    const formulaRefs = (this.doc?.blocks ?? []).some(
+      (b) =>
+        b.kind === "table" &&
+        b.table.columns.some((c) => c.expr?.includes(`@${table.id}`)),
+    );
+    if (charts > 0 || formulaRefs) {
+      const what = [
+        charts > 0 ? `${String(charts)} chart${charts > 1 ? "s" : ""}` : "",
+        formulaRefs ? "formulas in other tables" : "",
+      ]
+        .filter(Boolean)
+        .join(" and ");
+      return `${what} use${charts === 1 && !formulaRefs ? "s" : ""} this dataset`;
+    }
+    return null;
+  }
+
+  /** Simple table -> dataset: a real id, number columns typed. */
+  private tableToDataset(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    const t = block.table;
+    const ids = new Set(
+      (this.doc?.blocks ?? []).flatMap((b) =>
+        b.kind === "table" && !b.table.simple ? [b.table.id] : [],
+      ),
+    );
+    let n = 1;
+    while (ids.has(`table-${String(n)}`)) n++;
+    t.id = `table-${String(n)}`;
+    t.columns.forEach((col, c) => {
+      const cells = t.rows.map((r) => String(r[c] ?? "").trim());
+      const numeric =
+        cells.some((v) => v !== "") &&
+        cells.every((v) => v === "" || NUMERIC_RE.test(v));
+      col.type = numeric ? "number" : "text";
+      if (numeric) {
+        for (const r of t.rows) {
+          const v = String(r[c] ?? "").trim();
+          r[c] = v === "" ? "" : Number(v.replaceAll(",", ""));
+        }
+      }
+    });
+    delete t.simple;
+    this.render();
+    this.emitChange();
+    const numbers = t.columns
+      .filter((c) => c.type === "number")
+      .map((c) => c.name);
+    this.status(
+      `Now a dataset (${t.id})` +
+        (numbers.length > 0
+          ? ` - ${numbers.join(", ")} ${numbers.length > 1 ? "are now number columns" : "is now a number column"}`
+          : ""),
+    );
+  }
+
+  /** A short message for the host's status line. */
+  private status(message: string): void {
+    this.dispatchEvent(
+      new CustomEvent("folio-status", {
+        detail: { message },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /**
+   * Insert a chart of dataset `tableId` right below it: the first
+   * text column as categories, the first number/formula column as
+   * values, a bar chart (spec: docs/specs/simple-tables.md, "Charts").
+   * Returns why it could not, or null on success.
+   */
+  chartTable(tableId: string): string | null {
+    if (!this.doc) return "No document";
+    const at = this.doc.blocks.findIndex(
+      (b) => b.kind === "table" && !b.table.simple && b.table.id === tableId,
+    );
+    const block = this.doc.blocks[at];
+    if (block?.kind !== "table") return "Charts are drawn from a dataset";
+    const cols = block.table.columns;
+    const value = cols.find((c) => c.type === "number" || c.type === "formula");
+    if (!value) return "A chart needs a number or formula column";
+    const label = cols.find((c) => c !== value && c.type === "text") ?? cols[0];
+    const ids = new Set(
+      this.doc.blocks.flatMap((b) =>
+        b.kind === "chart" && b.chart.id ? [b.chart.id] : [],
+      ),
+    );
+    let id = `${tableId}-chart`;
+    for (let n = 2; ids.has(id); n++) id = `${tableId}-chart-${String(n)}`;
+    this.doc.blocks.splice(at + 1, 0, {
+      kind: "chart",
+      chart: {
+        id,
+        source: tableId,
+        query: { select: [label?.name ?? value.name, value.name] },
+        type: "bar",
+      },
+    });
+    this.render();
+    this.emitChange();
+    this.shadowRoot
+      ?.querySelector<HTMLElement>(
+        `article.folio-doc > [data-block-index="${String(at + 1)}"]`,
+      )
+      ?.scrollIntoView({ block: "center" });
+    return null;
+  }
+
+  /**
+   * The palette's "Insert a chart": chart the dataset at the caret,
+   * else the nearest dataset above it. Returns why it could not.
+   */
+  insertChart(): string | null {
+    if (!this.doc) return "No document";
+    const at = this.blockIndexAtCaret();
+    for (let i = at >= 0 ? at : this.doc.blocks.length - 1; i >= 0; i--) {
+      const b = this.doc.blocks[i];
+      if (b?.kind === "table" && !b.table.simple)
+        return this.chartTable(b.table.id);
+    }
+    return 'Charts are drawn from a dataset - insert one, or click a table\'s "Make it a dataset"';
+  }
+
+  /** Dataset -> simple table, only when nothing would be lost. */
+  private tableToSimple(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    const t = block.table;
+    if (this.simpleBlocker(t) !== null) return;
+    t.simple = {
+      align: t.columns.map((c) => (c.type === "number" ? "right" : "none")),
+    };
+    t.rows = t.rows.map((r) => t.columns.map((_, c) => String(r[c] ?? "")));
+    for (const c of t.columns) {
+      c.type = "text";
+      delete c.width;
+      delete c.align;
+    }
+    this.render();
+    this.emitChange();
+    this.status("Now a simple Markdown table");
   }
 
   /**
@@ -2499,9 +2773,13 @@ export class FolioDoc extends HTMLElement {
     input.focus();
     const commit = (): void => {
       const text = input.value.trim();
-      const value: Cell = /^-?[0-9]+(\.[0-9]+)?$/.test(text)
-        ? parseFloat(text)
-        : text;
+      // Only NUMBER columns coerce; text keeps exactly what was typed
+      // ("0.90" must not become 0.9 - a simple table is text).
+      const value: Cell =
+        block.table.columns[c]?.type === "number" &&
+        /^-?[0-9]+(\.[0-9]+)?$/.test(text)
+          ? parseFloat(text)
+          : text;
       const target = block.table.rows[modelRow];
       if (target && target[c] !== value) {
         target[c] = value;
@@ -2931,9 +3209,12 @@ export class FolioDoc extends HTMLElement {
     const col = block.table.columns[c];
     if (!col || col.type === "formula") return;
     const text = (td.textContent ?? "").trim();
-    const value: string | number = /^-?[0-9]+(\.[0-9]+)?$/.test(text)
-      ? parseFloat(text)
-      : text;
+    // Only NUMBER columns coerce; a text cell keeps exactly what was
+    // typed - visiting "0.90" in a simple table must not rewrite it.
+    const value: string | number =
+      col.type === "number" && /^-?[0-9]+(\.[0-9]+)?$/.test(text)
+        ? parseFloat(text)
+        : text;
     const row = block.table.rows[r];
     if (!row) return;
     if (row[c] === value) return;
@@ -3546,37 +3827,62 @@ export class FolioDoc extends HTMLElement {
     return Number(el?.dataset.blockIndex ?? -1);
   }
 
+  /**
+   * Insert a SIMPLE table (a standard Markdown pipe table) after the
+   * caret's block - what a Markdown user expects (spec: docs/specs/
+   * simple-tables.md). `insertDataset` inserts a typed dataset.
+   */
   insertTable(): void {
+    this.insertTableBlock(true);
+  }
+
+  /** Insert a typed dataset (`::: table`) after the caret's block. */
+  insertDataset(): void {
+    this.insertTableBlock(false);
+  }
+
+  private insertTableBlock(simple: boolean): void {
     if (!this.doc) return;
-    const host = this.shadowRoot?.querySelector("article.folio-doc");
-    if (!host) return;
-    const sel = window.getSelection();
-    let idx = this.doc.blocks.length;
-    if (sel && sel.rangeCount > 0 && host.contains(sel.anchorNode)) {
-      let node: Node | null = sel.anchorNode;
-      while (node && node.parentNode !== host) {
-        node = node.parentNode;
-      }
-      if (node instanceof HTMLElement && node.dataset.blockIndex) {
-        idx = Number(node.dataset.blockIndex) + 1;
-      }
-    }
+    // After the caret's block (tracked through the shadow root -
+    // window.getSelection() cannot see inside it, which appended
+    // every new table at the END of the document).
+    const at = this.blockIndexAtCaret();
+    const idx = at >= 0 ? at + 1 : this.doc.blocks.length;
     this.doc.blocks.splice(idx, 0, {
       kind: "table",
-      table: {
-        id: `table-${String(Date.now().toString(36))}`,
-        columns: [
-          { name: "item", type: "text" },
-          { name: "value", type: "number" },
-        ],
-        rows: [
-          ["", ""],
-          ["", ""],
-        ],
-      },
+      table: simple
+        ? {
+            id: `table-${String(Date.now().toString(36))}`,
+            columns: [
+              { name: "Column 1", type: "text" },
+              { name: "Column 2", type: "text" },
+            ],
+            rows: [
+              ["", ""],
+              ["", ""],
+            ],
+            simple: { align: ["none", "none"] },
+          }
+        : {
+            id: `table-${String(Date.now().toString(36))}`,
+            columns: [
+              { name: "item", type: "text" },
+              { name: "value", type: "number" },
+            ],
+            rows: [
+              ["", ""],
+              ["", ""],
+            ],
+          },
     });
     this.render();
     this.emitChange();
+    // Bring the new table into view, caret in its first cell.
+    const fig = this.shadowRoot?.querySelector<HTMLElement>(
+      `article.folio-doc > [data-block-index="${String(idx)}"]`,
+    );
+    fig?.scrollIntoView({ block: "center" });
+    fig?.querySelector<HTMLElement>("td[data-row-index]")?.focus();
   }
 
   private handleKeydown(ev: KeyboardEvent): void {

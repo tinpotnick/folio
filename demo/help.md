@@ -62,6 +62,17 @@ document — written in the same renderer you are working with.
 
 ## Tables and charts
 
+- folio has two kinds of table. A **Table** is a standard Markdown
+  pipe table (`| a | b |`), exactly what GitHub shows; the table
+  button inserts one. A **Dataset** adds an id, typed columns,
+  units, formulas and a caption. Charts and formulas can only use
+  datasets.
+- Click a table to see its kind at the start of its bar. **Make it a
+  dataset** upgrades a table; **Convert to simple table** turns a
+  dataset back into a pipe table when nothing would be lost (the
+  button says why when it can't). Search "dataset" in the palette
+  to insert one directly.
+
 - The insert group (seven icons after the format buttons) holds the
   block builders: table, Mermaid diagram, image, audio clip,
   equation, Strudel music, and code block. The
@@ -202,17 +213,21 @@ caption: "Quarter-on-quarter growth by region"
 :::
 ```
 
+- The quickest way to a chart: click a dataset and press **Chart
+  it** on its bar, or search "chart" in the palette. You get a bar
+  chart of its first text and first number column, which you can
+  then change on the chart's own bar, or in the source below.
 - **source** points at a table by its anchor id (`@regional-data`).
-- **query** has three parts, all optional except `select`:
-  - `select: [column, column]` — the columns to plot. The first
-    selected column labels the bars; the last is the value.
-  - `filter: "q2 > 350 && region != 'South'"` — a **Jexl expression**
-    over the table's columns (the same language as table
-    formulas; text columns included). The legacy form
-    `filter: {column: q2, op: gt, value: 0}` (operators `eq`, `gt`,
-    `lt`) still works.
-  - `sort: {by: growth, order: desc}` — sort by a column, `asc` or
-    `desc`.
+- **query** has three parts, all optional except `select`.
+- **query: select** `[column, column]` names the columns to plot.
+  The first selected column labels the bars; the last is the value.
+- **query: filter** `"q2 > 350 && region != 'South'"` is a **Jexl
+  expression** over the table's columns (the same language as table
+  formulas; text columns included). The legacy form
+  `filter: {column: q2, op: gt, value: 0}` (operators `eq`, `gt`,
+  `lt`) still works.
+- **query: sort** `{by: growth, order: desc}` sorts by a column,
+  `asc` or `desc`.
 - **type** is `bar`, `line`, `area`, `pie`, `donut`, or
   `scatter`. Bar/line/area plot the first selected column as
   the category label and the last as the value; pie and donut

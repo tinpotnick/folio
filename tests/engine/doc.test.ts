@@ -366,3 +366,87 @@ describe("lists", () => {
     expect(parseDoc("2024 was a year\n").blocks[0]?.kind).toBe("prose");
   });
 });
+
+describe("simple (GFM pipe) tables", () => {
+  const rt = (text: string): string => serializeDoc(parseDoc(text));
+  const gfm =
+    "| Name  | Qty |  Note  |\n" +
+    "| ----- | --: | :----: |\n" +
+    "| Apple |  12 | crisp  |\n" +
+    "| Pear  |   3 | a \\| b |\n";
+
+  it("a pipe table parses as a SIMPLE table: text cells, alignments kept", () => {
+    const block = parseDoc(`# T\n\n${gfm}`).blocks[1];
+    expect(block?.kind).toBe("table");
+    if (block?.kind !== "table") return;
+    expect(block.table.simple?.align).toEqual(["none", "right", "center"]);
+    expect(block.table.columns.map((c) => [c.name, c.type])).toEqual([
+      ["Name", "text"],
+      ["Qty", "text"],
+      ["Note", "text"],
+    ]);
+    // Cells stay text, exactly as written (no "3.50" -> 3.5 drift);
+    // an escaped pipe is a literal pipe in the cell.
+    expect(block.table.rows).toEqual([
+      ["Apple", "12", "crisp"],
+      ["Pear", "3", "a | b"],
+    ]);
+  });
+
+  it("Prettier-formatted pipe tables round-trip byte-identically", () => {
+    for (const text of [
+      `# T\n\n${gfm}`,
+      "| a   | b   |\n| --- | --- |\n| 1   | 2   |\n",
+      "Intro\n\n| x   |\n| --- |\n\nAfter\n",
+      "| Item | Cost |\n| :--- | ---: |\n| Tea  | 3.50 |\n",
+    ]) {
+      expect(rt(text), JSON.stringify(text)).toBe(text);
+    }
+  });
+
+  it("unpadded pipe tables keep their layout until edited", () => {
+    // Canonical (Prettier) layout applies only once the content
+    // changes - see "simple tables keep their author's formatting".
+    expect(rt("|a|bb|\n|-|-:|\n|1|2|\n")).toBe("|a|bb|\n|-|-:|\n|1|2|\n");
+  });
+
+  it("short rows pad with empty cells", () => {
+    const block = parseDoc("| a | b |\n| - | - |\n| 1 |\n").blocks[0];
+    expect(block?.kind === "table" && block.table.rows).toEqual([["1", ""]]);
+  });
+
+  it("a pipe line inside a paragraph stays paragraph text", () => {
+    expect(parseDoc("Some prose\n| not | a table |\n").blocks[0]?.kind).toBe(
+      "prose",
+    );
+  });
+
+  it("a pipe line without a delimiter row is not a table", () => {
+    expect(parseDoc("| just | pipes |\n").blocks[0]?.kind).toBe("prose");
+  });
+
+  it("datasets still serialize as ::: table", () => {
+    const text = loadGolden("sample-document.md");
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+});
+
+describe("simple tables keep their author's formatting", () => {
+  // Regression (first-contact eval): an untouched hand-formatted
+  // pipe table was re-padded on every save - churn in a GitHub diff.
+  it("an unedited table re-serializes exactly as written", () => {
+    const text =
+      "| Fruit   | Qty | Price |\n|:--------|----:|------:|\n| Apple   |   3 |  1.20 |\n";
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  it("an EDITED table takes the canonical layout", () => {
+    const doc = parseDoc("|a|b|\n|-|-|\n|1|2|\n");
+    const t = doc.blocks[0];
+    if (t?.kind !== "table") throw new Error("not a table");
+    t.table.rows[0] = ["10", "2"];
+    expect(serializeDoc(doc)).toBe(
+      "| a   | b   |\n| --- | --- |\n| 10  | 2   |\n",
+    );
+  });
+});
