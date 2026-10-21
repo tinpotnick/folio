@@ -73,3 +73,27 @@ the source to change a filter or fix a Mermaid typo.
   italic unit, chart flip to line + filter edit reaching source,
   math and Mermaid in-place edits).
 - First-contact eval: `evals/figure-inspectors-first-contact.md`.
+
+## Revealing a bar never moves the figure (2026-10-21)
+
+A bar appears ABOVE its figure, in flow, so revealing it pushed the
+figure down by its height (a table jumped ~50px under the pointer).
+The component now scrolls by that height as the bar appears, so what
+was clicked stays put. Bars are NOT floated over the text above,
+because that hid the paragraph people click to leave the figure.
+Hiding is not compensated: the click went elsewhere, and that spot
+must not move.
+
+**Labelled fields**: the chart bar labels every field (Data, Type,
+Columns, Filter, Sort by, Order, Caption), each label naming its
+control, and wraps onto a second row instead of truncating.
+Placeholders vanish once a field is filled. The chart's Data picker
+lists only datasets: simple tables cannot feed charts.
+
+A click on a figure (outside its code, cells or headers) lights no
+toolbar block or format button until the next keystroke or text
+click. Before, the engine left the selection at the document's start,
+and a chart caption click lit H1.
+
+e2e: `tests/e2e/backlog-polish.spec.ts`.
+

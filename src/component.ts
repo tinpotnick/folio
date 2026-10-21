@@ -249,6 +249,28 @@ function textOffsetIn(root: Node, node: Node, offset: number): number {
   return count;
 }
 
+/** The element that scrolls `el` (the page, or a scrolling host). */
+function scrollContainerOf(el: Element): Element {
+  for (let n: Element | null = el; n; n = n.parentElement) {
+    const oy = getComputedStyle(n).overflowY;
+    if ((oy === "auto" || oy === "scroll") && n.scrollHeight > n.clientHeight) {
+      return n;
+    }
+  }
+  return document.scrollingElement ?? document.documentElement;
+}
+
+/** A figure-bar control with a visible label (its accessible name). */
+function labelled(text: string, control: HTMLElement): HTMLElement {
+  const label = document.createElement("label");
+  label.className = "insp-field";
+  const span = document.createElement("span");
+  span.className = "insp-label";
+  span.textContent = text;
+  label.append(span, control);
+  return label;
+}
+
 /** Blocks whose text is inline Markdown: formats and links apply. */
 const INLINE_BLOCKS = new Set(["P", "UL", "OL"]);
 
@@ -385,13 +407,51 @@ export class FolioDoc extends HTMLElement {
     if (!inside) this.dismissInspectors(null);
   };
 
+  /**
+   * Revealing a figure's bar (table, chart, code header ...) pushes
+   * the figure down by the bar's height - the table jumped ~50px under
+   * the pointer. Scroll by the same height, so what was clicked stays
+   * put. Hiding is not compensated: the click went elsewhere, and that
+   * spot must not move.
+   */
+  private barObserver = new MutationObserver((records) => {
+    for (const r of records) {
+      const bar = r.target as HTMLElement;
+      if (
+        r.oldValue === null ||
+        bar.hidden ||
+        !bar.classList.contains("folio-inspector")
+      ) {
+        continue;
+      }
+      const style = getComputedStyle(bar);
+      if (style.position === "sticky" && bar.getBoundingClientRect().top <= 0) {
+        continue;
+      }
+      const shift =
+        bar.getBoundingClientRect().height +
+        parseFloat(style.marginTop || "0") +
+        parseFloat(style.marginBottom || "0");
+      scrollContainerOf(this).scrollBy({ top: shift, behavior: "instant" });
+    }
+  });
+
   disconnectedCallback(): void {
+    this.barObserver.disconnect();
     document.removeEventListener("selectionchange", this.trackCaret);
     document.removeEventListener("mousedown", this.outsidePress, true);
   }
 
   connectedCallback(): void {
     document.addEventListener("selectionchange", this.trackCaret);
+    if (this.shadowRoot) {
+      this.barObserver.observe(this.shadowRoot, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["hidden"],
+        attributeOldValue: true,
+      });
+    }
     // Native Enter (e.g. leaving a list) makes <p>, not <div>: the
     // DOM matches what a render would build.
     document.execCommand("defaultParagraphSeparator", false, "p");
@@ -2427,7 +2487,8 @@ export class FolioDoc extends HTMLElement {
     srcSel.className = "insp-source";
     srcSel.title = "Source table";
     for (const b of this.doc?.blocks ?? []) {
-      if (b.kind !== "table") continue;
+      // Only DATASETS feed charts (simple tables have no id to name).
+      if (b.kind !== "table" || b.table.simple) continue;
       const o = document.createElement("option");
       o.value = b.table.id;
       o.textContent = `@${b.table.id}`;
@@ -2530,7 +2591,18 @@ export class FolioDoc extends HTMLElement {
     };
     figure.addEventListener("mousedown", () => show());
 
-    bar.append(srcSel, typeSel, selInp, filterInp, sortInp, orderSel, capInp);
+    // Every field is LABELLED: placeholders vanish once filled, and a
+    // row of bare boxes says nothing (first-contact feedback).
+    bar.classList.add("labelled-bar");
+    bar.append(
+      labelled("Data", srcSel),
+      labelled("Type", typeSel),
+      labelled("Columns", selInp),
+      labelled("Filter", filterInp),
+      labelled("Sort by", sortInp),
+      labelled("Order", orderSel),
+      labelled("Caption", capInp),
+    );
     return bar;
   }
 

@@ -734,6 +734,22 @@ function wrapMdLines(open: string, close: string): void {
   reflectToolbarState();
 }
 
+/** The last click was on a figure (not text): nothing is "current"
+ * until the next click in text or keystroke. */
+let onFigure = false;
+el.addEventListener("keydown", () => {
+  onFigure = false;
+});
+// Decided at pointerDOWN, before a revealed bar can move anything.
+el.addEventListener(
+  "pointerdown",
+  (ev) => {
+    const hit = el.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY) ?? null;
+    onFigure = !!(hit?.closest("figure") && !hit.closest("pre, td, th"));
+  },
+  true,
+);
+
 function reflectToolbarState(point?: { x: number; y: number }): void {
   const inDoc = currentEditable() !== null;
   const inMd = document.activeElement === editor;
@@ -748,6 +764,15 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
     return;
   }
   if (inDoc) {
+    // A click on a FIGURE (a chart, its caption, a table's frame) puts
+    // no caret in text: no block or format is "current". The engine
+    // otherwise leaves the selection at the document's start, which
+    // lit H1 for a click on a chart caption.
+    if (onFigure) {
+      blockButtons.forEach((b) => b.classList.remove("active"));
+      fmtButtons.forEach((b) => b.classList.remove("active"));
+      return;
+    }
     const root = el.shadowRoot;
     const host = root?.querySelector<HTMLElement>("article.folio-doc") ?? null;
     let node: Node | null = host ? docSelectionAnchor(host, point) : null;
