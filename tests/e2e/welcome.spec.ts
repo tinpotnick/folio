@@ -209,7 +209,7 @@ test.describe("welcome page", () => {
     for (const [q, title] of [
       ["parametric", "Open example: Parametric parts"],
       ["field-operations", "Open example: Q3 Field Operations Review"],
-    ]) {
+    ] as const) {
       await page.keyboard.press("Control+k");
       await page.locator("#palette-input").fill(q);
       await expect(
