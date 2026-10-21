@@ -61,7 +61,9 @@ The model is the figure; the code is how you edit it.
 - **Export STL** (phase 3): the header's **Export STL** writes the
   drawn faces as ASCII STL (`src/render/stl.ts`: a triangle fan per
   convex face, with normals, in model units), named `model-N.stl` or
-  `<dataset>-rowN.stl`. The component emits `folio-export` and the host
+  `<dataset>-<label>.stl`, the label being the bound row's first
+  cell (`bracket-sizes-small.stl`; `<dataset>-rowN.stl` if empty).
+  The component emits `folio-export` and the host
   saves it: a native save dialog on the desktop (Tauri
   `save_text_file`), a download on the web.
 

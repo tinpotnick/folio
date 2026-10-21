@@ -19,7 +19,8 @@ flattened back to prose - nothing durable happened.
   fences).
 - **Render**: `figure.folio-codeblock[data-lang]` holding the code
   header (below) and the body `pre.folio-code > code` (themed:
-  mono, tinted background, pre-wrap). Unlike the generated figures
+  mono with ligatures off so `->` shows as typed, tinted background,
+  pre-wrap). Unlike the generated figures
   the figure is NOT contenteditable=false: the body edits in place,
   exactly like the bare `pre` it replaced. The source-view
   highlighter emits `fence` tokens for delimiter lines and `code`

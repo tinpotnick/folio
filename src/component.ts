@@ -585,6 +585,29 @@ export class FolioDoc extends HTMLElement {
     return this.doc ? outlineOf(this.doc) : [];
   }
 
+  /**
+   * The plain text of the section a heading opens (up to the next
+   * heading of the same or a higher level) - for searching the help
+   * by what it SAYS, not only its titles.
+   */
+  sectionText(blockIndex: number): string {
+    const blocks = this.doc?.blocks ?? [];
+    const head = blocks[blockIndex];
+    if (head?.kind !== "heading") return "";
+    const parts: string[] = [];
+    for (let i = blockIndex + 1; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (!b) break;
+      if (b.kind === "heading" && b.level <= head.level) break;
+      if (b.kind === "prose" || b.kind === "heading") parts.push(b.text);
+      if (b.kind === "list") parts.push(...flattenList(b));
+    }
+    return parts
+      .join(" ")
+      .replace(/[`*_[\]()]/g, " ")
+      .replace(/\s+/g, " ");
+  }
+
   revealBlock(blockIndex: number): void {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     const el = host?.children[blockIndex] as HTMLElement | undefined;
@@ -1083,6 +1106,7 @@ export class FolioDoc extends HTMLElement {
     stop.type = "button";
     stop.className = "insp-select abc-stop";
     stop.textContent = "■ Stop";
+    stop.disabled = true;
     play.addEventListener("click", () => {
       // The context is created and resumed INSIDE the click: WebKit's
       // autoplay policy only lets a gesture start audio.
@@ -1110,6 +1134,7 @@ export class FolioDoc extends HTMLElement {
           notesFromAbc(audio.tracks, audio.tempo),
         );
         play.textContent = PLAYING_LABEL;
+        stop.disabled = false;
         figure.dataset.playing = "true";
         const timer = setTimeout(
           () => this.stopAbc(),
@@ -1130,6 +1155,8 @@ export class FolioDoc extends HTMLElement {
     delete p.figure.dataset.playing;
     const btn = p.figure.querySelector<HTMLElement>(".abc-play");
     if (btn) btn.textContent = PLAY_LABEL;
+    const stopBtn = p.figure.querySelector<HTMLButtonElement>(".abc-stop");
+    if (stopBtn) stopBtn.disabled = true;
     this.abcPlaying = null;
   }
 
@@ -1221,7 +1248,9 @@ export class FolioDoc extends HTMLElement {
         background: null,
         font,
         view: { stroke: null, continuousWidth: width, continuousHeight: 240 },
-        title: { color: c.heading, fontWeight: 600 },
+        // Type at the size of folio's own charts (Vega's 8-10px is
+        // too small beside them).
+        title: { color: c.heading, fontWeight: 600, fontSize: 14 },
         axis: {
           labelColor: c.muted,
           titleColor: c.ink,
@@ -1229,21 +1258,35 @@ export class FolioDoc extends HTMLElement {
           domainColor: c.rule,
           tickColor: c.rule,
           titleFontWeight: 500,
+          labelFontSize: 11,
+          titleFontSize: 12,
         },
         // Horizontal x labels (Vega rotates discrete ones by default).
         axisX: { labelAngle: 0 },
-        legend: { labelColor: c.ink, titleColor: c.ink },
-        header: { labelColor: c.ink, titleColor: c.ink },
+        legend: {
+          labelColor: c.ink,
+          titleColor: c.ink,
+          labelFontSize: 11,
+          titleFontSize: 12,
+        },
+        header: {
+          labelColor: c.ink,
+          titleColor: c.ink,
+          labelFontSize: 12,
+          titleFontSize: 12,
+        },
         range: {
           category: theme.palette[mode],
           // Sequential scales run from the page's tint to its accent.
-          heatmap: [c.tint, c.accent],
-          ramp: [c.tint, c.accent],
+          // ...from a VISIBLE start: on dark paper the plain tint is the
+          // paper itself, and low values vanished.
+          heatmap: [mixHex(c.paper, c.accent, 0.18), c.accent],
+          ramp: [mixHex(c.paper, c.accent, 0.18), c.accent],
         },
         mark: { color: theme.palette[mode][0] },
         // Rules and text default to black - invisible on dark paper.
         rule: { color: c.ink },
-        text: { color: c.ink },
+        text: { color: c.ink, fontSize: 12 },
         ...(spec["config"] as Record<string, unknown> | undefined),
       };
       // A single chart (or layer) with no width of its own fills the
@@ -1698,8 +1741,24 @@ export class FolioDoc extends HTMLElement {
       );
       const n = all.indexOf(figure) + 1;
       const bind = this.jscadParams(figure);
+      // Named for what it is: the bound row's label ("small"), else
+      // its number among the document's models.
+      const rowLabel = bind
+        ? String(
+            (() => {
+              const t = this.doc?.blocks.find(
+                (b) => b.kind === "table" && b.table.id === bind.table,
+              );
+              return t?.kind === "table"
+                ? (t.table.rows[bind.row - 1]?.[0] ?? bind.row)
+                : bind.row;
+            })(),
+          )
+            .trim()
+            .replace(/[^\w.-]+/g, "-")
+        : "";
       const name = bind
-        ? `${bind.table}-row${String(bind.row)}`
+        ? `${bind.table}-${rowLabel || `row${String(bind.row)}`}`
         : `model-${String(n)}`;
       this.dispatchEvent(
         new CustomEvent("folio-export", {
@@ -2965,17 +3024,29 @@ export class FolioDoc extends HTMLElement {
    * values, a bar chart (spec: docs/specs/simple-tables.md, "Charts").
    * Returns why it could not, or null on success.
    */
-  chartTable(tableId: string): string | null {
+  chartTable(tableId: string, placeAt?: number): string | null {
     if (!this.doc) return "No document";
-    const at = this.doc.blocks.findIndex(
+    const tableAt = this.doc.blocks.findIndex(
       (b) => b.kind === "table" && !b.table.simple && b.table.id === tableId,
     );
-    const block = this.doc.blocks[at];
+    const block = this.doc.blocks[tableAt];
     if (block?.kind !== "table") return "Charts are drawn from a dataset";
+    // Below the dataset (Chart it), or where the caret is (palette).
+    const at = placeAt !== undefined ? placeAt - 1 : tableAt;
     const cols = block.table.columns;
     const value = cols.find((c) => c.type === "number" || c.type === "formula");
     if (!value) return "A chart needs a number or formula column";
     const label = cols.find((c) => c !== value && c.type === "text") ?? cols[0];
+    // A LONG table repeats its labels (Mon, Mon, Mon ...): a first
+    // chart that plots every row reads as nonsense. When another text
+    // column tells the repeats apart, split by it (one series each).
+    const li = label ? cols.indexOf(label) : -1;
+    const labels =
+      li < 0 ? [] : block.table.rows.map((r) => String(r[li] ?? ""));
+    const repeats = new Set(labels).size < labels.length;
+    const splitBy = repeats
+      ? cols.find((c) => c !== label && c !== value && c.type === "text")
+      : undefined;
     const ids = new Set(
       this.doc.blocks.flatMap((b) =>
         b.kind === "chart" && b.chart.id ? [b.chart.id] : [],
@@ -2990,6 +3061,7 @@ export class FolioDoc extends HTMLElement {
         source: tableId,
         query: { select: [label?.name ?? value.name, value.name] },
         type: "bar",
+        ...(splitBy ? { series: splitBy.name } : {}),
       },
     });
     this.render();
@@ -3011,8 +3083,13 @@ export class FolioDoc extends HTMLElement {
     const at = this.blockIndexAtCaret();
     for (let i = at >= 0 ? at : this.doc.blocks.length - 1; i >= 0; i--) {
       const b = this.doc.blocks[i];
-      if (b?.kind === "table" && !b.table.simple)
-        return this.chartTable(b.table.id);
+      // The chart goes where the caret is, not under its dataset.
+      if (b?.kind === "table" && !b.table.simple) {
+        return this.chartTable(
+          b.table.id,
+          at >= 0 ? this.insertionPoint(at).at : undefined,
+        );
+      }
     }
     return 'Charts are drawn from a dataset - insert one, or click a table\'s "Make it a dataset"';
   }

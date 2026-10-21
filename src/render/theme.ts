@@ -1469,6 +1469,33 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     /* SVG drawings inherit the page's ink as currentColor. */
     figure.folio-svg .code-view { color: var(--folio-ink); }
+    /* Header buttons (Play, Stop, Export STL) look like the bar's
+       controls, sized to their label - not stretched browser grey. */
+    figure.folio-codeblock .folio-inspector button.insp-select {
+      flex: none;
+      font: inherit;
+      font-size: 12px;
+      padding: 3px 10px;
+      border: 1px solid var(--folio-rule-strong);
+      border-radius: 5px;
+      background: var(--folio-input-bg);
+      color: var(--folio-ink);
+      cursor: pointer;
+    }
+    figure.folio-codeblock .folio-inspector button.insp-select:hover:not(:disabled) {
+      background: var(--folio-hover);
+    }
+    figure.folio-codeblock .folio-inspector button.insp-select:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    /* Code shows what was typed: no ligatures (-> must not become an
+       arrow glyph while writing DOT or JavaScript). */
+    pre.folio-code,
+    article.folio-doc code {
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
     figure.folio-drawn .code-view > svg {
       display: block;
       max-width: 100%;

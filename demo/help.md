@@ -284,9 +284,11 @@ caption: "Quarter-on-quarter growth by region"
 ```
 
 - The quickest way to a chart: click a dataset and press **Chart
-  it** on its bar, or search "chart" in the palette. You get a bar
-  chart of its first text and first number column, which you can
-  then change on the chart's own bar, or in the source below.
+  it** on its bar, or search "chart" in the palette (the chart goes
+  where your cursor is). You get a bar chart of its first text and
+  first number column, split by another text column when the labels
+  repeat, which you can then change on the chart's own bar, or in
+  the source below.
 - **source** points at a table by its anchor id (`@regional-data`).
 - **query** has three parts, all optional except `select`.
 - **query: select** `[column, column]` names the columns to plot.
@@ -309,7 +311,8 @@ caption: "Quarter-on-quarter growth by region"
 **Several series**: select more than one value column
 (`select: [month, revenue, cost]`) for grouped bars or several lines,
 or split one value by a column with `series: region` (one line or
-bar per region). Add `stack: true` to stack bars or areas. In the
+bar per region). Add `stack: true` for stacked bars or stacked
+areas. In the
 chart's bar these are **Split by** and **Stack**. A legend appears
 under the chart.
 
