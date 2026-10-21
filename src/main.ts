@@ -36,6 +36,7 @@ const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
 const status = requireEl<HTMLElement>("#status");
 const sidebar = requireEl<HTMLElement>("#sidebar");
+const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
 const outlineBox = requireEl<HTMLElement>("#outline");
 const mdWrap = requireEl<HTMLElement>("#md-wrap");
 const mdGutter = requireEl<HTMLElement>("#md-gutter");
@@ -1189,6 +1190,7 @@ function refreshOutline(): void {
   outlineBox.textContent = "";
   if (outline.length === 0) {
     sidebar.hidden = true;
+    btnSidebar.setAttribute("aria-pressed", "false");
     return;
   }
   for (const entry of outline) {
@@ -1233,7 +1235,10 @@ function holdActive(btn: HTMLButtonElement): void {
 }
 
 function reflectActiveSection(): void {
-  if (!editor.hidden) return;
+  // Document view only (the Markdown source has no rendered headings).
+  // This tested the textarea, which stays un-hidden until a section
+  // is clicked - so the mark never moved before that first click.
+  if (!mdWrap.hidden) return;
   if (activeHeld !== undefined) {
     // Still scrolling from a jump: wait for it to settle.
     window.clearTimeout(activeHeld);
@@ -1250,6 +1255,17 @@ function reflectActiveSection(): void {
   outline.forEach((entry, i) => {
     if (entry.blockIndex <= first) activeIdx = i;
   });
+  // At the very end of the page the last sections cannot reach the
+  // top: the mark goes to the last heading in view.
+  const atEnd =
+    window.innerHeight + window.scrollY >=
+    document.documentElement.scrollHeight - 2;
+  if (atEnd && window.scrollY > 0) {
+    const shown = el.lastBlockInView();
+    outline.forEach((entry, i) => {
+      if (entry.blockIndex <= shown) activeIdx = i;
+    });
+  }
   outlineBox.querySelectorAll("button").forEach((btn, i) => {
     btn.classList.toggle("active", i === activeIdx);
   });
@@ -1258,9 +1274,10 @@ function reflectActiveSection(): void {
 window.addEventListener("scroll", reflectActiveSection, { passive: true });
 window.addEventListener("resize", reflectActiveSection, { passive: true });
 
-const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
 btnSidebar.addEventListener("click", () => {
   sidebar.hidden = !sidebar.hidden;
+  btnSidebar.setAttribute("aria-pressed", String(!sidebar.hidden));
+  reflectActiveSection();
 });
 
 /* --- Desktop (Tauri) bridge: native Open/Save (ADR-0006) --- */

@@ -614,14 +614,18 @@ export class FolioDoc extends HTMLElement {
     if (!host || !el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
     this.holdReveal(host, el);
-    // Focus follows (screen readers, keyboard), without a focus ring:
-    // the heading is the destination, not a control.
-    el.setAttribute("tabindex", "-1");
-    el.classList.add("folio-revealed");
-    el.addEventListener("blur", () => el.classList.remove("folio-revealed"), {
-      once: true,
-    });
-    el.focus({ preventScroll: true });
+    // The caret follows, to the start of the block (like Word's
+    // navigation pane): typing continues there, and the toolbar shows
+    // the block it is in. No focus ring - the heading is the
+    // destination, not a control.
+    (host as HTMLElement).focus({ preventScroll: true });
+    if (host.getAttribute("contenteditable") === "true") {
+      this.setCaret(el, 0);
+    } else {
+      el.setAttribute("tabindex", "-1");
+      el.classList.add("folio-revealed");
+      el.focus({ preventScroll: true });
+    }
   }
 
   private revealHold: (() => void) | undefined;
@@ -655,6 +659,18 @@ export class FolioDoc extends HTMLElement {
       window.addEventListener(e, stop, { capture: true, passive: true });
     ro.observe(host);
     this.revealHold = stop;
+  }
+
+  /** The last block whose top is inside the window. */
+  lastBlockInView(): number {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return -1;
+    let last = -1;
+    for (let i = 0; i < host.children.length; i++) {
+      const r = host.children[i]?.getBoundingClientRect();
+      if (r && r.top < window.innerHeight) last = i;
+    }
+    return last;
   }
 
   /** The first block showing below `viewTop` (a host's sticky bar). */

@@ -22,7 +22,7 @@ document — written in the same renderer you are working with.
   highlighting. Switch back to Document to re-parse. If a parse
   error appears, fix the reported line — folio stays in source view
   until the Markdown is valid.
-- The **☰** button (tooltip "Sections") toggles the outline
+- The **sidebar** button at the far left (tooltip "Sections") toggles the outline
   sidebar. Click a section to jump straight to it; the section you
   are reading stays marked as you scroll.
 

@@ -15,26 +15,33 @@ Contract:
   tested in `tests/engine/outline.test.ts`.
 - Component (`<folio-doc>`):
   - `getOutline(): OutlineEntry[]`
-  - `revealBlock(blockIndex)` scrolls smoothly to the block and
-    moves focus to it, WITHOUT a focus ring (the heading is the
-    destination, not a control).
+  - `revealBlock(blockIndex)` scrolls smoothly to the block and puts
+    the caret at its start (like Word's navigation pane: typing
+    continues there and the toolbar shows the heading's level), with
+    no focus ring. A read-only document focuses the block instead.
+  - `lastBlockInView()`: the last block whose top is in the window.
   - `firstVisibleBlockIndex(viewTop = 0)` reports which block is at
     the top of the visible page; `viewTop` is the bottom of the
     host's sticky bar, so a block hidden under the toolbar does not
     count as visible.
-- Host: an icon-only `☰` toggle (tooltip "Sections", no text label -
-  consistent with the other toolbar controls) at the left edge of the
-  header (above the sidebar it controls) toggles the sidebar (`hidden`
-  attribute). Clicking a section in Markdown view parses the source
+- Host: an icon-only sidebar toggle at the left edge of the header
+  (above the sidebar it controls) - a stroked panel icon like the
+  other toolbar icons, tooltip "Sections", no text label - toggles
+  the sidebar (`hidden` attribute) and shows as pressed
+  (`aria-pressed`) while it is open. Clicking a section in Markdown view parses the source
   first and reveals the rendered section.
+- The sidebar sticks exactly under the toolbar (`top: --header-h`),
+  so its contents do not shift as the page scrolls.
 - Landing (2026-10-21): the page's `scroll-padding-top` is the
   toolbar's measured height (`--header-h`, kept by a ResizeObserver)
   plus 16px, so a revealed heading lands just below the toolbar - not
   under it.
 - Active section: the entry whose heading is the last one at or above
-  the top of the visible page. A clicked entry is active at once and
-  stays active until the jump's scrolling settles - including the last
-  sections, whose headings cannot scroll to the top.
+  the top of the visible page - from the moment the sidebar opens, not
+  only after a first click. At the very end of the page, where the
+  last sections cannot reach the top, it is the last heading in view.
+  A clicked entry is active at once and stays active until the jump's
+  scrolling settles.
 - Look: the toolbar's language - neutral surfaces, sentence-case
   "Sections" label, 6px radii. The document title leads in the text
   ink; nested sections hang off a guide line, and the active one marks
