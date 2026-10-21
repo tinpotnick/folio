@@ -736,7 +736,17 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
     // (headings render bold), which lit B on H1 lines and differs
     // between engines.
     let inline: string | null = null;
+    // The INNERMOST list around the caret: in a sub-list, the list
+    // buttons reflect (and act on) that sub-list.
+    let innerList: string | null = null;
     while (node && node.parentNode && node.parentNode !== host) {
+      if (
+        !innerList &&
+        node instanceof HTMLElement &&
+        (node.tagName === "UL" || node.tagName === "OL")
+      ) {
+        innerList = node.tagName;
+      }
       if (!inline) {
         const name = node.nodeName;
         if (name === "STRONG") inline = "bold";
@@ -761,7 +771,9 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
     blockButtons.forEach((b) => {
       const want =
         b.dataset.block === "p" ? "P" : (b.dataset.block ?? "").toUpperCase();
-      b.classList.toggle("active", tag === want);
+      const current =
+        (want === "UL" || want === "OL") && innerList ? innerList : tag;
+      b.classList.toggle("active", current === want);
     });
     // Headings and code blocks are complete block formats: the
     // markdown carries no inline emphasis inside them, so the inline
@@ -1466,6 +1478,26 @@ function paletteEntries(): PaletteEntry[] {
     action: () => clickBlockButton("ul"),
   });
   entries.push({
+    title: "Indent list item (Tab)",
+    group: "Command",
+    keywords:
+      "indent nest sub list item bullet deeper tab sublist demote increase indent level",
+    action: () => {
+      if (!el.indentListItem()) {
+        flash("Put the caret in a list item below another item");
+      }
+    },
+  });
+  entries.push({
+    title: "Outdent list item (Shift+Tab)",
+    group: "Command",
+    keywords:
+      "outdent unindent lift list item bullet shallower shift tab promote decrease indent level",
+    action: () => {
+      if (!el.outdentListItem()) flash("Put the caret in a nested list item");
+    },
+  });
+  entries.push({
     title: "Numbered list",
     group: "Command",
     keywords: "numbered list ordered list numbers steps ol 1.",
@@ -1595,6 +1627,10 @@ function runPalette(i: number): void {
   const entry = paletteFiltered[i];
   if (!entry) return;
   paletteModal.close();
+  // Closing hands focus back to the document, which drops the caret
+  // at its start; put it back where it was so the command acts THERE
+  // (and the next one does too).
+  el.restoreCaret();
   entry.action();
 }
 
@@ -1625,6 +1661,7 @@ function updatePalette(): void {
 
 function openPalette(): void {
   if (paletteModal.open) return;
+  el.saveCaret();
   paletteModal.showModal();
   paletteInput.value = "";
   updatePalette();

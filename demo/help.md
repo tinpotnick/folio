@@ -48,9 +48,17 @@ document — written in the same renderer you are working with.
   "paragraph" in the palette) turns each item back into its own
   paragraph.
   Items take bold, italic, code and links like any paragraph.
-- Numbered lists number themselves when saved. Lists are one level
-  deep for now: an indented `  - sub-item` is kept, but shows as
-  text.
+- **Tab** nests an item under the one above it; **Shift+Tab** lifts
+  it back out (or search "indent" / "outdent" in the palette). A
+  nested list can be bulleted inside a numbered one, or the other way
+  round: with the caret in the sub-list, press the Bulleted or
+  Numbered list button (it changes just that sub-list), or type
+  `- ` / `1. ` in an empty item. In the source, nesting is indentation, the standard
+  Markdown way: an item indented under the one above (two spaces
+  under `- `, three under `1. `) is its sub-item.
+- Numbered lists number themselves when saved. **Enter** on an empty
+  nested item lifts it one level; on an empty top-level item it ends
+  the list.
 
 ## Opening and saving
 

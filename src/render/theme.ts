@@ -1453,6 +1453,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       margin: 0.3em 0;
       padding-inline-start: 0.25em;
     }
+    /* A sub-list sits tight under its item: nesting must not loosen
+       the list's rhythm. */
+    article.folio-doc li > ul,
+    article.folio-doc li > ol {
+      margin: 0.15em 0 0;
+    }
     article.folio-doc li::marker {
       color: var(--folio-ink-muted);
     }

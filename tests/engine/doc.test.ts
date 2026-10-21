@@ -309,13 +309,14 @@ After.`);
 
 describe("lists", () => {
   const rt = (text: string): string => serializeDoc(parseDoc(text));
+  const t = (text: string) => ({ text });
 
   it("parses a bulleted list into one list block of inline items", () => {
     const doc = parseDoc("Intro:\n\n- One **bold**\n- Two [link](x.md)\n");
     expect(doc.blocks[1]).toEqual({
       kind: "list",
       ordered: false,
-      items: ["One **bold**", "Two [link](x.md)"],
+      items: [t("One **bold**"), t("Two [link](x.md)")],
     });
   });
 
@@ -323,7 +324,7 @@ describe("lists", () => {
     expect(parseDoc("1. a\n2. b\n").blocks[0]).toEqual({
       kind: "list",
       ordered: true,
-      items: ["a", "b"],
+      items: [t("a"), t("b")],
     });
     expect(parseDoc("3. c\n4. d\n").blocks[0]).toMatchObject({ start: 3 });
   });
@@ -331,7 +332,7 @@ describe("lists", () => {
   it("indented continuation lines belong to their item", () => {
     const doc = parseDoc("- A long item\n  that wraps\n- Next\n");
     expect(doc.blocks[0]).toMatchObject({
-      items: ["A long item\nthat wraps", "Next"],
+      items: [t("A long item\nthat wraps"), t("Next")],
     });
   });
 
@@ -343,7 +344,9 @@ describe("lists", () => {
       "7. seven\n8. eight\n",
       "- a\n\n- b\n",
       "- a\n-\n- c\n",
-      "- top\n  - nested stays text\n",
+      "- top\n  - nested\n",
+      "1. Prepare\n   - fonts\n   - colours\n2. Ship\n",
+      "- a\n  - b\n    1. c\n       wrapped\n    2. d\n  - e\n- f\n",
     ]) {
       expect(rt(text), JSON.stringify(text)).toBe(text);
     }
@@ -364,6 +367,64 @@ describe("lists", () => {
   it("emphasis and rules are not bullets", () => {
     expect(parseDoc("*emphasis* first\n").blocks[0]?.kind).toBe("prose");
     expect(parseDoc("2024 was a year\n").blocks[0]?.kind).toBe("prose");
+  });
+});
+
+describe("nested lists", () => {
+  const rt = (text: string): string => serializeDoc(parseDoc(text));
+
+  it("an indented item starts its parent's sub-list, of its own kind", () => {
+    expect(
+      parseDoc("1. Prepare\n   - fonts\n   - colours\n2. Ship\n").blocks[0],
+    ).toEqual({
+      kind: "list",
+      ordered: true,
+      items: [
+        {
+          text: "Prepare",
+          children: {
+            ordered: false,
+            items: [{ text: "fonts" }, { text: "colours" }],
+          },
+        },
+        { text: "Ship" },
+      ],
+    });
+  });
+
+  it("three levels deep, with a continuation line at depth", () => {
+    const doc = parseDoc("- a\n  - b\n    - c\n      more c\n  - d\n");
+    expect(doc.blocks[0]).toEqual({
+      kind: "list",
+      ordered: false,
+      items: [
+        {
+          text: "a",
+          children: {
+            ordered: false,
+            items: [
+              {
+                text: "b",
+                children: {
+                  ordered: false,
+                  items: [{ text: "c\nmore c" }],
+                },
+              },
+              { text: "d" },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
+  it("deeper or shallower indents canonicalize to the content column", () => {
+    expect(rt("- a\n    - b\n")).toBe("- a\n  - b\n");
+    expect(rt("1. a\n  - b\n")).toBe("1. a\n   - b\n");
+  });
+
+  it("a nested numbered list keeps its own start", () => {
+    expect(rt("- a\n  3. x\n  4. y\n")).toBe("- a\n  3. x\n  4. y\n");
   });
 });
 
