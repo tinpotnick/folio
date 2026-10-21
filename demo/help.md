@@ -118,9 +118,15 @@ document — written in the same renderer you are working with.
   cowbell - e.g. `s("bd sd [hh hh] sd")`. Add `:1` (`bd:1`) for
   an alternative sound. Examples copied from strudel.cc that pick
   an online sample bank - `.bank("RolandTR808")`, pianos, other
-  instruments - stay silent here (the header shows no error, but
-  those sounds are not in folio's offline kit); drop the `.bank(...)`
-  to use folio's drums.
+  instruments - stay silent here, because those sounds are not in
+  folio's offline kit; drop the `.bank(...)` to use folio's drums. An
+  example that calls `samples('github:...')` itself downloads that
+  bank when you're online, and its sounds fail offline.
+- If something in a pattern fails while it plays (a sound that won't
+  load, a scale name this version of Strudel rejects), the block's
+  header says **Some sounds failed: ...** and the rest keeps playing.
+  For example, current Strudel wants `.scale('G0:minor')`, not
+  `'G0 minor'`.
 - **Links** are standard inline Markdown: `[label](url)` in a
   paragraph. Clicking a link follows it - a `.md` path opens
   that document in place (the sample's "More examples" section

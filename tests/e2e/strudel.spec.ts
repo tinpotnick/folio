@@ -402,4 +402,45 @@ test.describe("engine audio failure", () => {
       figure.locator("pre.strudel-source .strudel-atom"),
     ).toHaveCount(0);
   });
+
+  // Regressions from strudel.cc's "Amensister" playing silently in
+  // the desktop app.
+  test("worklet effects (shape) play on the FIRST press - no second click", async ({
+    page,
+  }) => {
+    // initStrudel defers loading strudel's AudioWorklet effects to
+    // the NEXT mousedown; folio initialises inside the Play click, so
+    // every note using shape/crush/... failed until another click.
+    const logs: string[] = [];
+    page.on("console", (m) => logs.push(m.text()));
+    await loadDoc(
+      page,
+      '# T\n\n```strudel\nnote("c3 e3 g3 c4").s("sawtooth").shape(.6)\n```\n',
+    );
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".folio-inspector .strudel-play").click();
+    await expect(figure.locator(".strudel-on").first()).toBeVisible({
+      timeout: 10_000,
+    });
+    await page.waitForTimeout(1500);
+    expect(logs.filter((l) => l.includes("AudioWorkletNode"))).toEqual([]);
+    await figure.locator(".folio-inspector .strudel-stop").click();
+  });
+
+  test("errors DURING playback show in the header, not just the console", async ({
+    page,
+  }) => {
+    await loadDoc(
+      page,
+      '# T\n\n```strudel\nn("0 2 4").scale(\'G0 minor\').note().s("sawtooth")\n```\n',
+    );
+    const figure = page.locator("#the-doc figure.folio-strudel");
+    await figure.click();
+    await figure.locator(".folio-inspector .strudel-play").click();
+    const err = figure.locator(".folio-inspector .strudel-error");
+    await expect(err).toBeVisible({ timeout: 10_000 });
+    await expect(err).toContainText("Scale name G0 is incomplete");
+    await figure.locator(".folio-inspector .strudel-stop").click();
+  });
 });

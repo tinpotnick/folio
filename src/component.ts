@@ -951,6 +951,12 @@ export class FolioDoc extends HTMLElement {
           // late, so a cold kit would drop the first beats. A
           // sample that fails to load stays silent, never fatal.
           prebake: async () => {
+            // Load the AudioWorklet effects NOW. initStrudel defers
+            // them to the NEXT mousedown on the page, but folio
+            // initialises inside the Play click - so shape, crush,
+            // coarse... failed on every note until another click
+            // (strudel.cc's "Amensister" played silent).
+            await strudel.initAudio();
             await strudel.samples(DRUM_KIT);
             const ctx = strudel.getAudioContext();
             await Promise.all(
@@ -976,6 +982,7 @@ export class FolioDoc extends HTMLElement {
         this.strudelEvalError = null;
       }
       if (status.error !== null) throw status.error;
+      this.watchStrudelLog(err);
       await this.startStrudelLights(figure, source, repl);
       // Audio watchdog: if folio's context never starts running
       // (an engine that cannot open an audio device), say so
@@ -1122,7 +1129,37 @@ export class FolioDoc extends HTMLElement {
    * Stop all strudel playback. Hush is safe to call whether or
    * not the library ever loaded.
    */
+  /**
+   * Errors that happen DURING playback (a bad scale name, a sound
+   * that will not load) never reject anything: strudel logs them per
+   * note and plays on. They reach the playing block's header here -
+   * otherwise the only symptom is silence.
+   */
+  private strudelLogListener: ((ev: Event) => void) | null = null;
+
+  private watchStrudelLog(err: HTMLElement): void {
+    this.unwatchStrudelLog();
+    this.strudelLogListener = (ev: Event) => {
+      const message = (ev as CustomEvent<{ message?: unknown }>).detail
+        ?.message;
+      if (typeof message !== "string") return;
+      const m = /^\[([\w.-]+)\] error: (.*)$/s.exec(message);
+      if (!m || !err.isConnected) return;
+      err.textContent = `Some sounds failed: ${m[2] ?? ""}`;
+      err.hidden = false;
+    };
+    document.addEventListener("strudel.log", this.strudelLogListener);
+  }
+
+  private unwatchStrudelLog(): void {
+    if (this.strudelLogListener) {
+      document.removeEventListener("strudel.log", this.strudelLogListener);
+      this.strudelLogListener = null;
+    }
+  }
+
   private async stopStrudel(): Promise<void> {
+    this.unwatchStrudelLog();
     this.stopStrudelLights();
     for (const play of Array.from(
       this.shadowRoot?.querySelectorAll<HTMLElement>(".strudel-play") ?? [],
