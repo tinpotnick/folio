@@ -1589,6 +1589,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     article.folio-doc[contenteditable="true"] { caret-color: var(--folio-ink, #1f2328); }
     article.folio-doc[contenteditable="true"]:focus { outline: none; }
+    article.folio-doc > .folio-revealed:focus { outline: none; }
     p:empty::before, h1:empty::before, h2:empty::before {
       content: "…";
       color: var(--folio-ink-muted, #b0b8c1);

@@ -245,6 +245,11 @@
         width: 16px;
         height: 16px;
       }
+      /* A jump to a section lands its heading BELOW the sticky
+         toolbar, with a little air (main.ts keeps --header-h). */
+      html {
+        scroll-padding-top: calc(var(--header-h, 56px) + 16px);
+      }
       .layout {
         display: flex;
         min-height: calc(100vh - 52px);
@@ -265,12 +270,13 @@
       #sidebar[hidden] {
         display: none;
       }
+      /* The section browser speaks the toolbar's language: neutral
+         surfaces, the dark "active" ink, 6px radii - no blue. */
       #sidebar h2 {
-        font-size: 11px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        font-size: 12px;
+        font-weight: 600;
         color: var(--text-muted);
-        margin: 0 0 8px 6px;
+        margin: 4px 0 10px 8px;
       }
       #outline {
         display: flex;
@@ -283,8 +289,9 @@
         text-align: left;
         font: inherit;
         font-size: 13px;
-        color: var(--text);
-        padding: 4px 8px;
+        line-height: 1.35;
+        color: var(--text-muted);
+        padding: 5px 8px;
         border-radius: 6px;
         cursor: pointer;
         white-space: nowrap;
@@ -293,24 +300,39 @@
       }
       #outline button:hover {
         background: var(--surface-2);
-      }
-      #outline button.active {
-        background: var(--accent-bg);
-        color: var(--accent-text);
-        font-weight: 600;
+        color: var(--text);
       }
       #outline .l1 {
-        font-weight: 650;
+        color: var(--text);
+        font-weight: 600;
+        margin-bottom: 2px;
       }
-      #outline .l2 {
-        padding-left: 20px;
+      /* Nested sections hang off a guide line; the active one marks
+         it in the active ink. */
+      #outline .l2,
+      #outline .l3,
+      #outline .l4,
+      #outline .l5,
+      #outline .l6 {
+        margin-left: 12px;
+        border-left: 2px solid var(--border);
+        border-radius: 0 6px 6px 0;
+        padding-left: 12px;
       }
       #outline .l3,
       #outline .l4,
       #outline .l5,
       #outline .l6 {
-        padding-left: 32px;
-        color: var(--text-muted);
+        padding-left: 24px;
+        font-size: 12.5px;
+      }
+      #outline button.active {
+        background: var(--surface-2);
+        color: var(--text);
+        font-weight: 600;
+      }
+      #outline button.active:not(.l1) {
+        border-left-color: var(--active-bg);
       }
       main {
         padding: 32px 24px 64px;

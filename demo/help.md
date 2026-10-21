@@ -23,7 +23,8 @@ document — written in the same renderer you are working with.
   error appears, fix the reported line — folio stays in source view
   until the Markdown is valid.
 - The **☰** button (tooltip "Sections") toggles the outline
-  sidebar. Click a section to jump straight to it.
+  sidebar. Click a section to jump straight to it; the section you
+  are reading stays marked as you scroll.
 
 ## Unsaved changes
 
@@ -470,6 +471,7 @@ data:
   - [?, Open this help]
   - [F1, Open this help]
   - [Ctrl+K, Search commands, help, and sections]
+  - [Ctrl+P, Print the document (or save it as a PDF)]
   - [Esc, Close the help window]
 :::
 

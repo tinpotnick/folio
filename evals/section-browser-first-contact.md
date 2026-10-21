@@ -6,11 +6,15 @@ steps:
   - Observe a section list on the left (or a visible toolbar control that reveals it).
   - Toggle the sidebar closed, then open it with the same control.
   - Click the "Regional summary" section.
+  - Open the Q3 Sales Review example, open the sidebar, and click "Product mix", then "Next quarter", then scroll back up by hand.
 expected:
   - The sidebar lists every heading in order.
   - Toggling hides and shows the sidebar without losing edits.
   - Clicking a section scrolls the document to that heading and it gains focus.
-  - The clicked section highlights as the active section while scrolling.
+  - The heading lands fully visible just below the toolbar - not under it, not far down the page - even though charts above it draw late.
+  - No box or focus ring is drawn around the heading.
+  - The clicked section highlights as the active section, and the highlight follows the section being read while scrolling.
+  - The sidebar looks like the rest of the app's chrome (neutral colours, no lone accent blue).
 ---
 # First-contact eval: section browser
 

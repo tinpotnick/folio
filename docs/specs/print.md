@@ -12,8 +12,10 @@ No separate PDF export engine, no new dependency (ADR-0007).
 ## Contract
 
 - **Triggers**: the palette command "Print the document"
-  (`window.print()`), or the browser's own Ctrl+P / menu - both
-  land in the same place.
+  (`window.print()`), Ctrl+P, or the browser's own menu - all land
+  in the same place. folio binds Ctrl+P itself (calling
+  `window.print()`): the desktop app's webview (WebKitGTK) has no
+  browser binding for it, so it did nothing there.
 - **beforeprint normalization** (host): whatever the trigger, open
   dialogs (help, palette, settings) close and the Markdown source
   view switches to the rendered document view first. The user

@@ -1172,6 +1172,18 @@ requireEl<HTMLButtonElement>("#btn-home").addEventListener("click", () => {
 
 /* --- Section browser (left sidebar) --- */
 
+// The toolbar's real height (it can wrap on narrow windows), for
+// scroll-padding: jumps land headings below it, not under it.
+const headerEl = document.querySelector("header");
+if (headerEl) {
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty(
+      "--header-h",
+      `${String(headerEl.offsetHeight)}px`,
+    );
+  }).observe(headerEl);
+}
+
 function refreshOutline(): void {
   const outline = el.getOutline();
   outlineBox.textContent = "";
@@ -1200,15 +1212,39 @@ function refreshOutline(): void {
         btnMd.classList.remove("active");
       }
       el.revealBlock(entry.blockIndex);
+      // The clicked entry is the answer, even when the page cannot
+      // scroll its heading to the top (the last sections): hold it
+      // until the jump's scrolling stops.
+      holdActive(btn);
     });
     outlineBox.appendChild(btn);
   }
   reflectActiveSection();
 }
 
+let activeHeld: number | undefined;
+
+function holdActive(btn: HTMLButtonElement): void {
+  outlineBox.querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("active", b === btn);
+  });
+  window.clearTimeout(activeHeld);
+  activeHeld = window.setTimeout(() => (activeHeld = undefined), 200);
+}
+
 function reflectActiveSection(): void {
   if (!editor.hidden) return;
-  const first = el.firstVisibleBlockIndex();
+  if (activeHeld !== undefined) {
+    // Still scrolling from a jump: wait for it to settle.
+    window.clearTimeout(activeHeld);
+    activeHeld = window.setTimeout(() => (activeHeld = undefined), 200);
+    return;
+  }
+  // The section being read is the one at the top of the VISIBLE page,
+  // just below the sticky toolbar.
+  const first = el.firstVisibleBlockIndex(
+    document.querySelector("header")?.getBoundingClientRect().bottom ?? 0,
+  );
   const outline = el.getOutline();
   let activeIdx = -1;
   outline.forEach((entry, i) => {
@@ -1917,9 +1953,17 @@ requireEl<HTMLButtonElement>("#btn-search").addEventListener(
 );
 
 document.addEventListener("keydown", (ev) => {
-  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "k") {
+  if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
+  const key = ev.key.toLowerCase();
+  if (key === "k") {
     ev.preventDefault();
     openPalette();
+  }
+  // Ctrl+P prints everywhere: a browser binds it, but the desktop
+  // app's webview (WebKitGTK) does not.
+  if (key === "p") {
+    ev.preventDefault();
+    window.print();
   }
 });
 
