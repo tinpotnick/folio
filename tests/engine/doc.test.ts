@@ -511,3 +511,17 @@ describe("simple tables keep their author's formatting", () => {
     );
   });
 });
+
+describe("fence info beyond the language", () => {
+  it("```jscad params=@dims row=2 round-trips, the rest kept as info", () => {
+    const text = "```jscad params=@dims row=2\nconst main = () => 1\n```\n";
+    const doc = parseDoc(text);
+    expect(doc.blocks[0]).toEqual({
+      kind: "code",
+      lang: "jscad",
+      info: "params=@dims row=2",
+      text: "const main = () => 1",
+    });
+    expect(serializeDoc(doc)).toBe(text);
+  });
+});

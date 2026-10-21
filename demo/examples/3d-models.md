@@ -16,25 +16,49 @@ anything else.
 
 ## Mounting bracket
 
-A 3 mm plate with two mounting holes and a stiffening flange. Change
-`holeRadius` and the holes follow.
+A plate with two mounting holes and a stiffening flange, in three
+sizes. The sizes are a **dataset**; the model reads one row of it
+(`params=@bracket-sizes`). Pick another row in the model's header, or
+change a number in the table, and the drawing follows. **Export STL**
+in the header saves the part for a 3D printer.
 
-```jscad
+::: table {#bracket-sizes}
+caption: "Bracket sizes (mm)"
+columns:
+  - {name: size, type: text}
+  - {name: length, type: number, unit: "mm", align: right}
+  - {name: flangeHeight, type: number, unit: "mm", align: right}
+  - {name: holeRadius, type: number, unit: "mm", align: right}
+data:
+  - [small, 40, 14, 2]
+  - [medium, 60, 20, 3]
+  - [large, 90, 28, 5]
+:::
+
+```jscad params=@bracket-sizes row=2
 const { cuboid, cylinder } = require('@jscad/modeling').primitives
 const { subtract, union } = require('@jscad/modeling').booleans
 const { translate } = require('@jscad/modeling').transforms
 
-const holeRadius = 3
+// Defaults when no dataset row is bound.
+const getParameterDefinitions = () => [
+  { name: 'length', type: 'number', initial: 60 },
+  { name: 'flangeHeight', type: 'number', initial: 20 },
+  { name: 'holeRadius', type: 'number', initial: 3 },
+]
 
-const main = () => {
-  const plate = cuboid({ size: [60, 30, 3] })
-  const flange = translate([0, 13.5, 10], cuboid({ size: [60, 3, 20] }))
+const main = ({ length, flangeHeight, holeRadius }) => {
+  const plate = cuboid({ size: [length, 30, 3] })
+  const flange = translate(
+    [0, 13.5, flangeHeight / 2],
+    cuboid({ size: [length, 3, flangeHeight] }),
+  )
   const hole = (x) =>
     translate([x, -2, 0], cylinder({ radius: holeRadius, height: 4, segments: 40 }))
-  return subtract(union(plate, flange), hole(-20), hole(20))
+  return subtract(union(plate, flange), hole(-length / 3), hole(length / 3))
 }
 
-module.exports = { main }
+module.exports = { main, getParameterDefinitions }
 ```
 
 ## A spur gear

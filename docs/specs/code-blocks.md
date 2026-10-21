@@ -114,6 +114,17 @@ flattened back to prose - nothing durable happened.
   long block; the palette command focuses the picker.
 - First-contact eval: `evals/code-blocks-first-contact.md`.
 
+## Fence info (2026-10-21)
+
+A fence's info string may carry more than the language (GitHub's
+```` ```js title="x" ````, folio's ```` ```jscad params=@t row=2 ````).
+The rest is kept verbatim as `info` and round-trips byte for byte.
+Two bugs fixed with it: such a fence hung the parser (the paragraph
+collector stopped at the ```` ``` ```` line without consuming it), and
+the DOM-to-model sync rebuilt code blocks from language and text only,
+so typing anywhere dropped every info string. The figure now carries
+it as `data-info`.
+
 ## Code body integrity (2026-10-21)
 
 A code body is plain text: `<pre><code>text</code></pre>`, with only

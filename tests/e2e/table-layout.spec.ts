@@ -96,3 +96,26 @@ test.describe("narrow screens", () => {
     await expect(page.locator("#btn-mode")).toBeInViewport();
   });
 });
+
+// Regression: after a cell edit, recalculated formula cells showed raw
+// floats (the in-place refresh had its own formatting).
+test("recalculated formula cells keep six decimals after an edit", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator("#btn-markdown").click();
+  await page
+    .locator("#editor")
+    .fill(
+      '# T\n\n::: table {#t}\ncolumns:\n  - {name: a, type: number}\n  - {name: third, type: formula, expr: "a / 3"}\ndata:\n  - [3]\n:::\n',
+    );
+  await page.locator("#btn-view").click();
+  const a = page.locator('#the-doc td[data-row-index="0"][data-col-index="0"]');
+  await a.click();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.type("1");
+  await page.keyboard.press("Tab");
+  await expect(
+    page.locator('#the-doc td[data-row-index="0"][data-col-index="1"]'),
+  ).toHaveText("0.333333");
+});

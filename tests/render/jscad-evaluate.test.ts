@@ -72,3 +72,15 @@ describe("evaluateJscad", () => {
     );
   });
 });
+
+describe("parameters from a dataset row", () => {
+  it("row values override the parameter defaults, by name", () => {
+    const src = `const { cylinder } = require('@jscad/modeling').primitives
+      const getParameterDefinitions = () => [{ name: 'segments', initial: 8 }]
+      const main = (p) => cylinder({ radius: 1, height: 1, segments: p.segments })
+      module.exports = { main, getParameterDefinitions }`;
+    const few = evaluateJscad(src, modeling);
+    const many = evaluateJscad(src, modeling, { segments: 32 });
+    expect(many.length).toBeGreaterThan(few.length);
+  });
+});

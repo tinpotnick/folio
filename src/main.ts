@@ -17,7 +17,12 @@ import {
   themeNames,
 } from "./render/theme.js";
 import { BUNDLED_FONTS } from "./render/fonts.js";
-import { isDesktop, openDocument, saveDocument } from "./desktop.js";
+import {
+  isDesktop,
+  openDocument,
+  saveDocument,
+  saveTextFile,
+} from "./desktop.js";
 
 function requireEl<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -360,6 +365,28 @@ async function openLinkedDocument(href: string): Promise<void> {
     flash(`Could not open ${href}`);
   }
 }
+
+// Files the document exports (a model's STL): a native save dialog on
+// the desktop, a download on the web.
+el.addEventListener("folio-export", (ev) => {
+  const d = (
+    ev as CustomEvent<{ filename: string; mime: string; text: string }>
+  ).detail;
+  if (!d) return;
+  if (isDesktop()) {
+    void saveTextFile(d.text, d.filename, "STL model").then((path) => {
+      if (path) flash(`Saved ${path}`);
+    });
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([d.text], { type: d.mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = d.filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  flash(`Downloaded ${d.filename}`);
+});
 
 // The component's own short results ("Now a dataset ...").
 el.addEventListener("folio-status", (ev) => {

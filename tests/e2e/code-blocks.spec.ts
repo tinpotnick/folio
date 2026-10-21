@@ -197,3 +197,19 @@ test.describe("code body integrity", () => {
     expect(await source(page)).toContain("```js\nlet b = 2\n```");
   });
 });
+
+// Regression: the DOM -> model sync rebuilt code blocks from lang and
+// text only, so typing ANYWHERE dropped every fence's info string
+// (```js title="x", a model's params=@table row=2).
+test("typing elsewhere keeps a fence's info string", async ({ page }) => {
+  await loadDoc(
+    page,
+    '# T\n\nIntro\n\n```js title="hello.js"\nconst a = 1\n```\n',
+  );
+  await page.locator("#the-doc p", { hasText: "Intro" }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" more");
+  expect(await source(page)).toContain(
+    '```js title="hello.js"\nconst a = 1\n```',
+  );
+});

@@ -24,6 +24,7 @@ import { themeFromDoc, themeCss, type Mode } from "./render/theme.js";
 import { registerFonts } from "./render/fonts.js";
 import { formatComputed } from "./render/number.js";
 import { meshToSvg, VIEWS, type MeshPolygon } from "./render/mesh-svg.js";
+import { meshToStl } from "./render/stl.js";
 import {
   renderAreaChart,
   renderBarChart,
@@ -899,6 +900,9 @@ export class FolioDoc extends HTMLElement {
         : "folio-codeblock";
     figure.dataset.blockIndex = String(idx);
     if (block.lang !== undefined) figure.dataset.lang = block.lang;
+    // The fence info beyond the language rides on the figure, so the
+    // DOM -> model sync keeps it (it was dropped on every keystroke).
+    if (block.info !== undefined) figure.dataset.info = block.info;
     figure.appendChild(this.buildCodeInspector(figure, block));
     if (jscad) {
       // The MODEL is the figure (spec: docs/specs/jscad-blocks.md);
@@ -942,7 +946,10 @@ export class FolioDoc extends HTMLElement {
   private jscadRedraw: ReturnType<typeof setTimeout> | null = null;
 
   /** Evaluate a script in the sandbox: faces, or why not. */
-  private runJscad(source: string): Promise<MeshPolygon[]> {
+  private runJscad(
+    source: string,
+    params: Record<string, unknown> = {},
+  ): Promise<MeshPolygon[]> {
     if (!this.jscadWorker) {
       const w = new Worker(new URL("./jscad/worker.ts", import.meta.url), {
         type: "module",
@@ -985,7 +992,7 @@ export class FolioDoc extends HTMLElement {
         }
       }, JSCAD_TIMEOUT_MS);
       this.jscadPending.set(id, { resolve, reject, timer });
-      worker.postMessage({ id, source });
+      worker.postMessage({ id, source, params });
     });
   }
 
@@ -998,7 +1005,10 @@ export class FolioDoc extends HTMLElement {
     view.classList.add("jscad-building");
     view.title = "Building the model…";
     try {
-      const mesh = await this.runJscad(this.codeText(code));
+      const mesh = await this.runJscad(
+        this.codeText(code),
+        this.jscadRowValues(figure),
+      );
       this.jscadMesh.set(figure, mesh);
       this.paintJscad(figure);
     } catch (e) {
@@ -1009,6 +1019,69 @@ export class FolioDoc extends HTMLElement {
       view.classList.remove("jscad-building");
       view.title = "";
     }
+  }
+
+  /**
+   * The model's data binding, from its fence info: `params=@table`
+   * (a dataset) and `row=N` (1-based; default 1).
+   */
+  private jscadParams(
+    figure: HTMLElement,
+  ): { table: string; row: number } | null {
+    const block = this.doc?.blocks[Number(figure.dataset.blockIndex ?? -1)];
+    if (block?.kind !== "code") return null;
+    const info = block.info ?? "";
+    const table = /(?:^|\s)params=@([\w-]+)/.exec(info)?.[1];
+    if (!table) return null;
+    const row = Number(/(?:^|\s)row=(\d+)/.exec(info)?.[1] ?? "1");
+    return { table, row: Math.max(1, row) };
+  }
+
+  /** The bound row's values by column name - they override the
+   * script's parameter defaults (spec: jscad-blocks.md, "Data"). */
+  private jscadRowValues(figure: HTMLElement): Record<string, unknown> {
+    const bind = this.jscadParams(figure);
+    if (!bind) return {};
+    const t = this.doc?.blocks.find(
+      (b) => b.kind === "table" && !b.table.simple && b.table.id === bind.table,
+    );
+    if (t?.kind !== "table") {
+      throw new Error(`no dataset @${bind.table} - params= names a dataset`);
+    }
+    const recalced = recalcTable(t.table, this.tablePool());
+    const row = recalced.rows[bind.row - 1];
+    if (!row) {
+      throw new Error(
+        `@${bind.table} has no row ${String(bind.row)} (it has ${String(recalced.rows.length)})`,
+      );
+    }
+    const values: Record<string, unknown> = {};
+    t.table.columns.forEach((c, i) => (values[c.name] = row[i]));
+    return values;
+  }
+
+  /** Rewrite one `key=value` of a model's fence info (or drop it). */
+  private setJscadInfo(
+    figure: HTMLElement,
+    key: string,
+    value: string | null,
+  ): void {
+    const block = this.doc?.blocks[Number(figure.dataset.blockIndex ?? -1)];
+    if (block?.kind !== "code") return;
+    const tokens = (block.info ?? "")
+      .split(/\s+/)
+      .filter((t) => t !== "" && !t.startsWith(`${key}=`));
+    if (value !== null) tokens.push(`${key}=${value}`);
+    // Keep params= before row= - the canonical order.
+    tokens.sort((a, b) =>
+      a.startsWith("params=") ? -1 : b.startsWith("params=") ? 1 : 0,
+    );
+    if (tokens.length > 0) block.info = tokens.join(" ");
+    else delete block.info;
+    if (block.info !== undefined) figure.dataset.info = block.info;
+    else delete figure.dataset.info;
+    this.emitChange();
+    void this.drawJscad(figure);
   }
 
   /** Typing in a model's code rebuilds it once the typing pauses. */
@@ -1116,7 +1189,94 @@ export class FolioDoc extends HTMLElement {
       figure.dataset.pitch = String(v.pitch);
       this.paintJscad(figure);
     });
-    return [pick];
+    // Data: a dataset row feeds the parameters (params=@t row=N).
+    const dataSel = document.createElement("select");
+    dataSel.className = "insp-select jscad-data";
+    dataSel.title = "Parameters from a dataset row";
+    dataSel.setAttribute("aria-label", "Parameters from dataset");
+    const rowSel = document.createElement("select");
+    rowSel.className = "insp-select jscad-row";
+    rowSel.title = "Which row of the dataset";
+    rowSel.setAttribute("aria-label", "Dataset row");
+    const fill = (): void => {
+      const bind = this.jscadParams(figure);
+      dataSel.textContent = "";
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "No data";
+      dataSel.appendChild(none);
+      for (const b of this.doc?.blocks ?? []) {
+        if (b.kind !== "table" || b.table.simple) continue;
+        const o = document.createElement("option");
+        o.value = b.table.id;
+        o.textContent = `@${b.table.id}`;
+        dataSel.appendChild(o);
+      }
+      dataSel.value = bind?.table ?? "";
+      rowSel.textContent = "";
+      const t = this.doc?.blocks.find(
+        (b) => b.kind === "table" && b.table.id === bind?.table,
+      );
+      rowSel.hidden = t?.kind !== "table";
+      if (t?.kind === "table") {
+        t.table.rows.forEach((r, n) => {
+          const o = document.createElement("option");
+          o.value = String(n + 1);
+          o.textContent = `Row ${String(n + 1)}: ${String(r[0] ?? "")}`;
+          rowSel.appendChild(o);
+        });
+        rowSel.value = String(bind?.row ?? 1);
+      }
+    };
+    fill();
+    figure.addEventListener("mousedown", fill);
+    dataSel.addEventListener("change", () => {
+      this.setJscadInfo(
+        figure,
+        "params",
+        dataSel.value ? `@${dataSel.value}` : null,
+      );
+      if (!dataSel.value) this.setJscadInfo(figure, "row", null);
+      fill();
+    });
+    rowSel.addEventListener("change", () => {
+      this.setJscadInfo(
+        figure,
+        "row",
+        rowSel.value === "1" ? null : rowSel.value,
+      );
+    });
+    // Export STL: the drawn faces, as a file to 3D-print or open in CAD.
+    const exportBtn = document.createElement("button");
+    exportBtn.type = "button";
+    exportBtn.className = "insp-select jscad-export";
+    exportBtn.textContent = "Export STL";
+    exportBtn.title = "Save the model as an STL file (3D printing, CAD)";
+    exportBtn.addEventListener("click", () => {
+      const mesh = this.jscadMesh.get(figure);
+      if (!mesh) return;
+      // Models are numbered among the document's models: model-1 ...
+      const all = Array.from(
+        this.shadowRoot?.querySelectorAll("figure.folio-jscad") ?? [],
+      );
+      const n = all.indexOf(figure) + 1;
+      const bind = this.jscadParams(figure);
+      const name = bind
+        ? `${bind.table}-row${String(bind.row)}`
+        : `model-${String(n)}`;
+      this.dispatchEvent(
+        new CustomEvent("folio-export", {
+          detail: {
+            filename: `${name}.stl`,
+            mime: "model/stl",
+            text: meshToStl(mesh, name),
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    });
+    return [pick, dataSel, rowSel, exportBtn];
   }
 
   /**
@@ -3764,6 +3924,7 @@ export class FolioDoc extends HTMLElement {
         next.push({
           kind: "code",
           ...(el.dataset.lang !== undefined ? { lang: el.dataset.lang } : {}),
+          ...(el.dataset.info !== undefined ? { info: el.dataset.info } : {}),
           text: pre ? this.normalizeCodeBody(pre) : "",
         });
         continue;
@@ -3901,20 +4062,12 @@ export class FolioDoc extends HTMLElement {
         );
         if (!cell) continue;
         const v = recalced.rows[row]?.[c];
-        cell.textContent =
-          col.format === "percent" && typeof v === "number"
-            ? `${(v * 100).toFixed(1)}%`
-            : String(v ?? "");
+        cell.textContent = formatComputed(v, col.format);
         cell.classList.toggle("num", typeof v === "number");
       }
     });
     const host = this.shadowRoot?.querySelector("article.folio-doc");
-    const chartFigures = Array.from(
-      host?.querySelectorAll<HTMLElement>("[data-chart-source]") ?? [],
-    );
-    for (const cf of chartFigures) {
-      this.drawChart(cf);
-    }
+    this.refreshDependents(block.table.id);
     // Cross-table references ripple: another table's formulas may
     // read this one (budget.r3.q2), so their cells refresh too -
     // text-only updates in place, the edited caret untouched.
@@ -4024,10 +4177,26 @@ export class FolioDoc extends HTMLElement {
     const fresh = this.renderTable(block, idx);
     fresh.dataset.blockIndex = String(idx);
     host.replaceChild(fresh, figure);
-    const chartFigures = Array.from(
-      host.querySelectorAll<HTMLElement>("[data-chart-source]"),
-    );
-    for (const cf of chartFigures) this.drawChart(cf);
+    this.refreshDependents(block.table.id);
+  }
+
+  /**
+   * Everything drawn FROM a table, after its data changed: every chart
+   * (a chart may read any table), and the models bound to it
+   * (`params=@table`). ONE place, so no edit path forgets one.
+   */
+  private refreshDependents(tableId: string): void {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    for (const cf of Array.from(
+      host?.querySelectorAll<HTMLElement>("[data-chart-source]") ?? [],
+    )) {
+      this.drawChart(cf);
+    }
+    for (const mf of Array.from(
+      host?.querySelectorAll<HTMLElement>("figure.folio-jscad") ?? [],
+    )) {
+      if (this.jscadParams(mf)?.table === tableId) void this.drawJscad(mf);
+    }
   }
 
   /**

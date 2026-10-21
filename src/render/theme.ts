@@ -1463,7 +1463,10 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       opacity: 0.45;
       transition: opacity 200ms;
     }
-    figure.folio-jscad select.jscad-view-pick { flex: none; }
+    figure.folio-jscad select.jscad-view-pick,
+    figure.folio-jscad select.jscad-data,
+    figure.folio-jscad select.jscad-row,
+    figure.folio-jscad .jscad-export { flex: none; }
     figure.folio-jscad .jscad-view svg {
       display: block;
       width: 100%;
