@@ -275,9 +275,7 @@ export class FolioDoc extends HTMLElement {
    * the block the caret was in - not the last block clicked.
    */
   private trackCaret = (): void => {
-    const root = this.shadowRoot as
-      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
-    let n: Node | null = root?.getSelection?.()?.anchorNode ?? null;
+    let n: Node | null = this.caretPoint()?.node ?? null;
     while (n !== null && !(n instanceof HTMLElement)) n = n.parentNode;
     const block =
       n instanceof HTMLElement
@@ -3633,8 +3631,67 @@ export class FolioDoc extends HTMLElement {
     this.focusBlockStart(idx, true);
   }
 
+  /**
+   * The caret inside this shadow root. Chromium has
+   * `shadowRoot.getSelection()`; WebKit (the Linux desktop's
+   * WebKitGTK) does not - there, the standard
+   * `getComposedRanges({ shadowRoots })` is the only way to see a
+   * caret inside the component. Without it every caret-aware command
+   * acted on the last CLICKED block instead.
+   */
+  private caretPoint(): { node: Node; offset: number } | null {
+    const root = this.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+    if (!root) return null;
+    if (typeof root.getSelection === "function") {
+      const sel = root.getSelection();
+      return sel && sel.rangeCount > 0 && sel.anchorNode
+        ? { node: sel.anchorNode, offset: sel.anchorOffset }
+        : null;
+    }
+    const ds = document.getSelection() as
+      | (Selection & { getComposedRanges?: (...a: unknown[]) => StaticRange[] })
+      | null;
+    if (!ds?.getComposedRanges) return null;
+    let ranges: StaticRange[] = [];
+    try {
+      ranges = ds.getComposedRanges({ shadowRoots: [root] });
+    } catch {
+      try {
+        ranges = ds.getComposedRanges(root);
+      } catch {
+        return null;
+      }
+    }
+    const r = ranges[0];
+    return r && root.contains(r.startContainer)
+      ? { node: r.startContainer, offset: r.startOffset }
+      : null;
+  }
+
+  /** Put the caret at `node`/`offset`: the shadow selection where it
+   * exists (Chromium), else the document selection (WebKit accepts a
+   * shadow node there). */
+  private setCaret(node: Node, offset: number): void {
+    const root = this.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+    const sel =
+      typeof root?.getSelection === "function"
+        ? root.getSelection()
+        : document.getSelection();
+    if (!sel) return;
+    const max =
+      node.nodeType === Node.TEXT_NODE
+        ? (node.textContent ?? "").length
+        : node.childNodes.length;
+    const at = Math.min(offset, max);
+    // setBaseAndExtent, not addRange: WebKit silently IGNORES
+    // addRange() for a range inside a shadow root.
+    sel.setBaseAndExtent(node, at, node, at);
+  }
+
   /** The caret as it was when the host's UI took focus. */
-  private savedCaret: Range | null = null;
+  private savedCaret: { node: Node; offset: number } | null = null;
 
   /**
    * Remember the caret before the host's UI (the command palette)
@@ -3643,27 +3700,16 @@ export class FolioDoc extends HTMLElement {
    * from the palette would otherwise act on the first block.
    */
   saveCaret(): void {
-    const root = this.shadowRoot as
-      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
-    const sel = root?.getSelection?.();
-    const article = root?.querySelector("article.folio-doc");
-    this.savedCaret =
-      sel && sel.rangeCount > 0 && article?.contains(sel.anchorNode)
-        ? sel.getRangeAt(0).cloneRange()
-        : null;
+    this.savedCaret = this.caretPoint();
   }
 
   restoreCaret(): void {
-    const root = this.shadowRoot as
-      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
-    const range = this.savedCaret;
-    const sel = root?.getSelection?.();
-    if (!range || !sel || !range.startContainer.isConnected) return;
-    root?.querySelector<HTMLElement>("article.folio-doc")?.focus({
-      preventScroll: true,
-    });
-    sel.removeAllRanges();
-    sel.addRange(range);
+    const at = this.savedCaret;
+    if (!at || !at.node.isConnected) return;
+    this.shadowRoot
+      ?.querySelector<HTMLElement>("article.folio-doc")
+      ?.focus({ preventScroll: true });
+    this.setCaret(at.node, at.offset);
     this.trackCaret();
   }
 
@@ -3679,36 +3725,16 @@ export class FolioDoc extends HTMLElement {
    * sync the model (spec: docs/specs/lists.md, Tab / Shift+Tab).
    */
   private moveListItem(li: HTMLElement, move: () => void): void {
-    const root = this.shadowRoot as
-      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
-    const sel = root?.getSelection?.() ?? null;
-    const anchor = sel?.anchorNode ?? null;
-    const offset = sel?.anchorOffset ?? 0;
+    const at = this.caretPoint();
     move();
-    // Restore through the SHADOW selection only: writing the document
-    // selection into the shadow tree corrupts the caret on WebKitGTK.
-    if (sel && anchor && li.contains(anchor)) {
-      const range = document.createRange();
-      range.setStart(anchor, Math.min(offset, anchor.textContent?.length ?? 0));
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }
+    if (at && li.contains(at.node)) this.setCaret(at.node, at.offset);
     this.syncFromDom();
     this.emitChange();
   }
 
-  /** Put the caret at the start of `el` (shadow selection only). */
+  /** Put the caret at the start of `el`. */
   private placeCaret(el: HTMLElement): void {
-    const root = this.shadowRoot as
-      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
-    const sel = root?.getSelection?.();
-    if (!sel) return;
-    const range = document.createRange();
-    range.setStart(el, 0);
-    range.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(range);
+    this.setCaret(el, 0);
   }
 
   /** Tab: nest the caret's item under the item above it. */
@@ -4144,12 +4170,7 @@ export class FolioDoc extends HTMLElement {
    * hit testing, which pierces in every engine).
    */
   private blockIndexAtCaret(): number {
-    const root = this.shadowRoot as
-      | (ShadowRoot & {
-          getSelection?: () => Selection | null;
-        })
-      | null;
-    let n: Node | null = root?.getSelection?.()?.anchorNode ?? null;
+    let n: Node | null = this.caretPoint()?.node ?? null;
     while (n !== null && !(n instanceof HTMLElement)) {
       n = n.parentNode;
     }
