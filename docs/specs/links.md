@@ -28,9 +28,14 @@ inspector's spirit, inline) to change or remove the link.
   href, and the HOST decides what opening means (ADR-0006: the
   component is embeddable; navigation is host policy):
   - the demo host loads `.md` paths in place (same loader the
-    examples use) and opens anything with a protocol in a new
-    tab (`noopener`); a failed fetch is a visible flash, never a
+    examples use) and opens anything with a protocol outside
+    folio: a new tab (`noopener`) on the web, the system browser
+    or mail app on the desktop (`open_external`, http/https/mailto
+    only - ADR-0024); a failed fetch is a visible flash, never a
     broken document.
+  - The help window's links follow the same way (2026-10-22: they
+    did nothing, because only the document listened for
+    `folio-link`); a `.md` link from the help closes it first.
   - **Desktop caveat**: relative document links resolve against
     the PAGE in the web demo; the desktop host does not yet
     track the current document's directory (the Rust bridge

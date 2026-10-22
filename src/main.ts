@@ -20,6 +20,7 @@ import { BUNDLED_FONTS } from "./render/fonts.js";
 import {
   isDesktop,
   openDocument,
+  openExternal,
   saveDocument,
   saveTextFile,
 } from "./desktop.js";
@@ -393,19 +394,34 @@ btnLink.addEventListener("mousedown", (ev) => {
 });
 
 /**
+ * Outside folio: a new browser tab on the web; the user's own browser
+ * (or mail app) on the desktop, where the app's window must never
+ * navigate away from the document (ADR-0024).
+ */
+function openOutside(href: string): void {
+  if (isDesktop()) {
+    void openExternal(href).then((ok) => {
+      if (!ok) flash(`Could not open ${href}`);
+    });
+    return;
+  }
+  window.open(href, "_blank", "noopener");
+}
+
+/**
  * Follow a document link: .md paths load in place (the same path
- * the examples use); anything with a protocol opens in a new tab.
+ * the examples use); anything with a protocol opens outside folio.
  * A failed fetch is a visible message, never a broken document.
  */
 async function openLinkedDocument(href: string): Promise<void> {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(href)) {
-    window.open(href, "_blank", "noopener");
+  if (/^([a-z][a-z0-9+.-]*:\/\/|mailto:)/i.test(href)) {
+    openOutside(href);
     return;
   }
   try {
     const url = new URL(href, window.location.href);
     if (!url.pathname.endsWith(".md")) {
-      window.open(href, "_blank", "noopener");
+      openOutside(url.href);
       return;
     }
     if (await openShipped(url.pathname)) flash("Opened linked document");
@@ -1481,6 +1497,18 @@ const paletteModal = requireEl<HTMLDialogElement>("#palette-modal");
 const paletteInput = requireEl<HTMLInputElement>("#palette-input");
 const paletteList = requireEl<HTMLElement>("#palette-list");
 const helpDoc = requireEl<FolioDoc>("#help-doc");
+
+// Links in the help (graphviz.org, strudel.cc, ...) follow like the
+// document's own: they did nothing, because only the document
+// listened. A document link closes the help first.
+helpDoc.addEventListener("folio-link", (ev) => {
+  const href = (ev as CustomEvent<{ href: string }>).detail?.href;
+  if (!href) return;
+  if (/\.md($|[?#])/.test(href) && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
+    helpModal.close();
+  }
+  void openLinkedDocument(href);
+});
 
 const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
   {

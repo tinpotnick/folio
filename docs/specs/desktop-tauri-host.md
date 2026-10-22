@@ -68,3 +68,9 @@ change touching the caret, selection, or keyboard handling.
   (capability `core:window:allow-set-title`).
 - Ctrl+N / Ctrl+O / Ctrl+S: new, open, save. See
   docs/specs/toolbar.md.
+
+## Outside links (2026-10-22)
+
+- `open_external(url)`: opens http/https/mailto addresses in the
+  system browser or mail app via tauri-plugin-opener (ADR-0024);
+  every other scheme is refused. Document and help links use it.

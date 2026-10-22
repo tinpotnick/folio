@@ -181,10 +181,34 @@ async fn save_document(
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// Web addresses a document may hand to the system: the web and
+/// e-mail, nothing that runs or reads anything locally (`file:`,
+/// `javascript:`, custom app schemes).
+fn is_external_url(url: &str) -> bool {
+    let lower = url.trim().to_ascii_lowercase();
+    ["http://", "https://", "mailto:"]
+        .iter()
+        .any(|p| lower.starts_with(p) && lower.len() > p.len())
+}
+
+/// Open a link in the user's own browser (or mail app): the app's
+/// webview never navigates away from the document (ADR-0024).
+#[tauri::command]
+fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    if !is_external_url(&url) {
+        return Err(format!("not a web address: {url}"));
+    }
+    app.opener()
+        .open_url(url.trim(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         // Recording (spec: docs/specs/audio-embeds.md) is a
         // first-class feature: the record button IS the consent
         // gesture. Without a handler WebKitGTK silently DENIES
@@ -196,7 +220,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_document,
             save_document,
-            save_text_file
+            save_text_file,
+            open_external
         ])
         .run(tauri::generate_context!())
         .expect("error while running folio desktop");
@@ -204,7 +229,20 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::folder_hint;
+    use super::{folder_hint, is_external_url};
+
+    #[test]
+    fn only_web_and_mail_addresses_open_externally() {
+        assert!(is_external_url("https://graphviz.org"));
+        assert!(is_external_url("http://example.com/x"));
+        assert!(is_external_url("HTTPS://Example.com"));
+        assert!(is_external_url("mailto:a@b.c"));
+        assert!(!is_external_url("file:///etc/passwd"));
+        assert!(!is_external_url("javascript:alert(1)"));
+        assert!(!is_external_url("https://"));
+        assert!(!is_external_url("folio://x"));
+        assert!(!is_external_url("/demo/examples/poem.md"));
+    }
     use std::path::PathBuf;
 
     fn tempd(name: &str) -> PathBuf {
