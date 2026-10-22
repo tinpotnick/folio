@@ -14,6 +14,7 @@ steps:
   - Change the block's language to JavaScript, then back to Strudel.
   - Make the block play a drum beat, using only what the in-app help
     says about sounds.
+  - On a fresh install, press Play on a Strudel block for the first time.
 expected:
   - The music button (a note icon, tooltip "Insert a Strudel music
     block") or the palette entry "Insert a Strudel music block"
@@ -38,4 +39,5 @@ expected:
     pattern such as `s("bd sd [hh hh] sd")` plays audible drums
     offline (no network requests), with the drum names lighting
     as they sound and no error line.
+  - The first Play explains the Strudel player add-on (what, licence, size) and installs it only on "Install and play"; it then plays, and later plays need no download.
 ---
