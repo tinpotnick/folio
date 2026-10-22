@@ -74,3 +74,17 @@ export async function saveTextFile(
     return null;
   }
 }
+
+/** Open a web (or mailto) address in the user's own browser. The
+ * shell refuses anything else (ADR-0024). False when not desktop or
+ * refused. */
+export async function openExternal(url: string): Promise<boolean> {
+  if (!isDesktop()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    await invoke("open_external", { url });
+    return true;
+  } catch {
+    return false;
+  }
+}
