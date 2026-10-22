@@ -204,6 +204,78 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// Export the document as a PDF (ADR-0025): a save dialog, then the
+/// webview prints itself straight to that file with the print
+/// stylesheet (A4, 18 x 16 mm margins, as `@page` says) - no print
+/// dialog, the same pages Print makes.
+#[tauri::command]
+async fn export_pdf(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    suggested: String,
+) -> Result<String, String> {
+    let mut dialog = app
+        .dialog()
+        .file()
+        .add_filter("PDF document", &["pdf"])
+        .set_file_name(&suggested);
+    if let Some(dir) = read_last_dir(&app) {
+        dialog = dialog.set_directory(dir);
+    }
+    let path = dialog
+        .blocking_save_file()
+        .ok_or("cancelled")?
+        .into_path()
+        .map_err(|e| e.to_string())?;
+    remember_dir(&app, &path);
+    print_to_pdf(&window, &path).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[cfg(target_os = "linux")]
+async fn print_to_pdf(window: &tauri::WebviewWindow, path: &Path) -> Result<(), String> {
+    use webkit2gtk::PrintOperationExt;
+    let uri = gtk::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+    window
+        .with_webview(move |wv| {
+            let op = webkit2gtk::PrintOperation::new(&wv.inner());
+            let settings = gtk::PrintSettings::new();
+            settings.set_printer("Print to File");
+            settings.set("output-file-format", Some("pdf"));
+            settings.set("output-uri", Some(uri.as_str()));
+            op.set_print_settings(&settings);
+            let page = gtk::PageSetup::new();
+            page.set_paper_size(&gtk::PaperSize::new(Some("iso_a4")));
+            page.set_top_margin(18.0, gtk::Unit::Mm);
+            page.set_bottom_margin(18.0, gtk::Unit::Mm);
+            page.set_left_margin(16.0, gtk::Unit::Mm);
+            page.set_right_margin(16.0, gtk::Unit::Mm);
+            op.set_page_setup(&page);
+            let done = tx.clone();
+            op.connect_finished(move |_| {
+                let _ = done.send(Ok(()));
+            });
+            op.connect_failed(move |_, err| {
+                let _ = tx.send(Err(err.to_string()));
+            });
+            op.print();
+        })
+        .map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn_blocking(move || {
+        rx.recv_timeout(std::time::Duration::from_secs(120))
+            .unwrap_or_else(|_| Err("timed out writing the PDF".into()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Not built yet off Linux: the page falls back to the print dialog.
+#[cfg(not(target_os = "linux"))]
+async fn print_to_pdf(_window: &tauri::WebviewWindow, _path: &Path) -> Result<(), String> {
+    Err("unsupported".into())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -221,7 +293,8 @@ pub fn run() {
             open_document,
             save_document,
             save_text_file,
-            open_external
+            open_external,
+            export_pdf
         ])
         .run(tauri::generate_context!())
         .expect("error while running folio desktop");

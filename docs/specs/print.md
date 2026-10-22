@@ -42,3 +42,25 @@ No separate PDF export engine, no new dependency (ADR-0007).
   beforeprint switches views and closes dialogs, palette command
   calls print, page-break style applies in print media only).
 - First-contact eval: `evals/print-first-contact.md`.
+
+## Export as PDF (2026-10-22)
+
+- **Where**: the File group's **Export ▾** menu ("Export as" → PDF
+  document), and the palette's "Export as PDF" (keywords: export,
+  pdf, save as pdf, download, share). The menu leaves room for more
+  formats later.
+- **Before**: the same normalization as printing (`preparePrint`:
+  dialogs close, Markdown view switches to the document), then it
+  waits until no figure still says "Drawing…" / "Building the
+  model…" (up to 15 s).
+- **Desktop (Linux)**: `export_pdf(suggested)` (ADR-0025) - a save
+  dialog filtered to .pdf, named after the open file or the title,
+  starting in the last used folder; then a WebKitGTK print operation
+  writes the print stylesheet straight to that file ("Print to
+  File", A4, 18 x 16 mm margins as `@page` says) with no print
+  dialog. The flash reports the path; a failure is a flash, never
+  silent. Other platforms report "unsupported" and fall back to the
+  web behaviour.
+- **Web**: a browser cannot write a PDF itself; Export flashes
+  'Choose "Save as PDF" as the destination' and opens the print
+  dialog.
