@@ -924,13 +924,15 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     table.folio-table thead th {
       border-bottom: 1px solid var(--folio-table-rule, #1f2328);
       text-align: left;
-      padding: 6px 10px;
+      /* em, not px: a table shrunk to fit its page (component
+         fitTable) tightens its padding with its type. */
+      padding: 0.4em 0.65em;
       font-weight: 600;
     }
     table.folio-table tbody tr:last-child td {
       border-bottom: 2px solid var(--folio-table-rule, #1f2328);
     }
-    table.folio-table td, table.folio-table th { padding: 5px 10px; }
+    table.folio-table td, table.folio-table th { padding: 0.32em 0.65em; }
     table.folio-table td:empty::after {
       content: "\\00a0";
       opacity: 0;

@@ -62,10 +62,15 @@ see.
   expressions are free Jexl text and do not — a rename that
   orphans a formula reference surfaces as the table's error
   line, never a crash.
-- **Layout**: a table never runs past its page. The table sits
-  in a `.folio-table-scroll` wrapper that scrolls sideways INSIDE
-  the measure when the columns are wider than the page; numeric
-  cells never wrap mid-value. Number and formula columns
+- **Layout**: a table never runs past its page. A table wider than
+  the column first **shrinks to fit** (2026-10-22, `fitTable`): its
+  type - and its cell padding, which is in em - scales down until it
+  fits, to 75% at most, re-fitting when the page or the table
+  changes size (`table[data-fit]` records the scale). Only past that
+  does the `.folio-table-scroll` wrapper scroll sideways INSIDE the
+  measure (an eight-column table in a tracked-caps theme); numeric
+  cells never wrap mid-value. Eight-column tables overflowed in most
+  themes before, and a printout clipped them. Number and formula columns
   right-align, header included (ADR-0002: alignment derives from
   the column type). The rule is specific enough to beat the bidi
   `text-align: start` rule, which had silently left-aligned every
