@@ -25,6 +25,13 @@ import {
   saveDocument,
   saveTextFile,
 } from "./desktop.js";
+import { clearDraft, keepDraft, readDraft, type Draft } from "./drafts.js";
+import {
+  hasRealFiles,
+  openWebFile,
+  saveWebFile,
+  type WebFile,
+} from "./web-files.js";
 
 function requireEl<T extends HTMLElement>(selector: string): T {
   const el = document.querySelector<T>(selector);
@@ -83,7 +90,27 @@ async function boot(): Promise<void> {
     }
     if (!guided) path = WELCOME;
   }
+  // Unsaved work from last time comes back on a plain launch
+  // (docs/specs/web-files.md); a ?doc= link opens what it names and
+  // leaves the draft for later.
+  const draft = path === null ? await readDraft() : null;
   await openShipped(path, { history: "replace", unguarded: true });
+  if (draft) restoreDraft(draft);
+}
+
+/** Bring back a kept draft - still unsaved, so still kept. */
+function restoreDraft(draft: Draft): void {
+  void el.load(draft.markdown).then(() => {
+    editor.value = draft.markdown;
+    refreshOutline();
+    reflectTitle();
+    if (draft.name) webFile = { name: draft.name, handle: null };
+    const when = new Date(draft.at).toLocaleString(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+    flash(`Restored your unsaved work from ${when}`);
+  });
 }
 
 /** The address bar: a shipped document's `?doc=`, else the bare URL. */
@@ -127,6 +154,7 @@ async function openShipped(
     );
   }
   currentDocPath = null; // an in-memory doc has no folder
+  webFile = null;
   await el.load(text);
   editor.value = text;
   if (!mdWrap.hidden) renderHighlight();
@@ -1351,6 +1379,10 @@ const btnSave = requireEl<HTMLButtonElement>("#btn-save");
  * - and in-memory docs (examples, links, imports) clear it. */
 let currentDocPath: string | null = null;
 
+/** The web host's open file (its name, and a handle to write back to
+ * where the browser allows). */
+let webFile: WebFile | null = null;
+
 /* --- Unsaved changes (spec: docs/specs/unsaved-changes.md) ---
  * The document as of its last load or save, serialized: anything that
  * would REPLACE the document asks first when the current Markdown
@@ -1389,13 +1421,9 @@ async function confirmLeave(
 ): Promise<boolean> {
   if (!isDirty()) return true;
   unsavedText.textContent = `This document has changes that are not saved. ${action} replaces it.`;
-  btnUnsavedSave.hidden = !isDesktop();
   unsavedModal.returnValue = "cancel";
   unsavedModal.showModal();
-  (isDesktop()
-    ? btnUnsavedSave
-    : requireEl<HTMLButtonElement>("#btn-unsaved-cancel")
-  ).focus();
+  btnUnsavedSave.focus();
   const choice = await new Promise<string>((resolve) => {
     unsavedModal.addEventListener(
       "close",
@@ -1403,20 +1431,60 @@ async function confirmLeave(
       { once: true },
     );
   });
-  if (choice === "discard") return true;
+  if (choice === "discard") {
+    // Thrown away on purpose: no draft to bring back.
+    void clearDraft();
+    return true;
+  }
   if (choice === "save") return saveCurrent();
   return false;
 }
 
-/** Save through the desktop dialog; true when it was written. */
+/** A name to offer when saving: the open file's, else the title. */
+function suggestedName(ext: string): string {
+  const base =
+    (webFile?.name ?? currentDocPath?.split(/[\\/]/).pop())?.replace(
+      /\.(md|markdown)$/i,
+      "",
+    ) ??
+    (el
+      .getOutline()
+      .find((e) => e.level === 1)
+      ?.text.trim() ||
+      "Untitled");
+  return `${base.replace(/[\\/:*?"<>|]+/g, "-")}.${ext}`;
+}
+
+/**
+ * Save: the desktop's native dialog; on the web, back to the open file
+ * where the browser allows real files, else a download. True when it
+ * was written.
+ */
 async function saveCurrent(): Promise<boolean> {
   const md = currentMarkdown();
   if (md === null) return false;
-  const path = await saveDocument(md, currentDocPath ?? undefined);
-  if (path === null) return false;
-  currentDocPath = path;
+  if (isDesktop()) {
+    const path = await saveDocument(md, currentDocPath ?? undefined);
+    if (path === null) return false;
+    currentDocPath = path;
+    flash(`Saved ${path}`);
+  } else {
+    try {
+      const saved = await saveWebFile(
+        md,
+        suggestedName("md"),
+        webFile?.handle ?? null,
+      );
+      if (saved === null) return false;
+      webFile = saved;
+      flash(saved.handle ? `Saved ${saved.name}` : `Downloaded ${saved.name}`);
+    } catch (e) {
+      flash(`Could not save: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
+  }
   cleanMarkdown = md;
-  flash(`Saved ${path}`);
+  void clearDraft();
   return true;
 }
 
@@ -1438,16 +1506,35 @@ if (isDesktop()) {
   })();
 }
 
-if (isDesktop()) {
-  btnOpen.hidden = false;
-  btnSave.hidden = false;
+// Open and Save on both hosts: the desktop's native dialogs, the web's
+// own files (docs/specs/web-files.md).
+btnOpen.hidden = false;
+btnSave.hidden = false;
+
+/** Pick a file: the desktop dialog, or the browser's. */
+async function pickDocument(): Promise<string | null> {
+  if (isDesktop()) {
+    const res = await openDocument(currentDocPath ?? undefined);
+    if (res === null) return null;
+    currentDocPath = res.path;
+    return res.text;
+  }
+  try {
+    const res = await openWebFile();
+    if (res === null) return null;
+    webFile = { name: res.name, handle: res.handle };
+    return res.text;
+  } catch (e) {
+    flash(`Could not open: ${e instanceof Error ? e.message : String(e)}`);
+    return null;
+  }
 }
 
 btnOpen.addEventListener("click", async () => {
   if (!(await confirmLeave())) return;
-  const res = await openDocument(currentDocPath ?? undefined);
-  if (res === null) return;
-  currentDocPath = res.path;
+  const text = await pickDocument();
+  if (text === null) return;
+  const res = { text };
   await el.load(res.text);
   editor.value = res.text;
   refreshOutline();
@@ -1459,6 +1546,30 @@ btnOpen.addEventListener("click", async () => {
 btnSave.addEventListener("click", () => {
   void saveCurrent();
 });
+// Where the browser cannot write real files, Save downloads the .md.
+if (!isDesktop() && !hasRealFiles()) {
+  btnSave.title = "Save - downloads the .md file (Ctrl+S)";
+}
+
+/**
+ * Keep unsaved work as it changes (debounced), so closing the tab or
+ * the app loses nothing. Clean documents keep nothing.
+ */
+let draftTimer: ReturnType<typeof setTimeout> | undefined;
+function keepDraftSoon(): void {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    const md = currentMarkdown();
+    if (md === null || !isDirty()) return;
+    void keepDraft({
+      markdown: md,
+      name: webFile?.name ?? currentDocPath?.split(/[\\/]/).pop() ?? null,
+      at: Date.now(),
+    });
+  }, 600);
+}
+el.onChange(keepDraftSoon);
+editor.addEventListener("input", keepDraftSoon);
 
 /* --- In-app help (spec: docs/specs/in-app-help.md) --- */
 
@@ -1925,20 +2036,18 @@ function paletteEntries(): PaletteEntry[] {
       "guide getting started welcome home tour intro overview about front page examples learn",
     action: () => void openShipped(WELCOME),
   });
-  if (isDesktop()) {
-    entries.push({
-      title: "Open a document",
-      group: "Command",
-      keywords: "open load file document",
-      action: () => btnOpen.click(),
-    });
-    entries.push({
-      title: "Save the document",
-      group: "Command",
-      keywords: "save write file document",
-      action: () => btnSave.click(),
-    });
-  }
+  entries.push({
+    title: "Open a document",
+    group: "Command",
+    keywords: "open load file document upload markdown",
+    action: () => btnOpen.click(),
+  });
+  entries.push({
+    title: "Save the document",
+    group: "Command",
+    keywords: "save write file document download markdown md",
+    action: () => btnSave.click(),
+  });
   for (const section of el.getOutline()) {
     entries.push({
       title: section.text,
@@ -2102,9 +2211,9 @@ document.addEventListener("keydown", (ev) => {
     ev.preventDefault();
     window.print();
   }
-  // Ctrl+S / Ctrl+O: the desktop app's Save and Open (the web host
-  // has neither, and a browser's own Ctrl+S saves the web page).
-  if (isDesktop() && (key === "s" || key === "o")) {
+  // Ctrl+S / Ctrl+O: Save and Open, in the browser too (its own
+  // Ctrl+S would save the web page, not the document).
+  if (key === "s" || key === "o") {
     ev.preventDefault();
     (key === "s" ? btnSave : btnOpen).click();
   }
@@ -2427,14 +2536,7 @@ async function drawingsSettled(ms = 15000): Promise<void> {
 
 /** The file name a PDF is offered as: the open file's, else the title. */
 function pdfName(): string {
-  const base =
-    currentDocPath?.split(/[\\/]/).pop()?.replace(/\.md$/i, "") ??
-    (el
-      .getOutline()
-      .find((e) => e.level === 1)
-      ?.text.trim() ||
-      "Untitled");
-  return `${base.replace(/[\\/:*?"<>|]+/g, "-")}.pdf`;
+  return suggestedName("pdf");
 }
 
 /**

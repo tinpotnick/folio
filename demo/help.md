@@ -146,11 +146,17 @@ document — written in the same renderer you are working with.
 
 ## Opening and saving
 
-- **Desktop app:** the Open button (folder icon) loads a .md file
-  from disk; Save (arrow-down icon) writes the current document to
-  a file you choose.
-- **Web:** switch to Markdown view and copy the source — the plain
-  Markdown text is the document.
+- **Open** (folder icon, **Ctrl+O**) loads a .md file; **Save**
+  (**Ctrl+S**) writes the document to a file you choose, and after
+  that back to the same file.
+- **In a web browser** the files are on your own computer — nothing
+  is uploaded anywhere. Chrome and Edge open and save real files;
+  in Firefox and Safari, Open reads a file you pick and Save
+  downloads the .md file.
+- **Unsaved work is kept as you type**, in this browser (or the
+  desktop app). Close the window by accident and it is still there
+  the next time you open folio, with a note saying so. Saving, or
+  choosing **Discard changes**, lets it go.
 
 ## Tables and charts
 
@@ -505,8 +511,8 @@ data:
   - [Ctrl+K, Search commands, help, and sections]
   - [Ctrl+P, Print the document (or save it as a PDF)]
   - [Ctrl+N, New document (desktop app; a browser keeps Ctrl+N for a new window)]
-  - [Ctrl+S, Save (desktop app)]
-  - [Ctrl+O, Open a document (desktop app)]
+  - [Ctrl+S, Save]
+  - [Ctrl+O, Open a document]
   - [Esc, Close the help window]
 :::
 

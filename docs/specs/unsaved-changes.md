@@ -27,7 +27,8 @@ following a link, or pressing Back silently threw the edits away.
 - **The dialog** (`#unsaved-modal`) says what would happen ("Opening
   another document replaces it."; "Starting a new document replaces
   it." for New document) and offers:
-  - **Save...** (desktop only): the save dialog. Only a completed save
+  - **Save...** (both hosts; docs/specs/web-files.md): the save
+    dialog, or the web's real file / download. Only a completed save
     goes ahead; cancelling it stays put.
   - **Discard changes**: goes ahead.
   - **Cancel** (or Esc): stays, with the document and address

@@ -34,8 +34,8 @@ test.describe("unsaved changes", () => {
     const url = page.url();
     await page.locator("#the-doc a", { hasText: "A pure-prose poem" }).click();
     await expect(modal(page)).toBeVisible();
-    // The web has no Save: only Discard / Cancel.
-    await expect(page.locator("#btn-unsaved-save")).toBeHidden();
+    // The web saves too (docs/specs/web-files.md): Save, Discard, Cancel.
+    await expect(page.locator("#btn-unsaved-save")).toBeVisible();
     await page.locator("#btn-unsaved-cancel").click();
     await expect(modal(page)).toBeHidden();
     await expect(page.locator("#the-doc article > p").first()).toContainText(
