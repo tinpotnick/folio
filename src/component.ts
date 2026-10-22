@@ -611,17 +611,73 @@ export class FolioDoc extends HTMLElement {
   revealBlock(blockIndex: number): void {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     const el = host?.children[blockIndex] as HTMLElement | undefined;
-    if (!el) return;
+    if (!host || !el) return;
     el.scrollIntoView({ behavior: "smooth", block: "start" });
-    el.setAttribute("tabindex", "-1");
-    el.focus({ preventScroll: true });
+    this.holdReveal(host, el);
+    // The caret follows, to the start of the block (like Word's
+    // navigation pane): typing continues there, and the toolbar shows
+    // the block it is in. No focus ring - the heading is the
+    // destination, not a control.
+    (host as HTMLElement).focus({ preventScroll: true });
+    if (host.getAttribute("contenteditable") === "true") {
+      this.setCaret(el, 0);
+    } else {
+      el.setAttribute("tabindex", "-1");
+      el.classList.add("folio-revealed");
+      el.focus({ preventScroll: true });
+    }
   }
 
-  firstVisibleBlockIndex(): number {
+  private revealHold: (() => void) | undefined;
+
+  /**
+   * Keep a revealed block in place while the page settles: figures
+   * above it (charts, diagrams, drawings) finish drawing AFTER the
+   * jump starts, grow, and pushed the heading hundreds of pixels down.
+   * Each resize re-aims the jump; the reader's own scrolling, a key,
+   * a click or two seconds end the hold.
+   */
+  private holdReveal(host: Element, el: HTMLElement): void {
+    this.revealHold?.();
+    let first = true;
+    const ro = new ResizeObserver(() => {
+      if (first) {
+        first = false; // the initial observation is not a change
+        return;
+      }
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    const events = ["wheel", "touchstart", "keydown", "pointerdown"];
+    const stop = (): void => {
+      ro.disconnect();
+      window.clearTimeout(timer);
+      for (const e of events) window.removeEventListener(e, stop, true);
+      if (this.revealHold === stop) this.revealHold = undefined;
+    };
+    const timer = window.setTimeout(stop, 2000);
+    for (const e of events)
+      window.addEventListener(e, stop, { capture: true, passive: true });
+    ro.observe(host);
+    this.revealHold = stop;
+  }
+
+  /** The last block whose top is inside the window. */
+  lastBlockInView(): number {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     if (!host) return -1;
-    const hostRect = this.getBoundingClientRect();
-    const top = hostRect.top;
+    let last = -1;
+    for (let i = 0; i < host.children.length; i++) {
+      const r = host.children[i]?.getBoundingClientRect();
+      if (r && r.top < window.innerHeight) last = i;
+    }
+    return last;
+  }
+
+  /** The first block showing below `viewTop` (a host's sticky bar). */
+  firstVisibleBlockIndex(viewTop = 0): number {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return -1;
+    const top = Math.max(this.getBoundingClientRect().top, viewTop);
     for (let i = 0; i < host.children.length; i++) {
       const el = host.children[i] as HTMLElement;
       const r = el.getBoundingClientRect();
