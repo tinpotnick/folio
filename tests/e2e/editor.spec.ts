@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { pickStyle, insertFrom } from "./toolbar-helpers";
 
 /**
  * Editor battery: WYSIWYG contract tests. Every test here simulates a
@@ -818,10 +819,10 @@ test.describe("code blocks", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-code").click();
+    await insertFrom(page, "btn-code");
     await expect(page.locator("#the-doc pre.folio-code")).toBeVisible();
     await page.locator("#the-doc pre.folio-code").click();
-    await page.locator("#btn-code").click();
+    await insertFrom(page, "btn-code");
     await expect(
       page.locator("folio-doc p", { hasText: "Revenue recovered" }),
     ).toBeVisible();
@@ -850,7 +851,7 @@ test.describe("code blocks", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-code").click();
+    await insertFrom(page, "btn-code");
     await page.locator("#the-doc pre.folio-code").click();
     await expect(page.locator("#btn-code")).toHaveClass(/active/);
   });
@@ -886,7 +887,7 @@ test.describe("diagrams", () => {
   test("inserting a diagram renders an SVG", async ({ page }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-diagram").click();
+    await insertFrom(page, "btn-diagram");
     await expect(page.locator("#the-doc figure.folio-diagram svg")).toBeVisible(
       { timeout: 10_000 },
     );
@@ -897,7 +898,7 @@ test.describe("diagrams", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-diagram").click();
+    await insertFrom(page, "btn-diagram");
     const figure = page.locator("#the-doc figure.folio-diagram");
     await expect(figure).toBeVisible();
     await figure.click();
@@ -910,7 +911,7 @@ test.describe("diagrams", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-diagram").click();
+    await insertFrom(page, "btn-diagram");
     const figure = page.locator("#the-doc figure.folio-diagram");
     await figure.click();
     await page.keyboard.press("Enter");
@@ -922,7 +923,7 @@ test.describe("diagrams", () => {
   test("a diagram survives paragraph editing around it", async ({ page }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-diagram").click();
+    await insertFrom(page, "btn-diagram");
     await caretInParagraph(page, "Revenue recovered", 18);
     await page.keyboard.press("Enter");
     await page.keyboard.type("next");
@@ -988,7 +989,7 @@ test.describe("view round-trips", () => {
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await page.keyboard.type("New heading");
-    await page.locator('#block-bar button[data-block="h2"]').click();
+    await pickStyle(page, "h2");
     await expect(page.locator("#outline button")).toHaveCount(before + 1);
   });
 
@@ -1089,7 +1090,7 @@ test.describe("block conversion (document view)", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator('#block-bar button[data-block="h1"]').click();
+    await pickStyle(page, "h1");
     await expect(
       page.locator("#the-doc h1", { hasText: "Revenue recovered" }),
     ).toBeVisible();
@@ -1102,7 +1103,7 @@ test.describe("block conversion (document view)", () => {
   test("P converts a heading back to a paragraph", async ({ page }) => {
     await waitForDocument(page);
     await page.locator("folio-doc h2", { hasText: "Regional summary" }).click();
-    await page.locator('#block-bar button[data-block="p"]').click();
+    await pickStyle(page, "p");
     await expect(
       page.locator("#the-doc p", { hasText: "Regional summary" }),
     ).toBeVisible();
@@ -1118,8 +1119,8 @@ test.describe("block conversion (document view)", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc h2", { hasText: "Regional summary" }).click();
-    await page.locator('#block-bar button[data-block="h1"]').click();
-    await page.locator('#block-bar button[data-block="h2"]').click();
+    await pickStyle(page, "h1");
+    await pickStyle(page, "h2");
     const doc = await getDoc(page);
     const block = doc.blocks.find((b) =>
       (b.text ?? "").includes("Regional summary"),
@@ -1136,7 +1137,7 @@ test.describe("block conversion (document view)", () => {
     await page.keyboard.press("End");
     await page.keyboard.press("Enter");
     await page.keyboard.type("Fresh line");
-    await page.locator('#block-bar button[data-block="h1"]').click();
+    await pickStyle(page, "h1");
     await expect(
       page.locator("#the-doc h1", { hasText: "Fresh line" }),
     ).toBeVisible();
@@ -1147,7 +1148,7 @@ test.describe("block conversion (document view)", () => {
     await page.locator("#btn-sidebar").click();
     const before = await page.locator("#outline button").count();
     await page.locator("folio-doc h2", { hasText: "Regional summary" }).click();
-    await page.locator('#block-bar button[data-block="p"]').click();
+    await pickStyle(page, "p");
     await expect(page.locator("#outline button")).toHaveCount(before - 1);
   });
 });
@@ -1284,7 +1285,7 @@ test.describe("block boundaries", () => {
   }) => {
     await waitForDocument(page);
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-code").click();
+    await insertFrom(page, "btn-code");
     await page.keyboard.press("End");
     await page.keyboard.type(" plus");
     await page.locator("#btn-markdown").click();

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { insertFrom, pickStyle } from "./toolbar-helpers";
 
 /**
  * End-to-end coverage of the demo host page (index.html + src/main.ts)
@@ -38,9 +39,11 @@ test.describe("document view", () => {
     await expect(doc.locator("figure svg[role='img']").first()).toBeVisible();
   });
 
-  test("web degradation: native Open/Save stay hidden", async ({ page }) => {
+  test("web degradation: native Open/Save stay hidden; New is there", async ({
+    page,
+  }) => {
     await waitForDocument(page);
-    await expect(page.locator("#file-bar")).toBeHidden();
+    await expect(page.locator("#btn-new")).toBeVisible();
     await expect(page.locator("#btn-open")).toBeHidden();
     await expect(page.locator("#btn-save")).toBeHidden();
     await expect(page.locator("#btn-help")).toBeVisible();
@@ -51,7 +54,7 @@ test.describe("document view", () => {
   }) => {
     await waitForDocument(page);
     const before = await page.locator("folio-doc figure table").count();
-    await page.locator("#btn-table").click();
+    await insertFrom(page, "btn-table");
     await expect(
       page.locator("#status", { hasText: "Table inserted" }),
     ).toBeVisible();
@@ -311,11 +314,11 @@ test.describe("toolbar context state and actions", () => {
     await page.locator("#btn-markdown").click();
 
     await caretIn(page, "Revenue recovered", 3);
-    await page.locator(h1Btn).click();
+    await pickStyle(page, "h1");
     let source = await page.locator("#editor").inputValue();
     expect(source).toContain("# Revenue recovered");
 
-    await page.locator(pBtn).click();
+    await pickStyle(page, "p");
     source = await page.locator("#editor").inputValue();
     expect(source).toContain("\nRevenue recovered");
     expect(source).not.toContain("# Revenue recovered");
@@ -508,7 +511,7 @@ test.describe("code blocks", () => {
     await waitForDocument(page);
 
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator(codeBtn).click();
+    await insertFrom(page, "btn-code");
     const pre = page.locator("#the-doc pre.folio-code");
     await expect(pre).toBeVisible();
     await expect(pre.locator("code")).toContainText("Revenue recovered");
@@ -519,7 +522,7 @@ test.describe("code blocks", () => {
 
     await page.locator("#btn-view").click();
     await pre.click();
-    await page.locator(codeBtn).click();
+    await insertFrom(page, "btn-code");
     await expect(
       page.locator("folio-doc p", { hasText: "Revenue recovered" }),
     ).toBeVisible();
@@ -593,7 +596,7 @@ test.describe("insert group", () => {
     await waitForDocument(page);
 
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-diagram").click();
+    await insertFrom(page, "btn-diagram");
     const figure = page.locator("#the-doc figure.folio-diagram");
     await expect(figure).toBeVisible();
     await expect(figure.locator(".diagram-holder svg")).toBeVisible({
@@ -609,7 +612,7 @@ test.describe("insert group", () => {
 
     // Markdown view: the button wraps the caret's line in a directive.
     await caretIn(page, "Revenue recovered", 3);
-    await page.locator("#btn-diagram").click();
+    await insertFrom(page, "btn-diagram");
     expect(await page.locator("#editor").inputValue()).toContain(
       "::: mermaid {#diagram-new}",
     );
@@ -622,7 +625,7 @@ test.describe("insert group", () => {
     await page.locator("#btn-markdown").click();
 
     await caretIn(page, "Revenue recovered", 3);
-    await page.locator("#btn-code").click();
+    await insertFrom(page, "btn-code");
     // The whole (blank-line delimited) paragraph is fenced.
     expect(await page.locator("#editor").inputValue()).toContain(
       "```\nRevenue recovered after the service outage, with the North region\nleading for the second consecutive quarter.\n```",
@@ -713,7 +716,7 @@ test.describe("editor fixes", () => {
     await waitForDocument(page);
 
     await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
-    await page.locator("#btn-diagram").click();
+    await insertFrom(page, "btn-diagram");
     const figure = page.locator("#the-doc figure.folio-diagram");
     await expect(figure).toBeVisible();
 

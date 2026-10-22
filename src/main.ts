@@ -141,6 +141,7 @@ async function openShipped(
   shownUrl = window.location.href;
   onGuide = path === WELCOME;
   markClean();
+  reflectTitle();
   // A new document is for writing: the caret waits in its title.
   if (path === null) el.focusStart();
   return true;
@@ -637,7 +638,7 @@ async function startRecording(): Promise<void> {
     const reader = new FileReader();
     reader.onload = (): void => {
       if (typeof reader.result !== "string") return;
-      el.insertAudio(reader.result, "recording");
+      el.insertAudio(reader.result, "Recording");
       flash(
         `Recorded ${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, "0")}`,
       );
@@ -650,7 +651,7 @@ async function startRecording(): Promise<void> {
   recTick = window.setInterval((): void => {
     const elapsed = Date.now() - recStartedAt;
     const secs = Math.floor(elapsed / 1000);
-    status.textContent = `Recording ${String(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")} - click the mic to stop`;
+    status.textContent = `Recording ${String(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")} - click Stop in the toolbar to finish`;
     status.classList.add("show");
     if (elapsed >= RECORD_MAX_MS) stopRecording();
   }, 500);
@@ -667,6 +668,18 @@ btnRecord.addEventListener("mousedown", (ev) => {
   ev.preventDefault();
   toggleRecording();
 });
+
+// The record button lives in the Insert menu; while it records, the
+// bar itself says so and offers Stop.
+const btnRecStop = requireEl<HTMLButtonElement>("#btn-rec-stop");
+btnRecStop.addEventListener("click", () => {
+  if (recorder !== null) stopRecording();
+});
+new MutationObserver(() => {
+  btnRecStop.hidden = !btnRecord.classList.contains("rec");
+  // It takes room in the bar: make the row fit again.
+  fitToolbar();
+}).observe(btnRecord, { attributes: true, attributeFilter: ["class"] });
 
 /* --- Import data from a file (CSV / JSON) --- */
 
@@ -813,7 +826,8 @@ el.addEventListener(
 function reflectToolbarState(point?: { x: number; y: number }): void {
   const inDoc = currentEditable() !== null;
   const inMd = document.activeElement === editor;
-  const blockButtons = blockBar.querySelectorAll("button");
+  const blockButtons =
+    blockBar.querySelectorAll<HTMLButtonElement>("button[data-block]");
   const fmtButtons = fmtBar.querySelectorAll("button");
   if (!inDoc && !inMd) {
     blockButtons.forEach((b) => b.classList.remove("active"));
@@ -1312,7 +1326,6 @@ btnSidebar.addEventListener("click", () => {
 
 /* --- Desktop (Tauri) bridge: native Open/Save (ADR-0006) --- */
 
-const fileBar = requireEl<HTMLElement>("#file-bar");
 const btnOpen = requireEl<HTMLButtonElement>("#btn-open");
 const btnSave = requireEl<HTMLButtonElement>("#btn-save");
 
@@ -1409,7 +1422,8 @@ if (isDesktop()) {
 }
 
 if (isDesktop()) {
-  fileBar.hidden = false;
+  btnOpen.hidden = false;
+  btnSave.hidden = false;
 }
 
 btnOpen.addEventListener("click", async () => {
@@ -1421,6 +1435,7 @@ btnOpen.addEventListener("click", async () => {
   editor.value = res.text;
   refreshOutline();
   markClean();
+  reflectTitle();
   flash("Opened document");
 });
 
@@ -1875,7 +1890,7 @@ function paletteEntries(): PaletteEntry[] {
       "guide getting started welcome home tour intro overview about front page examples learn",
     action: () => void openShipped(WELCOME),
   });
-  if (!fileBar.hidden) {
+  if (isDesktop()) {
     entries.push({
       title: "Open a document",
       group: "Command",
@@ -2051,6 +2066,12 @@ document.addEventListener("keydown", (ev) => {
   if (key === "p") {
     ev.preventDefault();
     window.print();
+  }
+  // Ctrl+S / Ctrl+O: the desktop app's Save and Open (the web host
+  // has neither, and a browser's own Ctrl+S saves the web page).
+  if (isDesktop() && (key === "s" || key === "o")) {
+    ev.preventDefault();
+    (key === "s" ? btnSave : btnOpen).click();
   }
   // Ctrl+N: a new document. (A browser keeps Ctrl+N for a new window;
   // the desktop app has no such binding, so there it is folio's.)
@@ -2352,6 +2373,230 @@ window.addEventListener("beforeprint", () => {
 });
 
 refreshOutline();
+
+/* --- Toolbar: menus, overflow, window title (spec: docs/specs/toolbar.md) --- */
+
+document.documentElement.classList.toggle("desktop", isDesktop());
+
+// Header buttons never take focus from the document: after a click
+// on the mode or settings button, typing still goes into the page
+// (it went nowhere, and a typed title was lost). Keyboard focus by
+// Tab still works - this only cancels focus-on-press.
+requireEl<HTMLElement>("header").addEventListener("mousedown", (ev) => {
+  const btn = (ev.target as HTMLElement).closest("button");
+  if (btn && !btn.closest(".menu")) ev.preventDefault();
+});
+
+requireEl<HTMLButtonElement>("#btn-new").addEventListener("click", () => {
+  void openShipped(null);
+});
+
+/**
+ * A toolbar menu: opens under its trigger, closes on a pick, a click
+ * elsewhere, or Esc. The trigger acts on mousedown and cancels it so
+ * the document keeps its caret - menu items act on the caret just as
+ * the toolbar buttons they were did.
+ */
+function toolbarMenu(trigger: HTMLButtonElement, menu: HTMLElement): void {
+  const close = (): void => {
+    menu.hidden = true;
+    trigger.setAttribute("aria-expanded", "false");
+  };
+  trigger.addEventListener("mousedown", (ev) => {
+    ev.preventDefault();
+    const open = menu.hidden;
+    closeMenus();
+    if (open) {
+      menu.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      placeMenu(trigger, menu);
+    }
+  });
+  // Keyboard: Enter/Space on a focused trigger.
+  trigger.addEventListener("click", (ev) => {
+    if (ev.detail !== 0) return; // a mouse press was handled above
+    const open = menu.hidden;
+    closeMenus();
+    if (open) {
+      menu.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      placeMenu(trigger, menu);
+      menu.querySelector<HTMLButtonElement>("button:not([hidden])")?.focus();
+    }
+  });
+  // A pick closes the menu - after the item's own handler ran (they
+  // act on mousedown or click).
+  menu.addEventListener("click", (ev) => {
+    if ((ev.target as HTMLElement).closest("button")) close();
+  });
+  menu.addEventListener("mousedown", (ev) => {
+    // Items never take focus from the document's caret.
+    if ((ev.target as HTMLElement).closest("button")) ev.preventDefault();
+  });
+  menus.push(close);
+}
+
+/** Below its trigger, left-aligned with it, but always on screen. */
+function placeMenu(trigger: HTMLElement, menu: HTMLElement): void {
+  const t = trigger.getBoundingClientRect();
+  const top = t.bottom + 8;
+  menu.style.top = `${String(top)}px`;
+  menu.style.maxHeight = `${String(window.innerHeight - top - 12)}px`;
+  menu.style.left = "0px";
+  const w = menu.offsetWidth;
+  const left = Math.max(8, Math.min(t.left - 4, window.innerWidth - w - 8));
+  menu.style.left = `${String(left)}px`;
+}
+
+const menus: (() => void)[] = [];
+function closeMenus(): void {
+  for (const close of menus) close();
+}
+document.addEventListener("mousedown", (ev) => {
+  const t = ev.target as HTMLElement;
+  if (!t.closest(".menu-wrap")) closeMenus();
+});
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape") closeMenus();
+});
+// Placed against the window: a resize would leave them adrift.
+window.addEventListener("resize", closeMenus);
+
+toolbarMenu(
+  requireEl<HTMLButtonElement>("#btn-style-menu"),
+  requireEl<HTMLElement>("#style-menu"),
+);
+toolbarMenu(
+  requireEl<HTMLButtonElement>("#btn-insert-menu"),
+  requireEl<HTMLElement>("#insert-menu"),
+);
+toolbarMenu(
+  requireEl<HTMLButtonElement>("#btn-overflow"),
+  requireEl<HTMLElement>("#overflow-menu"),
+);
+
+// Inserts that live only in the palette run the palette's own action:
+// one implementation, two ways in.
+for (const item of Array.from(
+  document.querySelectorAll<HTMLButtonElement>("#insert-menu [data-insert]"),
+)) {
+  item.addEventListener("click", () => {
+    paletteEntries()
+      .find((e) => e.title === item.dataset.insert)
+      ?.action();
+  });
+}
+
+// The style menu's trigger names the style at the caret.
+const styleLabel = requireEl<HTMLElement>("#style-label");
+const styleLabelShort = requireEl<HTMLElement>("#style-label-short");
+const STYLE_NAMES: Record<string, string> = {
+  p: "Paragraph",
+  h1: "Heading 1",
+  h2: "Heading 2",
+  h3: "Heading 3",
+};
+function reflectStyleLabel(): void {
+  const active = blockBar.querySelector<HTMLElement>(
+    "#style-menu button.active",
+  );
+  const block = active?.dataset.block ?? "p";
+  styleLabel.textContent = STYLE_NAMES[block] ?? "Paragraph";
+  styleLabelShort.textContent = block.toUpperCase();
+}
+new MutationObserver(reflectStyleLabel).observe(
+  requireEl<HTMLElement>("#style-menu"),
+  { attributes: true, attributeFilter: ["class"], subtree: true },
+);
+
+/**
+ * One row at every width: when the toolbar does not fit, whole groups
+ * move into "More tools" (the ⋯ menu) - least used first, by their
+ * data-overflow rank - and come back when there is room. The groups
+ * keep their ids and handlers; only their place changes.
+ */
+const toolbarEl = requireEl<HTMLElement>(".toolbar");
+const overflowWrap = requireEl<HTMLElement>("#overflow-wrap");
+const overflowMenu = requireEl<HTMLElement>("#overflow-menu");
+// In bar order; `byRank` is the order they leave in.
+const collapsible = Array.from(
+  toolbarEl.querySelectorAll<HTMLElement>(":scope > [data-overflow]"),
+).map((node) => ({
+  node,
+  rank: Number(node.dataset.overflow),
+  // Where it lives in the bar, to put it back.
+  marker: document.createComment(`slot ${node.id || "group"}`),
+}));
+const byRank = [...collapsible].sort((a, b) => a.rank - b.rank);
+for (const c of collapsible) c.node.before(c.marker);
+
+function fitToolbar(): void {
+  // Everything home first, then out again in rank order until it fits.
+  for (const c of collapsible) c.marker.after(c.node);
+  overflowMenu.textContent = "";
+  overflowWrap.hidden = true;
+  const fits = (): boolean => toolbarEl.scrollWidth <= toolbarEl.clientWidth;
+  if (fits()) {
+    overflowMenu.hidden = true;
+    return;
+  }
+  overflowWrap.hidden = false;
+  const moved = new Set<(typeof collapsible)[number]>();
+  for (const c of byRank) {
+    if (fits()) break;
+    moved.add(c);
+    c.node.remove();
+  }
+  // A smaller group may fit again now that a larger one has gone
+  // (undo/redo, once B I S U are out): most important first.
+  for (const c of [...byRank].reverse()) {
+    if (!moved.has(c)) continue;
+    c.marker.after(c.node);
+    if (fits()) moved.delete(c);
+    else c.node.remove();
+  }
+  // In the menu, in their bar order: a group as a labelled row
+  // ("Format  B I S U"), a lone button as a row with its own label.
+  for (const c of collapsible) {
+    if (!moved.has(c)) continue;
+    const label = c.node.dataset.label;
+    if (!label) {
+      overflowMenu.appendChild(c.node);
+      continue;
+    }
+    const row = document.createElement("div");
+    row.className = "overflow-row";
+    const name = document.createElement("span");
+    name.className = "overflow-label";
+    name.textContent = label;
+    row.append(name, c.node);
+    overflowMenu.appendChild(row);
+  }
+}
+new ResizeObserver(fitToolbar).observe(requireEl<HTMLElement>("header"));
+fitToolbar();
+
+/**
+ * The window title names the document: "Q3 Sales Review — folio" in
+ * the browser tab and the desktop title bar.
+ */
+let shownTitle = "";
+function reflectTitle(): void {
+  const h1 = el
+    .getOutline()
+    .find((e) => e.level === 1)
+    ?.text.trim();
+  const title = `${h1 || "Untitled"} — folio`;
+  if (title === shownTitle) return;
+  shownTitle = title;
+  document.title = title;
+  if (isDesktop()) {
+    void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
+      getCurrentWindow().setTitle(title),
+    );
+  }
+}
+el.onChange(reflectTitle);
 
 // Last: booting can finish synchronously (a blank document fetches
 // nothing), so everything above must exist first.

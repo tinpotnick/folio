@@ -74,7 +74,7 @@ test.describe("table layout", () => {
 });
 
 test.describe("narrow screens", () => {
-  test("the page never scrolls sideways; the toolbar scrolls itself", async ({
+  test("the page never scrolls sideways; what does not fit is in More tools", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 800 });
@@ -85,15 +85,19 @@ test.describe("narrow screens", () => {
       view: window.innerWidth,
     }));
     expect(doc).toBeLessThanOrEqual(view);
-    // Every toolbar button is still reachable by scrolling the bar.
+    // One row that fits: nothing hides off the edge of the bar...
     const bar = page.locator("header .toolbar");
     const { sw, cw } = await bar.evaluate((el) => ({
       sw: el.scrollWidth,
       cw: el.clientWidth,
     }));
-    expect(sw).toBeGreaterThan(cw);
-    await page.locator("#btn-mode").scrollIntoViewIfNeeded();
-    await expect(page.locator("#btn-mode")).toBeInViewport();
+    expect(sw).toBeLessThanOrEqual(cw);
+    for (const id of ["#btn-search", "#btn-overflow", "#btn-insert-menu"]) {
+      await expect(page.locator(id)).toBeInViewport();
+    }
+    // ...and the rest is one click away, under More tools.
+    await page.locator("#btn-overflow").click();
+    await expect(page.locator("#overflow-menu #btn-mode")).toBeInViewport();
   });
 });
 

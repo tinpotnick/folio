@@ -3132,6 +3132,10 @@ export class FolioDoc extends HTMLElement {
         `article.folio-doc > [data-block-index="${String(at + 1)}"]`,
       )
       ?.scrollIntoView({ block: "center" });
+    // The caret carries on below the chart, so typing is not lost.
+    if (placeAt !== undefined && this.doc.blocks[at + 2]) {
+      this.focusBlockStart(at + 2);
+    }
     return null;
   }
 
@@ -5455,6 +5459,18 @@ export class FolioDoc extends HTMLElement {
     });
     this.render();
     this.emitChange();
+    // A new equation is for writing: its editor opens with the
+    // placeholder selected, so typing replaces it (focus fell to the
+    // page body, and typed LaTeX went nowhere).
+    const fig = this.shadowRoot?.querySelector<HTMLElement>(
+      `article.folio-doc > [data-block-index="${String(at)}"]`,
+    );
+    fig?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    const ta = fig?.querySelector<HTMLTextAreaElement>(
+      ".folio-inspector textarea",
+    );
+    ta?.focus();
+    ta?.select();
   }
 
   /**

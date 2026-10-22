@@ -4,6 +4,23 @@ Everything in folio is one Markdown document: prose, typed tables,
 and charts generated from them. This help page is itself a folio
 document — written in the same renderer you are working with.
 
+## The toolbar
+
+- One row, left to right: **New** (and **Open** / **Save** in the
+  desktop app), **undo / redo**, the **text style** menu
+  (Paragraph, Heading 1-3) with the bulleted and numbered list
+  buttons, **B I S U** and **link**, and the **+ Insert** menu. On
+  the right: Document / Markdown view, **search** (Ctrl+K), document
+  settings, dark mode, and **?** help.
+- **+ Insert** lists everything you can add, grouped: tables,
+  datasets and charts; images, audio clips and recordings;
+  equations, code, diagrams, drawings and 3D models; music.
+- In a narrow window, whatever does not fit moves into **More
+  tools** (the **⋯** button), least-used first, and comes back when
+  there is room. Nothing is ever off the edge of the bar.
+- Every toolbar action is also in the command palette (Ctrl+K):
+  search for it in your own words.
+
 ## Views and sections
 
 - **Document view** is the rendered report. Click into any text and
@@ -11,13 +28,13 @@ document — written in the same renderer you are working with.
 - Inline formats follow GitHub Markdown plus a few documented
   additions: **bold**, *italic*, `code`, ~~strikethrough~~, and
   ++underline++ (GitHub has no underline, so folio uses `++`).
-- The block and format buttons (H1, H2, P, B, I, code) always show
-  where you are: the button for the block or format at your caret
-  lights up — in Document view and in Markdown view alike. On
-  heading lines the inline buttons (B, I, code) switch off: a heading
-  is already a complete format. In Markdown view the buttons also
-  work on the source: H1 prefixes the line, B wraps the selection
-  (or word) in `**`.
+- The text style menu and the format buttons always show where you
+  are: the style menu names the block at your caret ("Heading 2"),
+  and the format at your caret lights up — in Document view and in
+  Markdown view alike. On heading lines the inline buttons (B, I,
+  code) switch off: a heading is already a complete format. In
+  Markdown view they also work on the source: Heading 1 prefixes the
+  line, B wraps the selection (or word) in `**`.
 - **Markdown view** (toolbar toggle) shows the source with syntax
   highlighting. Switch back to Document to re-parse. If a parse
   error appears, fix the reported line — folio stays in source view
@@ -44,7 +61,8 @@ document — written in the same renderer you are working with.
   in the desktop app. If the open document has unsaved changes,
   folio asks first.
 - **The guide** is always one search away: "guide" in the palette, or
-  click the **folio** wordmark (top left).
+  click the **folio** wordmark (top left, in the web version; the
+  desktop window's title bar names the document instead).
 - **Examples**: search "example" in the palette to open one.
 - Links to examples open in place, at the top of the document; the
   browser's **Back** button returns to the previous one. A link such as
@@ -103,11 +121,11 @@ document — written in the same renderer you are working with.
 
 - Start a line with `- ` for a bulleted list or `1. ` for a numbered
   one, in a new paragraph or in the source. The **Bulleted list** and
-  **Numbered list** buttons (beside P, or search "list" in the
+  **Numbered list** buttons (beside the text style menu, or search "list" in the
   palette) turn the paragraph at the caret into a list, switch
   between the two kinds, and turn a list back into a paragraph.
 - **Enter** adds an item; **Enter** on an empty item ends the list.
-  Pressing the same list button again (or **P**, or searching
+  Pressing the same list button again (or **Paragraph** in the text style menu, or searching
   "paragraph" in the palette) turns each item back into its own
   paragraph.
   Items take bold, italic, code and links like any paragraph.
@@ -137,24 +155,21 @@ document — written in the same renderer you are working with.
 ## Tables and charts
 
 - folio has two kinds of table. A **Table** is a standard Markdown
-  pipe table (`| a | b |`), exactly what GitHub shows; the table
-  button inserts one. A **Dataset** adds an id, typed columns,
+  pipe table (`| a | b |`), exactly what GitHub shows; **+ Insert ›
+  Table** inserts one. A **Dataset** adds an id, typed columns,
   units, formulas and a caption. Charts and formulas can only use
   datasets.
 - Click a table to see its kind at the start of its bar. **Make it a
   dataset** upgrades a table; **Convert to simple table** turns a
   dataset back into a pipe table when nothing would be lost (the
-  button says why when it can't). Search "dataset" in the palette
-  to insert one directly.
+  button says why when it can't). **+ Insert › Dataset** (or
+  "dataset" in the palette) inserts one directly.
 
-- The insert group (seven icons after the format buttons) holds the
-  block builders: table, Mermaid diagram, image, audio clip,
-  equation, Strudel music, and code block. The
-  diagram button inserts a starter diagram; the equation button
-  inserts a typeset `$$` block; the music button inserts a
-  playable Strudel pattern; the code button converts the block
-  you are in to a code block and back (in Markdown view it fences
-  the paragraph you are in).
+- The **+ Insert** menu holds the block builders, each placed at
+  your caret: Mermaid diagram inserts a starter diagram; Equation a
+  typeset `$$` block; Strudel music a playable pattern; Code block
+  converts the block you are in to a code block and back (in
+  Markdown view it fences the paragraph you are in).
 - Diagrams are Mermaid blocks: `::: mermaid {#id}` ... `:::` with
   the diagram source in between. They render as figures; edit the
   source in the Markdown view and switch back to re-render. Click a
@@ -217,7 +232,7 @@ document — written in the same renderer you are working with.
   only.
 - **Images** embed in the document as data URIs - a folio document
   is one file that renders fully offline. Pick a picture with the
-  image button (or the command palette); the file name seeds the
+  **+ Insert › Image** (or the command palette); the file name seeds the
   alt text. You can also hand-type the standard form
   `![alt](https://example.com/cat.png)` on its own line - folio
   upgrades it to an image directive on the next save. Click an
@@ -227,16 +242,17 @@ document — written in the same renderer you are working with.
   images and text wrap are deliberately not supported - layout
   belongs to the theme, not the document.
 - **Audio** embeds like an image - a recorded sound is media, the
-  temporal sibling of a picture. Pick a file with the speaker
-  button (or hand-type an `::: audio` directive with a `src`);
+  temporal sibling of a picture. Pick a file with **+ Insert ›
+  Audio clip** (or hand-type an `::: audio` directive with a `src`);
   it plays in the page through the browser's own audio controls.
   Click the figure to edit its alt text, caption, or replace the
   file; click once and press Backspace or Delete to remove it.
   The same 8 MB ceiling applies - and for sounds you want to
-  SYNTHESIZE, use a Strudel block instead. The mic button records
-  straight from the microphone: click to start, click again to
-  stop (the button pulses and the status bar counts while
-  recording); the clip embeds in place. The browser asks for
+  SYNTHESIZE, use a Strudel block instead. **+ Insert › Record
+  audio** records straight from the microphone: while it records,
+  the toolbar shows a pulsing **Recording · Stop** button and the
+  status bar counts; click it to stop, and the clip embeds in
+  place. The browser asks for
   microphone permission the first time.
 - **Equations** are fenced `$$` blocks: a line with only `$$`, the
   LaTeX source, then a closing `$$` line. They render typeset
@@ -401,7 +417,7 @@ rows they reference; formula cells are never editable by hand.
 ## Undo and redo
 
 - Press **Ctrl+Z** to undo, **Ctrl+Shift+Z** (or Ctrl+Y) to redo -
-  or use the undo/redo buttons at the front of the toolbar (grey
+  or use the undo/redo buttons after New in the toolbar (grey
   when there is nothing to step). One undo is one action: a burst
   of typing, a cell edit, an insert, a deletion, an inspector
   change. Opening a different document starts the history fresh;
@@ -410,8 +426,9 @@ rows they reference; formula cells are never editable by hand.
 
 ## Dark and light mode
 
-- The moon button beside **?** (or the palette's "Toggle dark
-  mode") switches the app - toolbar, section browser, Markdown
+- The moon button beside **?** (a sun in dark mode; in More tools
+  on a narrow window), or the palette's "Toggle dark mode",
+  switches the app - toolbar, section browser, Markdown
   source, dialogs - between light and dark. The choice is
   remembered, and the first visit follows the system preference.
   The document re-dresses with the app in its theme's OWN dark
@@ -478,6 +495,8 @@ data:
   - [Ctrl+K, Search commands, help, and sections]
   - [Ctrl+P, Print the document (or save it as a PDF)]
   - [Ctrl+N, New document (desktop app; a browser keeps Ctrl+N for a new window)]
+  - [Ctrl+S, Save (desktop app)]
+  - [Ctrl+O, Open a document (desktop app)]
   - [Esc, Close the help window]
 :::
 
