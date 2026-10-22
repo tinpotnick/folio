@@ -15,7 +15,9 @@ Same layout on web and desktop.
 
 - Sidebar toggle; the **folio** wordmark (web only - the desktop
   window's title bar names the app and the document).
-- **File**: New (both hosts), Open and Save (desktop only).
+- **File**: New (both hosts), Open and Save (desktop only), and the
+  **Export ▾** menu (PDF; docs/specs/print.md). Menus nest: Export
+  opens from inside More tools without closing it.
 - **History**: undo, redo.
 - **Block**: the text style menu ("Paragraph ▾": Paragraph,
   Heading 1-3, each shown at its size) and the bulleted / numbered

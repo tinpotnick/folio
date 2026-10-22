@@ -19,6 +19,7 @@ import {
 import { BUNDLED_FONTS } from "./render/fonts.js";
 import {
   isDesktop,
+  exportPdfFile,
   openDocument,
   openExternal,
   saveDocument,
@@ -1887,6 +1888,12 @@ function paletteEntries(): PaletteEntry[] {
     action: () => openSettings({ focusTheme: true }),
   });
   entries.push({
+    title: "Export as PDF",
+    group: "Command",
+    keywords: "export pdf save as pdf download share send file document",
+    action: () => void exportPdf(),
+  });
+  entries.push({
     title: "Print the document",
     group: "Command",
     keywords: "print pdf export paper",
@@ -2393,12 +2400,75 @@ settingsForm.addEventListener("submit", (ev) => {
  * document - not the source editor or an open dialog. The page
  * break style keys apply here (paged media).
  */
-window.addEventListener("beforeprint", () => {
+function preparePrint(): void {
   if (helpModal.open) helpModal.close();
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
   if (!mdWrap.hidden) btnView.click();
-});
+}
+window.addEventListener("beforeprint", preparePrint);
+
+/* --- Export (spec: docs/specs/print.md, ADR-0025) --- */
+
+/** Every figure drawn (charts, diagrams, models): an export must not
+ * catch one saying "Drawing…". Gives up after `ms`. */
+async function drawingsSettled(ms = 15000): Promise<void> {
+  const busy = (): boolean =>
+    Array.from(
+      el.shadowRoot?.querySelectorAll(".code-view, .jscad-view") ?? [],
+    ).some((n) =>
+      /^(Drawing…|Building the model…)$/.test(n.textContent?.trim() ?? ""),
+    );
+  const end = Date.now() + ms;
+  while (busy() && Date.now() < end) {
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
+/** The file name a PDF is offered as: the open file's, else the title. */
+function pdfName(): string {
+  const base =
+    currentDocPath?.split(/[\\/]/).pop()?.replace(/\.md$/i, "") ??
+    (el
+      .getOutline()
+      .find((e) => e.level === 1)
+      ?.text.trim() ||
+      "Untitled");
+  return `${base.replace(/[\\/:*?"<>|]+/g, "-")}.pdf`;
+}
+
+/**
+ * Export as PDF. The desktop app writes the file itself (a save
+ * dialog, then the print stylesheet straight to PDF - no print
+ * dialog). A browser can only print, so there the print dialog
+ * opens, with a word on choosing "Save as PDF".
+ */
+async function exportPdf(): Promise<void> {
+  preparePrint();
+  await drawingsSettled();
+  if (isDesktop()) {
+    flash("Exporting…");
+    const res = await exportPdfFile(pdfName());
+    if (res.ok) {
+      flash(`Exported ${res.path}`);
+      return;
+    }
+    if (res.reason === "cancelled") return;
+    if (res.reason !== "unsupported") {
+      flash(`Could not export: ${res.reason}`);
+      return;
+    }
+  }
+  flash('Choose "Save as PDF" as the destination');
+  window.print();
+}
+
+requireEl<HTMLButtonElement>("#btn-export-pdf").addEventListener(
+  "click",
+  () => {
+    void exportPdf();
+  },
+);
 
 refreshOutline();
 
@@ -2433,7 +2503,7 @@ function toolbarMenu(trigger: HTMLButtonElement, menu: HTMLElement): void {
   trigger.addEventListener("mousedown", (ev) => {
     ev.preventDefault();
     const open = menu.hidden;
-    closeMenus();
+    closeMenus(trigger);
     if (open) {
       menu.hidden = false;
       trigger.setAttribute("aria-expanded", "true");
@@ -2444,7 +2514,7 @@ function toolbarMenu(trigger: HTMLButtonElement, menu: HTMLElement): void {
   trigger.addEventListener("click", (ev) => {
     if (ev.detail !== 0) return; // a mouse press was handled above
     const open = menu.hidden;
-    closeMenus();
+    closeMenus(trigger);
     if (open) {
       menu.hidden = false;
       trigger.setAttribute("aria-expanded", "true");
@@ -2455,13 +2525,16 @@ function toolbarMenu(trigger: HTMLButtonElement, menu: HTMLElement): void {
   // A pick closes the menu - after the item's own handler ran (they
   // act on mousedown or click).
   menu.addEventListener("click", (ev) => {
-    if ((ev.target as HTMLElement).closest("button")) close();
+    // (A menu's own trigger inside it - Export in More tools - opens
+    // a menu; it is not a pick.)
+    const btn = (ev.target as HTMLElement).closest("button");
+    if (btn && !btn.classList.contains("menu-trigger")) close();
   });
   menu.addEventListener("mousedown", (ev) => {
     // Items never take focus from the document's caret.
     if ((ev.target as HTMLElement).closest("button")) ev.preventDefault();
   });
-  menus.push(close);
+  menus.push({ menu, close });
 }
 
 /** Below its trigger, left-aligned with it, but always on screen. */
@@ -2476,9 +2549,11 @@ function placeMenu(trigger: HTMLElement, menu: HTMLElement): void {
   menu.style.left = `${String(left)}px`;
 }
 
-const menus: (() => void)[] = [];
-function closeMenus(): void {
-  for (const close of menus) close();
+const menus: { menu: HTMLElement; close: () => void }[] = [];
+/** Close the open menus - except those holding `keep` (a menu opened
+ * from inside More tools keeps More tools open). */
+function closeMenus(keep?: HTMLElement): void {
+  for (const m of menus) if (!keep || !m.menu.contains(keep)) m.close();
 }
 document.addEventListener("mousedown", (ev) => {
   const t = ev.target as HTMLElement;
@@ -2488,7 +2563,7 @@ document.addEventListener("keydown", (ev) => {
   if (ev.key === "Escape") closeMenus();
 });
 // Placed against the window: a resize would leave them adrift.
-window.addEventListener("resize", closeMenus);
+window.addEventListener("resize", () => closeMenus());
 
 toolbarMenu(
   requireEl<HTMLButtonElement>("#btn-style-menu"),
@@ -2497,6 +2572,10 @@ toolbarMenu(
 toolbarMenu(
   requireEl<HTMLButtonElement>("#btn-insert-menu"),
   requireEl<HTMLElement>("#insert-menu"),
+);
+toolbarMenu(
+  requireEl<HTMLButtonElement>("#btn-export-menu"),
+  requireEl<HTMLElement>("#export-menu"),
 );
 toolbarMenu(
   requireEl<HTMLButtonElement>("#btn-overflow"),

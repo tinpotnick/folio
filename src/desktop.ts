@@ -88,3 +88,23 @@ export async function openExternal(url: string): Promise<boolean> {
     return false;
   }
 }
+
+export type ExportResult =
+  { ok: true; path: string } | { ok: false; reason: string };
+
+/** Export the page as a PDF file: a native save dialog, then the
+ * print stylesheet written straight to it (ADR-0025). `reason` is
+ * "cancelled", "unsupported" (not built on this platform yet, or not
+ * desktop), or the error. */
+export async function exportPdfFile(suggested: string): Promise<ExportResult> {
+  if (!isDesktop()) return { ok: false, reason: "unsupported" };
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    return {
+      ok: true,
+      path: await invoke<string>("export_pdf", { suggested }),
+    };
+  } catch (e) {
+    return { ok: false, reason: String(e) };
+  }
+}
