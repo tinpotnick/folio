@@ -2,7 +2,7 @@
 name: themes-first-contact
 feature: themes (docs/specs/themes.md)
 steps:
-  - Start the demo host and open the Field operations example (palette: "Open example: field-operations"). Without reading
+  - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review"). Without reading
     any docs, try to make the document "look different" - change
     its overall style.
   - Pick a theme that looks nothing like the current one and

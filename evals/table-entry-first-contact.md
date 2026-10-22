@@ -2,7 +2,7 @@
 name: table-entry-first-contact
 feature: table-keyboard
 steps:
-  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
+  - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review").
   - Click the q2 cell of the first table row; type a number.
   - Press Tab. Switch to Markdown view and back.
   - Click the q3 cell of the same row; type a number; press Tab.

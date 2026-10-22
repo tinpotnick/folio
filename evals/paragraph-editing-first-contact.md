@@ -2,7 +2,7 @@
 name: paragraph-editing-first-contact
 feature: editor-paragraphs
 steps:
-  - Start the demo host and open the Field operations example (palette: "Open example: field-operations").
+  - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review").
   - Click into the last paragraph, press Enter, and type — no click
     in between.
   - Click into the middle of a paragraph, press Enter to split it,

@@ -5,7 +5,7 @@ steps:
   - Start the demo host. Open the command palette (Ctrl+K) and run
     "Import the demo dataset (monthly-sales.csv)" - no file dialog
     needed.
-  - Open the example "Open example: report" to see the finished
+  - Open the example "Open example: An imported data report" to see the finished
     shape of an imported-data document.
   - Open the palette again and run "Import data from a file
     (CSV or JSON)" with the shipped `demo/data/site-metrics.json`.

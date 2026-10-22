@@ -29,17 +29,23 @@ document — written in the same renderer you are working with.
 ## Unsaved changes
 
 - If you have edited a document and then open another one (an
-  example, a link, the welcome page, Back, or Open), folio asks
+  example, a link, the guide, a new document, Back, or Open), folio asks
   first: **Save...** (in the desktop app), **Discard changes**, or
   **Cancel**. Closing the window or tab with unsaved edits asks too.
   Undoing all your edits counts as unchanged.
 
-## Welcome page and examples
+## Starting, the guide, and examples
 
-- folio opens on its **welcome page**: what folio is, a live table
-  and chart to try, and links to every example document. Click the
-  **folio** wordmark (top left), or search "welcome" in the palette,
-  to come back to it.
+- The first time you start folio it opens its **getting started
+  guide**: what folio is, a live table and chart to try, and links to
+  every example document. After that, folio opens on a **new, blank
+  document** with the caret in its title.
+- **New document**: search "new" in the palette, or press **Ctrl+N**
+  in the desktop app. If the open document has unsaved changes,
+  folio asks first.
+- **The guide** is always one search away: "guide" in the palette, or
+  click the **folio** wordmark (top left).
+- **Examples**: search "example" in the palette to open one.
 - Links to examples open in place, at the top of the document; the
   browser's **Back** button returns to the previous one. A link such as
   `?doc=demo/examples/poem.md` opens folio straight onto that
@@ -258,7 +264,7 @@ document — written in the same renderer you are working with.
 - **Import data**: the command palette (Ctrl+K) has "Import data
   from a file (CSV or JSON)" - or try it instantly with
   "Import the demo dataset", a shipped 72-row CSV (and a JSON one
-  at `demo/data/site-metrics.json`). The "Open example: report"
+  at `demo/data/site-metrics.json`). The "Open example: An imported data report"
   entry shows what a finished imported-data report looks like. The file becomes a typed table in
   the document - numeric columns are inferred, the header names
   become formula-usable column names, and `import: "file.csv"` in
@@ -421,9 +427,8 @@ rows they reference; formula cells are never editable by hand.
   summary", "keyboard shortcuts" — and Enter runs the top result.
   It searches commands, help topics, and the document's sections.
 - **Open example: ...** in the palette loads any shipped example
-  (field-operations, poem, accounts, report, technical,
-  signal-processing, music); **Open the welcome page** goes back to
-  the front page.
+  (type "example" to list them all); **New document** starts a blank
+  one; **Getting started guide** opens the guide.
 
 ## Themes
 
@@ -472,6 +477,7 @@ data:
   - [F1, Open this help]
   - [Ctrl+K, Search commands, help, and sections]
   - [Ctrl+P, Print the document (or save it as a PDF)]
+  - [Ctrl+N, New document (desktop app; a browser keeps Ctrl+N for a new window)]
   - [Esc, Close the help window]
 :::
 

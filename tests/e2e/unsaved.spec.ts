@@ -6,8 +6,10 @@ import { expect, test, type Page } from "@playwright/test";
  * Cancel. A clean document (or one undone back to clean) never asks.
  */
 
-async function editWelcome(page: Page): Promise<void> {
-  await page.goto("/");
+// An example, not the guide: the guide is a playground whose edits
+// never count as unsaved work.
+async function editExample(page: Page): Promise<void> {
+  await page.goto("/?doc=demo/examples/field-operations.md");
   const p = page.locator("#the-doc article > p").first();
   await p.click();
   await page.keyboard.press("End");
@@ -28,7 +30,7 @@ test.describe("unsaved changes", () => {
   test("an edited document asks; Cancel keeps it and its address", async ({
     page,
   }) => {
-    await editWelcome(page);
+    await editExample(page);
     const url = page.url();
     await page.locator("#the-doc a", { hasText: "A pure-prose poem" }).click();
     await expect(modal(page)).toBeVisible();
@@ -43,7 +45,7 @@ test.describe("unsaved changes", () => {
   });
 
   test("Discard changes goes ahead", async ({ page }) => {
-    await editWelcome(page);
+    await editExample(page);
     await page.locator("#btn-home").click();
     await expect(modal(page)).toBeVisible();
     await page.locator("#btn-unsaved-discard").click();
@@ -53,7 +55,7 @@ test.describe("unsaved changes", () => {
   });
 
   test("undoing back to the original counts as clean", async ({ page }) => {
-    await editWelcome(page);
+    await editExample(page);
     await page.keyboard.press("Control+z");
     await expect(
       page.locator("#the-doc article > p").first(),
@@ -82,7 +84,7 @@ test.describe("unsaved changes", () => {
   });
 
   test("the palette's Open example asks too", async ({ page }) => {
-    await editWelcome(page);
+    await editExample(page);
     await page.keyboard.press("Control+k");
     await page.locator("#palette-input").fill("open example poem");
     await page.keyboard.press("Enter");
@@ -96,7 +98,7 @@ test.describe("unsaved changes", () => {
   test("closing or reloading an edited tab gets the browser's prompt", async ({
     page,
   }) => {
-    await editWelcome(page);
+    await editExample(page);
     const prompted = new Promise<string>((resolve) => {
       page.once("dialog", (d) => {
         resolve(d.type());

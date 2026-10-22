@@ -673,6 +673,11 @@ export class FolioDoc extends HTMLElement {
     return last;
   }
 
+  /** Put the caret at the start of the document (a new document's title). */
+  focusStart(): void {
+    this.focusBlockStart(0);
+  }
+
   /** The first block showing below `viewTop` (a host's sticky bar). */
   firstVisibleBlockIndex(viewTop = 0): number {
     const host = this.shadowRoot?.querySelector("article.folio-doc");

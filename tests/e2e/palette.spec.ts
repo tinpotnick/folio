@@ -162,7 +162,9 @@ test.describe("command palette", () => {
 });
 
 test.describe("example documents", () => {
-  test("Open example: poem loads a pure-prose document", async ({ page }) => {
+  test("Open example: A pure-prose poem loads a pure-prose document", async ({
+    page,
+  }) => {
     await waitForDocument(page);
     await openPalette(page);
     await page.locator("#palette-input").fill("poem");
@@ -171,7 +173,7 @@ test.describe("example documents", () => {
     // not retarget tests.
     await page
       .locator("#palette-list .palette-item", {
-        hasText: "Open example: poem",
+        hasText: "Open example: A pure-prose poem",
       })
       .first()
       .click();
@@ -184,7 +186,7 @@ test.describe("example documents", () => {
     );
   });
 
-  test("Open example: accounts shows a negative bar below the zero line", async ({
+  test("Open example: Management accounts shows a negative bar below the zero line", async ({
     page,
   }) => {
     await waitForDocument(page);
@@ -204,7 +206,7 @@ test.describe("example documents", () => {
     expect(svg).toContain("-15.3%"); // labeled like the table
   });
 
-  test("Open example: technical renders code, math, and a diagram", async ({
+  test("Open example: A technical paper renders code, math, and a diagram", async ({
     page,
   }) => {
     await waitForDocument(page);
@@ -223,14 +225,14 @@ test.describe("example documents", () => {
     );
   });
 
-  test("Open example: signal-processing renders spectra and live math", async ({
+  test("Open example: Signals and spectra renders spectra and live math", async ({
     page,
   }) => {
     await waitForDocument(page);
     await openPalette(page);
     await page
       .locator("#palette-list .palette-item", {
-        hasText: "Open example: signal-processing",
+        hasText: "Open example: Signals and spectra",
       })
       .first()
       .click();
@@ -279,7 +281,7 @@ test.describe("example documents", () => {
       page.locator("#the-doc table.folio-table tr").nth(21),
     ).toContainText("153.6");
   });
-  test("Open example: music renders playable strudel figures", async ({
+  test("Open example: A music document renders playable strudel figures", async ({
     page,
   }) => {
     await waitForDocument(page);
@@ -289,7 +291,7 @@ test.describe("example documents", () => {
     // INSERT command - ranking must not retarget tests).
     await page
       .locator("#palette-list .palette-item", {
-        hasText: "Open example: music",
+        hasText: "Open example: A music document",
       })
       .first()
       .click();
@@ -342,7 +344,7 @@ test.describe("example documents", () => {
     await expect(figures.nth(1).locator("pre")).toContainText('s("bd*4")');
   });
 
-  test("Open example: music's Caverave tune plays offline", async ({
+  test("Open example: A music document's Caverave tune plays offline", async ({
     page,
   }) => {
     await waitForDocument(page);
@@ -353,7 +355,7 @@ test.describe("example documents", () => {
     // changes cannot silently retarget this test.
     await page
       .locator("#palette-list .palette-item", {
-        hasText: "Open example: music",
+        hasText: "Open example: A music document",
       })
       .first()
       .click();

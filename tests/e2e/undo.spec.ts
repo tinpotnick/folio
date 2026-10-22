@@ -107,7 +107,9 @@ test.describe("undo/redo", () => {
     await page.keyboard.press("Control+k");
     await page.locator("#palette-input").fill("poem");
     await page
-      .locator("#palette-list .palette-item", { hasText: "Open example: poem" })
+      .locator("#palette-list .palette-item", {
+        hasText: "Open example: A pure-prose poem",
+      })
       .first()
       .click();
     await expect(

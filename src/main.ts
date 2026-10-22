@@ -45,36 +45,58 @@ const mdView = requireEl<HTMLElement>("#md-view");
 /** The front page: what folio is, what it does, the examples. */
 const WELCOME = "/demo/welcome.md";
 
+/** A new document: an empty title, the caret in it. */
+const BLANK = "# \n";
+
+/** Set once the first-run guide has been shown (per browser/app). */
+const GUIDED_KEY = "folio.guided";
+
 /**
- * The document to boot into (spec: docs/specs/welcome-page.md): the
- * welcome page, or a shipped document named by `?doc=` - a link that
- * opens folio on an example. Only same-origin `.md` paths; anything
- * else falls back to the welcome page.
+ * The shipped document the address names (`?doc=`), or null for the
+ * bare address - a blank document. Only same-origin `.md` paths;
+ * anything else is ignored.
  */
-function bootPath(): string {
+function bootPath(): string | null {
   const doc = new URLSearchParams(window.location.search).get("doc");
   if (doc && /^\/?[\w./-]+\.md$/.test(doc) && !doc.includes("..")) {
     return doc.startsWith("/") ? doc : `/${doc}`;
   }
-  return WELCOME;
-}
-
-async function boot(): Promise<void> {
-  await openShipped(bootPath(), { history: "replace", unguarded: true });
-}
-
-/** The address bar for a shipped document: home is the bare URL. */
-function docUrl(path: string): string {
-  return path === WELCOME ? window.location.pathname : `?doc=${path.slice(1)}`;
+  return null;
 }
 
 /**
- * Load a shipped document by path into the editor (in place). It
- * opens at its TOP, and it becomes a browser history entry: Back
- * returns to the previous document instead of leaving folio.
+ * Boot (spec: docs/specs/welcome-page.md): a `?doc=` link opens that
+ * document; the very first launch opens the getting-started guide;
+ * every launch after that opens a blank document.
+ */
+async function boot(): Promise<void> {
+  let path = bootPath();
+  if (path === null) {
+    let guided = true;
+    try {
+      guided = localStorage.getItem(GUIDED_KEY) !== null;
+      localStorage.setItem(GUIDED_KEY, "1");
+    } catch {
+      // No storage (private window): a blank page, never a loop of guides.
+    }
+    if (!guided) path = WELCOME;
+  }
+  await openShipped(path, { history: "replace", unguarded: true });
+}
+
+/** The address bar: a shipped document's `?doc=`, else the bare URL. */
+function docUrl(path: string | null): string {
+  return path === null ? window.location.pathname : `?doc=${path.slice(1)}`;
+}
+
+/**
+ * Load a shipped document by path into the editor (in place), or a
+ * new blank document for `null`. It opens at its TOP, and it becomes
+ * a browser history entry: Back returns to the previous document
+ * instead of leaving folio.
  */
 async function openShipped(
-  path: string,
+  path: string | null,
   opts: {
     history?: "push" | "replace" | "none";
     scroll?: number;
@@ -82,10 +104,17 @@ async function openShipped(
     unguarded?: boolean;
   } = {},
 ): Promise<boolean> {
-  if (!opts.unguarded && !(await confirmLeave())) return false;
-  const res = await fetch(path);
-  if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
-  const text = await res.text();
+  if (
+    !opts.unguarded &&
+    !(await confirmLeave(path === null ? "Starting a new document" : undefined))
+  )
+    return false;
+  let text = BLANK;
+  if (path !== null) {
+    const res = await fetch(path);
+    if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
+    text = await res.text();
+  }
   const mode = opts.history ?? "push";
   // Remember where the reader was on the page they are leaving, so
   // Back returns them there - not to its top.
@@ -110,7 +139,10 @@ async function openShipped(
   if (mode === "push") history.pushState({ doc: path }, "", docUrl(path));
   if (mode === "replace") history.replaceState({ doc: path }, "", docUrl(path));
   shownUrl = window.location.href;
+  onGuide = path === WELCOME;
   markClean();
+  // A new document is for writing: the caret waits in its title.
+  if (path === null) el.focusStart();
   return true;
 }
 
@@ -1164,8 +1196,6 @@ el.onChange(() => {
   refreshOutline();
 });
 
-boot();
-
 // The wordmark is the way home: the welcome page.
 requireEl<HTMLButtonElement>("#btn-home").addEventListener("click", () => {
   void openShipped(WELCOME);
@@ -1306,7 +1336,11 @@ function markClean(): void {
   cleanMarkdown = el.getMarkdown();
 }
 
+/** The guide is a playground: trying its live table is not "work". */
+let onGuide = false;
+
 function isDirty(): boolean {
+  if (onGuide) return false;
   const md = currentMarkdown();
   return cleanMarkdown !== null && md !== null && md !== cleanMarkdown;
 }
@@ -1433,71 +1467,84 @@ const paletteInput = requireEl<HTMLInputElement>("#palette-input");
 const paletteList = requireEl<HTMLElement>("#palette-list");
 const helpDoc = requireEl<FolioDoc>("#help-doc");
 
-const EXAMPLES: { id: string; file: string; blurb: string }[] = [
+const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
   {
     id: "field-operations",
+    title: "Q3 Field Operations Review",
     file: "/demo/examples/field-operations.md",
     blurb: "quarterly review report regional table growth chart cumulative",
   },
   {
     id: "poem",
+    title: "A pure-prose poem",
     file: "/demo/examples/poem.md",
     blurb: "pure prose and poetry",
   },
   {
     id: "accounts",
+    title: "Management accounts",
     file: "/demo/examples/accounts.md",
     blurb: "accounts running totals budget negative growth",
   },
   {
     id: "report",
+    title: "An imported data report",
     file: "/demo/examples/report.md",
     blurb: "data report import windowed table running formulas line charts",
   },
   {
     id: "technical",
+    title: "A technical paper",
     file: "/demo/examples/technical.md",
     blurb: "technical code equations benchmarks",
   },
   {
     id: "signal-processing",
+    title: "Signals and spectra",
     file: "/demo/examples/signal-processing.md",
     blurb: "signal processing fft dft filter spectrum math frequency",
   },
   {
     id: "music",
+    title: "A music document",
     file: "/demo/examples/music.md",
     blurb: "music strudel audio beats pattern fun player",
   },
   {
     id: "sales-review",
+    title: "Q3 Sales Review",
     file: "/demo/examples/sales-review.md",
     blurb:
       "sales quarterly review report revenue regions pipeline heatmap stacked",
   },
   {
     id: "design-review",
+    title: "Bracket design review",
     file: "/demo/examples/design-review.md",
     blurb:
       "engineering design review bracket variants 3d model stl requirements",
   },
   {
     id: "practice-journal",
+    title: "A practice journal",
     file: "/demo/examples/practice-journal.md",
     blurb: "music practice journal log sheet music exercises charts",
   },
   {
     id: "drawings",
+    title: "Drawings from text",
     file: "/demo/examples/drawings.md",
     blurb: "drawings graphviz dot graph diagram vega svg music notation",
   },
   {
     id: "3d-models",
+    title: "Parametric parts",
     file: "/demo/examples/3d-models.md",
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
     id: "amensister",
+    title: "Amensister",
     file: "/demo/examples/amensister.md",
     blurb: "music strudel amen break breakbeat online samples felix roos",
   },
@@ -1735,7 +1782,7 @@ function paletteEntries(): PaletteEntry[] {
   entries.push({
     title: "Open the help document",
     group: "Command",
-    keywords: "help reference guide how to",
+    keywords: "help reference manual documentation how to",
     action: () => openHelp(),
   });
   entries.push({
@@ -1804,20 +1851,28 @@ function paletteEntries(): PaletteEntry[] {
   });
   for (const ex of EXAMPLES) {
     entries.push({
-      title: `Open example: ${ex.id}`,
+      // Named as the guide lists it; the short id still finds it.
+      title: `Open example: ${ex.title}`,
       group: "Command",
       keywords: `example demo document open load ${ex.id} ${ex.blurb}`,
       action: () => {
         void openShipped(ex.file).then((went) => {
-          if (went) flash(`Opened ${ex.id}`);
+          if (went) flash(`Opened ${ex.title}`);
         });
       },
     });
   }
   entries.push({
-    title: "Open the welcome page",
+    title: "New document",
     group: "Command",
-    keywords: "welcome home start front page about intro overview examples",
+    keywords: "new blank empty untitled create start fresh document file",
+    action: () => void openShipped(null),
+  });
+  entries.push({
+    title: "Getting started guide",
+    group: "Command",
+    keywords:
+      "guide getting started welcome home tour intro overview about front page examples learn",
     action: () => void openShipped(WELCOME),
   });
   if (!fileBar.hidden) {
@@ -1870,7 +1925,17 @@ function fuzzyScore(needle: string, haystack: string): number {
   // The query appearing VERBATIM beats any scattered-letter
   // match: "poem" must rank the poem example over a command whose
   // keywords merely contain p...o...e...m somewhere.
-  let score = h.includes(n) ? 10 : 0;
+  // Scored as the contiguous run it is - walking letter by letter
+  // took the FIRST g for "guide" (in "Getting") and scattered the
+  // rest, so "Getting started guide" lost to any help topic.
+  const at = h.indexOf(n);
+  if (at >= 0) {
+    const wordAt = new RegExp(
+      `(^|[ .:-])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+    ).exec(h);
+    return 10 + 3 * n.length + (wordAt ? 4 : 0);
+  }
+  let score = 0;
   let hi = 0;
   let last = -2;
   for (const ch of n) {
@@ -1941,6 +2006,11 @@ function updatePalette(): void {
         e,
         s: Math.max(
           fuzzyScore(query, `${e.title} ${e.keywords}`),
+          // Words in the TITLE beat the same words among the keywords:
+          // "new" is New document, not every command tagged "new".
+          e.title.toLowerCase().includes(query.toLowerCase())
+            ? fuzzyScore(query, e.title) + 5
+            : -1,
           // A help topic whose TEXT contains the query verbatim: found,
           // but ranked below title/keyword matches.
           e.body?.includes(query.toLowerCase()) ? 6 : -1,
@@ -1981,6 +2051,12 @@ document.addEventListener("keydown", (ev) => {
   if (key === "p") {
     ev.preventDefault();
     window.print();
+  }
+  // Ctrl+N: a new document. (A browser keeps Ctrl+N for a new window;
+  // the desktop app has no such binding, so there it is folio's.)
+  if (key === "n") {
+    ev.preventDefault();
+    void openShipped(null);
   }
 });
 
@@ -2276,3 +2352,7 @@ window.addEventListener("beforeprint", () => {
 });
 
 refreshOutline();
+
+// Last: booting can finish synchronously (a blank document fetches
+// nothing), so everything above must exist first.
+void boot();
