@@ -19,6 +19,9 @@ function copyDemo(): Plugin {
 }
 
 export default defineConfig({
+  // Relative asset URLs: one build serves from "/", a subfolder
+  // (GitHub Pages, /folio/) and the desktop app alike.
+  base: "./",
   resolve: {
     alias: {
       "@folio": path.resolve(__dirname, "./src"),

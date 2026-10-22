@@ -69,6 +69,13 @@ the north-star sample (docs/specs/sample-document.md).
   returns to where the reader was on the previous one. Opening a
   document clears the toolbar's block/format highlights (there is no
   caret in it yet).
+- **App-relative paths** (2026-10-22): shipped documents are
+  addressed relative to the app's page (`demo/welcome.md`, never
+  `/demo/...`), and the build uses a relative base (`./`), so one
+  build serves from "/", from a subfolder (the GitHub Pages site at
+  /folio/, deployed by `.github/workflows/pages.yml` on every push to
+  main) and inside the desktop app. A followed link's path is made
+  app-relative before loading.
 - **Deep link**: `?doc=<path>.md` boots straight into a shipped
   document (same-origin relative `.md` paths only; anything else,
   such as a URL with a protocol or `..`, is ignored and boots as
