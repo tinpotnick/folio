@@ -2,8 +2,10 @@ name: flatpak
 
 # Builds the Flatpak exactly as Flathub will (offline, from the
 # generated sources) in Flathub's own build image. Runs when the
-# desktop app or its packaging changes, and on release tags, and keeps
-# the resulting .flatpak bundle as an artifact for testing:
+# desktop app or its packaging changes, and on release tags. It keeps
+# the resulting .flatpak bundle as an artifact, and on a release tag
+# attaches it to the release too (until folio is on Flathub, this is
+# how a Linux user installs the Flatpak):
 #   flatpak install --user folio.flatpak
 
 on:
@@ -16,6 +18,9 @@ on:
       - "package-lock.json"
       - ".github/workflows/flatpak.yml"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 concurrency:
   group: flatpak-${{ github.ref }}
@@ -34,3 +39,8 @@ jobs:
           bundle: folio.flatpak
           manifest-path: packaging/flatpak/io.github.tinpotnick.folio.yml
           cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/*.json') }}
+      - name: Attach the bundle to the release (tags)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: folio.flatpak
