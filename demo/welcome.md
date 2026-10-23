@@ -85,7 +85,9 @@ caption: "Where the budget goes"
   in the page.
 - **Images and audio** embedded in the document itself, including
   recordings straight from the microphone.
-- **Music**: Strudel patterns that play right in the page.
+- **Music**: sheet music written as text (ABC), engraved and played
+  right in the page; Strudel live-coded patterns too, with a free
+  add-on.
 - **Ten themes**, each with its own dark mode: search "theme" in the
   command palette.
 - **Print and PDF** that look like a report, not a web page.

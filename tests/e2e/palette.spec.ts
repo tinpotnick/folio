@@ -1,4 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
+import { withStrudelPlayer } from "./strudel-player";
+
+// Playback tests start with the Strudel add-on installed (ADR-0026).
+test.beforeEach(async ({ page }) => {
+  await withStrudelPlayer(page);
+});
 
 /**
  * Command palette (Ctrl+K): search over commands, help topics, and

@@ -17,6 +17,13 @@ import { recalcTable, type TablePool } from "@folio/engine/recalc";
 import type { Audio, Cell, Chart, Image, Table } from "@folio/engine/index.js";
 import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import type { StrudelRepl } from "@strudel/web";
+import {
+  STRUDEL_SIZE,
+  installStrudel,
+  loadStrudel,
+  strudelIfLoaded,
+  strudelInstalled,
+} from "./audio/strudel-addon.js";
 import { CODE_LANGUAGES, paintCode, tokenizeCode } from "./render/code.js";
 import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
 import { onlineSampleSources } from "./audio/online-samples.js";
@@ -2098,6 +2105,27 @@ export class FolioDoc extends HTMLElement {
     skip.className = "insp-select consent-skip";
     skip.textContent = "Play without them";
     consent.append(consentText, allow, skip);
+    // The player itself is an add-on (ADR-0026): Strudel is AGPL and
+    // folio's builds do not contain it. The first Play asks, once.
+    const addon = document.createElement("span");
+    addon.className = "strudel-addon";
+    addon.setAttribute("role", "alert");
+    addon.hidden = true;
+    const addonText = document.createElement("span");
+    addonText.textContent =
+      `Playing Strudel patterns needs the Strudel player, a free add-on ` +
+      `(AGPL-3.0, ${STRUDEL_SIZE}). folio downloads it once from the ` +
+      `internet and keeps it, so it plays offline after that.`;
+    const install = document.createElement("button");
+    install.type = "button";
+    install.className = "insp-select addon-install";
+    install.textContent = "Install and play";
+    const later = document.createElement("button");
+    later.type = "button";
+    later.className = "insp-select addon-later";
+    later.textContent = "Not now";
+    addon.append(addonText, install, later);
+    let addonFor: { src: string; offline: boolean } | null = null;
 
     const source = (): string | null => {
       const code = figure.querySelector<HTMLElement>(
@@ -2113,8 +2141,44 @@ export class FolioDoc extends HTMLElement {
       // window (the play-does-nothing bug on WebKitGTK).
       this.ensureStrudelAudio();
       play.textContent = PLAYING_LABEL;
-      void this.playStrudel(figure, src, err, play, { offline });
+      void strudelInstalled().then((ok) => {
+        if (ok) {
+          void this.playStrudel(figure, src, err, play, { offline });
+          return;
+        }
+        play.textContent = PLAY_LABEL;
+        addonFor = { src, offline };
+        addon.hidden = false;
+      });
     };
+    install.addEventListener("click", () => {
+      if (!addonFor) return;
+      const { src, offline } = addonFor;
+      // Unlock audio inside THIS click, before the download.
+      this.ensureStrudelAudio();
+      install.disabled = later.disabled = true;
+      const was = addonText.textContent;
+      addonText.textContent = "Downloading the Strudel player…";
+      void installStrudel()
+        .then(() => {
+          addon.hidden = true;
+          play.textContent = PLAYING_LABEL;
+          return this.playStrudel(figure, src, err, play, { offline });
+        })
+        .catch((e: unknown) => {
+          addon.hidden = true;
+          err.textContent = `Could not install: ${e instanceof Error ? e.message : String(e)}`;
+          err.hidden = false;
+        })
+        .finally(() => {
+          install.disabled = later.disabled = false;
+          addonText.textContent = was;
+        });
+    });
+    later.addEventListener("click", () => {
+      addon.hidden = true;
+      addonFor = null;
+    });
     play.addEventListener("click", () => {
       const src = source();
       if (src === null) return;
@@ -2146,9 +2210,10 @@ export class FolioDoc extends HTMLElement {
     stop.addEventListener("click", () => {
       err.hidden = true;
       consent.hidden = true;
+      addon.hidden = true;
       void this.stopStrudel();
     });
-    return [play, stop, err, consent];
+    return [play, stop, err, consent, addon];
   }
 
   /**
@@ -2192,7 +2257,7 @@ export class FolioDoc extends HTMLElement {
     opts: { offline?: boolean } = {},
   ): Promise<void> {
     try {
-      const strudel = await import("@strudel/web");
+      const strudel = await loadStrudel();
       this.strudelInit ??= strudel
         .initStrudel({
           // The pre-unlocked context: created and resumed in the
@@ -2446,7 +2511,8 @@ export class FolioDoc extends HTMLElement {
     )) {
       play.textContent = PLAY_LABEL;
     }
-    const strudel = await import("@strudel/web").catch(() => null);
+    // Only a player that is running has anything to hush.
+    const strudel = await strudelIfLoaded()?.catch(() => null);
     if (strudel) strudel.hush();
   }
 

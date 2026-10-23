@@ -199,8 +199,11 @@ document — written in the same renderer you are working with.
   the source and fade as they end. Edit while it plays and Play
   becomes **▶ Update** - press it to hear the change. A pattern
   like `note("c a f e")` loops as synthesized sound; see
-  [strudel.cc](https://strudel.cc) for the language. Playback is
-  offline - nothing is downloaded. Melodic sounds are synthesized,
+  [strudel.cc](https://strudel.cc) for the language. The player
+  itself is a free **add-on** (Strudel is AGPL-licensed, folio is
+  MIT, so folio does not ship it): the first Play asks, then
+  downloads it once and keeps it - after that, playback is offline
+  and nothing more is downloaded. Melodic sounds are synthesized,
   and folio ships its own **drum kit** under the usual names:
   `bd` kick, `sd` snare, `hh` closed hat, `oh` open hat, `cp`
   clap, `rim`, `lt` `mt` `ht` toms, `cr` crash, `rd` ride, `cb`

@@ -1,5 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { withStrudelPlayer } from "./strudel-player";
 import { insertFrom } from "./toolbar-helpers";
+
+// Playback tests start with the Strudel add-on installed (ADR-0026).
+test.beforeEach(async ({ page }) => {
+  await withStrudelPlayer(page);
+});
 
 /**
  * Strudel music blocks (ADR-0014, spec: docs/specs/

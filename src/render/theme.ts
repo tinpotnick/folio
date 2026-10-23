@@ -1432,7 +1432,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       transition-duration: 0ms;
     }
     /* The online-samples consent (ADR-0019): a warning row of its own. */
-    .folio-inspector .strudel-consent {
+    .folio-inspector .strudel-consent, .folio-inspector .strudel-addon {
       flex-basis: 100%;
       display: flex;
       flex-wrap: wrap;
@@ -1445,6 +1445,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 12px;
     }
     .folio-inspector .strudel-consent[hidden] { display: none; }
+    .folio-inspector .strudel-addon[hidden] { display: none; }
     figure.folio-codeblock > .code-inspector { flex-wrap: wrap; }
     /* JSCAD (spec: jscad-blocks.md): the MODEL is the figure; its code
        shows only while the header is open (the one inspector
@@ -1545,7 +1546,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       margin-bottom: 8px;
     }
     .strudel-consent button { flex: none; }
+    .strudel-addon button { flex: none; }
     .folio-inspector .strudel-consent > span { flex: 1 1 260px; }
+    .folio-inspector .strudel-addon > span { flex: 1 1 260px; }
     .folio-inspector .strudel-error {
       color: var(--folio-sy-red, #b3261e);
       font-size: 12px;

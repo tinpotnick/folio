@@ -2,7 +2,7 @@
 
 Date: 2026-11-14
 
-Status: accepted
+Status: accepted; licence section superseded by ADR-0026 (the player is an add-on)
 
 ## Context
 

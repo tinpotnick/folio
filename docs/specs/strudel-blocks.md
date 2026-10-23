@@ -182,3 +182,25 @@ activation, so a DOM-dispatched click leaves the context suspended.
 - e2e (`tests/e2e/palette.spec.ts`): the music example's Caverave
   lights up while playing, offline.
 - First-contact eval: `evals/strudel-first-contact.md`.
+
+## The player is an add-on (2026-10-22, ADR-0026)
+
+- folio's builds do not contain Strudel (AGPL-3.0). Blocks render,
+  edit and round-trip without it; only Play needs it.
+- The first Play (after any online-samples consent) shows the add-on
+  strip (`.strudel-addon`): what it is, its licence and size, and
+  **Install and play** / **Not now**. Not now downloads nothing.
+- Install and play unlocks audio inside the click, downloads release
+  1.3.0's `index.mjs` and clock worker from jsDelivr, checks each
+  against its pinned SHA-256, keeps them in IndexedDB
+  (`folio-addons`), and plays. A failed or mismatched download is the
+  block's error line ("did not match the expected release"), never
+  run.
+- Later plays load the kept copy (a blob module, its clock worker
+  re-pointed at the kept file) with nothing downloaded.
+- Acceptance: `tests/e2e/strudel-addon.spec.ts` (asks; Not now;
+  installs once and keeps it; refuses a tampered download),
+  `tests/render/strudel-addon.test.ts` (the pin matches the tested
+  release; the loader's patch point exists),
+  `tests/webkitgtk/strudel-addon.js` (the kept copy loads in the
+  desktop engine).

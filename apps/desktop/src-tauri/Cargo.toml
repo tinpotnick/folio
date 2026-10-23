@@ -3,6 +3,7 @@ name = "folio-desktop"
 version = "0.1.0"
 description = "folio desktop host (Tauri, ADR-0006)"
 edition = "2021"
+license = "MIT"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
