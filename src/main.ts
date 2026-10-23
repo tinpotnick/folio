@@ -52,7 +52,10 @@ const mdGutter = requireEl<HTMLElement>("#md-gutter");
 const mdView = requireEl<HTMLElement>("#md-view");
 
 /** The front page: what folio is, what it does, the examples. */
-const WELCOME = "/demo/welcome.md";
+// Shipped documents are addressed RELATIVE to the app's page (no
+// leading slash): the same build serves from "/", from a subfolder
+// (GitHub Pages: /folio/), and inside the desktop app.
+const WELCOME = "demo/welcome.md";
 
 /** A new document: an empty title, the caret in it. */
 const BLANK = "# \n";
@@ -68,7 +71,7 @@ const GUIDED_KEY = "folio.guided";
 function bootPath(): string | null {
   const doc = new URLSearchParams(window.location.search).get("doc");
   if (doc && /^\/?[\w./-]+\.md$/.test(doc) && !doc.includes("..")) {
-    return doc.startsWith("/") ? doc : `/${doc}`;
+    return doc.replace(/^\/+/, "");
   }
   return null;
 }
@@ -115,7 +118,7 @@ function restoreDraft(draft: Draft): void {
 
 /** The address bar: a shipped document's `?doc=`, else the bare URL. */
 function docUrl(path: string | null): string {
-  return path === null ? window.location.pathname : `?doc=${path.slice(1)}`;
+  return path === null ? window.location.pathname : `?doc=${path}`;
 }
 
 /**
@@ -453,7 +456,12 @@ async function openLinkedDocument(href: string): Promise<void> {
       openOutside(url.href);
       return;
     }
-    if (await openShipped(url.pathname)) flash("Opened linked document");
+    // As an app-relative path: the page's own folder is the app's.
+    const appDir = new URL(".", window.location.href).pathname;
+    const path = url.pathname.startsWith(appDir)
+      ? url.pathname.slice(appDir.length)
+      : url.pathname;
+    if (await openShipped(path)) flash("Opened linked document");
   } catch {
     flash(`Could not open ${href}`);
   }
@@ -1626,81 +1634,81 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
   {
     id: "field-operations",
     title: "Q3 Field Operations Review",
-    file: "/demo/examples/field-operations.md",
+    file: "demo/examples/field-operations.md",
     blurb: "quarterly review report regional table growth chart cumulative",
   },
   {
     id: "poem",
     title: "A pure-prose poem",
-    file: "/demo/examples/poem.md",
+    file: "demo/examples/poem.md",
     blurb: "pure prose and poetry",
   },
   {
     id: "accounts",
     title: "Management accounts",
-    file: "/demo/examples/accounts.md",
+    file: "demo/examples/accounts.md",
     blurb: "accounts running totals budget negative growth",
   },
   {
     id: "report",
     title: "An imported data report",
-    file: "/demo/examples/report.md",
+    file: "demo/examples/report.md",
     blurb: "data report import windowed table running formulas line charts",
   },
   {
     id: "technical",
     title: "A technical paper",
-    file: "/demo/examples/technical.md",
+    file: "demo/examples/technical.md",
     blurb: "technical code equations benchmarks",
   },
   {
     id: "signal-processing",
     title: "Signals and spectra",
-    file: "/demo/examples/signal-processing.md",
+    file: "demo/examples/signal-processing.md",
     blurb: "signal processing fft dft filter spectrum math frequency",
   },
   {
     id: "music",
     title: "A music document",
-    file: "/demo/examples/music.md",
+    file: "demo/examples/music.md",
     blurb: "music strudel audio beats pattern fun player",
   },
   {
     id: "sales-review",
     title: "Q3 Sales Review",
-    file: "/demo/examples/sales-review.md",
+    file: "demo/examples/sales-review.md",
     blurb:
       "sales quarterly review report revenue regions pipeline heatmap stacked",
   },
   {
     id: "design-review",
     title: "Bracket design review",
-    file: "/demo/examples/design-review.md",
+    file: "demo/examples/design-review.md",
     blurb:
       "engineering design review bracket variants 3d model stl requirements",
   },
   {
     id: "practice-journal",
     title: "A practice journal",
-    file: "/demo/examples/practice-journal.md",
+    file: "demo/examples/practice-journal.md",
     blurb: "music practice journal log sheet music exercises charts",
   },
   {
     id: "drawings",
     title: "Drawings from text",
-    file: "/demo/examples/drawings.md",
+    file: "demo/examples/drawings.md",
     blurb: "drawings graphviz dot graph diagram vega svg music notation",
   },
   {
     id: "3d-models",
     title: "Parametric parts",
-    file: "/demo/examples/3d-models.md",
+    file: "demo/examples/3d-models.md",
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
     id: "amensister",
     title: "Amensister",
-    file: "/demo/examples/amensister.md",
+    file: "demo/examples/amensister.md",
     blurb: "music strudel amen break breakbeat online samples felix roos",
   },
 ];
@@ -1850,7 +1858,7 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "demo dataset sample data import csv try test data",
     action: () => {
       void (async (): Promise<void> => {
-        const res = await fetch("/demo/data/monthly-sales.csv");
+        const res = await fetch("demo/data/monthly-sales.csv");
         if (!res.ok) {
           flash("Demo dataset not found");
           return;
