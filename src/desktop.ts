@@ -108,3 +108,23 @@ export async function exportPdfFile(suggested: string): Promise<ExportResult> {
     return { ok: false, reason: String(e) };
   }
 }
+
+/** The document the app was launched to open ("Open with folio", a
+ * double-clicked .md file), once; null when there is none. */
+export async function launchDocument(): Promise<OpenedDocument | null> {
+  if (!isDesktop()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    return await invoke<OpenedDocument | null>("launch_document");
+  } catch {
+    return null;
+  }
+}
+
+/** macOS hands a running app more files by event: call `open` with
+ * each. */
+export async function onFileOpened(open: () => void): Promise<void> {
+  if (!isDesktop()) return;
+  const { listen } = await import("@tauri-apps/api/event");
+  await listen("folio-open-file", open);
+}

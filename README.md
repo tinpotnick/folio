@@ -134,6 +134,13 @@ npm run dev:desktop    # the desktop app (needs Rust and Tauri's system packages
 Tests, the desktop toolchain, and how the project is organised are
 in [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Support folio
+
+folio is free, and made in spare time. If it saves you time or makes
+your reports better, you can
+[buy me a coffee](https://buymeacoffee.com/tinpotnick) ☕ — or star
+the repository and tell someone who writes reports.
+
 ## Licence
 
 MIT — see [LICENSE](LICENSE). Bundled fonts, libraries and samples keep

@@ -74,3 +74,29 @@ change touching the caret, selection, or keyboard handling.
 - `open_external(url)`: opens http/https/mailto addresses in the
   system browser or mail app via tauri-plugin-opener (ADR-0024);
   every other scheme is refused. Document and help links use it.
+
+## Open with folio (2026-10-23)
+
+- Every package registers folio as an editor for Markdown
+  (`.md`, `.markdown`, `text/markdown`): `bundle.fileAssociations` in
+  `tauri.conf.json`; the .deb/.rpm desktop entry
+  (`packaging/linux/folio.desktop.hbs`) and the Flatpak's
+  (`packaging/linux/io.github.tinpotnick.folio.desktop`) run
+  `folio %F` with `MimeType=text/markdown;text/x-markdown;`; the
+  store listing `provides` the media type.
+- The shell keeps the first non-option argument as the launch file
+  (`launch_file_from_args`, unit-tested; a `file://` prefix is
+  dropped). The page asks for it once at boot (`launch_document`):
+  launched with a file, folio shows that file - not the blank page,
+  the guide or a restored draft - as the open, clean document, and
+  Save writes back to it. On macOS, files arrive by event
+  (`RunEvent::Opened` → `folio-open-file`); the page opens each after
+  the unsaved-changes check.
+- e2e: `tests/e2e/launch-file.spec.ts` (Tauri bridge stubbed).
+
+## Support link (2026-10-23)
+
+- "Support folio (Buy Me a Coffee)" in the palette and a help
+  section open https://buymeacoffee.com/tinpotnick outside folio;
+  the store listing carries it as the donation URL and
+  `.github/FUNDING.yml` adds GitHub's Sponsor button.

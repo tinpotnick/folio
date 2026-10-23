@@ -149,6 +149,9 @@ document — written in the same renderer you are working with.
 - **Open** (folder icon, **Ctrl+O**) loads a .md file; **Save**
   (**Ctrl+S**) writes the document to a file you choose, and after
   that back to the same file.
+- **In the desktop app** you can also open a .md file straight from
+  your file manager: double-click it, or choose **Open with → folio**.
+  Save then writes back to that file.
 - **In a web browser** the files are on your own computer — nothing
   is uploaded anywhere. Chrome and Edge open and save real files;
   in Firefox and Safari, Open reads a file you pick and Save
@@ -520,3 +523,11 @@ data:
 
 The help window is always one press away: the **? Help** toolbar
 button, or the **?** key when you are not typing.
+
+## Supporting folio
+
+folio is free and open source. If it is useful to you, you can buy
+its developer a coffee at
+[buymeacoffee.com/tinpotnick](https://buymeacoffee.com/tinpotnick) —
+or search "support" in the palette (Ctrl+K). Reporting a bug or
+sharing folio with someone who would like it helps just as much.

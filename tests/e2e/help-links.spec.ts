@@ -23,3 +23,27 @@ test("a link in the help opens in a new tab", async ({ page, context }) => {
   // The document is untouched.
   await expect(page.locator("#the-doc h1").first()).toHaveText("Ozymandias");
 });
+
+test("Support folio opens Buy Me a Coffee in a new tab", async ({
+  page,
+  context,
+}) => {
+  await context.route("https://buymeacoffee.com/**", (route) =>
+    route.fulfill({
+      body: "<title>Buy Me a Coffee</title>",
+      contentType: "text/html",
+    }),
+  );
+  await page.goto("/?doc=demo/examples/poem.md");
+  await page.locator("#the-doc h1").first().waitFor();
+  await page.keyboard.press("Control+k");
+  await page.locator("#palette-input").fill("coffee");
+  await expect(
+    page.locator("#palette-list .palette-item").first(),
+  ).toContainText("Support folio");
+  const [tab] = await Promise.all([
+    context.waitForEvent("page"),
+    page.keyboard.press("Enter"),
+  ]);
+  expect(tab.url()).toBe("https://buymeacoffee.com/tinpotnick");
+});

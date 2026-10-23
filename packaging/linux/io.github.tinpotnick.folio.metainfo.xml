@@ -32,6 +32,7 @@
   <url type="homepage">https://github.com/tinpotnick/folio</url>
   <url type="bugtracker">https://github.com/tinpotnick/folio/issues</url>
   <url type="vcs-browser">https://github.com/tinpotnick/folio</url>
+  <url type="donation">https://buymeacoffee.com/tinpotnick</url>
   <screenshots>
     <screenshot type="default">
       <caption>A quarterly report with live tables and charts</caption>
@@ -50,6 +51,9 @@
     <color type="primary" scheme_preference="light">#a7c0e3</color>
     <color type="primary" scheme_preference="dark">#1a2f52</color>
   </branding>
+  <provides>
+    <mediatype>text/markdown</mediatype>
+  </provides>
   <content_rating type="oars-1.1"/>
   <requires>
     <display_length compare="ge">768</display_length>

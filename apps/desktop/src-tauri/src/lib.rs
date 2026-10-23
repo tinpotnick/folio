@@ -276,9 +276,42 @@ async fn print_to_pdf(_window: &tauri::WebviewWindow, _path: &Path) -> Result<()
     Err("unsupported".into())
 }
 
+/// The document the app was asked to open at launch ("Open with
+/// folio", double-clicking a .md file, `folio notes.md`): the first
+/// argument that is not an option. Taken once by the page.
+struct LaunchFile(std::sync::Mutex<Option<String>>);
+
+fn launch_file_from_args(args: &[String]) -> Option<String> {
+    args.iter()
+        .skip(1)
+        .find(|a| !a.starts_with('-'))
+        .map(|a| a.strip_prefix("file://").unwrap_or(a).to_string())
+}
+
+/// The launch document, read and handed to the page once (it then
+/// belongs to the open document: Save writes back to it).
+#[tauri::command]
+fn launch_document(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, LaunchFile>,
+) -> Option<OpenedDocument> {
+    let path = state.0.lock().ok()?.take()?;
+    let text = std::fs::read_to_string(&path).ok()?;
+    let path = PathBuf::from(path);
+    remember_dir(&app, &path);
+    Some(OpenedDocument {
+        path: path.to_string_lossy().into_owned(),
+        text,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
     tauri::Builder::default()
+        .manage(LaunchFile(std::sync::Mutex::new(launch_file_from_args(
+            &args,
+        ))))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         // Recording (spec: docs/specs/audio-embeds.md) is a
@@ -294,15 +327,45 @@ pub fn run() {
             save_document,
             save_text_file,
             open_external,
-            export_pdf
+            export_pdf,
+            launch_document
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running folio desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building folio desktop")
+        .run(|_app, _event| {
+            // macOS opens files by event, not argument: hand the page
+            // the file (it opens it after the unsaved-changes check).
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = _event {
+                use tauri::{Emitter, Manager};
+                if let Some(path) = urls.iter().find_map(|u| u.to_file_path().ok()) {
+                    let path = path.to_string_lossy().into_owned();
+                    if let Ok(mut slot) = _app.state::<LaunchFile>().0.lock() {
+                        *slot = Some(path.clone());
+                    }
+                    let _ = _app.emit("folio-open-file", path);
+                }
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{folder_hint, is_external_url};
+    use super::{folder_hint, is_external_url, launch_file_from_args};
+
+    #[test]
+    fn the_launch_file_is_the_first_plain_argument() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(launch_file_from_args(&a(&["folio"])), None);
+        assert_eq!(
+            launch_file_from_args(&a(&["folio", "/home/n/notes.md"])),
+            Some("/home/n/notes.md".into())
+        );
+        assert_eq!(
+            launch_file_from_args(&a(&["folio", "--flag", "file:///tmp/a.md"])),
+            Some("/tmp/a.md".into())
+        );
+    }
 
     #[test]
     fn only_web_and_mail_addresses_open_externally() {
