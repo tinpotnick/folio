@@ -39,13 +39,13 @@ test.describe("document view", () => {
     await expect(doc.locator("figure svg[role='img']").first()).toBeVisible();
   });
 
-  test("web degradation: native Open/Save stay hidden; New is there", async ({
+  test("the web host has New, Open and Save (docs/specs/web-files.md)", async ({
     page,
   }) => {
     await waitForDocument(page);
     await expect(page.locator("#btn-new")).toBeVisible();
-    await expect(page.locator("#btn-open")).toBeHidden();
-    await expect(page.locator("#btn-save")).toBeHidden();
+    await expect(page.locator("#btn-open")).toBeVisible();
+    await expect(page.locator("#btn-save")).toBeVisible();
     await expect(page.locator("#btn-help")).toBeVisible();
   });
 
@@ -197,7 +197,7 @@ test.describe("in-app help", () => {
     ).toBeVisible();
     await expect(page.locator("#help-doc figure table").first()).toBeVisible();
     await expect(
-      page.locator("#help-doc li", { hasText: "copy the source" }),
+      page.locator("#help-doc li", { hasText: "is uploaded anywhere" }),
     ).toBeVisible();
 
     await page.locator("#btn-help-close").click();

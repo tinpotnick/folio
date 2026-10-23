@@ -141,14 +141,15 @@ test.describe("command palette", () => {
     await expect(page.locator("#palette-modal")).toBeVisible();
   });
 
-  test("web hosts list no Open or Save command", async ({ page }) => {
+  test("the web host lists Open and Save too (docs/specs/web-files.md)", async ({
+    page,
+  }) => {
     await waitForDocument(page);
     await openPalette(page);
     await page.locator("#palette-input").fill("save");
-    const items = await page
-      .locator("#palette-list .palette-item")
-      .allTextContents();
-    expect(items.some((t) => t.includes("Save the document"))).toBeFalsy();
+    await expect(
+      page.locator("#palette-list .palette-item").first(),
+    ).toContainText("Save the document");
   });
 
   test("the palette reflects the current view command", async ({ page }) => {
