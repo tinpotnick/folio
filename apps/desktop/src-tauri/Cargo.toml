@@ -12,7 +12,10 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-dialog = "2"
+# File dialogs: GTK's own by default; the desktop's file-chooser
+# portal in the Flatpak (feature "flatpak"), where the sandbox only
+# sees the files the user picks.
+tauri-plugin-dialog = { version = "2", default-features = false }
 tauri-plugin-opener = "2"
 
 # Export to PDF prints the webview straight to a file (ADR-0025):
@@ -20,6 +23,11 @@ tauri-plugin-opener = "2"
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0"
 gtk = "0.18"
+
+[features]
+default = ["dialogs-gtk"]
+dialogs-gtk = ["tauri-plugin-dialog/gtk3"]
+flatpak = ["tauri-plugin-dialog/xdg-portal"]
 
 [lib]
 name = "folio_desktop_lib"

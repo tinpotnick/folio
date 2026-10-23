@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=folio
+GenericName=Document editor
+Comment=Documents where the data lives inside, and the page looks finished
+Exec=folio
+Icon=io.github.tinpotnick.folio
+Terminal=false
+Categories=Office;WordProcessor;
+Keywords=document;report;markdown;table;chart;data;spreadsheet;word;
+StartupWMClass=folio

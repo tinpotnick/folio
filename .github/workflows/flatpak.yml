@@ -1,0 +1,36 @@
+name: flatpak
+
+# Builds the Flatpak exactly as Flathub will (offline, from the
+# generated sources) in Flathub's own build image. Runs when the
+# desktop app or its packaging changes, and on release tags, and keeps
+# the resulting .flatpak bundle as an artifact for testing:
+#   flatpak install --user folio.flatpak
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - "packaging/**"
+      - "package-lock.json"
+      - ".github/workflows/flatpak.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flatpak:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: folio.flatpak
+          manifest-path: packaging/flatpak/io.github.tinpotnick.folio.yml
+          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/*.json') }}

@@ -11,6 +11,7 @@ Release, built by `.github/workflows/release.yml`:
 | --- | --- | --- |
 | Windows | windows-latest | `.msi`, `-setup.exe` (NSIS) |
 | macOS (Apple silicon + Intel) | macos-latest, `universal-apple-darwin` | `.dmg` |
+| Linux (store) | Flathub's build image | Flatpak (`io.github.tinpotnick.folio`), built from source, offline |
 | Linux | ubuntu-22.04 (the oldest supported, so the AppImage runs widely) | `.rpm` (Fedora, openSUSE), `.deb` (Ubuntu, Debian), `.AppImage` |
 
 ## How to release
@@ -46,15 +47,8 @@ artifacts for 14 days, with no release.
   The release notes say so. Signing needs an Apple Developer account
   (about $99/year, plus notarisation in the workflow) and a Windows
   code-signing certificate; worth doing once there are users.
-- **Flathub** (the store Fedora, and most other distributions, show in
-  their software centres). The plan:
-  1. An AppStream metainfo file (`io.github.tinpotnick.folio.metainfo.xml`):
-     name, summary, description, screenshots, release notes,
-     content rating.
-  2. A Flatpak manifest building from source on the GNOME runtime,
-     with npm and Cargo dependencies vendored for an offline build
-     (`flatpak-node-generator`, `flatpak-cargo-generator`).
-  3. A pull request to `flathub/flathub`; after review the app gets
-     its own `flathub/io.github.tinpotnick.folio` repository, which
-     is updated for each release.
+- **Flathub**: the Flatpak is built (packaging/flatpak/, CI
+  `.github/workflows/flatpak.yml`); submitting it is a pull request
+  to `flathub/flathub` once a release contains the packaging - the
+  steps are in `packaging/flatpak/README.md`.
 - **Auto-update** (Tauri's updater, signed update manifests).
