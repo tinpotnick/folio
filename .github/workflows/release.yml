@@ -83,7 +83,7 @@ jobs:
             **Downloads**
             - **Windows:** the `.msi`, or the `-setup.exe`.
             - **macOS** (Apple silicon and Intel): the `.dmg`.
-            - **Linux:** `.rpm` (Fedora, openSUSE), `.deb` (Ubuntu, Debian) or the `.AppImage` (any distribution).
+            - **Linux:** `folio.flatpak` (any distribution: `flatpak install --user folio.flatpak`), `.rpm` (Fedora, openSUSE), `.deb` (Ubuntu, Debian) or the `.AppImage`.
 
             These builds are not code-signed yet. On **macOS**, the first time, right-click the app and choose **Open**. On **Windows**, if SmartScreen warns, choose **More info → Run anyway**.
           releaseDraft: true
