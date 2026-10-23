@@ -1,129 +1,143 @@
+<div align="center">
+
 # folio
 
-A document-first workspace. Semantic Markdown documents where tables
-are typed datasets, charts are queries over them, and the rendered
-output reads like a polished report — not a notebook.
+**The document Word should have been.**
 
-## Principles
+Write reports where the numbers live in the document and calculate as you
+type, the page looks finished from the first word, and the file is plain
+text that anyone can read — today, and in twenty years.
 
-- **Document-first.** The document is the artifact: prose, live
-  tables, figures in one portable, offline-renderable file.
-- **Semantic Markdown only.** No inline styling. Style lives in
-  themes with a closed, typed schema.
-- **Tables are typed datasets** — grid, dataset, and relation in one.
-- **Charts are queries**, not widgets. Edit the table, the figure
-  updates. No run buttons, no execution state.
-- **Embeddable.** The editor is a framework-agnostic web component;
-  our apps are hosts of it.
-- **AI-first development.** Every subsystem has a machine-checkable
-  contract. See AGENTS.md and docs/adr/.
+**[Try it in your browser](https://tinpotnick.github.io/folio/)** ·
+**[Download for Windows, macOS and Linux](https://github.com/tinpotnick/folio/releases/latest)** ·
+[See the examples](#examples)
 
-## Repository layout
+![Editing a number in a folio table: the formula column and the chart update as you type](docs/media/hero.gif)
 
-- `AGENTS.md` — standing orders for AI agents
-- `docs/adr/` — architecture decision records (read before
-  architectural changes)
-- `docs/specs/` — specs, including the north-star sample document
-- `docs/blockers/` — agent stop-and-report files
-- `tests/golden/` — lossless round-trip golden files
-- `evals/` — behavior eval set grown from real bugs
+</div>
 
-## Run it
+## Why folio
 
-```
+**Your data lives in the document.** A table in folio is a real dataset:
+typed columns, units, and formulas that recalculate as you edit. Charts
+are drawn from those tables, so when a number changes, every total and
+every chart that depends on it changes with it. No pasting screenshots
+of spreadsheets, no figures that quietly go out of date.
+
+**Beautiful without trying.** You write headings, paragraphs, tables and
+charts; a theme decides the fonts, colours, table rules and chart
+palette. There are ten themes, each with a dark mode, and switching
+theme restyles the whole document at once. Print or export to PDF and
+it looks like a report, not a web page.
+
+**A file you own.** A folio document is one plain Markdown file. Open it
+in any text editor, read it on GitHub, keep it in Git, diff it, search
+it. No binary format, no account, no lock-in — and folio itself is
+open source under the MIT licence. Documents render fully offline.
+
+![The same report in three themes, light and dark](docs/media/themes.png)
+
+## What you can do
+
+- **Tables two ways** — a plain Markdown table that GitHub shows as is,
+  or a **dataset** with typed columns, units and formulas across rows
+  and tables. One click turns one into the other.
+- **Charts as queries** — bar, line, area, scatter, pie and donut, with
+  several series, stacked or grouped; filter and sort them with the
+  same expressions as formulas. Or write a full
+  [Vega-Lite](https://vega.github.io/vega-lite/) chart over your data.
+- **Equations, code and diagrams** — LaTeX maths, highlighted code,
+  Mermaid and Graphviz diagrams, hand-written SVG drawings, and
+  parametric **3D models** (JSCAD) you can export as STL.
+- **Images, audio and sheet music** — embedded in the document itself;
+  record straight from the microphone; write music in ABC notation and
+  hear it played.
+- **Export to PDF**, print, light and dark mode, a section browser, and
+  a command palette (**Ctrl+K**) that finds every action by the words
+  you already use.
+
+![The Insert menu, and a design review where a table drives a 3D model](docs/media/features.png)
+
+## It is just Markdown
+
+This is a live dataset and a chart in a folio document — readable, and
+diffable, by anyone:
+
+````markdown
+::: table {#budget}
+caption: "Launch budget"
+columns:
+  - {name: item, type: text}
+  - {name: cost, type: number, unit: "£k"}
+  - {name: share, type: formula, expr: "cost / (self.col.cost | sum())", format: percent}
+data:
+  - [Engineering, 30]
+  - [Design, 12]
+  - [Marketing, 9]
+:::
+
+::: chart {#budget-chart}
+source: @budget
+query: {select: [item, cost]}
+type: donut
+:::
+````
+
+Everything else — headings, lists, links, ordinary tables — is the
+Markdown you already know.
+
+## How it compares
+
+| | folio | Word / Google Docs | Notion | Obsidian | Jupyter / Quarto |
+| --- | :---: | :---: | :---: | :---: | :---: |
+| Tables that calculate, in the document | ✓ | basic | partly | plugins | ✓ (code) |
+| Charts drawn from the document's own data | ✓ | embedded sheets | partly | plugins | ✓ (code) |
+| Polished output with no styling by hand | ✓ (themes) | manual | fixed look | themes | templates |
+| Plain-text file you can read anywhere | ✓ | — | — | ✓ | ✓ |
+| Works offline, no account | ✓ | partly | — | ✓ | ✓ |
+| No code to run | ✓ | ✓ | ✓ | ✓ | — |
+
+## Examples
+
+Open any of these in the [web version](https://tinpotnick.github.io/folio/)
+(Ctrl+K, then "example"):
+
+- **Q3 Sales Review** — regions, product mix and targets as live charts, a
+  heatmap, and the sales pipeline as a diagram.
+- **Bracket design review** — a variants table driving a 3D model, mass
+  against stiffness, a dimensioned drawing and a requirements trace.
+- **A practice journal** — a practice log charted week by week, and
+  sheet music you can play.
+- **Management accounts**, **Signals and spectra**, **A technical paper**,
+  and more.
+
+## Get it
+
+- **In your browser:** <https://tinpotnick.github.io/folio/> — open and
+  save files on your own computer; nothing is uploaded.
+- **Desktop app** for Windows, macOS and Linux:
+  [latest release](https://github.com/tinpotnick/folio/releases/latest).
+
+folio is young (version 0.1): expect rough edges, and please
+[report them](https://github.com/tinpotnick/folio/issues). Your
+documents are plain Markdown, so they stay readable whatever happens
+to folio.
+
+## Build from source
+
+```bash
 npm install
-npm run dev
+npm run dev            # the web app at http://localhost:5173
+npm run dev:desktop    # the desktop app (needs Rust and Tauri's system packages)
 ```
 
-Opens the demo host app on its welcome page: what folio is, a live
-table and chart to try (edit a cost and the formula column and the
-chart follow), and links to every example document. The north-star
-sample, a quarterly report, is the first example
-(`/?doc=demo/examples/field-operations.md` opens it directly). Toggle to **Markdown** to see and edit the
-source with code-editor highlighting; switch back to re-parse.
-**☰ Sections** (top left) toggles the section browser sidebar.
-**?** (also the `?` key or `F1`) opens the built-in help — which is
-itself a folio document.
+Tests, the desktop toolchain, and how the project is organised are
+in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Tests
+## Licence
 
-```bash
-just test        # engine + render unit tests (vitest)
-just test-e2e    # Playwright end-to-end tests of the host page
-just lint        # eslint + prettier
-just build       # type-check + production web build
-```
-
-The Playwright suite (`tests/e2e/`) drives the demo host page in a
-real browser: document rendering (table, chart), the Markdown source
-view and its parse round-trip, the section browser, toolbar actions,
-the in-app help window, and the web degradation of the desktop-only
-Open/Save buttons. It starts its own Vite dev server on port 5173
-(`npx playwright test`); Chromium is installed via
-`npx playwright install chromium`.
-
-### Desktop app (Tauri)
-
-The same UI as a native window with native Open/Save file dialogs.
-
-Prerequisites (one-time):
-
-```bash
-# Linux — the webview stack Tauri links against
-# Debian/Ubuntu:
-sudo apt install libwebkit2gtk-4.1-dev build-essential \
-  libxdo-dev libssl-dev libayatana-appindicator3-dev \
-  librsvg2-dev pkg-config
-# Fedora:
-sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
-  libappindicator-gtk3-devel librsvg2-devel libxdo-devel \
-  gcc gcc-c++ pkgconf-pkg-config
-
-# macOS — Xcode Command Line Tools (webview is built into macOS)
-xcode-select --install
-
-# Windows — Visual Studio C++ Build Tools (WebView2 is built into Windows 11;
-# on Windows 10 install the WebView2 runtime from Microsoft)
-```
-
-Then run:
-
-```bash
-npm install
-npm run dev:desktop    # opens the folio window with dev tools
-npm run build:desktop  # bundles the installable app
-```
-
-What works in this first build:
-- Document parse/serialize with lossless round-trip (golden-tested)
-- Typed tables with formula columns (recalc on every edit)
-- Table entry: click a cell to type; Tab/Enter finish the cell,
-  navigate, and grow the table (docs/specs/table-keyboard.md)
-- Insert group: table, Mermaid diagram, and code-block builders in
-  the toolbar
-- Charts as queries over tables (SVG, publication-oriented)
-- Theme from document frontmatter (closed schema; no style literals
-  ever live in the document)
-- `<folio-doc>` web component: embed it anywhere (ADR-0006)
-- Section browser: a Word-style sidebar listing every section;
-  click to zoom to it, collapsible from the toolbar
-- Markdown source view with VS Code-style syntax highlighting
-  (frontmatter, headings, emphasis, code, table/chart directives)
-- Desktop app: a Tauri v2 host with native Open/Save (ADR-0006)
-- markdown+ inline formats: GitHub-style bold, italic, code,
-  strikethrough, plus `++underline++` (docs/specs/inline-syntax.md)
-- Fenced code blocks with language tags; the toolbar code button
-  converts blocks in place (docs/specs/code-blocks.md)
-- Mermaid diagrams as semantic blocks, rendered offline
-  (docs/specs/diagrams-mermaid.md, ADR-0010)
-- In-app help: a `?` button and `?` / `F1` shortcuts opening
-  help as a folio document (docs/specs/in-app-help.md)
-- Context toolbar: H1/H2/P/B/I/code reflect the caret's block and
-  format in both views, and act on the Markdown source too
-  (docs/specs/toolbar-context.md)
-
-## Status
-
-Milestone 1 complete (engine + round-trip + first usable app).
-The recalc dependency graph (cross-table formulas, cycle detection)
-is the next engine milestone.
+MIT — see [LICENSE](LICENSE). Bundled fonts, libraries and samples keep
+their own licences, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The optional Strudel live-coding player is AGPL-3.0 and is not part of
+folio's builds; folio offers to download it the first time you play a
+Strudel pattern.
