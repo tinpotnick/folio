@@ -63,9 +63,15 @@
     <control>pointing</control>
   </supports>
   <releases>
-    <release version="0.1.0" date="2026-10-23">
+    <release version="0.1.1" date="2026-10-23">
       <description>
-        <p>The first release.</p>
+        <p>The first public release.</p>
+        <ul>
+          <li>Live tables, charts, equations, diagrams, 3D models and sheet music in plain Markdown documents</li>
+          <li>Ten themes, each with a dark mode</li>
+          <li>Export to PDF</li>
+          <li>Open Markdown files straight from the file manager</li>
+        </ul>
       </description>
     </release>
   </releases>
