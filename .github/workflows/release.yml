@@ -1,0 +1,105 @@
+name: release
+
+# Desktop builds for Windows, macOS and Linux (docs/specs/releases.md).
+#
+# - Push a tag "v0.1.0": builds every platform and attaches the
+#   installers to a DRAFT GitHub Release - check it, then publish.
+# - A pull request that touches the desktop app or this file: builds
+#   every platform as a check, and keeps the installers as workflow
+#   artifacts (no release).
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "apps/desktop/**"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # .deb, .rpm and .AppImage. The oldest supported Ubuntu, so
+          # the AppImage runs on older distributions too.
+          - platform: ubuntu-22.04
+            args: ""
+          # .msi and the -setup.exe installer.
+          - platform: windows-latest
+            args: ""
+          # One .dmg for Apple silicon and Intel Macs.
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri -> target
+
+      - name: Linux system packages (WebKitGTK, GTK)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        id: tauri
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: "."
+          tauriScript: npx tauri
+          args: ${{ matrix.args }}
+          # Tags make a draft release; anything else only builds.
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
+          releaseName: "folio ${{ github.ref_name }}"
+          releaseBody: |
+            See the [README](https://github.com/tinpotnick/folio#readme) for what folio is, or try it in your browser first: https://tinpotnick.github.io/folio/
+
+            **Downloads**
+            - **Windows:** the `.msi`, or the `-setup.exe`.
+            - **macOS** (Apple silicon and Intel): the `.dmg`.
+            - **Linux:** `.rpm` (Fedora, openSUSE), `.deb` (Ubuntu, Debian) or the `.AppImage` (any distribution).
+
+            These builds are not code-signed yet. On **macOS**, the first time, right-click the app and choose **Open**. On **Windows**, if SmartScreen warns, choose **More info → Run anyway**.
+          releaseDraft: true
+          prerelease: false
+
+      - name: Keep the installers (pull requests)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: folio-${{ matrix.platform }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.deb
+            apps/desktop/src-tauri/target/release/bundle/**/*.rpm
+            apps/desktop/src-tauri/target/release/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle/**/*.dmg
+          if-no-files-found: warn
+          retention-days: 14
