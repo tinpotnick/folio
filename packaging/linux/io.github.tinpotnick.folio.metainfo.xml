@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.tinpotnick.folio</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>folio</name>
+  <summary>Documents with live data inside, beautiful by default</summary>
+  <developer id="io.github.tinpotnick">
+    <name>Nick Knight</name>
+  </developer>
+  <description>
+    <p>
+      folio is the document Word should have been. Write reports where the
+      numbers live in the document and calculate as you type, the page looks
+      finished from the first word, and the file is plain Markdown that anyone
+      can read.
+    </p>
+    <ul>
+      <li>Tables are live datasets: typed columns, units, and formulas that recalculate as you edit</li>
+      <li>Charts are drawn from the document's own tables, so they never go out of date</li>
+      <li>Ten themes, each with a dark mode, restyle the whole document at once</li>
+      <li>Equations, code, diagrams, drawings, 3D models and sheet music in the page</li>
+      <li>Export to PDF that looks like a report, not a web page</li>
+      <li>Plain Markdown files: open them in any editor, keep them in Git, read them on GitHub</li>
+    </ul>
+    <p>
+      Everything works offline, with no account. folio is open source under the
+      MIT licence.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.tinpotnick.folio.desktop</launchable>
+  <url type="homepage">https://github.com/tinpotnick/folio</url>
+  <url type="bugtracker">https://github.com/tinpotnick/folio/issues</url>
+  <url type="vcs-browser">https://github.com/tinpotnick/folio</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>A quarterly report with live tables and charts</caption>
+      <image>https://raw.githubusercontent.com/tinpotnick/folio/main/docs/media/screenshot-report.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>The same report in four themes, light and dark</caption>
+      <image>https://raw.githubusercontent.com/tinpotnick/folio/main/docs/media/themes.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Insert tables, charts, equations, diagrams and 3D models</caption>
+      <image>https://raw.githubusercontent.com/tinpotnick/folio/main/docs/media/features.png</image>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#a7c0e3</color>
+    <color type="primary" scheme_preference="dark">#1a2f52</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <releases>
+    <release version="0.1.0" date="2026-10-23">
+      <description>
+        <p>The first release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

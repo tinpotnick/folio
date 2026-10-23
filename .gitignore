@@ -6,3 +6,9 @@ target/
 .env
 test-results/
 playwright-report/
+
+# Local Flatpak builds
+packaging/flatpak/build/
+packaging/flatpak/repo/
+packaging/flatpak/.flatpak-builder/
+.flatpak-builder/
