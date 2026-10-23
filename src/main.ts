@@ -20,6 +20,8 @@ import { BUNDLED_FONTS } from "./render/fonts.js";
 import {
   isDesktop,
   exportPdfFile,
+  launchDocument,
+  onFileOpened,
   openDocument,
   openExternal,
   saveDocument,
@@ -60,6 +62,9 @@ const WELCOME = "demo/welcome.md";
 /** A new document: an empty title, the caret in it. */
 const BLANK = "# \n";
 
+/** Where people can support folio's development. */
+const SUPPORT_URL = "https://buymeacoffee.com/tinpotnick";
+
 /** Set once the first-run guide has been shown (per browser/app). */
 const GUIDED_KEY = "folio.guided";
 
@@ -82,6 +87,14 @@ function bootPath(): string | null {
  * every launch after that opens a blank document.
  */
 async function boot(): Promise<void> {
+  // Launched to open a file (desktop: "Open with folio", a
+  // double-clicked .md): that file, before anything else.
+  const launched = await launchDocument();
+  if (launched) {
+    await openShipped(null, { history: "replace", unguarded: true });
+    await showOpened(launched.path, launched.text);
+    return;
+  }
   let path = bootPath();
   if (path === null) {
     let guided = true;
@@ -1538,17 +1551,31 @@ async function pickDocument(): Promise<string | null> {
   }
 }
 
-btnOpen.addEventListener("click", async () => {
-  if (!(await confirmLeave())) return;
-  const text = await pickDocument();
-  if (text === null) return;
-  const res = { text };
-  await el.load(res.text);
-  editor.value = res.text;
+/** Show a document read from disk as the open, clean document. */
+async function showOpened(path: string | null, text: string): Promise<void> {
+  if (path !== null) currentDocPath = path;
+  await el.load(text);
+  editor.value = text;
   refreshOutline();
   markClean();
   reflectTitle();
   flash("Opened document");
+}
+
+btnOpen.addEventListener("click", async () => {
+  if (!(await confirmLeave())) return;
+  const text = await pickDocument();
+  if (text === null) return;
+  await showOpened(null, text);
+});
+
+// macOS: a .md opened while folio runs.
+void onFileOpened(() => {
+  void (async () => {
+    if (!(await confirmLeave())) return;
+    const res = await launchDocument();
+    if (res) await showOpened(res.path, res.text);
+  })();
 });
 
 btnSave.addEventListener("click", () => {
@@ -2005,6 +2032,13 @@ function paletteEntries(): PaletteEntry[] {
     keywords:
       "theme look style design appearance fonts colours colors palette template",
     action: () => openSettings({ focusTheme: true }),
+  });
+  entries.push({
+    title: "Support folio (Buy Me a Coffee)",
+    group: "Command",
+    keywords:
+      "support donate donation tip coffee sponsor buy me a coffee thanks fund pay",
+    action: () => openOutside(SUPPORT_URL),
   });
   entries.push({
     title: "Export as PDF",
