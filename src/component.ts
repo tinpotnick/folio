@@ -353,6 +353,39 @@ const ACTION_MS = 100;
 /** The undo stack's ceiling. */
 const HISTORY_MAX = 100;
 
+/** The smallest a table's type shrinks to fit its page. */
+const TABLE_FIT_MIN = 0.75;
+
+/**
+ * Fit a table to its page (spec: docs/specs/table-layout.md): a table
+ * wider than the column shrinks its type (and, in em, its padding)
+ * until it fits - down to 75%; past that it scrolls sideways. Wide
+ * tables with tracked caps or eight columns overflowed in most themes,
+ * and a printout clipped them. Re-fits whenever the page or the table
+ * changes size.
+ */
+function fitTable(scroller: HTMLElement, table: HTMLElement): void {
+  let fitting = false;
+  const fit = (): void => {
+    if (fitting || !scroller.isConnected) return;
+    fitting = true;
+    table.style.fontSize = "";
+    const avail = scroller.clientWidth;
+    let k = 1;
+    // Two passes: padding and borders do not scale exactly with type.
+    for (let i = 0; i < 3 && avail > 0 && table.scrollWidth > avail + 1; i++) {
+      k = Math.max(TABLE_FIT_MIN, (k * avail) / table.scrollWidth);
+      table.style.fontSize = `${k.toFixed(3)}em`;
+      if (k === TABLE_FIT_MIN) break;
+    }
+    table.dataset.fit = k < 1 ? k.toFixed(2) : "";
+    fitting = false;
+  };
+  const ro = new ResizeObserver(() => requestAnimationFrame(fit));
+  ro.observe(scroller);
+  ro.observe(table);
+}
+
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
     return ["src", "mode"];
@@ -2774,6 +2807,7 @@ export class FolioDoc extends HTMLElement {
     scroller.className = "folio-table-scroll";
     scroller.appendChild(table);
     figure.appendChild(scroller);
+    fitTable(scroller, table);
     if (shownRows < totalRows) {
       const more = document.createElement("div");
       more.className = "folio-table-more";
