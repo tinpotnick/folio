@@ -1,0 +1,123 @@
+name: packages
+
+# folio's own package repositories, on GitHub Pages
+# (docs/specs/package-repos.md):
+#   https://tinpotnick.github.io/folio/repo/   flatpak/  rpm/  apt/
+#
+# Publishing a release adds its Flatpak bundle, .rpm and .deb to the
+# repositories, signed with the repository key, keeps them on the
+# `pkg-repo` branch and redeploys the site. A pull request touching
+# this does a dry run (from the latest release) and keeps the result
+# as an artifact.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.1.1)"
+        required: true
+  pull_request:
+    paths:
+      - "packaging/repo/**"
+      - ".github/workflows/packages.yml"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: packages
+  cancel-in-progress: false
+
+env:
+  BASE: https://tinpotnick.github.io/folio/repo
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Which release
+        id: rel
+        run: |
+          tag="${{ github.event.release.tag_name || inputs.tag }}"
+          [ -n "$tag" ] || tag=$(gh release list --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Publishing $tag"
+
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak ostree createrepo-c rpm apt-utils
+
+      - name: Signing key
+        if: github.event_name != 'pull_request'
+        run: printf '%s' "${{ secrets.PKG_GPG_PRIVATE_KEY }}" | gpg --batch --import
+
+      - name: Throwaway key (dry run)
+        if: github.event_name == 'pull_request'
+        run: |
+          gpg --batch --passphrase '' --quick-gen-key "folio dry run <dry@run>" rsa2048 sign 0
+          gpg --list-secret-keys --with-colons | awk -F: '/^fpr/{print $10; exit}' > /tmp/fpr
+
+      - name: The release's files
+        run: |
+          mkdir -p assets
+          tag=${{ steps.rel.outputs.tag }}
+          gh release download "$tag" -p '*.rpm' -p '*.deb' -p '*.flatpak' -D assets || true
+          # The Flatpak bundle is built by the flatpak workflow on the
+          # tag; attach it to the release if it is not there yet.
+          if ! ls assets/*.flatpak >/dev/null 2>&1; then
+            run=$(gh run list --workflow flatpak.yml --branch "$tag" --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+            if [ -n "$run" ]; then
+              gh run download "$run" -n folio-x86_64.flatpak -D assets
+              if [ "${{ github.event_name }}" != pull_request ]; then
+                gh release upload "$tag" assets/folio.flatpak --clobber
+              fi
+            fi
+          fi
+          ls -la assets
+
+      - name: The repositories so far
+        run: |
+          if git ls-remote --exit-code --heads origin pkg-repo >/dev/null; then
+            git fetch --depth 1 origin pkg-repo
+            mkdir site && git archive FETCH_HEAD | tar -x -C site
+          else
+            mkdir site
+          fi
+
+      - name: Publish into the repositories
+        run: |
+          fpr="${{ secrets.PKG_GPG_FINGERPRINT }}"
+          [ "${{ github.event_name }}" = pull_request ] && fpr=$(cat /tmp/fpr)
+          packaging/repo/publish.sh site assets "$fpr" "$BASE"
+
+      - name: Keep the result (dry run)
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-repos-dry-run
+          path: site
+          retention-days: 7
+
+      - name: Save to the pkg-repo branch
+        if: github.event_name != 'pull_request'
+        run: |
+          cd site
+          git init -q -b pkg-repo
+          git config user.name "folio packages"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Package repositories: ${{ steps.rel.outputs.tag }}"
+          # One commit, no history: the repositories themselves keep
+          # the versions they need.
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" pkg-repo
+
+      - name: Redeploy the site
+        if: github.event_name != 'pull_request'
+        run: gh workflow run pages.yml --ref main

@@ -9,7 +9,7 @@ type, the page looks finished from the first word, and the file is plain
 text that anyone can read — today, and in twenty years.
 
 **[Try it in your browser](https://tinpotnick.github.io/folio/)** ·
-**[Download for Windows, macOS and Linux](https://github.com/tinpotnick/folio/releases/latest)** ·
+**[Install on Linux, Windows or macOS](#install)** ·
 [See the examples](#examples)
 
 ![Editing a number in a folio table: the formula column and the chart update as you type](docs/media/hero.gif)
@@ -111,12 +111,55 @@ Open any of these in the [web version](https://tinpotnick.github.io/folio/)
 - **Management accounts**, **Signals and spectra**, **A technical paper**,
   and more.
 
-## Get it
+## Install
 
-- **In your browser:** <https://tinpotnick.github.io/folio/> — open and
-  save files on your own computer; nothing is uploaded.
-- **Desktop app** for Windows, macOS and Linux:
-  [latest release](https://github.com/tinpotnick/folio/releases/latest).
+**Try it first in your browser:** <https://tinpotnick.github.io/folio/> —
+open and save files on your own computer; nothing is uploaded.
+
+### Linux
+
+**Flatpak** — any distribution, sandboxed, updates with your system:
+[**Install folio**](https://tinpotnick.github.io/folio/repo/io.github.tinpotnick.folio.flatpakref)
+(opens in GNOME Software or KDE Discover), or in a terminal:
+
+```bash
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+flatpak remote-add --user --if-not-exists folio https://tinpotnick.github.io/folio/repo/folio.flatpakrepo
+flatpak install --user folio io.github.tinpotnick.folio
+```
+
+**Fedora** (and other dnf-based systems) — `dnf upgrade` keeps it current:
+
+```bash
+sudo dnf config-manager addrepo --from-repofile=https://tinpotnick.github.io/folio/repo/folio.repo
+sudo dnf install folio
+```
+
+**Debian and Ubuntu** — `apt upgrade` keeps it current:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://tinpotnick.github.io/folio/repo/folio-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/folio-archive-keyring.gpg > /dev/null
+curl -fsSL https://tinpotnick.github.io/folio/repo/folio.list \
+  | sudo tee /etc/apt/sources.list.d/folio.list > /dev/null
+sudo apt update && sudo apt install folio
+```
+
+Or download the `.AppImage`, `.rpm` or `.deb` from the
+[latest release](https://github.com/tinpotnick/folio/releases/latest).
+
+The repositories and packages are signed with folio's key,
+fingerprint `6F82 66DF 93E2 5A83 AD43  E40B 089C 758D 9CB4 E587`
+([folio-archive-key.asc](packaging/repo/folio-archive-key.asc)).
+
+### Windows and macOS
+
+Download from the [latest release](https://github.com/tinpotnick/folio/releases/latest):
+the `.msi` or `-setup.exe` for Windows, the `.dmg` for macOS (Apple
+silicon and Intel). The builds are not code-signed yet: on macOS,
+right-click the app and choose **Open** the first time; on Windows,
+choose **More info → Run anyway** if SmartScreen warns.
 
 folio is young (version 0.1): expect rough edges, and please
 [report them](https://github.com/tinpotnick/folio/issues). Your

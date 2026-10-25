@@ -83,7 +83,7 @@ jobs:
             **Downloads**
             - **Windows:** the `.msi`, or the `-setup.exe`.
             - **macOS** (Apple silicon and Intel): the `.dmg`.
-            - **Linux:** `folio.flatpak` (any distribution: `flatpak install --user folio.flatpak`), `.rpm` (Fedora, openSUSE), `.deb` (Ubuntu, Debian) or the `.AppImage`.
+            - **Linux:** add folio's own repository for automatic updates - Flatpak, Fedora (dnf) or Debian/Ubuntu (apt); see [Install](https://github.com/tinpotnick/folio#install). Or download `folio.flatpak` (added when the release is published), the `.rpm`, the `.deb` or the `.AppImage`.
 
             These builds are not code-signed yet. On **macOS**, the first time, right-click the app and choose **Open**. On **Windows**, if SmartScreen warns, choose **More info → Run anyway**.
           releaseDraft: true

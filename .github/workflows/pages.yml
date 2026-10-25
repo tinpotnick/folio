@@ -29,6 +29,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # folio's own package repositories (docs/specs/package-repos.md),
+      # kept on the pkg-repo branch by the packages workflow.
+      - name: Package repositories
+        run: |
+          if git ls-remote --exit-code --heads origin pkg-repo >/dev/null; then
+            git fetch --depth 1 origin pkg-repo
+            mkdir -p dist/repo
+            git archive FETCH_HEAD | tar -x -C dist/repo
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
