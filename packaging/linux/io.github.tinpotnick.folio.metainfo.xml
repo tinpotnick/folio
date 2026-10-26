@@ -48,8 +48,8 @@
     </screenshot>
   </screenshots>
   <branding>
-    <color type="primary" scheme_preference="light">#a7c0e3</color>
-    <color type="primary" scheme_preference="dark">#1a2f52</color>
+    <color type="primary" scheme_preference="light">#f4efe4</color>
+    <color type="primary" scheme_preference="dark">#3a2a24</color>
   </branding>
   <provides>
     <mediatype>text/markdown</mediatype>

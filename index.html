@@ -372,6 +372,8 @@
       header h1 {
         flex: none;
       }
+      /* The wordmark: folio's # mark and "folio" set in EB Garamond
+         italic (bundled, registered on this page by fonts.ts). */
       #btn-home {
         font: inherit;
         color: inherit;
@@ -379,6 +381,24 @@
         border: none;
         padding: 0;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #btn-home .brand-mark {
+        width: 26px;
+        height: 26px;
+        display: block;
+      }
+      #btn-home .brand-word {
+        font-family: "EB Garamond", Georgia, serif;
+        font-style: italic;
+        font-weight: 600;
+        font-size: 25px;
+        letter-spacing: 0.005em;
+        line-height: 1;
+        position: relative;
+        top: -1px;
       }
       .seg {
         display: flex;
@@ -1133,7 +1153,8 @@
           title="folio — a document-first workspace. Open the welcome page"
           aria-label="folio - open the welcome page"
         >
-          folio
+          <img class="brand-mark" src="favicon.svg" alt="" />
+          <span class="brand-word">folio</span>
         </button>
       </h1>
       <div class="toolbar">

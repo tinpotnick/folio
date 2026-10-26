@@ -38,10 +38,18 @@ and apt repositories on GitHub Pages: docs/specs/package-repos.md.
   accepts for a GitHub-hosted project. It names the app's data folder
   (drafts, settings, the last-used folder), so it must not change
   after the first release.
-- Icon: `docs/media/icon.svg` (source) → `icon-1024.png` → every
-  platform size via `npx tauri icon docs/media/icon-1024.png -o
-  apps/desktop/src-tauri/icons` (then remove the android/ios sets).
-  The same SVG is the web version's favicon (`public/favicon.svg`).
+- Icon (2026-10-26): Markdown's `#` whose second upright rises like a
+  bar in a chart, on a paper tile (`#f4efe4`), in ink (`#1d1c1a`) and
+  folio's vermilion (`#ef5b33`). `docs/media/icon.svg` is the mark;
+  `icon-small.svg` is its 16-32 px cut (heavier strokes, fuller tile),
+  used for the favicon (`public/favicon.svg`) and `32x32.png`. Every
+  platform size: `npx tauri icon docs/media/icon-1024.png -o
+  apps/desktop/src-tauri/icons` (remove the android/ios sets), then
+  32x32.png from `icon-small-1024.png`.
+- Wordmark: the mark beside "folio" in EB Garamond italic (600) - the
+  toolbar (`#btn-home`), the README header
+  (`docs/media/wordmark-{light,dark}.png`) and the social card
+  (`docs/media/social.png`).
 - Bundle metadata (category, descriptions, publisher, licence) is in
   `tauri.conf.json` → `bundle`.
 
