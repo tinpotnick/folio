@@ -41,7 +41,8 @@ All under https://tinpotnick.github.io/folio/repo/.
   downloads the release's `.rpm`, `.deb` and `folio.flatpak` - taking
   the Flatpak bundle from the flatpak workflow's run on the tag, and
   attaching it to the release - and runs `packaging/repo/publish.sh`.
-- `publish.sh` updates the repositories in place: Flatpak imports the
+- `publish.sh` updates the repositories in place (recreating the
+  empty directories OSTree needs, which git does not keep): Flatpak imports the
   bundle and prunes to the last 5 commits (with static deltas); RPM and
   APT add the new package beside the old ones.
 - The result is force-pushed as one commit to the `pkg-repo` branch

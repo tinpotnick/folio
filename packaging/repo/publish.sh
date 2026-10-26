@@ -30,6 +30,10 @@ bundles=("$ASSETS"/*.flatpak)
 if ((${#bundles[@]})); then
   repo="$SITE/flatpak"
   [ -f "$repo/config" ] || ostree init --repo="$repo" --mode=archive-z2
+  # The repository comes back from the pkg-repo branch, and git keeps no
+  # empty directories: OSTree needs these to exist ("Listing refs:
+  # opendir(refs/remotes)" failed every publish after the first).
+  mkdir -p "$repo"/refs/{heads,remotes,mirrors} "$repo"/{objects,tmp,state,extensions}
   for b in "${bundles[@]}"; do
     flatpak build-import-bundle --gpg-sign="$FPR" "$repo" "$b"
   done
