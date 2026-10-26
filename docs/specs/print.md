@@ -87,6 +87,14 @@ No separate PDF export engine, no new dependency (ADR-0007).
   numbers right-aligned 16 mm from the right, 9 mm from the bottom. A
   title with characters outside WinAnsi is left off rather than
   printed as "?".
+- **Desktop Print** goes through WebKitGTK's own print dialog, whose
+  output folio never sees: no page numbers or header. Print says so
+  (flash: "For page numbers, use Export as PDF") and the help points
+  to Export. Considered and deferred (2026-10-26): Print builds the
+  stamped PDF and hands it to `GtkPrintUnixDialog` +
+  `gtk_print_job_set_source_file` (libgtk-3, already linked); macOS
+  would use PDFKit's `PDFDocument.printOperation`; Windows' WebView2
+  (Chromium) likely prints margin boxes already - unverified.
 - **Light paper**: before printing or exporting, every `<folio-doc>`
   switches to the light rendition (charts and diagrams redraw; export
   waits for them via `drawn()`), and goes back to the app's mode on

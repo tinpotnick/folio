@@ -2093,7 +2093,7 @@ function paletteEntries(): PaletteEntry[] {
     title: "Print the document",
     group: "Command",
     keywords: "print pdf export paper",
-    action: () => window.print(),
+    action: printDocument,
   });
   entries.push({
     title: "Page numbers and running header",
@@ -2313,7 +2313,7 @@ document.addEventListener("keydown", (ev) => {
   // app's webview (WebKitGTK) does not.
   if (key === "p") {
     ev.preventDefault();
-    window.print();
+    printDocument();
   }
   // Ctrl+S / Ctrl+O: Save and Open, in the browser too (its own
   // Ctrl+S would save the web page, not the document).
@@ -2643,6 +2643,18 @@ const printFurnitureStyle = document.head.appendChild(
 printFurnitureStyle.id = "print-furniture";
 window.addEventListener("beforeprint", preparePrint);
 window.addEventListener("afterprint", reflectMode);
+
+/**
+ * Print. The desktop app's print dialog (WebKitGTK) leaves off page
+ * numbers and the running header - only Export adds them (ADR-0027) -
+ * so it says where to find them.
+ */
+function printDocument(): void {
+  if (isDesktop()) {
+    flash("For page numbers, use Export as PDF");
+  }
+  window.print();
+}
 
 /* --- Export (spec: docs/specs/print.md, ADR-0025) --- */
 

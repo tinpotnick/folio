@@ -553,8 +553,11 @@ rows they reference; formula cells are never editable by hand.
   crisp vector graphics, always on light paper - even in dark mode.
 - Pages are numbered "Page n of N", with the title as a running
   header from page 2 (see Document settings to turn them off).
-  Exported PDFs have them unless you turn them off; when printing
-  from a browser, Chrome and Edge show them, Safari does not.
+  Exported PDFs have them unless you turn them off. **In the desktop
+  app, Print (and the print dialog's "Print to File") leaves them
+  off - use Export as PDF**, then print that file if you want paper.
+  When printing from a browser, Chrome and Edge show them, Safari
+  does not.
 
 ## Keyboard shortcuts
 
