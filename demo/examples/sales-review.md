@@ -66,8 +66,8 @@ caption: "Revenue by month and region"
 :::
 
 The same table as a heatmap: the North's lead widens month by month,
-and the Midlands catch up with the South by September. Against target
-(@sec:against-target), all three regions are close.
+and the Midlands catch up with the South by September. Against
+target, all three regions are close (see @sec:against-target).
 
 ```vega-lite
 {

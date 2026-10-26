@@ -929,7 +929,13 @@ export class FolioDoc extends HTMLElement {
         const host = this.shadowRoot?.querySelector("article.folio-doc");
         const t =
           host && this.crossRefTargets(host).get(xref.dataset.ref ?? "");
-        t?.el.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (t) {
+          t.el.scrollIntoView({ behavior: "smooth", block: "center" });
+          // Pick out where the reference landed, as footnotes do.
+          t.el.classList.remove("folio-xref-target");
+          void (t.el as HTMLElement).offsetWidth;
+          t.el.classList.add("folio-xref-target");
+        }
         return;
       }
       const a = (ev.target as Element).closest?.(
@@ -1214,8 +1220,10 @@ export class FolioDoc extends HTMLElement {
       if (!kind) continue;
       const named = id !== undefined && referenced.has(`${kind}:${id}`);
       const cap = el.querySelector<HTMLElement>(":scope > figcaption");
+      const fig = el as HTMLElement;
       if (!caption && !named) {
         if (cap) delete cap.dataset.label;
+        delete fig.dataset.xlabel;
         continue;
       }
       const label =
@@ -1226,6 +1234,10 @@ export class FolioDoc extends HTMLElement {
         if (caption) cap.dataset.label = label;
         else delete cap.dataset.label;
       }
+      // Referenced but uncaptioned: the number still shows, on its own
+      // where a caption would be, so "see Table 2" has a Table 2.
+      if (caption && cap) delete fig.dataset.xlabel;
+      else fig.dataset.xlabel = label;
       if (id !== undefined) targets.set(`${kind}:${id}`, { label, el });
     }
     return targets;
@@ -1338,7 +1350,16 @@ export class FolioDoc extends HTMLElement {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     if (!host || !this.doc) return [];
     const out: { ref: string; label: string; caption: string }[] = [];
+    // A lone H1 is the document's title - nothing to refer to.
+    const h1s = this.doc.blocks.filter(
+      (b) => b.kind === "heading" && b.level === 1,
+    );
+    const title = h1s.length === 1 ? h1s[0] : undefined;
     for (const [ref, t] of this.crossRefTargets(host)) {
+      if (ref.startsWith("sec:")) {
+        const idx = Number((t.el as HTMLElement).dataset.blockIndex ?? -1);
+        if (!t.label.trim() || this.doc.blocks[idx] === title) continue;
+      }
       const cap =
         t.el.querySelector(":scope > figcaption")?.textContent?.trim() ?? "";
       out.push({

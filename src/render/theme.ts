@@ -1666,7 +1666,26 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     a.folio-xref:hover { border-bottom-style: solid; }
     a.folio-xref.folio-xref-missing { color: var(--folio-ink-muted); font-style: italic; }
-    @media print { a.folio-xref { color: inherit; border-bottom: none; } }
+    /* A referenced figure with no caption still shows its number. */
+    figure[data-xlabel]::after {
+      content: attr(data-xlabel);
+      display: block;
+      margin-top: 0.4em;
+      font-size: 0.85em;
+      font-weight: 600;
+      text-align: center;
+      color: var(--folio-ink);
+    }
+    /* Where a reference landed, picked out for a moment. */
+    .folio-xref-target { animation: folio-fn-flash 1.6s ease-out; border-radius: 4px; }
+    /* On paper a reference is just words: "see Table 2". */
+    @media print {
+      a.folio-xref {
+        color: inherit !important;
+        border-bottom: none !important;
+        text-decoration: none !important;
+      }
+    }
 
     /* Footnotes (docs/specs/footnotes.md): numbers in the theme's
        accent; the notes gathered at the end, smaller, under a rule. */
