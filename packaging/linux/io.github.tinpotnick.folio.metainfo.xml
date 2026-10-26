@@ -63,6 +63,16 @@
     <control>pointing</control>
   </supports>
   <releases>
+    <release version="0.1.2" date="2026-10-26">
+      <description>
+        <p>A new look, and Linux packages that update themselves.</p>
+        <ul>
+          <li>A new icon and wordmark</li>
+          <li>Install from folio's own Flatpak, dnf or apt repository and get updates through your system</li>
+          <li>The Flatpak's icon now shows on high-resolution displays</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.1" date="2026-10-23">
       <description>
         <p>The first public release.</p>
