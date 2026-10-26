@@ -17,8 +17,8 @@ document — written in the same renderer you are working with.
 - **+ Insert** lists everything you can add, grouped: tables,
   datasets and charts; images, audio clips and recordings;
   equations, code, diagrams, drawings and 3D models; music; and
-  references - a footnote, a cross-reference ("see Table 2") and a
-  table of contents.
+  references - a footnote, a citation and a bibliography, a
+  cross-reference ("see Table 2") and a table of contents.
 - In a narrow window, whatever does not fit moves into **More
   tools** (the **⋯** button), least-used first, and comes back when
   there is room. Nothing is ever off the edge of the bar.
@@ -164,6 +164,26 @@ document — written in the same renderer you are working with.
   word (`[^source]`); readers still see numbers.
 
 [^how]: This is a footnote. Its number in the text links here.
+
+## Citations and references
+
+- **+ Insert › Bibliography** (or search "bibliography") adds a
+  **References** heading and a reference list. Click the list to see
+  its source: BibTeX, the format Google Scholar ("Cite" › BibTeX),
+  Zotero, Mendeley and journal sites all export. Paste entries there.
+- **+ Insert › Citation** (or search "cite") lists the references; pick
+  one and folio writes `[@knuth1984]` at your cursor, shown as
+  "(Knuth, 1984)". The reference list shows only what is cited, sorted
+  and formatted for you; entries not cited yet are listed (on screen
+  only) underneath.
+- Typing works too, in Pandoc's syntax: `[@knuth1984, p. 99]` adds a
+  page, `[see @a; @b]` cites two, `[-@knuth1984]` gives the year alone,
+  and `@knuth1984` in a sentence reads "Knuth (1984)".
+- **Citation style** in document settings: author-date, APA-like
+  "(Knuth, 1984)", or numeric, IEEE-like "[1]" - the citations and the
+  list renumber together. Click a citation to go to its entry.
+- A citation whose key is not in the bibliography shows as
+  "(key?)" in grey; hover it to see which key is missing.
 
 ## Numbered tables, figures and cross-references
 
@@ -526,8 +546,9 @@ rows they reference; formula cells are never editable by hand.
 - The sliders button (toolbar, or search "settings") opens the
   document settings: the theme picker first, then overrides for
   fonts, heading and body sizes, table style (booktabs, plain,
-  striped, minimal, banded, ledger), chart palette, page-break
-  behavior, and page numbers and the running header. Everything it edits is
+  striped, minimal, banded, ledger), chart palette, citation style
+  (author-date or numeric), page-break behavior, and page numbers and
+  the running header. Everything it edits is
   the style header at the top of the Markdown source — the dialog
   is just a friendlier way to write the same YAML.
 - **H1/H2 start a new page** applies when printing (and to PDF

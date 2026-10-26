@@ -32,6 +32,10 @@ follow), so each new language adds only its own drawing function.
 - **Insert**: each language has a palette entry and a language-picker
   entry; inserting on an empty line takes the line's place.
 
+## BibTeX (`bibtex`, also `biblatex`)
+
+- The picture is the formatted reference list; see citations.md.
+
 ## Graphviz (`dot`, also `graphviz`)
 
 - Laid out and drawn by Graphviz (`@viz-js/viz`, WebAssembly,

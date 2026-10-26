@@ -1727,6 +1727,8 @@
                   </svg>
                   <span class="mi-label">3D model (JSCAD)</span>
                 </button>
+              </div>
+              <div class="menu-col">
                 <div class="menu-heading">References</div>
                 <button
                   role="menuitem"
@@ -1750,6 +1752,42 @@
                     />
                   </svg>
                   <span class="mi-label">Footnote</span>
+                </button>
+                <button
+                  role="menuitem"
+                  id="btn-insert-cite"
+                  title="Cite a source from the bibliography: '(Knuth, 1984)'"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M3 10.5c0-3 1-5 3-6.5M3 10.5a1.75 1.75 0 103.5 0 1.75 1.75 0 00-3.5 0zM9.5 10.5c0-3 1-5 3-6.5M9.5 10.5a1.75 1.75 0 103.5 0 1.75 1.75 0 00-3.5 0z"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Citation</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a bibliography"
+                  title="Insert a reference list - paste BibTeX into it"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M3 2.5h2.5v11H3zM6.5 2.5H9v11H6.5zM10.2 3.2l2.3-.7 2.2 10.4-2.3.6z"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Bibliography</span>
                 </button>
                 <button
                   role="menuitem"
@@ -2085,6 +2123,8 @@
         <select id="set-table-style"></select>
         <label for="set-palette">Chart palette</label>
         <select id="set-palette"></select>
+        <label for="set-citation-style">Citation style</label>
+        <select id="set-citation-style"></select>
         <div class="settings-sub"><span>Print &amp; PDF</span></div>
         <label for="set-pb-h1">H1 starts a new page</label>
         <select id="set-pb-h1">

@@ -10,6 +10,7 @@
  * its own dark colors and dark palette: a dark editorial page is
  * still recognisably editorial.
  */
+import { CITATION_STYLES, type CitationStyle } from "../engine/citations.js";
 import type { Doc } from "../engine/doc.js";
 import { fontStack } from "./fonts.js";
 
@@ -73,6 +74,8 @@ export interface Theme {
   colors: Record<Mode, ThemeColors>;
   pageBreakH1: boolean;
   pageBreakH2: boolean;
+  /** How citations read (docs/specs/citations.md). */
+  citationStyle: CitationStyle;
 }
 
 /**
@@ -169,6 +172,7 @@ const DEFAULT_THEME: Theme = {
   },
   pageBreakH1: false,
   pageBreakH2: false,
+  citationStyle: "author-date",
 };
 
 function palette(name: string): Record<Mode, string[]> {
@@ -653,6 +657,11 @@ export function themeFromDoc(doc: Doc): Theme {
     palette: PALETTES[style.get("chart.palette") ?? ""] ?? base.palette,
     pageBreakH1: style.get("pagebreak.h1") === "before",
     pageBreakH2: style.get("pagebreak.h2") === "before",
+    citationStyle: (CITATION_STYLES as readonly string[]).includes(
+      style.get("citation.style") ?? "",
+    )
+      ? (style.get("citation.style") as CitationStyle)
+      : base.citationStyle,
   };
 }
 
@@ -1474,6 +1483,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     /* SVG drawings inherit the page's ink as currentColor. */
     figure.folio-svg .code-view { color: var(--folio-ink); }
+    figure.folio-bibtex .code-view,
+    figure.folio-biblatex .code-view { color: var(--folio-ink); font-size: 1em; overflow-x: visible; }
     /* Header buttons (Play, Stop, Export STL) look like the bar's
        controls, sized to their label - not stretched browser grey. */
     figure.folio-codeblock .folio-inspector button.insp-select {
@@ -1666,6 +1677,44 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     a.folio-xref:hover { border-bottom-style: solid; }
     a.folio-xref.folio-xref-missing { color: var(--folio-ink-muted); font-style: italic; }
+    /* Citations and the reference list (docs/specs/citations.md). */
+    span.folio-cite {
+      color: var(--folio-accent);
+      cursor: pointer;
+      border-bottom: 1px dotted color-mix(in srgb, var(--folio-accent) 50%, transparent);
+    }
+    span.folio-cite:hover { border-bottom-style: solid; }
+    span.folio-cite.folio-cite-missing { color: var(--folio-ink-muted); font-style: italic; }
+    figure.folio-bibtex, figure.folio-biblatex { margin: 0.6em 0 1.6em; }
+    article.folio-doc ol.folio-refs {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      font-size: 0.92em;
+      line-height: 1.5;
+    }
+    article.folio-doc ol.folio-refs li { margin: 0 0 0.55em; border-radius: 4px; }
+    /* Author-date: a hanging indent, as APA sets it. */
+    article.folio-doc ol.folio-refs-author-date li { padding-left: 2em; text-indent: -2em; }
+    /* Numeric: the labels in their own column. */
+    article.folio-doc ol.folio-refs-numeric li { display: grid; grid-template-columns: 2.6em 1fr; }
+    ol.folio-refs-numeric .ref-label { color: var(--folio-ink-muted); font-variant-numeric: tabular-nums; }
+    article.folio-doc ol.folio-refs a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+    article.folio-doc ol.folio-refs a:hover { color: var(--folio-accent); text-decoration: underline; }
+    .folio-refs-note, .folio-refs-error {
+      margin: 0.4em 0 0;
+      font-size: 0.85em;
+      color: var(--folio-ink-muted);
+      font-style: italic;
+    }
+    .folio-refs-error { color: var(--folio-unit); font-style: normal; }
+    @media print {
+      span.folio-cite {
+        color: inherit !important;
+        border-bottom: none !important;
+      }
+      .folio-refs-note, .folio-refs-error { display: none; }
+    }
     /* A referenced figure with no caption still shows its number. */
     figure[data-xlabel]::after {
       content: attr(data-xlabel);

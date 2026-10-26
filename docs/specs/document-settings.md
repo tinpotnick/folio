@@ -53,6 +53,8 @@ hand, never a second representation.
     paged media (print). Markdown has no page-break token and
     folio adds none - a page break is a style, not content
     (non-negotiable: documents are semantic).
+  - `citation.style`: author-date (default) or numeric
+    (docs/specs/citations.md).
   - `page.numbers`, `page.header` - unset (on) or "off": "Page n of
     N" and the running title on printed and exported pages
     (print.md, ADR-0027).
