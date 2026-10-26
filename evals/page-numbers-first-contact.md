@@ -9,7 +9,7 @@ expected:
   - Every page says "Page n of N" at the bottom right; from page 2 the document's title is at the top left; page 1 has no header.
   - The pages are light paper with light-mode charts, even though the app is in dark mode.
   - The control is found from visible affordances (Document settings, or Ctrl+K "page numbers").
-  - Turning numbers off removes them from the next printout; the source gains `page.numbers: off` and nothing in the text.
+  - Turning numbers off removes them from the next printout; the source gains `page.numbers: "off"` and nothing in the text.
 ---
 # First-contact eval: page numbers
 

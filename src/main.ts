@@ -3,7 +3,11 @@
  * Document view / Markdown view toggle; edits in either mode keep
  * the document as the source of truth.
  */
-import { furnitureCss, furnitureFor } from "./render/page-furniture";
+import {
+  furnitureCss,
+  furnitureFont,
+  furnitureFor,
+} from "./render/page-furniture";
 import "./component.js";
 import type { FolioDoc } from "./component.js";
 import { parseDoc, serializeDoc } from "./engine/doc.js";
@@ -2628,7 +2632,10 @@ function preparePrint(): void {
   }
   // The running header and page numbers, as @page margin boxes - they
   // only apply from the document's own stylesheet.
-  printFurnitureStyle.textContent = furnitureCss(furnitureFor(el.getDoc()));
+  printFurnitureStyle.textContent = furnitureCss(
+    furnitureFor(el.getDoc()),
+    furnitureFont(el.getDoc()),
+  );
 }
 const printFurnitureStyle = document.head.appendChild(
   document.createElement("style"),

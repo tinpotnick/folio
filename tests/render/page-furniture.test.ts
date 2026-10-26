@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseDoc } from "../../src/engine/doc";
-import { furnitureCss, furnitureFor } from "../../src/render/page-furniture";
+import {
+  furnitureCss,
+  furnitureFont,
+  furnitureFor,
+} from "../../src/render/page-furniture";
 
 describe("page furniture (docs/specs/print.md)", () => {
   it("is the title and page numbers by default", () => {
@@ -25,6 +29,16 @@ describe("page furniture (docs/specs/print.md)", () => {
     expect(furnitureFor(parseDoc("Just text.\n")).header).toBeNull();
     expect(furnitureCss({ header: 'A "q" \\ b', numbers: false })).toContain(
       'content: "A \\"q\\" \\\\ b"',
+    );
+  });
+
+  it("sets the margin boxes in the theme's body face", () => {
+    const font = furnitureFont(
+      parseDoc("---\ntheme: manuscript\n---\n\n# T\n"),
+    );
+    expect(font).toMatch(/serif/i);
+    expect(furnitureCss({ header: "T", numbers: true }, font)).toContain(
+      `font: 8.5pt ${font};`,
     );
   });
 });

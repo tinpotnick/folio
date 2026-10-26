@@ -6,11 +6,17 @@
  * style keys, never in the text (AGENTS.md #1).
  */
 import type { Doc } from "../engine/doc";
+import { themeFromDoc } from "./theme";
 
 export interface Furniture {
   /** The running header, or null for none. */
   header: string | null;
   numbers: boolean;
+}
+
+/** The document's body font stack, for the margin boxes. */
+export function furnitureFont(doc: Doc | null): string {
+  return doc ? themeFromDoc(doc).bodyFont : "sans-serif";
 }
 
 /** A heading's words without its Markdown marks. */
@@ -43,8 +49,8 @@ function cssString(s: string): string {
  * (Chromium) print them; the desktop app's WebKitGTK does not, so its
  * PDF export stamps the same furniture on afterwards (ADR-0027).
  */
-export function furnitureCss(f: Furniture): string {
-  const box = "font: 8.5pt sans-serif; color: #6b6b6b;";
+export function furnitureCss(f: Furniture, font = "sans-serif"): string {
+  const box = `font: 8.5pt ${font}; color: #6b6b6b;`;
   const rules: string[] = [];
   if (f.header) {
     rules.push(`@top-left { content: ${cssString(f.header)}; ${box} }`);

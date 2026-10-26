@@ -72,7 +72,9 @@ No separate PDF export engine, no new dependency (ADR-0007).
   left - small grey sans-serif, in the page margin. Page 1 carries the
   title itself, so it has no header.
 - **Settings**: style keys `page.numbers` and `page.header`, on when
-  unset, `off` to remove (document-settings.md). No title, no header.
+  unset, `"off"` to remove (document-settings.md; the dialog writes
+  it quoted, since YAML 1.1 reads a bare `off` as false - both
+  spellings are read the same). No title, no header.
 - **Print / web**: `preparePrint` writes the furniture into the host's
   `<style id="print-furniture">` as `@page` margin boxes
   (`furnitureCss`, `src/render/page-furniture.ts`) - they only apply
