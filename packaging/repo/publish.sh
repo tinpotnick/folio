@@ -43,7 +43,7 @@ Url=$BASE/flatpak/
 Homepage=https://github.com/tinpotnick/folio
 Comment=folio's own Flatpak repository
 Description=Documents with live data inside, beautiful by default, saved as plain Markdown.
-Icon=$BASE/icon.svg
+Icon=$BASE/icon.png
 GPGKey=$KEY_B64
 EOF
   cat > "$SITE/$APP.flatpakref" <<EOF
@@ -56,10 +56,14 @@ Url=$BASE/flatpak/
 SuggestRemoteName=folio
 RuntimeRepo=https://dl.flathub.org/repo/flathub.flatpakrepo
 Homepage=https://github.com/tinpotnick/folio
-Icon=$BASE/icon.svg
+Icon=$BASE/icon.png
 GPGKey=$KEY_B64
 EOF
-  cp "$HERE/../../docs/media/icon.svg" "$SITE/icon.svg"
+  # A PNG: GNOME Software shows a .flatpakref's Icon before the
+  # repository (and its AppStream icons) is added, and it does not
+  # load an SVG there - the link showed no icon.
+  cp "$HERE/../../apps/desktop/src-tauri/icons/128x128@2x.png" "$SITE/icon.png"
+  rm -f "$SITE/icon.svg"
 fi
 
 # --- RPM: a dnf repository (signed packages and signed metadata) --------

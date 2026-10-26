@@ -50,5 +50,9 @@ All under https://tinpotnick.github.io/folio/repo/.
   web app and copies `pkg-repo` into `dist/repo/`.
 - A pull request touching this runs a dry run from the latest release
   with a throwaway key and keeps the result as an artifact.
+- The `.flatpakref` and `.flatpakrepo` point their `Icon=` at a 256 px
+  PNG (`/repo/icon.png`): GNOME Software shows the one-click link's
+  app before the repository's AppStream icons are available, and does
+  not load an SVG there.
 - Republishing a release by hand: Actions → packages → Run workflow,
   with its tag.
