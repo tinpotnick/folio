@@ -3,7 +3,7 @@
 # from a release's files, into a static site served at
 #   https://tinpotnick.github.io/folio/repo/
 #
-#   publish.sh <site-dir> <assets-dir> <gpg-fingerprint> <base-url>
+#   publish.sh <site-dir> <assets-dir> <gpg-fingerprint> <base-url> <tag>
 #
 # <site-dir> holds the repositories so far (updated in place, so
 # Flatpak keeps its history for updates); <assets-dir> holds the
@@ -16,6 +16,8 @@ SITE=$1
 ASSETS=$2
 FPR=$3
 BASE=${4%/}
+TAG=$5
+RELEASE="https://github.com/tinpotnick/folio/releases/download/$TAG/"
 HERE=$(cd "$(dirname "$0")" && pwd)
 APP=io.github.tinpotnick.folio
 
@@ -105,17 +107,21 @@ EOF
 fi
 
 # --- RPM: a dnf repository (signed packages and signed metadata) --------
+# The metadata lists the release's own .rpm (xml:base = the release), so
+# each dnf install or upgrade is a download of the release file - how
+# folio counts Fedora installs. The repository holds the latest release.
 rpms=("$ASSETS"/*.rpm)
 if ((${#rpms[@]})); then
   dir="$SITE/rpm"
-  mkdir -p "$dir"
+  rm -rf "$dir" "$ASSETS/signed-rpm"
+  mkdir -p "$dir" "$ASSETS/signed-rpm"
   printf '%%_gpg_name %s\n%%__gpg /usr/bin/gpg\n' "$FPR" > "$HOME/.rpmmacros"
   for r in "${rpms[@]}"; do
-    cp "$r" "$dir/"
-    rpmsign --addsign "$dir/$(basename "$r")"
+    cp "$r" "$ASSETS/signed-rpm/"
+    # Signed once; a release already carrying folio's signed .rpm keeps it.
+    [ -f "$ASSETS/.rpm-signed" ] || rpmsign --addsign "$ASSETS/signed-rpm/$(basename "$r")"
   done
-  createrepo_c --update "$dir"
-  rm -f "$dir/repodata/repomd.xml.asc"
+  createrepo_c --baseurl "$RELEASE" --outputdir "$dir" "$ASSETS/signed-rpm"
   gpg --batch --yes --local-user "$FPR" --armor --detach-sign \
     --output "$dir/repodata/repomd.xml.asc" "$dir/repodata/repomd.xml"
   cat > "$SITE/folio.repo" <<EOF

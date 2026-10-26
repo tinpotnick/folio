@@ -39,3 +39,8 @@ verify-agent:
 # The Linux desktop's real engine (WebKitGTK); needs `npm run dev`.
 test-webkitgtk:
     python3 tests/webkitgtk/run.py
+
+# How folio is being found and installed: release downloads (including
+# Fedora dnf installs), 14-day traffic, stars.
+stats:
+    scripts/stats.sh
