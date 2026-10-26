@@ -4892,18 +4892,28 @@ export class FolioDoc extends HTMLElement {
     )) {
       this.drawChart(fig);
     }
+    const pending: Promise<unknown>[] = [];
     for (const fig of Array.from(
       root.querySelectorAll<HTMLElement>("[data-diagram-id]"),
     )) {
-      void this.drawDiagram(fig);
+      pending.push(this.drawDiagram(fig));
     }
     // Drawings take the mode's palette too (models only re-project).
     for (const fig of Array.from(
       root.querySelectorAll<HTMLElement>("figure.folio-drawn"),
     )) {
       if (fig.dataset.lang === "jscad") this.paintJscad(fig);
-      else void this.drawDrawn(fig);
+      else pending.push(this.drawDrawn(fig));
     }
+    this.restyled = Promise.allSettled(pending).then(() => undefined);
+  }
+
+  private restyled: Promise<void> = Promise.resolve();
+
+  /** Resolves once the last mode change has redrawn every figure (an
+   * export waits on it before printing). */
+  drawn(): Promise<void> {
+    return this.restyled;
   }
 
   private drawChart(figure: HTMLElement): void {

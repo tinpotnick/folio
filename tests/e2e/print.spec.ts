@@ -90,4 +90,47 @@ test.describe("print and PDF", () => {
     });
     expect(screenBreak).not.toBe("page");
   });
+
+  test("pages carry the title and their numbers (docs/specs/print.md)", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+    const css = await page.locator("style#print-furniture").textContent();
+    expect(css).toContain('@top-left { content: "Q3 Field Operations Review"');
+    expect(css).toContain('"Page " counter(page) " of " counter(pages)');
+    expect(css).toContain("@page :first { @top-left { content: none; } }");
+  });
+
+  test("page numbers and the header turn off in Document settings", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("page numbers");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#settings-modal")).toBeVisible();
+    await expect(page.locator("#set-page-numbers")).toBeFocused();
+    await page.locator("#set-page-numbers").selectOption("off");
+    await page.locator("#set-page-header").selectOption("off");
+    await page.locator("#settings-form button[type=submit]").click();
+    await page.locator("#btn-markdown").click();
+    const md = await page.locator("#editor").inputValue();
+    expect(md).toMatch(/page\.numbers: "?off"?/);
+    expect(md).toMatch(/page\.header: "?off"?/);
+    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+    expect(await page.locator("style#print-furniture").textContent()).toBe("");
+  });
+
+  test("dark mode prints on light paper, then comes back", async ({ page }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-mode").click();
+    const docMode = (): Promise<string | null> =>
+      page.locator("#the-doc").getAttribute("mode");
+    await expect.poll(docMode).toBe("dark");
+    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+    await expect.poll(docMode).toBe("light");
+    await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
+    await expect.poll(docMode).toBe("dark");
+  });
 });
