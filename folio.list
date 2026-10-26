@@ -1,0 +1,1 @@
+deb [signed-by=/etc/apt/keyrings/folio-archive-keyring.gpg] https://tinpotnick.github.io/folio/repo/apt stable main

@@ -1,0 +1,34 @@
+Package: folio
+Architecture: amd64
+Version: 0.1.1
+Priority: optional
+Maintainer: Nick Knight
+Installed-Size: 20324
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+Filename: pool/main/folio_0.1.1_amd64.deb
+Size: 9076812
+MD5sum: 31d7be894845479faa535c3a93972e81
+SHA1: 07a69b3b131804796d6282cf8eb47b5fdb6c17a8
+SHA256: 332aa50a2b38f2e6ff7568a16e124085099e3954428d02e75a13345fb1af4f8d
+SHA512: e8cbbc82f8f0c277f99a8cd7d140ece32a439c5b29b7c1c547b576a846b3ecd0fbb18a98b35be4b049c6dd76b7a0070342f0c412ae9ef8401edd6bb0199b9a25
+Homepage: https://github.com/tinpotnick/folio
+Description: Documents where the data lives inside, and the page looks finished.
+ folio is a document editor where tables are live datasets, charts are drawn from them, and every document renders as a polished report from a plain Markdown file anyone can read.
+
+Package: folio
+Architecture: amd64
+Version: 0.1.2
+Priority: optional
+Maintainer: Nick Knight
+Installed-Size: 20324
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+Filename: pool/main/folio_0.1.2_amd64.deb
+Size: 9077080
+MD5sum: 57aba0b10838821dc46879c94a5bd556
+SHA1: 5991a504b6fea8840fac146fabeac1acfd4d586f
+SHA256: 84357cd1e97858b7eb754b4a71a644c4480603f3ac931c3dc438db1dc00ba614
+SHA512: 5f422a6a269c1856f9f0aa92adab1233a379b6179aa1832fe9389e779ad07b88febe12b8ea9d16169ad4f8c464f1319a1c30e6d0bfb782a2b9144ad3f79b3bd5
+Homepage: https://github.com/tinpotnick/folio
+Description: Documents where the data lives inside, and the page looks finished.
+ folio is a document editor where tables are live datasets, charts are drawn from them, and every document renders as a polished report from a plain Markdown file anyone can read.
+

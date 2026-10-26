@@ -1,0 +1,23 @@
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Mon, 26 Oct 2026 14:30:36 +0000
+Label: folio
+Origin: folio
+Suite: stable
+MD5Sum:
+ fae830269566a65877b4371121e2930f              134 Release
+ fdeeb901091d3acbaed40d22e7ef707c             1636 main/binary-amd64/Packages
+ bbac60be5c6bf5c1042e5181d649e7ef              771 main/binary-amd64/Packages.gz
+SHA1:
+ 813750d611af1a4c69414e6ab7de6ae03f96d73a              134 Release
+ dec44ddc507b2fe6222271cc28f4ebeb82d6200a             1636 main/binary-amd64/Packages
+ 5b2fc67364676a838a166e648365d18bad704f2d              771 main/binary-amd64/Packages.gz
+SHA256:
+ 7d41e200cc68ffef1dbbfbb084c8cc586a22d8bad7e4a227eb42ce57a9fd39e7              134 Release
+ b0dc23be57938b237d9c616da0dba1634c9e13c5297368b23fa12495ff6a76f4             1636 main/binary-amd64/Packages
+ c7c6b5eddc16b23f56df65edd7e571dfe7651139d2e14e0084d7e7e2025d5833              771 main/binary-amd64/Packages.gz
+SHA512:
+ 3fcf15380209144114a133aed7fa0515a59081bd25e5b8bb0bf5b3bae2897e1408f64b2090069e29c33982a956ac5b9267d8bbd36d91ef859b0bd7b607decf83              134 Release
+ f12247ea257ec975935882bf9b697b6ffded5d06c1980ce46b3428dbd4bc0dd9628632f77ba445634ff6b281aeccbeac476bacc457aaf8d236e4a939a3f57ac7             1636 main/binary-amd64/Packages
+ 0d1b03fdec8049eeebe44f2aeb37aa4cd83ec322aade89db75fd77bc489611901290a39b42c08fe10a2a794dedf52dfb9f934b2f0589bb78e2662f34d270f609              771 main/binary-amd64/Packages.gz
