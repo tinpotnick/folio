@@ -114,6 +114,26 @@ function pages(p: string): string {
   return p.replace(/\s*[-–]+\s*/g, "–");
 }
 
+const SMALL_WORDS = new Set(
+  "a an and as at but by for in nor of on or so the to up via with".split(" "),
+);
+
+/** APA sets periodical titles in title case; reference managers often
+ * export them lower-cased ("The computer journal"). Only all-lower-case
+ * words change - "IEEE" and "iPhone" are kept. */
+function titleCase(s: string): string {
+  return s
+    .split(" ")
+    .map((w, i) =>
+      /^[a-z]/.test(w) &&
+      w === w.toLowerCase() &&
+      (i === 0 || !SMALL_WORDS.has(w))
+        ? w[0]?.toUpperCase() + w.slice(1)
+        : w,
+    )
+    .join(" ");
+}
+
 function sentence(s: string): string {
   return /[.?!]$/.test(s) ? s : `${s}.`;
 }
@@ -212,7 +232,13 @@ export function formatCitation(
   style: CitationStyle,
 ): { text: string; missing: string[] } {
   const missing: string[] = [];
-  const parts = cluster.items.map((it) => {
+  // Several works in one citation read in list order: alphabetical
+  // (APA), or ascending numbers (IEEE). Unknown keys go last.
+  const rank = (k: string): number => f.byKey.get(k)?.number ?? Infinity;
+  const items = cluster.narrative
+    ? cluster.items
+    : [...cluster.items].sort((a, b) => rank(a.key) - rank(b.key));
+  const parts = items.map((it) => {
     const hit = f.byKey.get(it.key);
     if (!hit) {
       missing.push(it.key);
@@ -299,7 +325,7 @@ function apa(e: BibEntry, yr: string): Run[] {
     case "article": {
       head(false);
       if (f.journal) {
-        runs.push({ text: f.journal, em: true });
+        runs.push({ text: titleCase(f.journal), em: true });
         if (f.volume) runs.push({ text: ", " }, { text: f.volume, em: true });
         if (f.number) runs.push({ text: `(${f.number})` });
         if (f.pages) runs.push({ text: `, ${pages(f.pages)}` });
@@ -322,7 +348,7 @@ function apa(e: BibEntry, yr: string): Run[] {
       const book = f.booktitle ?? f.title;
       runs.push({ text: "In " });
       if (e.editors.length) runs.push({ text: `${apaEditors(e.editors)}, ` });
-      runs.push({ text: book ?? "", em: true });
+      runs.push({ text: titleCase(book ?? ""), em: true });
       runs.push({ text: f.pages ? ` (pp. ${pages(f.pages)}). ` : ". " });
       if (f.publisher) runs.push({ text: sentence(f.publisher) });
       break;

@@ -95,6 +95,44 @@ describe("BibTeX (docs/specs/citations.md)", () => {
     ]);
   });
 
+  it("never carries one entry's fields into the next", () => {
+    const { entries, errors } = parseBibtex(
+      [
+        "@article{erdos1959, author={Erd{\\H{o}}s, P.}, title={On random graphs},",
+        "  journal={Publicationes Mathematicae Debrecen}, year={1959}",
+        "@book{goossens1994, author={Goossens, Michel}, title={The {\\LaTeX} Companion}, year={1994}}",
+        "@misc{x, title={Unclosed value, year={2000}}",
+        "@misc{y, title={Fine}, year={2001}}",
+      ].join("\n"),
+    );
+    const byKey = Object.fromEntries(entries.map((e) => [e.key, e]));
+    expect(byKey.erdos1959?.fields.title).toBe("On random graphs");
+    expect(byKey.erdos1959?.authors[0]?.family).toBe("Erdős");
+    expect(byKey.goossens1994?.fields.title).toBe("The LaTeX Companion");
+    expect(byKey.goossens1994?.fields.journal).toBeUndefined();
+    expect(byKey.y?.fields.title).toBe("Fine");
+    expect(errors.join(" | ")).toMatch(
+      /"erdos1959" is not closed - a \} is missing before line 3.*"x" is not closed - a \} is missing before line 5/,
+    );
+  });
+
+  it("stops an unclosed value at the next entry", () => {
+    const { entries, errors } = parseBibtex(
+      "@misc{z, title={Never closed,\n  year={2000}\n@misc{w, title={W}}",
+    );
+    expect(entries.map((e) => e.key)).toEqual(["z", "w"]);
+    expect(entries[1]?.fields.title).toBe("W");
+    expect(errors[0]).toMatch(/"z": the title field is not closed/);
+  });
+
+  it("flags keys a citation cannot name", () => {
+    const { entries, errors } = parseBibtex(
+      '@article{schr{\\"o}dinger1935, title={Die gegenwärtige Situation}, year=1935}',
+    );
+    expect(entries).toEqual([]);
+    expect(errors[0]).toMatch(/cannot be cited as it is - rename the key/);
+  });
+
   it("reports what it cannot read, and keeps going", () => {
     const { entries, errors } = parseBibtex(
       "@book{a, title={A}, year=2000}\n@book{a, title={B}}\n@misc{b, title={C}",
@@ -136,6 +174,8 @@ describe("author-date (APA-like)", () => {
     expect(cite("[see @knuth1984, p. 99; @tufte1983]")).toBe(
       "(see Knuth, 1984, p. 99; Tufte, 1983)",
     );
+    // Several works read alphabetically, however they were written.
+    expect(cite("[@tufte1983; @knuth1984]")).toBe("(Knuth, 1984; Tufte, 1983)");
     expect(cite("[-@knuth1984]")).toBe("(1984)");
     expect(cite("@knuth1984")).toBe("Knuth (1984)");
     expect(cite("[@satyanarayan2017]")).toBe("(Satyanarayan et al., 2017)");

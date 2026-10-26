@@ -1032,6 +1032,11 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       cursor: pointer;
     }
     .folio-inspector .insp-chart:hover { background: var(--folio-hover); }
+    .folio-inspector .insp-hint {
+      align-self: center;
+      color: var(--folio-ink-muted);
+      font-size: 12px;
+    }
     .folio-inspector .insp-note {
       flex-basis: 100%;
       color: var(--folio-unit);
@@ -1701,6 +1706,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     ol.folio-refs-numeric .ref-label { color: var(--folio-ink-muted); font-variant-numeric: tabular-nums; }
     article.folio-doc ol.folio-refs a { color: inherit; text-decoration: none; overflow-wrap: anywhere; }
     article.folio-doc ol.folio-refs a:hover { color: var(--folio-accent); text-decoration: underline; }
+    article.folio-doc ol.folio-refs-uncited { color: var(--folio-ink-muted); margin-top: 0.4em; }
     .folio-refs-note, .folio-refs-error {
       margin: 0.4em 0 0;
       font-size: 0.85em;
@@ -1713,7 +1719,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
         color: inherit !important;
         border-bottom: none !important;
       }
-      .folio-refs-note, .folio-refs-error { display: none; }
+      .folio-refs-note, .folio-refs-error, ol.folio-refs-uncited { display: none !important; }
     }
     /* A referenced figure with no caption still shows its number. */
     figure[data-xlabel]::after {
@@ -1786,7 +1792,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     /* The note a reference jumped to, picked out for a moment. */
     section.folio-notes li.folio-fn-target { animation: folio-fn-flash 1.6s ease-out; }
     @keyframes folio-fn-flash {
-      0%, 30% { background: color-mix(in srgb, var(--folio-accent) 16%, transparent); }
+      0%, 30% { background: color-mix(in srgb, var(--folio-accent) 26%, transparent); }
       100% { background: transparent; }
     }
     section.folio-notes li { border-radius: 4px; }
@@ -1916,6 +1922,16 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       }
       figure.folio-audio audio {
         display: none;
+      }
+      /* Paper shows the document, never the editing furniture: an
+         inspector bar left open, or a drawn figure's source. */
+      .folio-inspector,
+      figure.folio-drawn > pre.folio-code {
+        display: none !important;
+      }
+      figure.folio-drawn > .code-view {
+        border-bottom: none !important;
+        margin-bottom: 0 !important;
       }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }

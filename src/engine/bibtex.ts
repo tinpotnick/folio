@@ -6,6 +6,8 @@
  * of truth and is never rewritten.
  */
 
+import { CITE_KEY } from "./citations.js";
+
 export interface Name {
   family: string;
   given: string;
@@ -169,12 +171,15 @@ export function parseNames(raw: string | undefined): Name[] {
     );
 }
 
+/** A line that starts an entry: `@article{`. */
+const NEXT_ENTRY = /^\s*@\s*[a-zA-Z]+\s*[{(]/;
+
 /** Read one field value at `i`: {...}, "...", a number or a macro, joined by #. */
 function readValue(
   src: string,
   i: number,
   strings: Record<string, string>,
-): { value: string; end: number } {
+): { value: string; end: number; unclosed?: boolean } {
   let value = "";
   for (;;) {
     while (/\s/.test(src[i] ?? "")) i++;
@@ -183,6 +188,11 @@ function readValue(
       let depth = 1;
       let j = i + 1;
       while (j < src.length && depth > 0) {
+        // An unclosed value stops where the next entry starts - it
+        // must never swallow the entries after it.
+        if (src[j] === "\n" && NEXT_ENTRY.test(src.slice(j + 1, j + 80))) {
+          return { value: value + src.slice(i + 1, j), end: j, unclosed: true };
+        }
         if (src[j] === "{") depth++;
         else if (src[j] === "}") depth--;
         j++;
@@ -253,10 +263,16 @@ export function parseBibtex(src: string): Bibliography {
     const key = keyM[1] ?? "";
     i += keyM[0].length;
     const raw: Record<string, string> = {};
+    const line = (at: number): string =>
+      `line ${String(src.slice(0, at).split("\n").length)}`;
     for (;;) {
       while (/[\s,]/.test(src[i] ?? "")) i++;
-      if (i >= src.length) {
-        errors.push(`"${key}" is not closed - a } is missing`);
+      // The next entry starts before this one closed: close it here,
+      // so no field ever crosses from one reference to another.
+      if (i >= src.length || NEXT_ENTRY.test(src.slice(i, i + 80))) {
+        errors.push(
+          `"${key}" is not closed - a } is missing before ${i >= src.length ? "the end" : line(i)}`,
+        );
         break;
       }
       if (src[i] === close) {
@@ -266,7 +282,7 @@ export function parseBibtex(src: string): Bibliography {
       const f = /^([^\s=,{}]+)\s*=/.exec(src.slice(i));
       if (!f) {
         errors.push(
-          `"${key}" has something that is not a field near "${src.slice(i, i + 20).trim()}"`,
+          `"${key}" has something that is not a field near "${src.slice(i, i + 20).trim()}" (${line(i)})`,
         );
         while (i < src.length && src[i] !== "\n") i++;
         continue;
@@ -274,9 +290,20 @@ export function parseBibtex(src: string): Bibliography {
       i += f[0].length;
       const v = readValue(src, i, strings);
       raw[(f[1] ?? "").toLowerCase()] = v.value;
+      if (v.unclosed) {
+        errors.push(
+          `"${key}": the ${(f[1] ?? "").toLowerCase()} field is not closed - a } is missing before ${line(v.end + 1)}`,
+        );
+      }
       i = v.end;
     }
     at.lastIndex = i;
+    if (!new RegExp(`^${CITE_KEY}$`).test(key)) {
+      errors.push(
+        `"${key}" cannot be cited as it is - rename the key using letters, digits and : . - _ only`,
+      );
+      continue;
+    }
     if (seen.has(key)) {
       errors.push(`"${key}" appears twice - the first is used`);
       continue;

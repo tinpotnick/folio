@@ -864,7 +864,10 @@
         border-radius: 8px;
       }
       .palette-item.selected {
-        background: var(--surface-3);
+        /* The accent tint reads in both modes (surface-3 is darker
+           than the dark dialog, so the row vanished). */
+        background: var(--accent-bg);
+        box-shadow: inset 3px 0 0 var(--accent-text);
       }
       .palette-item .palette-tag {
         font-size: 11px;

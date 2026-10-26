@@ -265,7 +265,8 @@ function isBibLang(lang: string | undefined): boolean {
 }
 
 /** The bibliography's starting entry: a real one, to show the shape. */
-const BIBTEX_STARTER = `@article{knuth1984,
+const BIBTEX_STARTER = `% An example entry. Paste your own BibTeX here - it replaces this.
+@article{knuth1984,
   author  = {Knuth, Donald E.},
   title   = {Literate Programming},
   journal = {The Computer Journal},
@@ -440,6 +441,8 @@ export class FolioDoc extends HTMLElement {
     sortDir: "asc" | "desc";
   } = { filter: "", sortBy: null, sortDir: "asc" };
   private lastBlock: HTMLElement | null = null;
+  /** The block the caret was last seen in (typed atoms hydrate on leaving it). */
+  private caretBlock: HTMLElement | null = null;
   /**
    * The last mouse-drag text selection, built from the two caret
    * points (document.caretRangeFromPoint pierces the shadow tree
@@ -510,9 +513,38 @@ export class FolioDoc extends HTMLElement {
           ) as HTMLElement | null)
         : null;
     if (block) this.lastBlock = block;
+    // (Its own record: a mousedown moves lastBlock before this runs.)
+    const left = this.caretBlock;
+    if (block) this.caretBlock = block;
+    if (left && block && left !== block) this.hydrateInline(left);
     const li = n instanceof HTMLElement ? n.closest("li") : null;
     this.lastLi = li && block?.contains(li) ? li : block ? null : this.lastLi;
   };
+
+  /**
+   * A paragraph the caret just left: citations, cross-references and
+   * footnote numbers TYPED in it (`[@knuth1984, p. 99]`) become their
+   * atoms now, not on the next reload. The source is unchanged - the
+   * atoms convert back to exactly the typed text.
+   */
+  private hydrateInline(el: HTMLElement): void {
+    if (!el.isConnected || el.tagName !== "P" || !this.doc) return;
+    const block = this.doc.blocks[Number(el.dataset.blockIndex ?? -1)];
+    if (block?.kind !== "prose") return;
+    const atoms = "span.folio-cite, a.folio-xref, sup.folio-fnref";
+    const html = inlineMarkdownToHtml(block.text, this.inlineOpts());
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html;
+    if (
+      tpl.content.querySelectorAll(atoms).length <=
+      el.querySelectorAll(atoms).length
+    ) {
+      return;
+    }
+    el.innerHTML = html;
+    const host = el.closest("article.folio-doc");
+    if (host) this.renderCrossRefs(host);
+  }
 
   /** The list item the caret is (or was last) in. */
   private lastLi: HTMLElement | null = null;
@@ -1474,6 +1506,14 @@ export class FolioDoc extends HTMLElement {
     range.collapse(true);
     range.insertNode(node);
     range.setStartAfter(node);
+    // ...and a space after it when a word follows: `[@a]compute`.
+    const next = node.nextSibling;
+    if (
+      next?.nodeType === Node.TEXT_NODE &&
+      /^[\p{L}\p{N}]/u.test((next as Text).data)
+    ) {
+      (next as Text).insertData(0, " ");
+    }
     this.syncFromDom();
     this.renderCrossRefs(host);
     this.emitChange("insert");
@@ -1606,21 +1646,27 @@ export class FolioDoc extends HTMLElement {
     const listed = f.entries.filter((e) => mine.has(e.entry.key));
     const ol = document.createElement("ol");
     ol.className = `folio-refs folio-refs-${style}`;
-    for (const e of listed) {
-      const li = document.createElement("li");
-      li.dataset.key = e.entry.key;
-      if (e.label) {
-        const lab = document.createElement("span");
-        lab.className = "ref-label";
-        lab.textContent = e.label;
-        li.appendChild(lab);
+    const fill = (
+      list: HTMLOListElement,
+      items: Formatted["entries"],
+    ): void => {
+      for (const e of items) {
+        const li = document.createElement("li");
+        li.dataset.key = e.entry.key;
+        if (e.label) {
+          const lab = document.createElement("span");
+          lab.className = "ref-label";
+          lab.textContent = e.label;
+          li.appendChild(lab);
+        }
+        const text = document.createElement("span");
+        text.className = "ref-text";
+        this.runsToDom(e.runs, text);
+        li.appendChild(text);
+        list.appendChild(li);
       }
-      const text = document.createElement("span");
-      text.className = "ref-text";
-      this.runsToDom(e.runs, text);
-      li.appendChild(text);
-      ol.appendChild(li);
-    }
+    };
+    fill(ol, listed);
     if (listed.length) view.appendChild(ol);
     const cited = new Set(f.entries.map((e) => e.entry.key));
     const waiting = own.entries.filter((e) => !cited.has(e.key));
@@ -1631,12 +1677,25 @@ export class FolioDoc extends HTMLElement {
         "No references yet - click here and paste BibTeX (Google Scholar, Zotero and journals all export it).";
       view.appendChild(p);
     } else if (waiting.length) {
+      // On screen only: what is ready to cite, formatted, so a paste
+      // can be checked before anything cites it.
       const p = document.createElement("p");
       p.className = "folio-refs-note";
       p.textContent = listed.length
-        ? `Not cited yet (not printed): ${waiting.map((e) => e.key).join(", ")}`
-        : `Nothing cited yet - ${String(waiting.length)} ${waiting.length === 1 ? "entry is" : "entries are"} ready: Insert › Citation (not printed until cited).`;
+        ? "Not cited yet (not printed):"
+        : "Nothing cited yet - Insert › Citation to cite these (not printed until cited):";
       view.appendChild(p);
+      const rest = document.createElement("ol");
+      rest.className = "folio-refs folio-refs-author-date folio-refs-uncited";
+      fill(
+        rest,
+        formatBibliography(
+          waiting,
+          waiting.map((e) => e.key),
+          "author-date",
+        ).entries,
+      );
+      view.appendChild(rest);
     }
     for (const err of own.errors) {
       const p = document.createElement("p");
@@ -1644,6 +1703,49 @@ export class FolioDoc extends HTMLElement {
       p.textContent = `BibTeX: ${err}`;
       view.appendChild(p);
     }
+  }
+
+  /**
+   * A bibliography's header says where BibTeX comes from; a click on
+   * the list puts the caret at the end of the source, ready for a
+   * paste; and a paste into the untouched example entry replaces it.
+   */
+  private attachBibliographyEditing(
+    figure: HTMLElement,
+    bar: HTMLElement,
+  ): void {
+    const hint = document.createElement("span");
+    hint.className = "insp-hint";
+    hint.textContent =
+      "Paste BibTeX from Google Scholar (Cite › BibTeX), Zotero or a journal";
+    bar.append(hint);
+    const code = (): HTMLElement | null =>
+      figure.querySelector<HTMLElement>("pre.folio-code > code");
+    figure.addEventListener("click", (ev) => {
+      const t = ev.target as Element;
+      if (t.closest("pre.folio-code, .folio-inspector, a")) return;
+      const c = code();
+      if (c) this.setCaret(c, c.childNodes.length);
+    });
+    figure.addEventListener("paste", (ev) => {
+      const idx = Number(figure.dataset.blockIndex ?? -1);
+      const block = this.doc?.blocks[idx];
+      const text = ev.clipboardData?.getData("text/plain") ?? "";
+      if (
+        block?.kind !== "code" ||
+        block.text !== BIBTEX_STARTER ||
+        !text.includes("@")
+      ) {
+        return;
+      }
+      ev.preventDefault();
+      block.text = text.trim();
+      this.render();
+      this.emitChange("insert");
+      this.shadowRoot
+        ?.querySelector(`[data-block-index="${String(idx)}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
   }
 
   /** Every reference a citation can name, for the "Cite" picker. */
@@ -1658,9 +1760,44 @@ export class FolioDoc extends HTMLElement {
     });
   }
 
-  /** Insert `[@key]` at the caret. Returns why it could not, or null. */
-  insertCitation(key: string): string | null {
-    return this.insertInlineAtom(`[@${key}]`, "span.folio-cite", "citation");
+  /**
+   * Insert `[@key]` at the caret - or, right after another bracketed
+   * citation, add to it: `[@a; @b]` reads "(A, 2001; B, 2002)", where
+   * two would read "(A, 2001)(B, 2002)". Returns why it could not, or
+   * null.
+   */
+  insertCitation(key: string, locator = ""): string | null {
+    const item = `@${key}${locator ? `, ${locator}` : ""}`;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const at = this.caretPoint();
+    let prev: Node | null = null;
+    if (at) {
+      if (at.node.nodeType === Node.TEXT_NODE) {
+        const before = (at.node as Text).data.slice(0, at.offset);
+        if (!before.trim()) prev = at.node.previousSibling;
+      } else {
+        prev = at.node.childNodes[at.offset - 1] ?? null;
+      }
+    }
+    const cite =
+      prev instanceof HTMLElement &&
+      prev.matches("span.folio-cite:not(.folio-cite-narrative)")
+        ? prev
+        : null;
+    const source = cite?.dataset.cite ?? "";
+    if (host && cite && source.endsWith("]")) {
+      cite.dataset.cite = `${source.slice(0, -1)}; ${item}]`;
+      this.syncFromDom();
+      this.renderCrossRefs(host);
+      this.emitChange("insert");
+      const parent = cite.parentNode ?? host;
+      this.setCaret(
+        parent,
+        Array.from(parent.childNodes).indexOf(cite as ChildNode) + 1,
+      );
+      return null;
+    }
+    return this.insertInlineAtom(`[${item}]`, "span.folio-cite", "citation");
   }
 
   /**
@@ -2874,6 +3011,7 @@ export class FolioDoc extends HTMLElement {
     if (block.lang === "abc") {
       bar.append(...this.buildAbcControls(figure));
     }
+    if (isBibLang(block.lang)) this.attachBibliographyEditing(figure, bar);
     figure.addEventListener("mousedown", () => {
       bar.hidden = false;
     });
@@ -6601,6 +6739,30 @@ export class FolioDoc extends HTMLElement {
       if ((key === "z" && ev.shiftKey) || key === "y") {
         ev.preventDefault();
         this.redo();
+        return;
+      }
+    }
+    // Esc dismisses a code figure's open header early - the one
+    // inspector contract (docs/specs/figure-inspectors.md). A drawn
+    // figure's source hides with it, so the caret moves past it.
+    if (ev.key === "Escape") {
+      const at = this.caretPoint();
+      const node =
+        at && (at.node instanceof Element ? at.node : at.node.parentElement);
+      const fig = node?.closest<HTMLElement>("figure.folio-codeblock");
+      const bar = fig?.querySelector<HTMLElement>(":scope > .folio-inspector");
+      if (fig && bar && !bar.hidden) {
+        ev.preventDefault();
+        bar.hidden = true;
+        if (fig.classList.contains("folio-drawn")) {
+          const idx = Number(fig.dataset.blockIndex ?? -1);
+          const host = fig.closest("article.folio-doc");
+          if (host && idx + 1 < host.children.length) {
+            this.focusBlockStart(idx + 1);
+          } else {
+            (document.getSelection() as Selection | null)?.removeAllRanges();
+          }
+        }
         return;
       }
     }

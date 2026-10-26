@@ -173,9 +173,11 @@ document — written in the same renderer you are working with.
   Zotero, Mendeley and journal sites all export. Paste entries there.
 - **+ Insert › Citation** (or search "cite") lists the references; pick
   one and folio writes `[@knuth1984]` at your cursor, shown as
-  "(Knuth, 1984)". The reference list shows only what is cited, sorted
-  and formatted for you; entries not cited yet are listed (on screen
-  only) underneath.
+  "(Knuth, 1984)". For a page, type it after the name: "Knuth p. 99"
+  gives "(Knuth, 1984, p. 99)". Citing again straight after a citation
+  adds to it: "(Knuth, 1984; Tufte, 1983)". The reference list shows
+  only what is cited, sorted and formatted for you; entries not cited
+  yet are listed in grey underneath, on screen only.
 - Typing works too, in Pandoc's syntax: `[@knuth1984, p. 99]` adds a
   page, `[see @a; @b]` cites two, `[-@knuth1984]` gives the year alone,
   and `@knuth1984` in a sentence reads "Knuth (1984)".

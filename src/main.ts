@@ -1756,6 +1756,8 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
 interface PaletteEntry {
   title: string;
   group: "Command" | "Help" | "Section";
+  /** The badge, when it is not the group ("Reference"). */
+  tag?: string;
   keywords: string;
   /** Body text matched VERBATIM only (a help topic's words). */
   body?: string;
@@ -1827,12 +1829,16 @@ function paletteEntries(): PaletteEntry[] {
   // Literate Programming" (docs/specs/citations.md).
   for (const c of el.citationChoices()) {
     entries.push({
-      title: `Cite: ${c.label}${c.title ? ` · ${c.title}` : ""}`,
+      title: `Cite: ${c.label}${c.title ? ` · ${c.title}` : ""} (@${c.key})`,
       group: "Command",
+      tag: "Reference",
       keywords: `cite citation reference source bibliography ${c.key}`,
       action: () => {
-        const why = el.insertCitation(c.key);
-        flash(why ?? `Cited ${c.label}`);
+        const why = el.insertCitation(c.key, paletteLocator);
+        flash(
+          why ??
+            `Cited ${c.label}${paletteLocator ? `, ${paletteLocator}` : ""}`,
+        );
       },
     });
   }
@@ -2260,7 +2266,7 @@ function renderPalette(): void {
     btn.setAttribute("aria-selected", i === paletteSel ? "true" : "false");
     const tag = document.createElement("span");
     tag.className = "palette-tag";
-    tag.textContent = entry.group;
+    tag.textContent = entry.tag ?? entry.group;
     btn.appendChild(tag);
     btn.appendChild(document.createTextNode(entry.title));
     btn.addEventListener("click", () => runPalette(i));
@@ -2282,8 +2288,30 @@ function runPalette(i: number): void {
   entry.action();
 }
 
+/** A page (or chapter...) typed after a reference's name in the
+ * citation picker: "Cite: Knuth p. 99" cites `[@knuth1984, p. 99]`. */
+let paletteLocator = "";
+const paletteFoot = requireEl<HTMLElement>("#palette-modal .palette-foot");
+const PALETTE_FOOT = paletteFoot.textContent;
+const LOCATOR_RE =
+  /(?:,\s*|\s+)((?:pp?|ch|chap|sec|para|fig|vol|n|note)\.?\s*\d[\w\u2013-]*(?:\s*[-\u2013]\s*\w+)?)\s*$/i;
+
 function updatePalette(): void {
-  const query = paletteInput.value.trim();
+  let query = paletteInput.value.trim();
+  paletteLocator = "";
+  if (/^cite:/i.test(query)) {
+    const m = LOCATOR_RE.exec(query);
+    if (m) {
+      paletteLocator = (m[1] ?? "").replace(
+        /^(pp?|ch|chap|sec|para|fig|vol|n|note)\.?\s*/i,
+        "$1. ",
+      );
+      query = query.slice(0, m.index).trim();
+    }
+  }
+  paletteFoot.textContent = /^cite:/i.test(query)
+    ? `Enter to cite${paletteLocator ? ` with ${paletteLocator}` : ""} · add a page after the name: "Knuth p. 99" · Esc to close`
+    : PALETTE_FOOT;
   const all = paletteEntries();
   if (!query) {
     // Every command, then a taste of each other group - a growing
@@ -2293,6 +2321,8 @@ function updatePalette(): void {
     const help = all.filter((e) => e.group === "Help").slice(0, 10);
     paletteFiltered = [...commands, ...sections, ...help];
   } else {
+    // A search that goes past the command word: "cite knuth", "Cite: ".
+    const targeted = query.includes(":") || query.split(/\s+/).length > 1;
     paletteFiltered = all
       .map((e) => ({
         e,
@@ -2309,13 +2339,15 @@ function updatePalette(): void {
             e.body?.includes(query.toLowerCase()) ? 6 : -1,
           ) -
           // "Cross-reference: Regional summary" must not outrank the
-          // section itself: references rank last unless asked for.
+          // section itself, nor "Cite: Knuth 1984" the "Insert a
+          // citation" command: one target per row ranks last unless
+          // the search names one ("cite knuth", "Cite: Knuth").
           (e.title.startsWith("Cross-reference:") &&
-          !/^(cross|ref|see)/i.test(query)
+          !(targeted && /^(cross|ref|see)/i.test(query))
             ? 20
             : 0) -
-          // Likewise "Cite: Knuth 1984" unless citing is the search.
-          (e.title.startsWith("Cite:") && !/^(cite|cita|ref|bib)/i.test(query)
+          (e.title.startsWith("Cite:") &&
+          !(targeted && /^(cite|cita|ref|bib)/i.test(query))
             ? 20
             : 0),
       }))

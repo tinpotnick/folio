@@ -19,13 +19,17 @@ reference list are formatted by folio itself, in one of two styles.
   their entries; the first definition of a key wins.
 - **Reader** (`src/engine/bibtex.ts`, no UI dependencies): entries,
   `@string` macros, `#` concatenation, month macros; `@comment` and
-  `@preamble` skipped. LaTeX becomes text: accents (`{\"o}` → ö),
+  `@preamble` skipped (text outside entries, like `%` comments, is
+  ignored). LaTeX becomes text: accents (`{\"o}` → ö),
   letters (`\ss`, `\o`), escapes, `--`/`---` dashes, `~`, `\LaTeX`,
   formatting commands keep their words, braces go. Names in either
   order, particles ("van"), `{Corporate Names}`, `and others`.
   BibLaTeX's `date`, `journaltitle`, `institution` are understood.
-  Problems (a duplicate key, an unclosed entry) are listed under the
-  list, never thrown.
+  Problems are listed under the list with their line, never thrown: a
+  duplicate key; an entry or a braced value left open (it ends where
+  the next `@entry{` line starts, so no field ever crosses into another
+  reference); a key a citation cannot name (`schr{\"o}dinger1935` -
+  rename it), which is left out.
 - **Citations** (`src/render/inline.ts`): Pandoc's `[@key]`,
   `[@key, p. 12]` (any text after the key is the locator), `[see @a;
   @b]`, `[-@key]` (year only), and narrative `@key`. A bracketed
@@ -40,17 +44,27 @@ reference list are formatted by folio itself, in one of two styles.
   - `author-date` (default, APA 7-like): "(Knuth, 1984)", "(Knuth,
     1984, p. 99)", "(see Knuth, 1984; Tufte, 1983)", "Knuth (1984)",
     "(Satyanarayan et al., 2017)"; same names and year become 2020a /
-    2020b. List: alphabetical, hanging indent, DOIs as
+    2020b; several works in one citation read alphabetically. List:
+    alphabetical, hanging indent, journal and book titles in title
+    case (only all-lower-case words change), DOIs as
     `https://doi.org/` links.
   - `numeric` (IEEE-like): "[1]", "[2, p. 99]", "Knuth [2]"; numbered
-    in order of first citation; list with the labels in a column.
+    in order of first citation, ascending within a citation; list with
+    the labels in a column.
   - Entry types: article, book, manual, incollection, inproceedings,
     conference, inbook, phdthesis, mastersthesis, thesis, techreport,
     report; anything else is formatted as misc (title, where, URL).
 - **The list** shows the cited entries only (in the style's order).
-  On screen only, entries not cited yet are named underneath ("Not
-  cited yet"), and an empty bibliography explains where BibTeX comes
-  from. Print shows the list alone.
+  On screen only, entries not cited yet are listed underneath,
+  formatted and greyed ("Not cited yet") so a paste can be checked,
+  and an empty bibliography explains where BibTeX comes from. Print
+  shows the cited list alone - never the BibTeX source or any
+  inspector bar, even one left open (a print rule for every figure).
+- **Editing the bibliography**: its header says where BibTeX comes
+  from; a click on the list puts the caret at the end of the source,
+  ready to paste; a paste into the untouched example entry replaces
+  it. Esc hides the source (the inspector contract, for every code
+  figure).
 - **Rendering** (`renderCitations`, alongside cross-references on
   render, input and change): every citation in reading order - the
   footnotes included - is filled in; a key the bibliography lacks
@@ -59,9 +73,17 @@ reference list are formatted by folio itself, in one of two styles.
   entry and highlights it (`.folio-xref-target`).
 - **Inserting**: + Insert › **Citation** / "Insert a citation" opens
   the palette on one entry per reference ("Cite: Knuth 1984 ·
-  Literate Programming") and inserts `[@key]` at the cursor (a space
-  is added after a word). With no references it says how to add
-  them. + Insert › **Bibliography** / "Insert a bibliography" adds a
+  Literate Programming (@knuth1984)", badge "Reference") and inserts
+  `[@key]` at the cursor - a space is added after a word before it and
+  before a word after it. A page typed after the name ("Cite: Knuth
+  p. 99"; also pp., ch., sec., para., fig., vol., n.) becomes the
+  locator, `[@knuth1984, p. 99]`, as the palette's footer says. Right
+  after another bracketed citation, it joins it: `[@a; @b]`. A bare
+  "cite" search ranks the command above the references. With no
+  references it says how to add them.
+- **Typed citations** (and cross-references, footnote numbers) become
+  their atoms when the caret leaves the paragraph (`hydrateInline`);
+  the source is unchanged. + Insert › **Bibliography** / "Insert a bibliography" adds a
   "References" heading and a ```bibtex block with one real entry,
   at the end of the document (before the footnotes); with one
   already there, it goes to it instead.
