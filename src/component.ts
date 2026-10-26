@@ -6,6 +6,7 @@
  * Row/column operations live in a context menu, not on the page.
  */
 import type { Footnote } from "./engine/doc.js";
+import { headingSlug } from "./engine/outline.js";
 import {
   parseDoc,
   serializeDoc,
@@ -742,6 +743,10 @@ export class FolioDoc extends HTMLElement {
 
   private emitChange(label = "edit"): void {
     if (!this.doc) return;
+    // Captions and references renumber with every change (a figure
+    // redrawn by its inspector loses its number otherwise).
+    const xhost = this.shadowRoot?.querySelector("article.folio-doc");
+    if (xhost) this.renderCrossRefs(xhost);
     this.noteHistory(label);
     for (const fn of this.listeners) fn(this.doc);
   }
@@ -908,6 +913,17 @@ export class FolioDoc extends HTMLElement {
     // a new tab). Editing lives on the toolbar's link button.
     host.addEventListener("click", (ev) => {
       if (this.handleFootnoteClick(ev)) return;
+      const xref = (ev.target as Element).closest?.(
+        "a.folio-xref",
+      ) as HTMLElement | null;
+      if (xref) {
+        ev.preventDefault();
+        const host = this.shadowRoot?.querySelector("article.folio-doc");
+        const t =
+          host && this.crossRefTargets(host).get(xref.dataset.ref ?? "");
+        t?.el.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
       const a = (ev.target as Element).closest?.(
         "a[href]",
       ) as HTMLAnchorElement | null;
@@ -968,6 +984,7 @@ export class FolioDoc extends HTMLElement {
     });
     this.renderNotes(host, true);
     root.appendChild(host);
+    this.renderCrossRefs(host);
   }
 
   private renderBlock(block: Doc["blocks"][number], idx: number): HTMLElement {
@@ -1124,6 +1141,155 @@ export class FolioDoc extends HTMLElement {
       text.focus();
       this.setCaret(text, 0);
     }
+    return null;
+  }
+
+  /**
+   * Cross-reference targets (spec: docs/specs/cross-references.md):
+   * every captioned table and figure is numbered in reading order -
+   * "Table 2", "Figure 3" - and so is any uncaptioned one a reference
+   * names. Headings are targets by their GitHub-style slug.
+   */
+  private crossRefTargets(
+    host: Element,
+  ): Map<string, { label: string; el: Element }> {
+    const targets = new Map<string, { label: string; el: Element }>();
+    if (!this.doc) return targets;
+    const referenced = new Set(
+      Array.from(host.querySelectorAll<HTMLElement>("a.folio-xref")).map(
+        (a) => a.dataset.ref ?? "",
+      ),
+    );
+    let tables = 0;
+    let figures = 0;
+    const slugs = new Map<string, number>();
+    for (const el of Array.from(host.children)) {
+      const idx = Number((el as HTMLElement).dataset.blockIndex ?? -1);
+      const block = this.doc.blocks[idx];
+      if (!block) continue;
+      if (block.kind === "heading") {
+        let slug = headingSlug(block.text);
+        const seen = slugs.get(slug) ?? 0;
+        slugs.set(slug, seen + 1);
+        if (seen > 0) slug = `${slug}-${String(seen)}`;
+        targets.set(`sec:${slug}`, { label: block.text, el });
+        continue;
+      }
+      let kind: "tbl" | "fig" | null = null;
+      let id: string | undefined;
+      let caption: string | undefined;
+      if (block.kind === "table" && !block.table.simple) {
+        kind = "tbl";
+        id = block.table.id;
+        caption = block.table.caption;
+      } else if (block.kind === "chart") {
+        kind = "fig";
+        id = block.chart.id;
+        caption = block.chart.caption;
+      } else if (block.kind === "image") {
+        kind = "fig";
+        id = block.image.id;
+        caption = block.image.caption;
+      } else if (block.kind === "diagram") {
+        kind = "fig";
+        id = block.diagram.id;
+      }
+      if (!kind) continue;
+      const named = id !== undefined && referenced.has(`${kind}:${id}`);
+      const cap = el.querySelector<HTMLElement>(":scope > figcaption");
+      if (!caption && !named) {
+        if (cap) delete cap.dataset.label;
+        continue;
+      }
+      const label =
+        kind === "tbl"
+          ? `Table ${String(++tables)}`
+          : `Figure ${String(++figures)}`;
+      if (cap) {
+        if (caption) cap.dataset.label = label;
+        else delete cap.dataset.label;
+      }
+      if (id !== undefined) targets.set(`${kind}:${id}`, { label, el });
+    }
+    return targets;
+  }
+
+  /** Number the captions and fill in every cross-reference. */
+  private renderCrossRefs(host: Element): void {
+    const targets = this.crossRefTargets(host);
+    for (const a of Array.from(
+      host.querySelectorAll<HTMLElement>("a.folio-xref"),
+    )) {
+      const ref = a.dataset.ref ?? "";
+      const t = targets.get(ref);
+      const kind = ref.split(":")[0];
+      const noun =
+        kind === "tbl" ? "table" : kind === "fig" ? "figure" : "section";
+      a.textContent = t ? t.label : `${noun} ?`;
+      a.classList.toggle("folio-xref-missing", !t);
+      a.title = t
+        ? `Go to ${t.label}`
+        : `No ${noun} with the id "${ref.slice(ref.indexOf(":") + 1)}"`;
+    }
+  }
+
+  /** Every target a reference can name, for the "Cross-reference" picker. */
+  crossRefChoices(): { ref: string; label: string; caption: string }[] {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host || !this.doc) return [];
+    const out: { ref: string; label: string; caption: string }[] = [];
+    for (const [ref, t] of this.crossRefTargets(host)) {
+      const cap =
+        t.el.querySelector(":scope > figcaption")?.textContent?.trim() ?? "";
+      out.push({
+        ref,
+        label: t.label,
+        caption: ref.startsWith("sec:") ? "" : cap,
+      });
+    }
+    return out;
+  }
+
+  /** Insert `@kind:id` at the caret. Returns why it could not, or null. */
+  insertCrossRef(ref: string): string | null {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    let at = this.caretPoint();
+    const el =
+      at && (at.node instanceof Element ? at.node : at.node.parentElement);
+    if (
+      !host ||
+      !at ||
+      !el?.closest?.("article.folio-doc > p, article.folio-doc li")
+    ) {
+      return "Put the cursor in a paragraph or list item first";
+    }
+    const tpl = document.createElement("template");
+    tpl.innerHTML = inlineMarkdownToHtml(` @${ref}`).trimStart();
+    const node = tpl.content.querySelector("a.folio-xref");
+    if (!node) return "Could not insert the reference";
+    this.plainSpaceBefore(at);
+    // A reference needs a space (or opening punctuation) before it:
+    // `Compare@tbl:b` would not read as one when the file is reopened.
+    if (at.node.nodeType === Node.TEXT_NODE && at.offset > 0) {
+      const prev = (at.node as Text).data[at.offset - 1] ?? "";
+      if (/[^\s([{"'“‘]/.test(prev)) {
+        (at.node as Text).insertData(at.offset, " ");
+        at = { ...at, offset: at.offset + 1 };
+      }
+    }
+    const range = document.createRange();
+    range.setStart(at.node, at.offset);
+    range.collapse(true);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    this.syncFromDom();
+    this.renderCrossRefs(host);
+    this.emitChange("insert");
+    this.setCaret(
+      node.parentNode ?? host,
+      Array.from(node.parentNode?.childNodes ?? []).indexOf(node as ChildNode) +
+        1,
+    );
     return null;
   }
 
@@ -4959,6 +5125,7 @@ export class FolioDoc extends HTMLElement {
     ) {
       this.renderNotes(host);
     }
+    if (host) this.renderCrossRefs(host);
     this.scheduleJscadRedraw();
     this.autoformatList();
     this.commitCaretCell();

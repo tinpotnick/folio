@@ -21,3 +21,16 @@ export function outlineOf(doc: Doc): OutlineEntry[] {
   });
   return out;
 }
+
+/**
+ * A heading's id, as GitHub makes it: lower case, punctuation dropped
+ * (hyphens and underscores kept), spaces to hyphens. `@sec:` cross-
+ * references name headings by it (docs/specs/cross-references.md).
+ */
+export function headingSlug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s/g, "-");
+}

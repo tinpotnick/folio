@@ -1810,6 +1810,25 @@ function paletteEntries(): PaletteEntry[] {
       flash("3D model inserted");
     },
   });
+  // One entry per thing a cross-reference can name: "Cross-reference:
+  // Table 2 · Revenue by product line" (docs/specs/cross-references.md).
+  for (const c of el.crossRefChoices()) {
+    entries.push({
+      title: `Cross-reference: ${c.label}${c.caption ? ` · ${c.caption}` : ""}`,
+      group: "Command",
+      keywords: `cross reference refer see link mention ${c.ref.replace(":", " ")}`,
+      action: () => {
+        const why = el.insertCrossRef(c.ref);
+        flash(why ?? `Referred to ${c.label}`);
+      },
+    });
+  }
+  entries.push({
+    title: "Insert a cross-reference",
+    group: "Command",
+    keywords: "cross reference refer see table figure section number caption",
+    action: () => openPalette("Cross-reference: "),
+  });
   entries.push({
     title: "Insert a footnote",
     group: "Command",
@@ -2214,17 +2233,24 @@ function updatePalette(): void {
     paletteFiltered = all
       .map((e) => ({
         e,
-        s: Math.max(
-          fuzzyScore(query, `${e.title} ${e.keywords}`),
-          // Words in the TITLE beat the same words among the keywords:
-          // "new" is New document, not every command tagged "new".
-          e.title.toLowerCase().includes(query.toLowerCase())
-            ? fuzzyScore(query, e.title) + 5
-            : -1,
-          // A help topic whose TEXT contains the query verbatim: found,
-          // but ranked below title/keyword matches.
-          e.body?.includes(query.toLowerCase()) ? 6 : -1,
-        ),
+        s:
+          Math.max(
+            fuzzyScore(query, `${e.title} ${e.keywords}`),
+            // Words in the TITLE beat the same words among the keywords:
+            // "new" is New document, not every command tagged "new".
+            e.title.toLowerCase().includes(query.toLowerCase())
+              ? fuzzyScore(query, e.title) + 5
+              : -1,
+            // A help topic whose TEXT contains the query verbatim: found,
+            // but ranked below title/keyword matches.
+            e.body?.includes(query.toLowerCase()) ? 6 : -1,
+          ) -
+          // "Cross-reference: Regional summary" must not outrank the
+          // section itself: references rank last unless asked for.
+          (e.title.startsWith("Cross-reference:") &&
+          !/^(cross|ref|see)/i.test(query)
+            ? 20
+            : 0),
       }))
       .filter((x) => x.s > 0)
       .sort((a, b) => b.s - a.s)
@@ -2235,11 +2261,13 @@ function updatePalette(): void {
   renderPalette();
 }
 
-function openPalette(): void {
+/** Open the palette - optionally with a search already typed (the
+ * Insert menu's Cross-reference opens it on the targets). */
+function openPalette(query?: unknown): void {
   if (paletteModal.open) return;
   el.saveCaret();
   paletteModal.showModal();
-  paletteInput.value = "";
+  paletteInput.value = typeof query === "string" ? query : "";
   updatePalette();
   paletteInput.focus();
 }
@@ -2733,6 +2761,15 @@ toolbarMenu(
 toolbarMenu(
   requireEl<HTMLButtonElement>("#btn-overflow"),
   requireEl<HTMLElement>("#overflow-menu"),
+);
+
+// Cross-reference: the palette, opened on the things it can name.
+requireEl<HTMLButtonElement>("#btn-insert-xref").addEventListener(
+  "click",
+  () => {
+    closeMenus();
+    openPalette("Cross-reference: ");
+  },
 );
 
 // Inserts that live only in the palette run the palette's own action:

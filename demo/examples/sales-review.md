@@ -26,9 +26,9 @@ more qualified deals than at any point this year.[^pipeline]
 
 ## Revenue by region
 
-Monthly revenue, one line per region. The table is in the long form
-an export produces (one row per month and region); the chart splits
-it by region.
+Monthly revenue, one line per region. The table (@tbl:regional-revenue)
+is in the long form an export produces, one row per month and region;
+@fig:region-trend splits it by region.
 
 ::: table {#regional-revenue}
 caption: "Monthly revenue by region (GBP thousands)"
@@ -66,7 +66,8 @@ caption: "Revenue by month and region"
 :::
 
 The same table as a heatmap: the North's lead widens month by month,
-and the Midlands catch up with the South by September.
+and the Midlands catch up with the South by September. Against target
+(@sec:against-target), all three regions are close.
 
 ```vega-lite
 {
