@@ -1827,7 +1827,7 @@ function paletteEntries(): PaletteEntry[] {
     title: "Insert a cross-reference",
     group: "Command",
     keywords: "cross reference refer see table figure section number caption",
-    action: () => openPalette("Cross-reference: "),
+    action: openCrossRefPicker,
   });
   entries.push({
     title: "Insert a footnote",
@@ -2763,12 +2763,24 @@ toolbarMenu(
   requireEl<HTMLElement>("#overflow-menu"),
 );
 
+// Cross-reference: the palette, opened on the things it can name -
+// or, when there are none, a word on how to make one.
+function openCrossRefPicker(): void {
+  if (el.crossRefChoices().length === 0) {
+    flash(
+      "Nothing to refer to yet - add a heading, or a table or chart with a caption",
+    );
+    return;
+  }
+  openPalette("Cross-reference: ");
+}
+
 // Cross-reference: the palette, opened on the things it can name.
 requireEl<HTMLButtonElement>("#btn-insert-xref").addEventListener(
   "click",
   () => {
     closeMenus();
-    openPalette("Cross-reference: ");
+    openCrossRefPicker();
   },
 );
 

@@ -119,6 +119,8 @@ test.describe("cross-references", () => {
     await expect(targetTable).not.toBeInViewport();
     await refs.nth(1).click();
     await expect(targetTable).toBeInViewport();
+    // Where it landed is picked out for a moment.
+    await expect(targetTable).toHaveClass(/folio-xref-target/);
   });
 
   test("inserted right after a word, a reference gets its space", async ({
@@ -140,5 +142,87 @@ test.describe("cross-references", () => {
     expect(await page.locator("#editor").inputValue()).toContain(
       "Compare @tbl:targets",
     );
+  });
+
+  test("a referenced table with no caption still shows its number", async ({
+    page,
+  }) => {
+    await open(page);
+    await page.evaluate(() =>
+      document.querySelector<HTMLElement>("#btn-markdown")?.click(),
+    );
+    const editor = page.locator("#editor");
+    await editor.fill(
+      (await editor.inputValue()).replace(
+        "## Summary",
+        "See @tbl:bare.\n\n::: table {#bare}\ncolumns:\n  - {name: a, type: text}\ndata:\n  - [x]\n:::\n\n## Summary",
+      ),
+    );
+    await page.evaluate(() =>
+      document.querySelector<HTMLElement>("#btn-view")?.click(),
+    );
+    const bare = page.locator('#the-doc figure[data-table-id="bare"]');
+    await expect(bare).toHaveAttribute("data-xlabel", /^Table \d+$/);
+    const label = await bare.getAttribute("data-xlabel");
+    await expect(
+      page.locator('#the-doc a.folio-xref[data-ref="tbl:bare"]'),
+    ).toHaveText(label ?? "");
+    // Captioned figures keep their number on the caption, not twice.
+    await expect(
+      page.locator('#the-doc figure[data-table-id="targets"]'),
+    ).not.toHaveAttribute("data-xlabel", /.*/);
+  });
+
+  test("the picker skips the title; with nothing to name, it says so", async ({
+    page,
+  }) => {
+    await open(page);
+    const choices = await page.evaluate(() =>
+      (
+        document.querySelector("#the-doc") as unknown as {
+          crossRefChoices(): { label: string }[];
+        }
+      )
+        .crossRefChoices()
+        .map((c) => c.label),
+    );
+    expect(choices).not.toContain("Q3 Sales Review");
+    expect(choices).toContain("Against target");
+    await page.evaluate(() =>
+      document.querySelector<HTMLElement>("#btn-markdown")?.click(),
+    );
+    await page.locator("#editor").fill("# Just a title\n\nSome words.\n");
+    await page.evaluate(() =>
+      document.querySelector<HTMLElement>("#btn-view")?.click(),
+    );
+    await page.locator("#btn-insert-menu").click();
+    await page.locator("#insert-menu #btn-insert-xref").click();
+    await expect(page.locator("#status")).toContainText(
+      "Nothing to refer to yet",
+    );
+    await expect(page.locator("#palette-input")).toBeHidden();
+  });
+
+  test("printed, a reference is plain text", async ({ page }) => {
+    await open(page);
+    await page.emulateMedia({ media: "print" });
+    const style = await page.evaluate(() => {
+      const a = document
+        .querySelector("#the-doc")
+        ?.shadowRoot?.querySelector("a.folio-xref");
+      const p = a?.closest("p");
+      if (!a || !p) return null;
+      const s = getComputedStyle(a);
+      return {
+        color: s.color,
+        text: getComputedStyle(p).color,
+        line: s.textDecorationLine,
+        border: s.borderBottomStyle,
+      };
+    });
+    expect(style).not.toBeNull();
+    expect(style?.color).toBe(style?.text);
+    expect(style?.line).toBe("none");
+    expect(style?.border).toBe("none");
   });
 });
