@@ -97,6 +97,21 @@ jobs:
           [ "${{ github.event_name }}" = pull_request ] && fpr=$(cat /tmp/fpr)
           packaging/repo/publish.sh site assets "$fpr" "$BASE"
 
+      # What GNOME Software does for most users: a SYSTEM installation
+      # adds the repository and pulls its catalogue (it writes as root,
+      # so it rejects objects a user installation accepts). Nothing is
+      # published unless this works.
+      - name: Check a system installation can use it
+        run: |
+          fpr="${{ secrets.PKG_GPG_FINGERPRINT }}"
+          [ "${{ github.event_name }}" = pull_request ] && fpr=$(cat /tmp/fpr)
+          gpg --export "$fpr" > /tmp/repo-key.gpg
+          sudo flatpak remote-add --system --gpg-import=/tmp/repo-key.gpg \
+            folio-check "file://$PWD/site/flatpak"
+          sudo flatpak update --system --appstream folio-check
+          sudo flatpak remote-ls --system folio-check
+          sudo flatpak remote-delete --system folio-check
+
       - name: Keep the result (dry run)
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
