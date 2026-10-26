@@ -913,6 +913,14 @@ export class FolioDoc extends HTMLElement {
     // a new tab). Editing lives on the toolbar's link button.
     host.addEventListener("click", (ev) => {
       if (this.handleFootnoteClick(ev)) return;
+      const tocLink = (ev.target as Element).closest?.(
+        "a.folio-toc-link",
+      ) as HTMLElement | null;
+      if (tocLink) {
+        ev.preventDefault();
+        this.revealBlock(Number(tocLink.dataset.target));
+        return;
+      }
       const xref = (ev.target as Element).closest?.(
         "a.folio-xref",
       ) as HTMLElement | null;
@@ -1072,6 +1080,15 @@ export class FolioDoc extends HTMLElement {
         this.drawChart(figure);
         return figure;
       }
+      case "toc": {
+        // Filled in by renderContents (it needs the whole document).
+        const nav = document.createElement("nav");
+        nav.className = "folio-toc";
+        nav.contentEditable = "false";
+        nav.setAttribute("aria-label", "Contents");
+        nav.dataset.blockIndex = String(idx);
+        return nav;
+      }
       case "footnotes": {
         // The definitions stay where the author wrote them in the
         // file; on the page they are gathered into the Notes section
@@ -1214,8 +1231,91 @@ export class FolioDoc extends HTMLElement {
     return targets;
   }
 
+  /**
+   * Fill every table of contents (spec: docs/specs/contents.md): the
+   * document's headings, nested by level, each a link that jumps there.
+   * A lone H1 is the title, so it is left out; three levels deep.
+   */
+  private renderContents(host: Element): void {
+    if (!this.doc) return;
+    const navs = Array.from(
+      host.querySelectorAll<HTMLElement>(":scope > nav.folio-toc"),
+    );
+    if (navs.length === 0) return;
+    const heads = this.doc.blocks
+      .map((b, i) => ({ b, i }))
+      .filter((x) => x.b.kind === "heading") as {
+      b: Extract<DocBlock, { kind: "heading" }>;
+      i: number;
+    }[];
+    const h1s = heads.filter((h) => h.b.level === 1).length;
+    const top = h1s === 1 ? 2 : 1;
+    const shown = heads.filter((h) => h.b.level >= top && h.b.level < top + 3);
+    const signature = shown
+      .map((h) => `${String(h.i)}:${String(h.b.level)}:${h.b.text}`)
+      .join("\n");
+    for (const nav of navs) {
+      if (nav.dataset.signature === signature) continue;
+      nav.dataset.signature = signature;
+      nav.textContent = "";
+      const title = document.createElement("p");
+      title.className = "folio-toc-title";
+      title.textContent = "Contents";
+      nav.appendChild(title);
+      if (shown.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "folio-toc-empty";
+        empty.textContent = "Headings will be listed here.";
+        nav.appendChild(empty);
+        continue;
+      }
+      // Nested lists: a deeper heading opens a list inside the last item.
+      const root = document.createElement("ol");
+      const stack: { level: number; list: HTMLOListElement }[] = [
+        { level: top, list: root },
+      ];
+      for (const h of shown) {
+        let current = stack[stack.length - 1];
+        while (current && h.b.level < current.level && stack.length > 1) {
+          stack.pop();
+          current = stack[stack.length - 1];
+        }
+        if (current && h.b.level > current.level) {
+          const parentItem = current.list.lastElementChild ?? current.list;
+          const sub = document.createElement("ol");
+          parentItem.appendChild(sub);
+          stack.push({ level: h.b.level, list: sub });
+          current = stack[stack.length - 1];
+        }
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.className = "folio-toc-link";
+        a.tabIndex = 0;
+        a.dataset.target = String(h.i);
+        a.textContent = h.b.text;
+        li.appendChild(a);
+        current?.list.appendChild(li);
+      }
+      nav.appendChild(root);
+    }
+  }
+
+  /** Insert a table of contents after the caret's block (or in place
+   * of an empty line). */
+  insertContents(): void {
+    if (!this.doc) return;
+    const { at, replace } = this.insertionPoint(this.blockIndexAtCaret());
+    this.doc.blocks.splice(at, replace, { kind: "toc", marker: "[[_TOC_]]" });
+    this.render();
+    this.emitChange("insert");
+    this.shadowRoot
+      ?.querySelector(`article.folio-doc > [data-block-index="${String(at)}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   /** Number the captions and fill in every cross-reference. */
   private renderCrossRefs(host: Element): void {
+    this.renderContents(host);
     const targets = this.crossRefTargets(host);
     for (const a of Array.from(
       host.querySelectorAll<HTMLElement>("a.folio-xref"),
@@ -5034,7 +5134,8 @@ export class FolioDoc extends HTMLElement {
         b.kind === "math" ||
         b.kind === "image" ||
         b.kind === "audio" ||
-        b.kind === "footnotes",
+        b.kind === "footnotes" ||
+        b.kind === "toc",
     );
     let gi = 0;
     const next: DocBlock[] = [];
@@ -5044,7 +5145,10 @@ export class FolioDoc extends HTMLElement {
     for (const child of blockEls) {
       const el = child as HTMLElement;
       if (el.classList.contains("folio-notes")) continue;
-      if (el.tagName === "ASIDE" && el.classList.contains("folio-fndefs")) {
+      if (
+        (el.tagName === "ASIDE" && el.classList.contains("folio-fndefs")) ||
+        (el.tagName === "NAV" && el.classList.contains("folio-toc"))
+      ) {
         const g = generated[gi];
         gi += 1;
         if (g) next.push(g);
@@ -5377,7 +5481,8 @@ export class FolioDoc extends HTMLElement {
       block.kind === "math" ||
       block.kind === "image" ||
       block.kind === "audio" ||
-      block.kind === "footnotes"
+      block.kind === "footnotes" ||
+      block.kind === "toc"
     ) {
       return;
     }

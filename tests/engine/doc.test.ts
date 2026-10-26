@@ -575,3 +575,19 @@ describe("footnotes (GitHub syntax; spec: docs/specs/footnotes.md)", () => {
     expect(doc.blocks.map((b) => b.kind)).toEqual(["prose", "footnotes"]);
   });
 });
+
+describe("table of contents markers (spec: docs/specs/contents.md)", () => {
+  it("[[_TOC_]] and [TOC] are contents blocks, kept as written", () => {
+    for (const marker of ["[[_TOC_]]", "[TOC]"]) {
+      const text = `# Title\n\n${marker}\n\n## One\n`;
+      const doc = parseDoc(text);
+      expect(doc.blocks[1]).toEqual({ kind: "toc", marker });
+      expect(serializeDoc(doc)).toBe(text);
+    }
+  });
+
+  it("a marker right after a paragraph line ends the paragraph", () => {
+    const doc = parseDoc("Some text\n[[_TOC_]]\n");
+    expect(doc.blocks.map((b) => b.kind)).toEqual(["prose", "toc"]);
+  });
+});

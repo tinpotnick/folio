@@ -7,6 +7,8 @@ theme: academic
 A technical folio document mixes prose, code, equations, and
 measured data.
 
+[[_TOC_]]
+
 ## The evaluator loop
 
 The hot path is one function:
