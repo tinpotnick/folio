@@ -13,7 +13,7 @@ updates through their system:
 | | Where | Users add |
 | --- | --- | --- |
 | Flatpak | `/repo/flatpak/` (OSTree, archive-z2) | `folio.flatpakrepo`, or one click on `io.github.tinpotnick.folio.flatpakref` |
-| dnf (Fedora, RHEL, openSUSE) | `/repo/rpm/` (createrepo_c) | `folio.repo` |
+| dnf (Fedora, RHEL, openSUSE) | `/repo/rpm/` metadata (createrepo_c); packages from the release | `folio.repo` |
 | apt (Debian, Ubuntu) | `/repo/apt/` (`stable main`, amd64) | `folio-archive-keyring.gpg` + `folio.list` |
 
 All under https://tinpotnick.github.io/folio/repo/.
@@ -69,3 +69,27 @@ All under https://tinpotnick.github.io/folio/repo/.
   not load an SVG there.
 - Republishing a release by hand: Actions → packages → Run workflow,
   with its tag.
+
+## Counting downloads (2026-10-26)
+
+GitHub Pages keeps no logs, so installs from folio's repositories are
+invisible - except Fedora's, by design:
+
+- **dnf installs count.** The dnf metadata lists the release's own
+  `.rpm` (`createrepo_c --baseurl https://github.com/tinpotnick/folio/releases/download/<tag>/`),
+  so every `dnf install` / `upgrade` is a download of the release file.
+  The repository therefore holds the latest release only.
+- For that, the release carries the **signed** `.rpm`: the packages
+  workflow signs it once and replaces the release's unsigned copy,
+  labelled "<name> (signed)". A later publish of the same tag finds the
+  label and reuses that file (signing again would change its bytes and
+  its checksum).
+- **The workflow does not count itself:** it takes the `.rpm`, `.deb`
+  and Flatpak bundle from the tag's build artifacts (the release
+  workflow keeps them on tags too), falling back to the release only
+  when those have expired.
+- Not counted: Flatpak and apt installs from the repositories (their
+  formats cannot point at files elsewhere). Flathub, later, publishes
+  install statistics. folio itself never reports home.
+- `just stats` (`scripts/stats.sh`): release downloads per file, 14-day
+  traffic and referrers, stars.

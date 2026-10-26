@@ -89,8 +89,10 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-      - name: Keep the installers (pull requests)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      # Kept on tags too: the packages workflow builds the Linux
+      # repositories from these, so its own fetching does not count as
+      # downloads of the release.
+      - name: Keep the installers
         uses: actions/upload-artifact@v4
         with:
           name: folio-${{ matrix.platform }}
