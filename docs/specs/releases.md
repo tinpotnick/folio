@@ -27,6 +27,11 @@ A pull request that touches the desktop app or the workflow builds
 every platform as a check; the installers are kept as workflow
 artifacts for 14 days, with no release.
 
+## Package repositories
+
+Publishing a release also adds it to folio's own signed Flatpak, dnf
+and apt repositories on GitHub Pages: docs/specs/package-repos.md.
+
 ## Identity
 
 - App id: `io.github.tinpotnick.folio` - the reverse-DNS form Flathub
