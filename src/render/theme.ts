@@ -1627,10 +1627,13 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     sup.folio-fnref { line-height: 0; font-size: 0.72em; margin-left: 0.05em; }
     sup.folio-fnref a {
       color: var(--folio-accent);
+      font-weight: 600;
       text-decoration: none;
       cursor: pointer;
       font-variant-numeric: lining-nums;
-      padding: 0 0.1em;
+      /* A bigger target than the digit: padding, pulled back by margin. */
+      padding: 0.35em 0.3em;
+      margin: -0.35em -0.15em;
     }
     sup.folio-fnref a:hover { text-decoration: underline; }
     article.folio-doc > section.folio-notes {
@@ -1660,10 +1663,23 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       color: var(--folio-accent);
       text-decoration: none;
       cursor: pointer;
-      font-size: 0.9em;
-      margin-left: 0.2em;
+      white-space: nowrap;
+      padding: 0.2em 0.35em;
+      margin: -0.2em -0.15em;
+      border-radius: 4px;
     }
-    @media print { section.folio-notes .fn-back { display: none; } }
+    section.folio-notes .fn-back:hover { background: var(--folio-hover, rgba(0,0,0,0.06)); }
+    /* The note a reference jumped to, picked out for a moment. */
+    section.folio-notes li.folio-fn-target { animation: folio-fn-flash 1.6s ease-out; }
+    @keyframes folio-fn-flash {
+      0%, 30% { background: color-mix(in srgb, var(--folio-accent) 16%, transparent); }
+      100% { background: transparent; }
+    }
+    section.folio-notes li { border-radius: 4px; }
+    @media print {
+      section.folio-notes .fn-back { display: none; }
+      sup.folio-fnref a { color: inherit; font-weight: normal; text-decoration: none; }
+    }
     article.folio-doc a {
       color: var(--folio-accent);
       text-decoration: underline;

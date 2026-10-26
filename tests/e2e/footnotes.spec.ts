@@ -113,4 +113,34 @@ test.describe("footnotes", () => {
     await note.locator(".fn-back").click();
     await expect(page.locator("#the-doc sup.folio-fnref")).toBeInViewport();
   });
+
+  test("a number takes the cursor to its note; ↩ brings it back after the number", async ({
+    page,
+  }) => {
+    await load(page, "# T\n\nA claim[^a] and more.\n\n[^a]: The note.\n");
+    await page.locator("#the-doc sup.folio-fnref").click();
+    const li = page.locator("#the-doc section.folio-notes li").first();
+    await expect(li).toHaveClass(/folio-fn-target/);
+    await page.keyboard.type(" Typed in the note.");
+    await li.locator(".fn-back").click();
+    await page.keyboard.type(" (see note)");
+    const md = await source(page);
+    expect(md).toContain("A claim[^a] (see note) and more.");
+    expect(md).toContain("[^a]: The note. Typed in the note.");
+  });
+
+  test("a space typed before an inserted footnote stays an ordinary space", async ({
+    page,
+  }) => {
+    await load(page, "# T\n\nThe claim\n");
+    await page.locator("#the-doc p").click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" ");
+    await page.locator("#btn-insert-menu").click();
+    await page
+      .locator('#insert-menu [data-insert="Insert a footnote"]')
+      .click();
+    await page.keyboard.type("Note.");
+    expect(await source(page)).toContain("The claim [^1]\n");
+  });
 });

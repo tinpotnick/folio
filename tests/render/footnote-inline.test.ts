@@ -18,4 +18,12 @@ describe("footnote references inline", () => {
     const md = "[a link](https://example.com) and a note[^2]";
     expect(htmlToInlineMarkdown(inlineMarkdownToHtml(md))).toBe(md);
   });
+
+  it("typed no-break spaces become ordinary spaces in the file", () => {
+    const html = inlineMarkdownToHtml("A claim[^1] and more.").replace(
+      "</sup> and",
+      "</sup>\u00a0and",
+    );
+    expect(htmlToInlineMarkdown(html)).toBe("A claim[^1] and more.");
+  });
 });

@@ -1102,6 +1102,7 @@ export class FolioDoc extends HTMLElement {
     tpl.innerHTML = inlineMarkdownToHtml(`[^${label}]`);
     const sup = tpl.content.firstChild;
     if (!sup) return "Could not insert the footnote";
+    this.plainSpaceBefore(at);
     const range = document.createRange();
     range.setStart(at.node, at.offset);
     range.collapse(true);
@@ -1124,6 +1125,19 @@ export class FolioDoc extends HTMLElement {
       this.setCaret(text, 0);
     }
     return null;
+  }
+
+  /**
+   * Before inserting an inline atom (a footnote or cross-reference) at
+   * a caret: a space typed just before it is a no-break space (the
+   * browser keeps a trailing space visible that way, and turns it back
+   * only when a LETTER follows) - it must not reach the file.
+   */
+  private plainSpaceBefore(at: { node: Node; offset: number }): void {
+    if (at.node.nodeType !== Node.TEXT_NODE || at.offset === 0) return;
+    const t = at.node as Text;
+    if (t.data[at.offset - 1] === "\u00a0")
+      t.replaceData(at.offset - 1, 1, " ");
   }
 
   /** The labels referenced in the page, in reading order, each once. */
@@ -1213,7 +1227,8 @@ export class FolioDoc extends HTMLElement {
       back.tabIndex = 0;
       back.title = "Back to the text";
       back.textContent = "↩";
-      li.append(text, " ", back);
+      // A no-break space: the ↩ never wraps onto a line of its own.
+      li.append(text, "\u00a0", back);
       ol.appendChild(li);
     }
     section.append(title, ol);
@@ -1250,20 +1265,43 @@ export class FolioDoc extends HTMLElement {
     host.appendChild(section);
   }
 
-  /** Jump between a reference and its note (no href: these are not
-   * links to follow). */
+  /**
+   * Jump between a reference and its note (no href: these are not
+   * links to follow). Each jump moves the CARET too - to the end of the
+   * note, or just after the reference - so typing carries on there; the
+   * note jumped to is highlighted for a moment.
+   */
   private handleFootnoteClick(ev: MouseEvent): boolean {
     const t = ev.target as Element;
-    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const host =
+      this.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
     if (!host) return false;
     const ref = t.closest?.("sup.folio-fnref") as HTMLElement | null;
     if (ref) {
       ev.preventDefault();
-      host
-        .querySelector(
-          `section.folio-notes li[data-fn="${CSS.escape(ref.dataset.fn ?? "")}"]`,
-        )
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const li = host.querySelector<HTMLElement>(
+        `section.folio-notes li[data-fn="${CSS.escape(ref.dataset.fn ?? "")}"]`,
+      );
+      if (!li) return true;
+      li.scrollIntoView({ behavior: "smooth", block: "center" });
+      li.classList.remove("folio-fn-target");
+      void li.offsetWidth; // restart the highlight
+      li.classList.add("folio-fn-target");
+      const text = li.querySelector<HTMLElement>(
+        ".fn-text[contenteditable='true']",
+      );
+      if (text) {
+        text.focus({ preventScroll: true });
+        const w = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+        let last: Node = text;
+        for (let n = w.nextNode(); n; n = w.nextNode()) last = n;
+        this.setCaret(
+          last,
+          last === text
+            ? text.childNodes.length
+            : (last.textContent ?? "").length,
+        );
+      }
       return true;
     }
     const back = t.closest?.("a.fn-back");
@@ -1271,9 +1309,15 @@ export class FolioDoc extends HTMLElement {
       ev.preventDefault();
       const label =
         (back.closest("li") as HTMLElement | null)?.dataset.fn ?? "";
-      host
-        .querySelector(`sup.folio-fnref[data-fn="${CSS.escape(label)}"]`)
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const sup = host.querySelector<HTMLElement>(
+        `sup.folio-fnref[data-fn="${CSS.escape(label)}"]`,
+      );
+      if (!sup?.parentNode) return true;
+      sup.scrollIntoView({ behavior: "smooth", block: "center" });
+      host.focus({ preventScroll: true });
+      const parent = sup.parentNode;
+      this.setCaret(parent, Array.from(parent.childNodes).indexOf(sup) + 1);
+      this.trackCaret();
       return true;
     }
     return false;

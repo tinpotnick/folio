@@ -51,7 +51,11 @@ function nodesToMarkdown(root: Node): string {
   let out = "";
   for (const node of Array.from(root.childNodes)) {
     if (node.nodeType === Node.TEXT_NODE) {
-      out += node.textContent ?? "";
+      // No-break spaces are the editor's, not the author's: the browser
+      // types one wherever an ordinary space would collapse (at a line's
+      // end, beside a footnote number or a reference) and turns it back
+      // only when a letter follows. They must not reach the file.
+      out += (node.textContent ?? "").replaceAll("\u00a0", " ");
       continue;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;

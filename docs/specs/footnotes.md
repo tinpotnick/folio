@@ -35,8 +35,14 @@ reader sees numbers.
   them): Enter does nothing (one paragraph), Home/End stay within the
   note (the browser's End jumped past the ↩ into the next note), and
   each edit writes back to the definition and records an undo step.
-- **Navigation:** clicking a number scrolls to its note; the note's ↩
-  scrolls back to the first reference. ↩ is hidden in print.
+- **Navigation:** clicking a number scrolls to its note, highlights it
+  for a moment and puts the caret at the end of its text; the note's ↩
+  scrolls back to the first reference and puts the caret just after it,
+  so typing carries on in the text. ↩ is kept with the note's last word
+  (a no-break space) and hidden in print; references print as plain
+  superscripts.
+- **Spaces:** no-break spaces typed by the editor (beside a number, at
+  a line's end) are saved as ordinary spaces.
 - **Inserting:** "Insert a footnote" (palette; **+ Insert › Footnote**)
   inserts the next free numeric label at the caret, adds an empty
   definition to the footnote block at the end of the document (or
