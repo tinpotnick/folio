@@ -59,7 +59,12 @@ if ((${#bundles[@]})); then
         ln -sfn "../$size" "$tree/c/icons/flatpak/$size"
       fi
     done
+    # Owned by root with canonical permissions, as Flatpak commits
+    # everything: OSTree checksums include ownership, and a system
+    # installation (which writes as root) rejected the CI runner's uid
+    # as a "Corrupted file object".
     ostree commit --repo="$repo" --branch="$branch" --tree=dir="$tree/c" \
+      --owner-uid=0 --owner-gid=0 --canonical-permissions \
       --gpg-sign="$FPR" --skip-if-unchanged \
       --subject="AppStream with high-DPI icons" >/dev/null
     rm -rf "$tree"

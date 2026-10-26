@@ -49,13 +49,19 @@ All under https://tinpotnick.github.io/folio/repo/.
   (the repositories keep the versions they need; git keeps no history
   of them), then the Pages workflow is dispatched. Pages builds the
   web app and copies `pkg-repo` into `dist/repo/`.
+- Before anything is published, the workflow adds the new repository to
+  a **system** Flatpak installation and pulls its catalogue - what GNOME
+  Software does for most users.
 - A pull request touching this runs a dry run from the latest release
   with a throwaway key and keeps the result as an artifact.
 - **High-DPI icons:** Flatpak builds the repository's AppStream
   catalogue with the app's `scale="2"` icon entries but copies only the
   64x64 and 128x128 files, so on a 2x display GNOME Software showed no
   icon. `publish.sh` copies the app's `64x64@2` and `128x128@2` icons
-  into both catalogue branches, re-signs them, and updates the summary
+  into both catalogue branches (committed root-owned with canonical
+  permissions, as Flatpak commits everything - OSTree checksums include
+  ownership, and a system installation rejected the CI runner's uid),
+  re-signs them, and updates the summary
   with `--no-update-appstream`.
 - The `.flatpakref` and `.flatpakrepo` point their `Icon=` at a 256 px
   PNG (`/repo/icon.png`): GNOME Software shows the one-click link's
