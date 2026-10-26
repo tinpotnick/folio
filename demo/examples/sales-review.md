@@ -4,9 +4,9 @@ theme: corporate-report
 
 # Q3 Sales Review
 
-Revenue grew in every region this quarter, led by the North. Services
+Revenue grew in every region this quarter, led by the North.[^fx] Services
 overtook hardware for the first time, and the pipeline enters Q4 with
-more qualified deals than at any point this year.
+more qualified deals than at any point this year.[^pipeline]
 
 ## Summary
 
@@ -18,7 +18,7 @@ more qualified deals than at any point this year.
 | Average deal £k | 33.8   | 30.9   | -8.6%  |
 
 - **Highlights**
-  - The North passed its target in every month.
+  - The North passed its target in every month.[^target]
   - Services revenue grew 31% on the quarter.
 - **Watch**
   - Average deal size is falling as the mix shifts to smaller,
@@ -154,3 +154,7 @@ digraph {
 1. Hold the North's pace: two new account managers start in October.
 2. Price services bundles to lift the average deal back above £33k.
 3. Review the South's flat September before the Q4 forecast.
+
+[^fx]: All figures are in GBP at constant exchange rates, so growth is not flattered by a weaker pound.
+[^pipeline]: A deal counts as qualified once it has a named buyer, a budget and a decision date.
+[^target]: Monthly targets were set in the Q3 plan and have not been revised.

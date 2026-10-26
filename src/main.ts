@@ -1811,6 +1811,15 @@ function paletteEntries(): PaletteEntry[] {
     },
   });
   entries.push({
+    title: "Insert a footnote",
+    group: "Command",
+    keywords: "footnote note endnote reference annotation aside citation fn",
+    action: () => {
+      const why = el.insertFootnote();
+      flash(why ?? "Footnote added - type the note");
+    },
+  });
+  entries.push({
     title: "Insert a chart",
     group: "Command",
     keywords: "chart graph plot bar line pie visualize visualise draw insert",

@@ -1622,6 +1622,48 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.95em;
       pointer-events: none;
     }
+    /* Footnotes (docs/specs/footnotes.md): numbers in the theme's
+       accent; the notes gathered at the end, smaller, under a rule. */
+    sup.folio-fnref { line-height: 0; font-size: 0.72em; margin-left: 0.05em; }
+    sup.folio-fnref a {
+      color: var(--folio-accent);
+      text-decoration: none;
+      cursor: pointer;
+      font-variant-numeric: lining-nums;
+      padding: 0 0.1em;
+    }
+    sup.folio-fnref a:hover { text-decoration: underline; }
+    article.folio-doc > section.folio-notes {
+      margin-top: 3em;
+      padding-top: 1em;
+      border-top: 1px solid var(--folio-rule, #d0d7de);
+      font-size: 0.88em;
+      color: var(--folio-ink);
+    }
+    section.folio-notes .folio-notes-title {
+      margin: 0 0 0.6em;
+      font-weight: 600;
+      color: var(--folio-ink-muted);
+      font-size: 0.95em;
+    }
+    section.folio-notes ol { margin: 0; padding-left: 1.6em; }
+    section.folio-notes li { margin: 0.35em 0; }
+    section.folio-notes li::marker { color: var(--folio-ink-muted); font-variant-numeric: tabular-nums; }
+    section.folio-notes .fn-text:focus { outline: none; }
+    section.folio-notes .fn-text:empty::before {
+      content: "Type the note…";
+      color: var(--folio-ink-muted);
+      font-style: italic;
+    }
+    section.folio-notes .fn-missing { color: var(--folio-ink-muted); font-style: italic; }
+    section.folio-notes .fn-back {
+      color: var(--folio-accent);
+      text-decoration: none;
+      cursor: pointer;
+      font-size: 0.9em;
+      margin-left: 0.2em;
+    }
+    @media print { section.folio-notes .fn-back { display: none; } }
     article.folio-doc a {
       color: var(--folio-accent);
       text-decoration: underline;

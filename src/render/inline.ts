@@ -27,6 +27,12 @@ export function inlineMarkdownToHtml(text: string): string {
         (m, bang: string, label: string, url: string) =>
           bang === "!" ? m : `<a href="${url}">${label}</a>`,
       )
+      // Footnote references (GitHub's [^label]): numbered by the
+      // component in reading order (spec: docs/specs/footnotes.md).
+      .replace(
+        /\[\^([\w.-]+)\]/g,
+        '<sup class="folio-fnref" data-fn="$1" contenteditable="false"><a role="doc-noteref" tabindex="0">$1</a></sup>',
+      )
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
       .replace(/~~([^~]+)~~/g, "<del>$1</del>")
@@ -75,6 +81,13 @@ function nodesToMarkdown(root: Node): string {
         break;
       case "BR":
         out += "\n";
+        break;
+      case "SUP":
+        if (el.classList.contains("folio-fnref")) {
+          out += `[^${el.getAttribute("data-fn") ?? ""}]`;
+          break;
+        }
+        out += nodesToMarkdown(el);
         break;
       default:
         out += nodesToMarkdown(el);

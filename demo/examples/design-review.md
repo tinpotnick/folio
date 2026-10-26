@@ -13,7 +13,7 @@ export it as STL for a test print.
 ## Variants
 
 Mass is computed from the plate's dimensions (aluminium,
-2.7 g/cm³), less the holes.
+2.7 g/cm³),[^density] less the holes.
 
 ::: table {#variants}
 caption: "Bracket variants (dimensions in mm)"
@@ -144,4 +144,7 @@ digraph {
 1. Select variant B for the pilot build.
    - Print three test parts from the exported STL.
    - Fatigue-test one at twice the rated load.
-2. Re-review C if the rail load rises above 6 kg.
+2. Re-review C if the rail load rises above 6 kg.[^load]
+
+[^density]: 6061-T6 aluminium, 2.70 g/cm³, from the supplier's data sheet. Machining tolerances are ignored.
+[^load]: The rail's rated load is 5 kg; 6 kg is the worst case seen in the field trial.

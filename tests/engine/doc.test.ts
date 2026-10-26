@@ -546,3 +546,32 @@ describe("lines that start with # but are not titled headings", () => {
     ]);
   });
 });
+
+describe("footnotes (GitHub syntax; spec: docs/specs/footnotes.md)", () => {
+  it("round-trips byte-identically", () => {
+    const text = loadGolden("footnotes.md");
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  it("parses consecutive definitions as one block, continuation lines joined", () => {
+    const blocks = parseDoc(loadGolden("footnotes.md")).blocks;
+    const fns = blocks.filter((b) => b.kind === "footnotes");
+    expect(fns).toHaveLength(2);
+    expect(fns[0]).toEqual({
+      kind: "footnotes",
+      notes: [
+        { label: "1", text: "The first note, with **bold** and `code`." },
+        { label: "source", text: "A note with a named label." },
+        {
+          label: "2",
+          text: "A note that runs on\nover a second, indented line.",
+        },
+      ],
+    });
+  });
+
+  it("a definition right after a paragraph line still starts a footnote block", () => {
+    const doc = parseDoc("Text[^a].\n[^a]: The note.\n");
+    expect(doc.blocks.map((b) => b.kind)).toEqual(["prose", "footnotes"]);
+  });
+});
