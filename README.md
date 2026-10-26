@@ -1,6 +1,11 @@
 <div align="center">
 
-# folio
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/wordmark-dark.png">
+    <img src="docs/media/wordmark-light.png" alt="folio" width="340">
+  </picture>
+</h1>
 
 **The document Word should have been.**
 
