@@ -40,6 +40,35 @@ if ((${#bundles[@]})); then
   flatpak build-update-repo --gpg-sign="$FPR" --generate-static-deltas \
     --prune --prune-depth=5 --title="folio" --default-branch=master "$repo"
 
+  # High-DPI icons. The catalogue the step above builds lists the app's
+  # @2 icons (scale="2"), but Flatpak copies only the 64x64 and 128x128
+  # files into it - so on a 2x display GNOME Software found no icon at
+  # all, for the one-click link and in search. Copy them in from the app
+  # and re-commit the catalogue branches.
+  app_ref=$(ostree refs --repo="$repo" | grep "^app/$APP/" | head -1)
+  for branch in $(ostree refs --repo="$repo" | grep -E '^appstream2?/'); do
+    tree=$(mktemp -d)
+    ostree checkout --repo="$repo" --user-mode --union "$branch" "$tree/c"
+    for size in 64x64@2 128x128@2; do
+      src="/files/share/app-info/icons/flatpak/$size"
+      if ostree ls --repo="$repo" "$app_ref" "$src" >/dev/null 2>&1; then
+        mkdir -p "$tree/c/icons/$size"
+        ostree checkout --repo="$repo" --user-mode --union \
+          --subpath="$src" "$app_ref" "$tree/c/icons/$size"
+        mkdir -p "$tree/c/icons/flatpak"
+        ln -sfn "../$size" "$tree/c/icons/flatpak/$size"
+      fi
+    done
+    ostree commit --repo="$repo" --branch="$branch" --tree=dir="$tree/c" \
+      --gpg-sign="$FPR" --skip-if-unchanged \
+      --subject="AppStream with high-DPI icons" >/dev/null
+    rm -rf "$tree"
+  done
+  # The summary again, now that the catalogue branches moved (keeping
+  # the catalogue as committed above).
+  flatpak build-update-repo --gpg-sign="$FPR" --no-update-appstream \
+    --generate-static-deltas --title="folio" --default-branch=master "$repo"
+
   cat > "$SITE/folio.flatpakrepo" <<EOF
 [Flatpak Repo]
 Title=folio

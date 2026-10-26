@@ -51,6 +51,12 @@ All under https://tinpotnick.github.io/folio/repo/.
   web app and copies `pkg-repo` into `dist/repo/`.
 - A pull request touching this runs a dry run from the latest release
   with a throwaway key and keeps the result as an artifact.
+- **High-DPI icons:** Flatpak builds the repository's AppStream
+  catalogue with the app's `scale="2"` icon entries but copies only the
+  64x64 and 128x128 files, so on a 2x display GNOME Software showed no
+  icon. `publish.sh` copies the app's `64x64@2` and `128x128@2` icons
+  into both catalogue branches, re-signs them, and updates the summary
+  with `--no-update-appstream`.
 - The `.flatpakref` and `.flatpakrepo` point their `Icon=` at a 256 px
   PNG (`/repo/icon.png`): GNOME Software shows the one-click link's
   app before the repository's AppStream icons are available, and does
