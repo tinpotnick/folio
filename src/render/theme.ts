@@ -1944,7 +1944,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       /* Paper shows the document, never the editing furniture: an
          inspector bar left open, or a drawn figure's source. */
       .folio-inspector,
-      figure.folio-drawn > pre.folio-code {
+      figure.folio-drawn > pre.folio-code,
+      .folio-table-more .ds-open {
         display: none !important;
       }
       figure.folio-drawn > .code-view {

@@ -29,7 +29,10 @@ No separate PDF export engine, no new dependency (ADR-0007).
   (`break-after: avoid`); figures, tables, and code blocks avoid
   splitting (`break-inside: avoid`); exact color reproduction for
   code/table backgrounds. Charts and diagrams are SVG and print
-  vector-crisp.
+  vector-crisp. Screen-only controls never print: inspector bars, a drawn
+  figure's source, and a long table's "Open dataset" button (its
+  "201 rows x 12 columns - showing first 12" line stays, so the
+  reader knows the table is cut short).
 - **Page breaks** (see document-settings.md): `pagebreak.h1` /
   `pagebreak.h2` emit `break-before: page` under `@media print`
   only (screen computed styles stay `auto`), guarded by
