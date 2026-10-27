@@ -31,6 +31,9 @@ export interface Table {
   retrieved?: string;
   /** The bibliography key that cites this data's source. */
   cite?: string;
+  /** The terms the data came under: a licence's name, or
+   * "personal-use" for data whose terms do not allow sharing. */
+  licence?: string;
   columns: Column[];
   rows: Cell[][];
   /**

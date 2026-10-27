@@ -1693,6 +1693,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.8em;
       color: var(--folio-ink-muted);
     }
+    .folio-personal { font-weight: 600; color: var(--folio-unit); }
     /* Citations and the reference list (docs/specs/citations.md). */
     span.folio-cite {
       color: var(--folio-accent);

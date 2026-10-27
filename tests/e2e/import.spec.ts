@@ -22,6 +22,8 @@ test.describe("data import", () => {
       mimeType: "text/csv",
       buffer: Buffer.from("region,v\nNorth,412\nSouth,388\n"),
     });
+    // A file is previewed first (rows, types, names, terms).
+    await page.locator("#btn-import-go").click();
     const fig = page.locator('figure[data-table-id="sales"]');
     await expect(fig.locator("tbody tr")).toHaveCount(2);
     await expect(fig.locator('th[data-col-index="1"]')).toHaveText("v");
@@ -30,6 +32,8 @@ test.describe("data import", () => {
     const md = await page.locator("#editor").inputValue();
     expect(md).toContain("::: table {#sales}");
     expect(md).toContain('import: "sales.csv"');
+    // A file without a web address is not cited.
+    expect(md).not.toContain("cite:");
     expect(md).toContain("{name: v, type: number}");
     expect(md).toContain("- [North, 412]");
   });
@@ -43,6 +47,8 @@ test.describe("data import", () => {
         '[{"month":"Jul","total":190},{"month":"Aug","total":210}]',
       ),
     });
+    // A file is previewed first (rows, types, names, terms).
+    await page.locator("#btn-import-go").click();
     await expect(
       page.locator('figure[data-table-id="metrics"] tbody tr'),
     ).toHaveCount(2);
@@ -68,6 +74,8 @@ test.describe("data import", () => {
       mimeType: "text/csv",
       buffer: Buffer.from(csv),
     });
+    // A file is previewed first (rows, types, names, terms).
+    await page.locator("#btn-import-go").click();
     const fig = page.locator('figure[data-table-id="big"]');
     await expect(fig.locator("tbody tr")).toHaveCount(50);
     await expect(fig.locator(".folio-table-more")).toContainText("2,000 rows");
@@ -90,7 +98,7 @@ test.describe("data import", () => {
       mimeType: "application/json",
       buffer: Buffer.from("{not json"),
     });
-    await expect(page.locator("#status")).toContainText("Import failed");
+    await expect(page.locator("#import-error")).toContainText("Import failed");
     await expect(page.locator("#the-doc figure")).toHaveCount(before);
   });
 

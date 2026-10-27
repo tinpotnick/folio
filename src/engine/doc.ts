@@ -293,6 +293,7 @@ function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
     else if (k === "import") table.import = unquote(raw);
     else if (k === "retrieved") table.retrieved = unquote(raw);
     else if (k === "cite") table.cite = unquote(raw);
+    else if (k === "licence") table.licence = unquote(raw);
     else if (k === "columns") section = "columns";
     else if (k === "data") section = "data";
     else throw new ParseError(`Unknown table key: '${k}'`, 0);
@@ -862,6 +863,9 @@ function serializeTable(table: Table): string {
     lines.push(`retrieved: ${table.retrieved}`);
   }
   if (table.cite !== undefined) lines.push(`cite: ${table.cite}`);
+  if (table.licence !== undefined) {
+    lines.push(`licence: "${table.licence}"`);
+  }
   lines.push("columns:");
   for (const col of table.columns) {
     const entries = [`name: ${col.name}`, `type: ${col.type}`];

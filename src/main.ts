@@ -20,10 +20,17 @@ import {
 } from "./engine/ingest.js";
 import {
   parseFetched,
+  publisherFor,
   sourceBibtex,
   sourceKey,
   type SourceMeta,
 } from "./engine/sources.js";
+import {
+  PUBLISHERS,
+  publisher,
+  type KnownSeries,
+  type Publisher,
+} from "./engine/catalog.js";
 import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
 import {
@@ -799,46 +806,21 @@ function tableIdFromFileName(
   return id;
 }
 
-importFile.addEventListener("change", () => {
-  const f = importFile.files?.[0];
-  importFile.value = "";
-  if (!f) return;
-  if (f.size > IMPORT_MAX_BYTES) {
-    flash("File too large (over 8 MB) - the document stays one file");
-    return;
-  }
-  const format = f.name.toLowerCase().endsWith(".json") ? "json" : "csv";
-  const reader = new FileReader();
-  reader.onload = (): void => {
-    if (typeof reader.result !== "string") return;
-    let table: Table;
-    try {
-      table = importedTable(
-        tableIdFromFileName(f.name, el.getDoc()),
-        parseImport(reader.result, format),
-        f.name,
-      );
-    } catch (e) {
-      flash(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
-      return;
-    }
-    el.restoreCaret();
-    el.insertImportedTable(table);
-    flash(
-      `Imported ${table.rows.length.toLocaleString()} rows into @${table.id}`,
-    );
-  };
-  reader.readAsText(f);
-});
-
-/* --- Import data dialog: from a file, from the web
+/* --- Import data dialog: a file, open data, a web address
        (spec: docs/specs/data-import.md, ADR-0029) --- */
 
 const importModal = requireEl<HTMLDialogElement>("#import-modal");
-const importTabFile = requireEl<HTMLButtonElement>("#import-tab-file");
-const importTabWeb = requireEl<HTMLButtonElement>("#import-tab-web");
-const importPaneFile = requireEl<HTMLElement>("#import-pane-file");
-const importPaneWeb = requireEl<HTMLElement>("#import-pane-web");
+const importTabs = {
+  file: requireEl<HTMLButtonElement>("#import-tab-file"),
+  known: requireEl<HTMLButtonElement>("#import-tab-known"),
+  web: requireEl<HTMLButtonElement>("#import-tab-web"),
+};
+const importPanes = {
+  file: requireEl<HTMLElement>("#import-pane-file"),
+  known: requireEl<HTMLElement>("#import-pane-known"),
+  web: requireEl<HTMLElement>("#import-pane-web"),
+};
+type ImportTab = keyof typeof importTabs;
 const importUrl = requireEl<HTMLInputElement>("#import-url");
 const importError = requireEl<HTMLElement>("#import-error");
 const importBlocked = requireEl<HTMLElement>("#import-blocked");
@@ -847,27 +829,47 @@ const importGo = requireEl<HTMLButtonElement>("#btn-import-go");
 const importId = requireEl<HTMLInputElement>("#import-id");
 const importCaption = requireEl<HTMLInputElement>("#import-caption");
 const importPublisher = requireEl<HTMLInputElement>("#import-publisher");
+const importOrigin = requireEl<HTMLInputElement>("#import-origin");
+const importOriginLabel = requireEl<HTMLElement>("#import-origin-label");
 const importCite = requireEl<HTMLInputElement>("#import-cite");
+const importPersonal = requireEl<HTMLInputElement>("#import-personal");
 const importFetchBtn = requireEl<HTMLButtonElement>("#btn-import-fetch");
+const importPub = requireEl<HTMLSelectElement>("#import-pub");
+const importSeries = requireEl<HTMLFieldSetElement>("#import-series");
+const importCodeRow = requireEl<HTMLElement>("#import-code-row");
+const importCode = requireEl<HTMLInputElement>("#import-code");
+const importFrom = requireEl<HTMLInputElement>("#import-from");
+const importKnownBtn = requireEl<HTMLButtonElement>("#btn-import-known");
 
-/** What the web pane fetched and read, waiting for Import. */
-let pending: { parsed: ParsedImport; meta: SourceMeta; url: string } | null =
-  null;
+/** What a route read, waiting in the preview for Import. */
+interface Pending {
+  parsed: ParsedImport;
+  meta: SourceMeta;
+  /** The web address it came from ("" for a file). */
+  url: string;
+  /** The file's name, for a file. */
+  file?: string;
+  /** The dataset name to offer (a known series' own). */
+  id?: string;
+}
+let pending: Pending | null = null;
 
-function importTab(which: "file" | "web"): void {
-  importTabFile.setAttribute("aria-selected", String(which === "file"));
-  importTabWeb.setAttribute("aria-selected", String(which === "web"));
-  importPaneFile.hidden = which !== "file";
-  importPaneWeb.hidden = which !== "web";
-  importGo.hidden = which !== "web" || pending === null;
+function importTab(which: ImportTab): void {
+  for (const k of Object.keys(importTabs) as ImportTab[]) {
+    importTabs[k].setAttribute("aria-selected", String(k === which));
+    importPanes[k].hidden = k !== which;
+  }
+  importReset();
   if (which === "web") importUrl.focus();
+  if (which === "known") importPub.focus();
 }
 
-function openImport(which: "file" | "web" = "file"): void {
+function openImport(which: ImportTab = "file"): void {
   closeMenus();
-  if (importModal.open) return;
-  el.saveCaret();
-  importModal.showModal();
+  if (!importModal.open) {
+    el.saveCaret();
+    importModal.showModal();
+  }
   importTab(which);
 }
 
@@ -894,30 +896,41 @@ function todayIso(): string {
 }
 
 /** A dataset name from what the source is called. */
-function nameFor(meta: SourceMeta, url: string): string {
-  const raw =
-    meta.title && meta.title.length <= 24
-      ? meta.title
-      : (new URL(url).pathname.split("/").filter(Boolean).pop() ?? "data");
+function nameFor(meta: SourceMeta, url: string, file?: string): string {
+  let raw = file ?? "data";
+  if (meta.title && meta.title.length <= 24) raw = meta.title;
+  else if (url) {
+    try {
+      raw = new URL(url).pathname.split("/").filter(Boolean).pop() ?? raw;
+    } catch {
+      // keep the file name
+    }
+  }
   return tableIdFromFileName(raw.toLowerCase(), el.getDoc());
 }
 
-/** Show what came back: a sample, a name, a caption, the licence. */
-function importShow(text: string, url: string): void {
+/** The licence line: what the terms allow, before anything changes. */
+function licenceText(meta: SourceMeta, isFile: boolean): string {
+  const lines = [
+    meta.licence
+      ? `Licence: ${meta.licence} - fine to share with the source credited.`
+      : isFile
+        ? "Licence: yours to know - if its terms do not allow sharing, tick Personal use only."
+        : "Licence unknown - check the publisher's terms before sharing a document with this data.",
+    meta.notice ? `${meta.notice}.` : "",
+  ];
+  return lines.filter(Boolean).join(" ");
+}
+
+/** Show what a route read: a sample, names, caption, the licence. */
+function importShowParsed(p: Pending, caption?: string): void {
   importReset();
-  let got: { parsed: ParsedImport; meta: SourceMeta };
-  try {
-    got = parseFetched(text, url);
-  } catch (e) {
-    importFail(e instanceof Error ? e.message : String(e));
+  if (!p.parsed.rows.length) {
+    importFail("That returned no rows of data");
     return;
   }
-  if (!got.parsed.rows.length) {
-    importFail("That address returned no rows of data");
-    return;
-  }
-  pending = { ...got, url };
-  const { parsed, meta } = got;
+  pending = p;
+  const { parsed, meta, url, file } = p;
   requireEl<HTMLElement>("#import-summary").textContent =
     `${parsed.rows.length.toLocaleString()} rows · ${parsed.columns
       .map((c) => `${c.name} (${c.type})`)
@@ -947,41 +960,70 @@ function importShow(text: string, url: string): void {
     const tr = body.insertRow();
     for (const v of row) tr.insertCell().textContent = String(v);
   }
-  importId.value = nameFor(meta, url);
+  importId.value = p.id
+    ? tableIdFromFileName(p.id, el.getDoc())
+    : nameFor(meta, url, file);
   // A bare series code is not a caption: ask for a name instead.
-  const codeOnly = /^[A-Z0-9_.,-]+$/.test(meta.title ?? "");
-  importCaption.value = codeOnly ? "" : (meta.title ?? "");
+  const codeOnly = !caption && /^[A-Z0-9_.,-]+$/.test(meta.title ?? "");
+  importCaption.value = caption ?? (codeOnly ? "" : (meta.title ?? ""));
   importCaption.placeholder = codeOnly
     ? `What is ${meta.title ?? "it"}? e.g. "Official Bank Rate, monthly"`
     : "";
   importPublisher.value = meta.publisher ?? "";
-  requireEl<HTMLElement>("#import-licence").textContent = [
-    meta.licence
-      ? `Licence: ${meta.licence} - fine to share with the source credited.`
-      : "Licence unknown - check the publisher's terms before sharing a document with this data.",
-    meta.notice ? `${meta.notice}.` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  // A file may say where it was downloaded from - then it is cited.
+  importOrigin.hidden = !file;
+  importOriginLabel.hidden = !file;
+  importOrigin.value = "";
+  importPersonal.checked = false;
+  reflectCite();
+  requireEl<HTMLElement>("#import-licence").textContent = licenceText(
+    meta,
+    Boolean(file),
+  );
   importPreview.hidden = false;
   importGo.disabled = false;
   importGo.hidden = false;
   if (codeOnly) importCaption.focus();
 }
 
-async function importFetch(): Promise<void> {
-  const url = importUrl.value.trim();
-  importReset();
-  if (!/^https?:\/\/\S+$/i.test(url)) {
-    importFail("Enter a web address starting with https://");
-    return;
+/** Citing needs a web address to cite. */
+function reflectCite(): void {
+  const address = pending?.file ? importOrigin.value.trim() : pending?.url;
+  importCite.disabled = !address;
+  importCite.checked = Boolean(address);
+  importCite.parentElement?.setAttribute(
+    "title",
+    address ? "" : "Add the web address it came from to cite it",
+  );
+}
+
+function importShow(text: string, url: string): void {
+  try {
+    importShowParsed({ ...parseFetched(text, url), url });
+  } catch (e) {
+    importReset();
+    importFail(e instanceof Error ? e.message : String(e));
   }
-  importFetchBtn.disabled = true;
-  importFetchBtn.textContent = "Fetching…";
+}
+
+/**
+ * Fetch an address: the desktop app directly; a browser page where
+ * the site allows it (CORS), else the download-and-choose route.
+ * Calls `got` with the text.
+ */
+async function importFetchText(
+  url: string,
+  button: HTMLButtonElement,
+  got: (text: string) => void,
+): Promise<void> {
+  importReset();
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = "Fetching…";
   try {
     if (isDesktop()) {
-      const got = await fetchUrlDesktop(url);
-      if (got) importShow(got.text, url);
+      const res = await fetchUrlDesktop(url);
+      if (res) got(res.text);
       return;
     }
     let res: Response;
@@ -994,24 +1036,180 @@ async function importFetch(): Promise<void> {
         "This site does not let a web page fetch its data directly. Open the address to download the file, then choose it here - folio still records this address as the source. (The desktop app fetches it directly.)";
       requireEl<HTMLAnchorElement>("#import-open-link").href = url;
       importBlocked.hidden = false;
+      blockedThen = got;
       return;
     }
     if (!res.ok) {
       importFail(`The site answered ${String(res.status)} ${res.statusText}`);
       return;
     }
-    importShow(await res.text(), url);
+    got(await res.text());
   } catch (e) {
     importFail(e instanceof Error ? e.message : String(e));
   } finally {
-    importFetchBtn.disabled = false;
-    importFetchBtn.textContent = "Fetch";
+    button.disabled = false;
+    button.textContent = label;
   }
 }
+/** What a downloaded file is read as, after a blocked fetch. */
+let blockedThen: ((text: string) => void) | null = null;
+
+async function importFetch(): Promise<void> {
+  const url = importUrl.value.trim();
+  if (!/^https?:\/\/\S+$/i.test(url)) {
+    importReset();
+    importFail("Enter a web address starting with https://");
+    return;
+  }
+  await importFetchText(url, importFetchBtn, (text) => importShow(text, url));
+}
+
+/* Open data: a publisher, its series, from a year. */
+
+function fillPublishers(): void {
+  importPub.textContent = "";
+  for (const p of PUBLISHERS) {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = p.name;
+    importPub.appendChild(o);
+  }
+  fillSeries();
+}
+
+function fillSeries(): void {
+  const pub = publisher(importPub.value) ?? PUBLISHERS[0];
+  if (!pub) return;
+  requireEl<HTMLElement>("#import-pub-about").textContent = [
+    `${pub.about}.`,
+    pub.licence ? `Licence: ${pub.licence}.` : "",
+    pub.notice ? `${pub.notice}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  importSeries.querySelectorAll("label").forEach((l) => l.remove());
+  importSeries.hidden = pub.series.length === 0;
+  pub.series.forEach((ser, i) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = pub.multi ? "checkbox" : "radio";
+    input.name = "import-series";
+    input.value = ser.code;
+    input.checked = i === 0;
+    label.append(input, ` ${ser.title}`);
+    const unit = document.createElement("small");
+    unit.textContent = ser.unit;
+    label.appendChild(unit);
+    importSeries.appendChild(label);
+  });
+  importCodeRow.hidden = !pub.anyCode;
+  if (pub.anyCode) {
+    requireEl<HTMLElement>("#import-code-label").textContent =
+      pub.anyCode.label;
+    importCode.placeholder = `e.g. ${pub.anyCode.example}`;
+    importCode.value = "";
+  }
+  importReset();
+}
+
+async function importKnown(): Promise<void> {
+  const pub = publisher(importPub.value);
+  if (!pub) return;
+  const picked = Array.from(
+    importSeries.querySelectorAll<HTMLInputElement>("input:checked"),
+  ).map((i) => i.value);
+  const typed = importCode.value
+    .split(/[\s,]+/)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const codes = [...picked, ...typed];
+  if (!codes.length) {
+    importReset();
+    importFail(
+      pub.anyCode
+        ? `Type a ${pub.anyCode.label.toLowerCase()}`
+        : "Choose a series",
+    );
+    return;
+  }
+  const from = Math.min(Math.max(Number(importFrom.value) || 2000, 1900), 2100);
+  const url = pub.url(pub.multi ? codes : [codes[0] ?? ""], from);
+  await importFetchText(url, importKnownBtn, (text) => {
+    let read: ReturnType<typeof parseFetched>;
+    try {
+      read = parseFetched(text, url);
+    } catch (e) {
+      importReset();
+      importFail(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    const shaped = knownShape(
+      read,
+      pub,
+      pub.multi ? codes : [codes[0] ?? ""],
+      from,
+    );
+    importShowParsed({ ...shaped, url }, shaped.caption);
+  });
+}
+
+/**
+ * Name a known series the way the catalogue does: `date`, and the
+ * series' own column names (bank_rate, fixed_2y); the publisher's
+ * licence; a caption from the series titles; rows from the year.
+ */
+function knownShape(
+  read: ReturnType<typeof parseFetched>,
+  pub: Publisher,
+  codes: string[],
+  from: number,
+): { parsed: ParsedImport; meta: SourceMeta; caption: string; id: string } {
+  const titles =
+    (read.meta as { titles?: Record<string, string> }).titles ?? {};
+  const known = (code: string): KnownSeries | undefined =>
+    pub.series.find((s) => s.code === code);
+  const cols = read.parsed.columns.map((c, i) => {
+    if (c.type === "date" && i === 0) return { ...c, name: "date" };
+    if (
+      read.parsed.columns.length === 2 &&
+      codes.length === 1 &&
+      pub.id !== "hmlr"
+    ) {
+      const code = codes[0] ?? "";
+      return { ...c, name: known(code)?.column ?? code.toLowerCase() };
+    }
+    const k = known(c.name);
+    return { ...c, name: k?.column ?? c.name.toLowerCase() };
+  });
+  const dateCol = cols.findIndex((c) => c.type === "date");
+  const floor = `${String(from)}-01-01`;
+  const rows =
+    dateCol < 0
+      ? read.parsed.rows
+      : read.parsed.rows.filter((r) => String(r[dateCol] ?? "") >= floor);
+  const caption = codes
+    .map((c) => known(c)?.title ?? titles[c] ?? c)
+    .join("; ");
+  return {
+    parsed: { columns: cols, rows },
+    meta: {
+      ...read.meta,
+      publisher: pub.name,
+      ...(pub.licence ? { licence: pub.licence } : {}),
+      ...(pub.notice ? { notice: pub.notice } : {}),
+      title: caption,
+    },
+    caption,
+    // One series: its column's name; several: the publisher's set.
+    id: codes.length === 1 ? (cols[1]?.name ?? pub.id) : `${pub.id}_series`,
+  };
+}
+
+/* Commit, whichever route. */
 
 function importCommit(): void {
   if (!pending) return;
-  const { meta, url } = pending;
+  const { meta, url, file } = pending;
   const names = sanitizeNames(
     Array.from(
       document.querySelectorAll<HTMLInputElement>(
@@ -1026,27 +1224,38 @@ function importCommit(): void {
       name: names[i] ?? c.name,
     })),
   };
+  const address = file ? importOrigin.value.trim() : url;
+  const personal = importPersonal.checked;
   const retrieved = todayIso();
   const id = tableIdFromFileName(importId.value || "data", el.getDoc());
   const finalMeta: SourceMeta = {
     ...meta,
+    ...(file && address ? publisherFor(address) : {}),
     ...(importCaption.value.trim()
       ? { title: importCaption.value.trim() }
       : {}),
     ...(importPublisher.value.trim()
       ? { publisher: importPublisher.value.trim() }
       : {}),
+    ...(personal
+      ? { licence: "personal use only, not for redistribution" }
+      : {}),
   };
   const table: Table = {
-    ...importedTable(id, parsed, url),
-    retrieved,
+    ...importedTable(id, parsed, address || (file ?? url)),
+    ...(address ? { retrieved } : {}),
     ...(finalMeta.title ? { caption: finalMeta.title } : {}),
+    ...(personal
+      ? { licence: "personal-use" }
+      : finalMeta.licence
+        ? { licence: finalMeta.licence }
+        : {}),
   };
   let reference: string | undefined;
-  if (importCite.checked) {
+  if (importCite.checked && address) {
     const key = sourceKey(finalMeta, id, el.referenceKeys());
     table.cite = key;
-    reference = sourceBibtex(key, finalMeta, url, retrieved);
+    reference = sourceBibtex(key, finalMeta, address, retrieved);
   }
   importModal.close();
   el.restoreCaret();
@@ -1054,21 +1263,66 @@ function importCommit(): void {
   flash(
     `Imported ${table.rows.length.toLocaleString()} rows into @${table.id}${
       table.cite ? ` - cite it as [@${table.cite}]` : ""
-    }`,
+    }${personal ? " (marked personal use only)" : ""}`,
   );
 }
 
-importTabFile.addEventListener("click", () => importTab("file"));
-importTabWeb.addEventListener("click", () => importTab("web"));
+/** A picked file: read, then the same preview. */
+function importFromFile(f: File): void {
+  if (f.size > IMPORT_MAX_BYTES) {
+    flash("File too large (over 8 MB) - the document stays one file");
+    return;
+  }
+  const format = f.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+  void f.text().then((text) => {
+    openImport("file");
+    try {
+      importShowParsed({
+        parsed: parseImport(text, format),
+        meta: {},
+        url: "",
+        file: f.name,
+      });
+    } catch (e) {
+      importReset();
+      importFail(
+        `Import failed: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  });
+}
+
+importFile.addEventListener("change", () => {
+  const f = importFile.files?.[0];
+  importFile.value = "";
+  if (f) importFromFile(f);
+});
+
+for (const k of Object.keys(importTabs) as ImportTab[]) {
+  importTabs[k].addEventListener("click", () => importTab(k));
+}
+fillPublishers();
+importPub.addEventListener("change", fillSeries);
+importKnownBtn.addEventListener("click", () => void importKnown());
+importFrom.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    void importKnown();
+  }
+});
+importCode.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    void importKnown();
+  }
+});
+importOrigin.addEventListener("input", reflectCite);
 requireEl<HTMLButtonElement>("#btn-import-data").addEventListener("click", () =>
   openImport(),
 );
 requireEl<HTMLButtonElement>("#btn-import-choose").addEventListener(
   "click",
-  () => {
-    importModal.close();
-    importFile.click();
-  },
+  () => importFile.click(),
 );
 requireEl<HTMLButtonElement>("#btn-import-demo").addEventListener(
   "click",
@@ -1094,17 +1348,18 @@ importGo.addEventListener("click", importCommit);
 requireEl<HTMLButtonElement>("#btn-import-downloaded").addEventListener(
   "click",
   () => {
+    const then = blockedThen;
     const pick = document.createElement("input");
     pick.type = "file";
     pick.accept = ".csv,.json,text/csv,application/json";
     pick.addEventListener("change", () => {
       const f = pick.files?.[0];
-      if (!f) return;
+      if (!f || !then) return;
       if (f.size > IMPORT_MAX_BYTES) {
         importFail("File too large (over 8 MB) - the document stays one file");
         return;
       }
-      void f.text().then((text) => importShow(text, importUrl.value.trim()));
+      void f.text().then(then);
     });
     pick.click();
   },
@@ -3092,6 +3347,8 @@ function printDocument(): void {
   if (isDesktop()) {
     flash("For page numbers, use Export as PDF");
   }
+  const remind = personalUseReminder();
+  if (remind) flash(remind);
   window.print();
 }
 
@@ -3123,6 +3380,15 @@ function pdfName(): string {
  * dialog). A browser can only print, so there the print dialog
  * opens, with a word on choosing "Save as PDF".
  */
+/** Before a document leaves the user's hands: say if it holds data
+ * imported for personal use only (a reminder, never a block). */
+function personalUseReminder(): string {
+  const tables = el.personalUseTables();
+  return tables.length
+    ? `This document contains personal-use data (${tables.join(", ")}) - check its terms before sharing`
+    : "";
+}
+
 async function exportPdf(): Promise<void> {
   preparePrint();
   await el.drawn();
@@ -3132,7 +3398,8 @@ async function exportPdf(): Promise<void> {
     const res = await exportPdfFile(pdfName(), furnitureFor(el.getDoc()));
     reflectMode();
     if (res.ok) {
-      flash(`Exported ${res.path}`);
+      const remind = personalUseReminder();
+      flash(`Exported ${res.path}${remind ? `. ${remind}` : ""}`);
       return;
     }
     if (res.reason === "cancelled") return;
@@ -3141,7 +3408,10 @@ async function exportPdf(): Promise<void> {
       return;
     }
   }
-  flash('Choose "Save as PDF" as the destination');
+  const remind = personalUseReminder();
+  flash(
+    `Choose "Save as PDF" as the destination${remind ? `. ${remind}` : ""}`,
+  );
   window.print();
 }
 

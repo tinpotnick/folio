@@ -112,9 +112,50 @@ data exactly like hand-authored tables.
   `new`, `new_2`, …) and the palette's "Insert a row below", "Insert a
   column to the right", "Delete the row", "Delete the column", acting
   on the cell at the caret.
-- Not yet: a picker of known sources by series code; Refresh (fetch
-  again into the same table); market prices (licensed - see the
-  research note).
+- **Open data** (the dialog's middle tab, 2026-10-27;
+  `src/engine/catalog.ts`): a publisher, its series, a year to start
+  from, Fetch - then the same preview. Only publishers whose terms let
+  a document holding their data be shared (with credit), and that
+  need no key or account (docs/research/open-data-licences.md):
+  - **Bank of England** (OGL v3): Bank Rate (average, end of month),
+    2/3/5-year fixed mortgage rates (75% LTV), the revert-to rate, the
+    10-year gilt yield; several at once (they share dates), or any
+    series code typed in. Fetched as the titled CSV (`CSVF=TT`), whose
+    descriptions title any code.
+  - **ONS** (OGL v3): CPI and CPIH inflation, the CPI index, average
+    weekly earnings.
+  - **OECD** (CC BY 4.0): share price indices (UK, US, Germany, France,
+    Japan; 2015 = 100, price only - the licence line says dividends are
+    excluded), UK long and short interest rates, the US long rate.
+  - **HM Land Registry** (OGL v3): the UK House Price Index for the UK,
+    its nations and London - average price, index, yearly and monthly
+    change.
+  - **ECB** (free reuse with credit): pound and dollar per euro.
+  - **Eurostat** (CC BY 4.0): euro-area inflation.
+  - **FRED**: any series ID, with its "check the series' notes"
+    notice (it re-publishes other owners' data).
+  The preview names the columns as the catalogue does (`date`,
+  `bank_rate`, `fixed_2y`, `uk_shares`), the caption from the series'
+  titles, the dataset after its series (`boe_series` for several),
+  and keeps rows from the chosen year. The publishers' layouts are
+  read by `parseFetched`: SDMX-CSV (OECD, ECB, Eurostat - the period
+  and the value; the descriptions become the title), the House Price
+  Index download (the all-property-types columns of ~60), the Bank's
+  titled CSV, the ONS CSV.
+- **Personal use only** (2026-10-27): data whose terms do not allow
+  sharing - a price history downloaded from a broker or a finance site
+  - imports **From a file**, previewed like the rest, with an optional
+  **Came from** address (then it is cited) and a **Personal use only**
+  tick. The table records `licence: "personal-use"`; it, and every
+  chart drawn from it, shows "Personal use only - not for sharing"
+  on screen and on paper; the BibTeX note says "Licence: personal use
+  only, not for redistribution"; Print and Export say "This document
+  contains personal-use data (...) - check its terms before sharing" -
+  a reminder, never a block. folio records the terms; the user, who
+  agreed to them, decides. Other imports record their licence's name
+  in `licence:` too.
+- Not yet: Refresh (fetch again into the same table); keyed market-data
+  providers (they need a key store; see the research note).
 
 ## Shipped demo data
 

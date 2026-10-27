@@ -260,6 +260,17 @@ const DRAWN_LANGS: Record<string, string> = {
   biblatex: "References",
 };
 
+/** "Personal use only" - on a table or chart whose data's terms do not
+ * allow sharing (docs/specs/data-import.md). */
+function personalMark(after: boolean): HTMLElement {
+  const mark = document.createElement("span");
+  mark.className = "folio-personal";
+  mark.textContent = `${after ? " · " : ""}Personal use only - not for sharing`;
+  mark.title =
+    "Imported under terms that do not allow sharing this data, or figures derived from it";
+  return mark;
+}
+
 /** A bibliography block (docs/specs/citations.md). */
 /** Edits to a table's shape (context menu, palette). */
 export type TableAction =
@@ -1174,6 +1185,17 @@ export class FolioDoc extends HTMLElement {
           const cap = document.createElement("figcaption");
           cap.textContent = block.chart.caption;
           figure.appendChild(cap);
+        }
+        // Figures drawn from personal-use data carry its terms too.
+        const from = this.doc?.blocks.find(
+          (b) => b.kind === "table" && b.table.id === block.chart.source,
+        );
+        if (from?.kind === "table" && from.table.licence === "personal-use") {
+          const note = document.createElement("div");
+          note.className = "folio-table-source";
+          note.contentEditable = "false";
+          note.appendChild(personalMark(false));
+          figure.appendChild(note);
         }
         this.drawChart(figure);
         return figure;
@@ -3881,12 +3903,17 @@ export class FolioDoc extends HTMLElement {
       figure.appendChild(cap);
     }
     // Imported data names its source - a citation, so it reads in the
-    // document's style and its reference is listed.
-    if (block.table.cite) {
+    // document's style and its reference is listed - and says when
+    // its terms do not allow sharing, on screen and on paper.
+    const personal = block.table.licence === "personal-use";
+    if (block.table.cite || personal) {
       const src = document.createElement("div");
       src.className = "folio-table-source";
       src.contentEditable = "false";
-      src.innerHTML = `Source: ${inlineMarkdownToHtml(`@${block.table.cite}`, this.inlineOpts())}`;
+      src.innerHTML = block.table.cite
+        ? `Source: ${inlineMarkdownToHtml(`@${block.table.cite}`, this.inlineOpts())}`
+        : "";
+      if (personal) src.appendChild(personalMark(Boolean(block.table.cite)));
       figure.appendChild(src);
     }
     return figure;
@@ -4850,6 +4877,16 @@ export class FolioDoc extends HTMLElement {
     if (reference) this.addReference(reference);
     this.render();
     this.emitChange("insert");
+  }
+
+  /** Datasets imported for personal use only (export and print
+   * remind the user before the document leaves their hands). */
+  personalUseTables(): string[] {
+    return (this.doc?.blocks ?? []).flatMap((b) =>
+      b.kind === "table" && b.table.licence === "personal-use"
+        ? [b.table.caption ?? b.table.id]
+        : [],
+    );
   }
 
   /** Every key the bibliography defines (an import's new key must be

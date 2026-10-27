@@ -61,6 +61,15 @@ Two practical facts shaped the design (both checked 2026-10-27):
   lacks.
 - In a browser, importing from most open-data sites is two steps
   (download, choose). The desktop app is one.
-- "Known sources" (pick a publisher and a series code) and any
-  personal-use market-data provider are separate decisions, to be
-  made provider by provider against their terms.
+- Known sources (decided 2026-10-27): the Open data tab lists only
+  publishers that need no key and whose terms let a document holding
+  their data be shared with credit - Bank of England, ONS, OECD, HM
+  Land Registry, ECB, Eurostat, and FRED with its per-series notice.
+  Keyed market-data providers (Alpha Vantage, Twelve Data, ...) are
+  out for now: they would need a key store, and their terms forbid
+  sharing. Data under such terms - a price history downloaded by the
+  user - comes in From a file, marked "personal use only": recorded in
+  the source (`licence: "personal-use"`), shown on the table and its
+  charts, noted in the reference, and recalled on Print and Export.
+  folio makes the terms visible; the user, who agreed to them,
+  decides.
