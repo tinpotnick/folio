@@ -855,6 +855,11 @@ interface Pending {
 let pending: Pending | null = null;
 
 function importTab(which: ImportTab): void {
+  try {
+    localStorage.setItem(IMPORT_TAB_KEY, which);
+  } catch {
+    // Remembering the tab is a convenience only.
+  }
   for (const k of Object.keys(importTabs) as ImportTab[]) {
     importTabs[k].setAttribute("aria-selected", String(k === which));
     importPanes[k].hidden = k !== which;
@@ -864,13 +869,25 @@ function importTab(which: ImportTab): void {
   if (which === "known") importPub.focus();
 }
 
-function openImport(which: ImportTab = "file"): void {
+/** The tab Import data opened on last (a convenience: browser storage
+ * may be unavailable). */
+const IMPORT_TAB_KEY = "folio:import-tab";
+function lastImportTab(): ImportTab {
+  try {
+    const t = localStorage.getItem(IMPORT_TAB_KEY);
+    return t === "known" || t === "web" ? t : "file";
+  } catch {
+    return "file";
+  }
+}
+
+function openImport(which?: ImportTab): void {
   closeMenus();
   if (!importModal.open) {
     el.saveCaret();
     importModal.showModal();
   }
-  importTab(which);
+  importTab(which ?? lastImportTab());
 }
 
 function importReset(): void {
@@ -1098,7 +1115,7 @@ function fillSeries(): void {
     input.checked = i === 0;
     label.append(input, ` ${ser.title}`);
     const unit = document.createElement("small");
-    unit.textContent = ser.unit;
+    unit.textContent = `(${ser.unit})`;
     label.appendChild(unit);
     importSeries.appendChild(label);
   });
@@ -1168,6 +1185,14 @@ function knownShape(
     (read.meta as { titles?: Record<string, string> }).titles ?? {};
   const known = (code: string): KnownSeries | undefined =>
     pub.series.find((s) => s.code === code);
+  // A catalogue series' unit rides its column: the header reads
+  // "bank_rate (%)".
+  const withUnit = (
+    c: ParsedImport["columns"][number],
+    name: string,
+    k: KnownSeries | undefined,
+  ): ParsedImport["columns"][number] =>
+    k && k.unit !== "index" ? { ...c, name, unit: k.unit } : { ...c, name };
   const cols = read.parsed.columns.map((c, i) => {
     if (c.type === "date" && i === 0) return { ...c, name: "date" };
     if (
@@ -1176,10 +1201,14 @@ function knownShape(
       pub.id !== "hmlr"
     ) {
       const code = codes[0] ?? "";
-      return { ...c, name: known(code)?.column ?? code.toLowerCase() };
+      return withUnit(
+        c,
+        known(code)?.column ?? code.toLowerCase(),
+        known(code),
+      );
     }
     const k = known(c.name);
-    return { ...c, name: k?.column ?? c.name.toLowerCase() };
+    return withUnit(c, k?.column ?? c.name.toLowerCase(), k);
   });
   const dateCol = cols.findIndex((c) => c.type === "date");
   const floor = `${String(from)}-01-01`;
@@ -1200,8 +1229,15 @@ function knownShape(
       title: caption,
     },
     caption,
-    // One series: its column's name; several: the publisher's set.
-    id: codes.length === 1 ? (cols[1]?.name ?? pub.id) : `${pub.id}_series`,
+    // One series: its column's name; a few: theirs joined
+    // (bank_rate_fixed_2y); many: the publisher's set.
+    id:
+      codes.length <= 3
+        ? cols
+            .slice(1)
+            .map((c) => c.name)
+            .join("_")
+        : `${pub.id}_series`,
   };
 }
 
@@ -2572,10 +2608,17 @@ function paletteEntries(): PaletteEntry[] {
     });
   }
   entries.push({
+    title: "Import open data (Bank of England, ONS, OECD, house prices…)",
+    group: "Command",
+    keywords:
+      "import open data public statistics bank rate mortgage rates interest rates gilt yield inflation cpi earnings share prices stock market index ftse house prices exchange rates bank of england ons oecd land registry ecb eurostat fred",
+    action: () => openImport("known"),
+  });
+  entries.push({
     title: "Import data",
     group: "Command",
     keywords:
-      "import data dataset csv json file web url download open data source fetch",
+      "import data dataset csv json file web url download open data source fetch personal use",
     action: () => openImport(),
   });
   entries.push({
@@ -3348,7 +3391,13 @@ function printDocument(): void {
     flash("For page numbers, use Export as PDF");
   }
   const remind = personalUseReminder();
-  if (remind) flash(remind);
+  if (remind) {
+    // The print dialog would cover the reminder at once: let it be
+    // read first.
+    flash(remind);
+    setTimeout(() => window.print(), 1200);
+    return;
+  }
   window.print();
 }
 
@@ -3412,7 +3461,9 @@ async function exportPdf(): Promise<void> {
   flash(
     `Choose "Save as PDF" as the destination${remind ? `. ${remind}` : ""}`,
   );
-  window.print();
+  // With a reminder, let it be read before the dialog covers it.
+  if (remind) setTimeout(() => window.print(), 1200);
+  else window.print();
 }
 
 requireEl<HTMLButtonElement>("#btn-export-pdf").addEventListener(
