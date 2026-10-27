@@ -932,6 +932,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       width: 100%;
       font-variant-numeric: tabular-nums;
     }
+    /* A date never breaks across lines (2010-\n01-31). */
+    table.folio-table td.date { white-space: nowrap; }
     table.folio-table thead tr { border-top: 2px solid var(--folio-table-rule, #1f2328); }
     table.folio-table thead th {
       border-bottom: 1px solid var(--folio-table-rule, #1f2328);

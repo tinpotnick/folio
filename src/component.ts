@@ -3746,7 +3746,11 @@ export class FolioDoc extends HTMLElement {
           td.contentEditable = "false";
           td.textContent = formatComputed(v, col.format);
           if (typeof v === "number") td.classList.add("num");
+          if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+            td.classList.add("date");
+          }
         } else {
+          if (col.type === "date") td.classList.add("date");
           if (col.type === "number") {
             td.classList.add("num");
           }

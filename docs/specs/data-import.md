@@ -159,6 +159,16 @@ data exactly like hand-authored tables.
 
 ## Shipped demo data
 
+- `demo/examples/repay-or-invest.md` - "Open example: Repay or invest?
+  A mortgage question" (2026-10-27): Bank of England mortgage rates,
+  OECD UK share prices and ONS CPI from January 2010, imported through
+  Open data and cited; an assumptions table (loan, term, monthly extra,
+  dividend yield) drives a month-by-month model built from `pmt`,
+  `asof`, `eomonth` and running balances; a summary table and charts
+  compare overpaying with investing, in pounds of the day and of 2010.
+  Every figure recalculates when an assumption changes. All three
+  sources are open-licensed, so the example itself is shareable.
+
 - `demo/data/monthly-sales.csv` - 72 rows (24 months x 3
   regions), realistic seasonality and per-region trends; the
   palette command "Import the demo dataset" imports it through
