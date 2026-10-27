@@ -5,7 +5,31 @@
  * the same semantic source. One deep module for both directions.
  */
 
-export function inlineMarkdownToHtml(text: string): string {
+import { CITE_KEY, XREF_PREFIX, parseCluster } from "../engine/citations.js";
+
+export interface InlineOptions {
+  /** Bibliography keys: a bare `@key` is a citation only when its key
+   * is one of these (so "@nick" stays text). */
+  citeKeys?: ReadonlySet<string>;
+}
+
+// After a space or opening punctuation only - never inside a URL,
+// an email address or a word.
+const NARRATIVE_RE = new RegExp(
+  String.raw`(^|[\s("'\u201C\u2018])@(${CITE_KEY})`,
+  "g",
+);
+
+/** A citation atom: the component fills in "(Knuth, 1984)". */
+function citeAtom(source: string, narrative: boolean): string {
+  const attr = source.replaceAll('"', "&quot;");
+  return `<span class="folio-cite${narrative ? " folio-cite-narrative" : ""}" data-cite="${attr}" contenteditable="false" tabindex="0">${source}</span>`;
+}
+
+export function inlineMarkdownToHtml(
+  text: string,
+  opts: InlineOptions = {},
+): string {
   const escaped = text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
@@ -18,8 +42,25 @@ export function inlineMarkdownToHtml(text: string): string {
     spans.push(`<code>${code}</code>`);
     return `\uE000${String(spans.length - 1)}\uE000`;
   });
+  // Citations (Pandoc's [@key, p. 12] and bare @key, spec:
+  // docs/specs/citations.md) are lifted like code spans: their text
+  // keeps its `*` and `_` exactly, for the round trip.
+  const cites: string[] = [];
+  const lift = (html: string): string => {
+    cites.push(html);
+    return `\uE001${String(cites.length - 1)}\uE001`;
+  };
+  const withCites = lifted
+    .replace(/\[([^[\]]*@[^[\]]*)\](?!\()/g, (m, inner: string) =>
+      parseCluster(inner) ? lift(citeAtom(m, false)) : m,
+    )
+    .replace(NARRATIVE_RE, (m, before: string, key: string) =>
+      opts.citeKeys?.has(key) && !XREF_PREFIX.test(key)
+        ? before + lift(citeAtom(`@${key}`, true))
+        : m,
+    );
   return (
-    lifted
+    withCites
       // Links first: the label then still gets the inline format
       // rules applied INSIDE the anchor (bold link text works).
       .replace(
@@ -45,6 +86,7 @@ export function inlineMarkdownToHtml(text: string): string {
       .replace(/~~([^~]+)~~/g, "<del>$1</del>")
       .replace(/\+\+([^+]+)\+\+/g, "<ins>$1</ins>")
       .replace(/\uE000(\d+)\uE000/g, (_m, n: string) => spans[Number(n)] ?? "")
+      .replace(/\uE001(\d+)\uE001/g, (_m, n: string) => cites[Number(n)] ?? "")
   );
 }
 
@@ -96,6 +138,13 @@ function nodesToMarkdown(root: Node): string {
         break;
       case "BR":
         out += "\n";
+        break;
+      case "SPAN":
+        if (el.classList.contains("folio-cite")) {
+          out += el.getAttribute("data-cite") ?? "";
+          break;
+        }
+        out += nodesToMarkdown(el);
         break;
       case "SUP":
         if (el.classList.contains("folio-fnref")) {

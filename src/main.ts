@@ -3,6 +3,7 @@
  * Document view / Markdown view toggle; edits in either mode keep
  * the document as the source of truth.
  */
+import { CITATION_STYLES } from "./engine/citations.js";
 import {
   furnitureCss,
   furnitureFont,
@@ -1738,6 +1739,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
+    id: "paper",
+    title: "An academic paper",
+    file: "demo/examples/paper.md",
+    blurb:
+      "academic paper citations bibliography references bibtex footnotes cross-references research",
+  },
+  {
     id: "amensister",
     title: "Amensister",
     file: "demo/examples/amensister.md",
@@ -1748,6 +1756,8 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
 interface PaletteEntry {
   title: string;
   group: "Command" | "Help" | "Section";
+  /** The badge, when it is not the group ("Reference"). */
+  tag?: string;
   keywords: string;
   /** Body text matched VERBATIM only (a help topic's words). */
   body?: string;
@@ -1813,6 +1823,40 @@ function paletteEntries(): PaletteEntry[] {
     action: () => {
       el.insertJscad();
       flash("3D model inserted");
+    },
+  });
+  // One entry per reference in the bibliography: "Cite: Knuth 1984 ·
+  // Literate Programming" (docs/specs/citations.md).
+  for (const c of el.citationChoices()) {
+    entries.push({
+      title: `Cite: ${c.label}${c.title ? ` · ${c.title}` : ""} (@${c.key})`,
+      group: "Command",
+      tag: "Reference",
+      keywords: `cite citation reference source bibliography ${c.key}`,
+      action: () => {
+        const why = el.insertCitation(c.key, paletteLocator);
+        flash(
+          why ??
+            `Cited ${c.label}${paletteLocator ? `, ${paletteLocator}` : ""}`,
+        );
+      },
+    });
+  }
+  entries.push({
+    title: "Insert a citation",
+    group: "Command",
+    keywords:
+      "cite citation reference source paper bibliography academic author year apa ieee",
+    action: openCitePicker,
+  });
+  entries.push({
+    title: "Insert a bibliography",
+    group: "Command",
+    keywords:
+      "bibliography references reference list works cited sources bibtex zotero google scholar academic",
+    action: () => {
+      const why = el.insertBibliography();
+      flash(why ?? "Bibliography added - paste BibTeX entries into it");
     },
   });
   // One entry per thing a cross-reference can name: "Cross-reference:
@@ -2222,7 +2266,7 @@ function renderPalette(): void {
     btn.setAttribute("aria-selected", i === paletteSel ? "true" : "false");
     const tag = document.createElement("span");
     tag.className = "palette-tag";
-    tag.textContent = entry.group;
+    tag.textContent = entry.tag ?? entry.group;
     btn.appendChild(tag);
     btn.appendChild(document.createTextNode(entry.title));
     btn.addEventListener("click", () => runPalette(i));
@@ -2244,8 +2288,30 @@ function runPalette(i: number): void {
   entry.action();
 }
 
+/** A page (or chapter...) typed after a reference's name in the
+ * citation picker: "Cite: Knuth p. 99" cites `[@knuth1984, p. 99]`. */
+let paletteLocator = "";
+const paletteFoot = requireEl<HTMLElement>("#palette-modal .palette-foot");
+const PALETTE_FOOT = paletteFoot.textContent;
+const LOCATOR_RE =
+  /(?:,\s*|\s+)((?:pp?|ch|chap|sec|para|fig|vol|n|note)\.?\s*\d[\w\u2013-]*(?:\s*[-\u2013]\s*\w+)?)\s*$/i;
+
 function updatePalette(): void {
-  const query = paletteInput.value.trim();
+  let query = paletteInput.value.trim();
+  paletteLocator = "";
+  if (/^cite:/i.test(query)) {
+    const m = LOCATOR_RE.exec(query);
+    if (m) {
+      paletteLocator = (m[1] ?? "").replace(
+        /^(pp?|ch|chap|sec|para|fig|vol|n|note)\.?\s*/i,
+        "$1. ",
+      );
+      query = query.slice(0, m.index).trim();
+    }
+  }
+  paletteFoot.textContent = /^cite:/i.test(query)
+    ? `Enter to cite${paletteLocator ? ` with ${paletteLocator}` : ""} · add a page after the name: "Knuth p. 99" · Esc to close`
+    : PALETTE_FOOT;
   const all = paletteEntries();
   if (!query) {
     // Every command, then a taste of each other group - a growing
@@ -2255,6 +2321,8 @@ function updatePalette(): void {
     const help = all.filter((e) => e.group === "Help").slice(0, 10);
     paletteFiltered = [...commands, ...sections, ...help];
   } else {
+    // A search that goes past the command word: "cite knuth", "Cite: ".
+    const targeted = query.includes(":") || query.split(/\s+/).length > 1;
     paletteFiltered = all
       .map((e) => ({
         e,
@@ -2271,9 +2339,15 @@ function updatePalette(): void {
             e.body?.includes(query.toLowerCase()) ? 6 : -1,
           ) -
           // "Cross-reference: Regional summary" must not outrank the
-          // section itself: references rank last unless asked for.
+          // section itself, nor "Cite: Knuth 1984" the "Insert a
+          // citation" command: one target per row ranks last unless
+          // the search names one ("cite knuth", "Cite: Knuth").
           (e.title.startsWith("Cross-reference:") &&
-          !/^(cross|ref|see)/i.test(query)
+          !(targeted && /^(cross|ref|see)/i.test(query))
+            ? 20
+            : 0) -
+          (e.title.startsWith("Cite:") &&
+          !(targeted && /^(cite|cita|ref|bib)/i.test(query))
             ? 20
             : 0),
       }))
@@ -2357,6 +2431,7 @@ const setH2Size = requireEl<HTMLInputElement>("#set-h2-size");
 const setH3Size = requireEl<HTMLInputElement>("#set-h3-size");
 const themeGrid = requireEl<HTMLElement>("#set-theme");
 const setTableStyle = requireEl<HTMLSelectElement>("#set-table-style");
+const setCitationStyle = requireEl<HTMLSelectElement>("#set-citation-style");
 const setPalette = requireEl<HTMLSelectElement>("#set-palette");
 const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
 const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
@@ -2461,6 +2536,7 @@ function reflectThemeDefaults(): void {
   named(setBodyFont, familyOf(look.bodyFont));
   named(setH1Font, familyOf(look.h1Font));
   named(setTableStyle, look.tableStyle);
+  named(setCitationStyle, look.citationStyle);
   const paletteName =
     Object.entries(PALETTES).find(([, p]) => p === look.palette)?.[0] ??
     "muted";
@@ -2481,6 +2557,7 @@ const overrideFields = (): (HTMLSelectElement | HTMLInputElement)[] => [
   setH3Size,
   setTableStyle,
   setPalette,
+  setCitationStyle,
 ];
 
 /** Say how many fields override the theme - they would mask it. */
@@ -2521,6 +2598,7 @@ function fillSettings(): void {
   setH2Size.value = style.get("h2.font.size") ?? "";
   setH3Size.value = style.get("h3.font.size") ?? "";
   fillOptions(setTableStyle, TABLE_STYLES, style.get("table.style"));
+  fillOptions(setCitationStyle, CITATION_STYLES, style.get("citation.style"));
   fillOptions(setPalette, Object.keys(PALETTES), style.get("chart.palette"));
   setPbH1.value = style.get("pagebreak.h1") === "before" ? "before" : "default";
   setPbH2.value = style.get("pagebreak.h2") === "before" ? "before" : "default";
@@ -2566,6 +2644,7 @@ settingsForm.addEventListener("submit", (ev) => {
       "h2.font.size": setH2Size.value.trim(),
       "h3.font.size": setH3Size.value.trim(),
       "table.style": setTableStyle.value,
+      "citation.style": setCitationStyle.value,
       "chart.palette": setPalette.value,
       "pagebreak.h1": setPbH1.value,
       "pagebreak.h2": setPbH2.value,
@@ -2823,6 +2902,26 @@ toolbarMenu(
 toolbarMenu(
   requireEl<HTMLButtonElement>("#btn-overflow"),
   requireEl<HTMLElement>("#overflow-menu"),
+);
+
+// Citation: the palette, opened on the bibliography's references - or,
+// with none yet, a word on where they come from.
+function openCitePicker(): void {
+  if (el.citationChoices().length === 0) {
+    flash(
+      "No references yet - Insert › Bibliography, then paste BibTeX from Google Scholar or Zotero",
+    );
+    return;
+  }
+  openPalette("Cite: ");
+}
+
+requireEl<HTMLButtonElement>("#btn-insert-cite").addEventListener(
+  "click",
+  () => {
+    closeMenus();
+    openCitePicker();
+  },
 );
 
 // Cross-reference: the palette, opened on the things it can name -
