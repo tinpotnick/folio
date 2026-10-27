@@ -1622,6 +1622,33 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.95em;
       pointer-events: none;
     }
+    /* Table of contents (docs/specs/contents.md). */
+    article.folio-doc > nav.folio-toc {
+      margin: 1.6em 0 2em;
+      padding: 1em 0 0.4em;
+      border-top: 1px solid var(--folio-rule, #d0d7de);
+      border-bottom: 1px solid var(--folio-rule, #d0d7de);
+    }
+    nav.folio-toc .folio-toc-title {
+      margin: 0 0 0.6em;
+      font-weight: 600;
+      color: var(--folio-ink-muted);
+      font-size: 0.85em;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    nav.folio-toc ol { list-style: none; margin: 0; padding: 0; }
+    nav.folio-toc ol ol { padding-left: 1.4em; }
+    nav.folio-toc li { margin: 0.3em 0; }
+    nav.folio-toc > ol > li > a.folio-toc-link { font-weight: 600; }
+    nav.folio-toc a.folio-toc-link {
+      color: var(--folio-ink);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    nav.folio-toc a.folio-toc-link:hover { color: var(--folio-accent); }
+    nav.folio-toc .folio-toc-empty { color: var(--folio-ink-muted); font-style: italic; margin: 0 0 0.6em; }
+
     /* Cross-references (docs/specs/cross-references.md): the caption's
        number is CSS-drawn from data-label, so caption text stays the
        author's own. */

@@ -1824,6 +1824,16 @@ function paletteEntries(): PaletteEntry[] {
     });
   }
   entries.push({
+    title: "Insert a table of contents",
+    group: "Command",
+    keywords:
+      "table of contents toc contents outline index sections headings list",
+    action: () => {
+      el.insertContents();
+      flash("Contents added - it keeps itself up to date");
+    },
+  });
+  entries.push({
     title: "Insert a cross-reference",
     group: "Command",
     keywords: "cross reference refer see table figure section number caption",

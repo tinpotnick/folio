@@ -32,7 +32,10 @@ export type DocBlock =
   /** Footnote definitions (spec: docs/specs/footnotes.md), GitHub's
    * syntax: `[^label]: text`, continuation lines indented. Consecutive
    * definitions are one block so they round-trip without blank lines. */
-  | { kind: "footnotes"; notes: Footnote[] };
+  | { kind: "footnotes"; notes: Footnote[] }
+  /** A table of contents (spec: docs/specs/contents.md): the marker
+   * line as written, `[[_TOC_]]` (GitLab, Azure DevOps) or `[TOC]`. */
+  | { kind: "toc"; marker: string };
 
 export interface Footnote {
   label: string;
@@ -189,6 +192,11 @@ export function parseDoc(text: string): Doc {
       const t = parsePipeTable(lines, i, `table-${String(simpleCount)}`);
       doc.blocks.push(t.block);
       i = t.end;
+      continue;
+    }
+    if (TOC_RE.test(line.trim())) {
+      doc.blocks.push({ kind: "toc", marker: line.trim() });
+      i++;
       continue;
     }
     if (FOOTNOTE_DEF_RE.test(line)) {
@@ -585,6 +593,9 @@ function serializePipeTable(table: Table): string {
  * number (`N. `, `N) `). */
 const LIST_ITEM_RE = /^(?:([-*+])|(\d{1,9})[.)])(?: (.*))?$/;
 
+/** A table-of-contents marker line: `[[_TOC_]]` or `[TOC]`. */
+export const TOC_RE = /^(\[\[_TOC_\]\]|\[TOC\])$/;
+
 /** A footnote definition line: `[^label]: text` (GitHub, Pandoc). */
 export const FOOTNOTE_DEF_RE = /^\[\^([^\]\s]+)\]:[ \t]?(.*)$/;
 
@@ -697,6 +708,7 @@ function collectProse(lines: string[], start: number): number {
       /^!\[[^\]]*\]\([^)]+\)$/.test(line.trim()) ||
       line.startsWith("#") ||
       FOOTNOTE_DEF_RE.test(line) ||
+      TOC_RE.test(line.trim()) ||
       line.trim() === "$$" ||
       /^`{3,}/.test(line.trim())
     ) {
@@ -780,6 +792,8 @@ function serializeBlock(block: DocBlock): string {
       return block.text;
     case "list":
       return serializeList(block);
+    case "toc":
+      return block.marker;
     case "footnotes":
       return block.notes
         .map((n) => `[^${n.label}]: ${n.text.split("\n").join("\n    ")}`)

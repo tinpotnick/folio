@@ -4,6 +4,8 @@ Everything in folio is one Markdown document: prose, typed tables,
 and charts generated from them. This help page is itself a folio
 document — written in the same renderer you are working with.
 
+[[_TOC_]]
+
 ## The toolbar
 
 - One row, left to right: **New** (and **Open** / **Save** in the
@@ -177,6 +179,17 @@ document — written in the same renderer you are working with.
   `@fig:region-trend` or `@sec:against-target` (Pandoc's and Quarto's
   syntax): the table's or chart's id, or the heading's name in lower
   case with hyphens.
+
+## Table of contents
+
+- **+ Insert › Table of contents** (or search "contents" with
+  Ctrl+K) adds a **Contents** list of your document's sections, like
+  the one at the top of this help. Click an entry to jump there.
+- It keeps itself up to date as you add, rename and move headings.
+  A single H1 is treated as the title and left out; three levels of
+  headings are listed.
+- In the Markdown view it is one line, `[[_TOC_]]` - the same marker
+  GitLab and Azure DevOps use (`[TOC]` works too).
 
 ## Opening and saving
 
