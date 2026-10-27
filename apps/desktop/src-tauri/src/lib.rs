@@ -3,7 +3,10 @@
 //! this shell adds native Open/Save so documents are real local files.
 //! No engine logic lives here (ADR-0001): the document stays the
 //! single source of truth, read and written as plain Markdown text.
+
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod pdf_furniture;
 
 use std::path::{Path, PathBuf};
 
@@ -213,6 +216,7 @@ async fn export_pdf(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     suggested: String,
+    furniture: Option<pdf_furniture::Furniture>,
 ) -> Result<String, String> {
     let mut dialog = app
         .dialog()
@@ -229,6 +233,11 @@ async fn export_pdf(
         .map_err(|e| e.to_string())?;
     remember_dir(&app, &path);
     print_to_pdf(&window, &path).await?;
+    // The running header and page numbers: WebKitGTK ignores the print
+    // stylesheet's page-margin boxes, so they are stamped on after.
+    if let Some(f) = furniture {
+        pdf_furniture::stamp(&path, &f)?;
+    }
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -352,6 +361,22 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{folder_hint, is_external_url, launch_file_from_args};
+
+    /// Stamp a real WebKitGTK PDF: `FOLIO_PDF_SAMPLE=/path/to.pdf cargo test
+    /// stamps_a_sample -- --ignored`, then read it with pdftotext.
+    #[test]
+    #[ignore]
+    fn stamps_a_sample() {
+        let path = std::env::var("FOLIO_PDF_SAMPLE").expect("FOLIO_PDF_SAMPLE");
+        super::pdf_furniture::stamp(
+            std::path::Path::new(&path),
+            &super::pdf_furniture::Furniture {
+                header: Some("Q3 Sales Review — £ test".into()),
+                numbers: true,
+            },
+        )
+        .unwrap();
+    }
 
     #[test]
     fn the_launch_file_is_the_first_plain_argument() {

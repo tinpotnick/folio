@@ -3,6 +3,11 @@
  * Document view / Markdown view toggle; edits in either mode keep
  * the document as the source of truth.
  */
+import {
+  furnitureCss,
+  furnitureFont,
+  furnitureFor,
+} from "./render/page-furniture";
 import "./component.js";
 import type { FolioDoc } from "./component.js";
 import { parseDoc, serializeDoc } from "./engine/doc.js";
@@ -2088,7 +2093,17 @@ function paletteEntries(): PaletteEntry[] {
     title: "Print the document",
     group: "Command",
     keywords: "print pdf export paper",
-    action: () => window.print(),
+    action: printDocument,
+  });
+  entries.push({
+    title: "Page numbers and running header",
+    group: "Command",
+    keywords:
+      "page numbers numbering pagination footer header running title print pdf export",
+    action: () => {
+      openSettings();
+      setPageNumbers.focus();
+    },
   });
   for (const ex of EXAMPLES) {
     entries.push({
@@ -2298,7 +2313,7 @@ document.addEventListener("keydown", (ev) => {
   // app's webview (WebKitGTK) does not.
   if (key === "p") {
     ev.preventDefault();
-    window.print();
+    printDocument();
   }
   // Ctrl+S / Ctrl+O: Save and Open, in the browser too (its own
   // Ctrl+S would save the web page, not the document).
@@ -2345,6 +2360,8 @@ const setTableStyle = requireEl<HTMLSelectElement>("#set-table-style");
 const setPalette = requireEl<HTMLSelectElement>("#set-palette");
 const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
 const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
+const setPageNumbers = requireEl<HTMLSelectElement>("#set-page-numbers");
+const setPageHeader = requireEl<HTMLSelectElement>("#set-page-header");
 const overrideNote = requireEl<HTMLElement>("#settings-override-note");
 const btnSettingsReset = requireEl<HTMLButtonElement>("#btn-settings-reset");
 
@@ -2507,6 +2524,9 @@ function fillSettings(): void {
   fillOptions(setPalette, Object.keys(PALETTES), style.get("chart.palette"));
   setPbH1.value = style.get("pagebreak.h1") === "before" ? "before" : "default";
   setPbH2.value = style.get("pagebreak.h2") === "before" ? "before" : "default";
+  setPageNumbers.value =
+    style.get("page.numbers") === "off" ? "off" : "default";
+  setPageHeader.value = style.get("page.header") === "off" ? "off" : "default";
   reflectThemeDefaults();
 }
 
@@ -2549,6 +2569,8 @@ settingsForm.addEventListener("submit", (ev) => {
       "chart.palette": setPalette.value,
       "pagebreak.h1": setPbH1.value,
       "pagebreak.h2": setPbH2.value,
+      "page.numbers": setPageNumbers.value,
+      "page.header": setPageHeader.value,
     };
     // The theme name rides the `theme:` frontmatter line;
     // "default" removes it so the fallback look applies.
@@ -2603,8 +2625,36 @@ function preparePrint(): void {
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
   if (!mdWrap.hidden) btnView.click();
+  // Paper is light whatever the app's mode: a dark rendition's charts
+  // and diagrams would print pale-on-white. Restored after printing.
+  for (const doc of Array.from(document.querySelectorAll("folio-doc"))) {
+    doc.setAttribute("mode", "light");
+  }
+  // The running header and page numbers, as @page margin boxes - they
+  // only apply from the document's own stylesheet.
+  printFurnitureStyle.textContent = furnitureCss(
+    furnitureFor(el.getDoc()),
+    furnitureFont(el.getDoc()),
+  );
 }
+const printFurnitureStyle = document.head.appendChild(
+  document.createElement("style"),
+);
+printFurnitureStyle.id = "print-furniture";
 window.addEventListener("beforeprint", preparePrint);
+window.addEventListener("afterprint", reflectMode);
+
+/**
+ * Print. The desktop app's print dialog (WebKitGTK) leaves off page
+ * numbers and the running header - only Export adds them (ADR-0027) -
+ * so it says where to find them.
+ */
+function printDocument(): void {
+  if (isDesktop()) {
+    flash("For page numbers, use Export as PDF");
+  }
+  window.print();
+}
 
 /* --- Export (spec: docs/specs/print.md, ADR-0025) --- */
 
@@ -2636,10 +2686,12 @@ function pdfName(): string {
  */
 async function exportPdf(): Promise<void> {
   preparePrint();
+  await el.drawn();
   await drawingsSettled();
   if (isDesktop()) {
     flash("Exporting…");
-    const res = await exportPdfFile(pdfName());
+    const res = await exportPdfFile(pdfName(), furnitureFor(el.getDoc()));
+    reflectMode();
     if (res.ok) {
       flash(`Exported ${res.path}`);
       return;

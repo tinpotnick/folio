@@ -53,7 +53,7 @@ No separate PDF export engine, no new dependency (ADR-0007).
   dialogs close, Markdown view switches to the document), then it
   waits until no figure still says "Drawing…" / "Building the
   model…" (up to 15 s).
-- **Desktop (Linux)**: `export_pdf(suggested)` (ADR-0025) - a save
+- **Desktop (Linux)**: `export_pdf(suggested, furniture)` (ADR-0025) - a save
   dialog filtered to .pdf, named after the open file or the title,
   starting in the last used folder; then a WebKitGTK print operation
   writes the print stylesheet straight to that file ("Print to
@@ -64,3 +64,43 @@ No separate PDF export engine, no new dependency (ADR-0007).
 - **Web**: a browser cannot write a PDF itself; Export flashes
   'Choose "Save as PDF" as the destination' and opens the print
   dialog.
+
+## Page numbers and running header (2026-10-26, ADR-0027)
+
+- **What**: "Page n of N" bottom right on every page, and from page 2
+  the document's title (its first H1, Markdown marks removed) top
+  left - small grey sans-serif, in the page margin. Page 1 carries the
+  title itself, so it has no header.
+- **Settings**: style keys `page.numbers` and `page.header`, on when
+  unset, `"off"` to remove (document-settings.md; the dialog writes
+  it quoted, since YAML 1.1 reads a bare `off` as false - both
+  spellings are read the same). No title, no header.
+- **Print / web**: `preparePrint` writes the furniture into the host's
+  `<style id="print-furniture">` as `@page` margin boxes
+  (`furnitureCss`, `src/render/page-furniture.ts`) - they only apply
+  from the document's own stylesheet, not a shadow root. Browsers
+  without margin boxes (WebKit-based) print without them.
+- **Desktop export**: `export_pdf(suggested, furniture)`; after
+  WebKitGTK writes the PDF (which ignores margin boxes), Rust stamps
+  the same text in the same places (`pdf_furniture::stamp`, lopdf):
+  Helvetica 8.5 pt, grey, header at 16 mm / 11 mm from the top-left,
+  numbers right-aligned 16 mm from the right, 9 mm from the bottom. A
+  title with characters outside WinAnsi is left off rather than
+  printed as "?".
+- **Desktop Print** goes through WebKitGTK's own print dialog, whose
+  output folio never sees: no page numbers or header. Print says so
+  (flash: "For page numbers, use Export as PDF") and the help points
+  to Export. Considered and deferred (2026-10-26): Print builds the
+  stamped PDF and hands it to `GtkPrintUnixDialog` +
+  `gtk_print_job_set_source_file` (libgtk-3, already linked); macOS
+  would use PDFKit's `PDFDocument.printOperation`; Windows' WebView2
+  (Chromium) likely prints margin boxes already - unverified.
+- **Light paper**: before printing or exporting, every `<folio-doc>`
+  switches to the light rendition (charts and diagrams redraw; export
+  waits for them via `drawn()`), and goes back to the app's mode on
+  `afterprint` / when the export finishes.
+- Acceptance: `tests/render/page-furniture.test.ts`, the Rust tests in
+  `pdf_furniture.rs` (stamped pages, unspellable title),
+  `tests/e2e/print.spec.ts` (furniture CSS, light mode while printing,
+  settings write the keys), eval `evals/page-numbers-first-contact.md`.
+
