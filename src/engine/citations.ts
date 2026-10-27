@@ -109,6 +109,37 @@ function locator(suffix: string): string {
     .replace(/--/g, "\u2013");
 }
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** "27 October 2026" from an ISO date (urldate); "" when unreadable. */
+function longDate(iso: string | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!m) return "";
+  return `${String(Number(m[3]))} ${MONTH_NAMES[Number(m[2]) - 1] ?? ""} ${m[1] ?? ""}`;
+}
+
+/** IEEE's "Oct. 27, 2026". */
+function shortDate(iso: string | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!m) return "";
+  const name = MONTH_NAMES[Number(m[2]) - 1] ?? "";
+  const short = name.length > 4 ? `${name.slice(0, 3)}.` : name;
+  return `${short} ${String(Number(m[3]))}, ${m[1] ?? ""}`;
+}
+
 /** "pp. 45–67" from "45--67" (already dashed by the reader) or "45-67". */
 function pages(p: string): string {
   return p.replace(/\s*[-–]+\s*/g, "–");
@@ -292,8 +323,14 @@ function link(e: BibEntry): Run[] {
       { text: `https://doi.org/${doi}`, link: `https://doi.org/${doi}` },
     ];
   }
-  if (e.fields.url)
-    return [{ text: " " }, { text: e.fields.url, link: e.fields.url }];
+  if (e.fields.url) {
+    // A web source that changes says when it was read (APA 7).
+    const read = longDate(e.fields.urldate);
+    return [
+      { text: read ? ` Retrieved ${read}, from ` : " " },
+      { text: e.fields.url, link: e.fields.url },
+    ];
+  }
   return [];
 }
 
@@ -370,13 +407,23 @@ function apa(e: BibEntry, yr: string): Run[] {
       break;
     }
     default: {
-      head(true);
-      const where = f.howpublished ?? f.publisher ?? f.organization;
+      // A dataset is marked as one: "Title [Data set]".
+      const dataset = /^data ?set$/i.test(f.howpublished ?? "");
+      head(true, dataset ? " [Data set]" : "");
+      const where = dataset
+        ? f.publisher
+        : (f.howpublished ?? f.publisher ?? f.organization);
       if (where && !/^\\?url/i.test(where))
         runs.push({ text: sentence(where) });
     }
   }
-  runs.push(...link(e));
+  for (const r of link(e)) {
+    // One space between parts, never two.
+    const last = runs[runs.length - 1]?.text ?? "";
+    runs.push(
+      last.endsWith(" ") ? { ...r, text: r.text.replace(/^ +/, "") } : r,
+    );
+  }
   return runs.filter((r) => r.text !== "");
 }
 
@@ -477,8 +524,9 @@ function ieee(e: BibEntry): Run[] {
       { text: "." },
     );
   } else if (f.url) {
+    const read = shortDate(f.urldate);
     runs.push(
-      { text: ". [Online]. Available: " },
+      { text: `.${read ? ` Accessed: ${read}.` : ""} [Online]. Available: ` },
       { text: f.url, link: f.url },
     );
   } else {

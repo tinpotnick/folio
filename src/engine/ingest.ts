@@ -5,9 +5,12 @@
  * Pure engine code, zero UI dependencies.
  */
 import type { Cell, Table } from "./index.js";
+import { toIso } from "./dates.js";
+
+type ImportType = "text" | "number" | "date";
 
 export interface ParsedImport {
-  columns: { name: string; type: "text" | "number" }[];
+  columns: { name: string; type: ImportType }[];
   rows: Cell[][];
 }
 
@@ -44,10 +47,15 @@ function applyTypes(parsed: ParsedImport): ParsedImport {
     columns: parsed.columns,
     rows: parsed.rows.map((row) =>
       row.map((v, c) => {
-        if (parsed.columns[c]?.type !== "number") return v;
+        const type = parsed.columns[c]?.type;
+        if (type === "date") {
+          // Dates are written ISO, whatever shape they came in.
+          return isMissing(v) ? "" : (toIso(String(v)) ?? v);
+        }
+        if (type !== "number") return v;
         if (typeof v === "number") return v;
         const s = String(v).trim();
-        return s === "" ? "" : NUMBER_RE.test(s) ? parseFloat(s) : v;
+        return isMissing(s) ? "" : NUMBER_RE.test(s) ? parseFloat(s) : v;
       }),
     ),
   };
@@ -201,23 +209,43 @@ function csvRows(text: string): string[][] {
   return rows;
 }
 
-const NUMBER_RE = /^-?[0-9]+(\.[0-9]+)?$/;
+const NUMBER_RE = /^-?[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?$/;
 
-function inferTypes(rows: Cell[][], width: number): ("text" | "number")[] {
-  const types: ("text" | "number")[] = [];
+/** An empty cell - or a published "no value": FRED writes ".", others
+ * "NA" or "n/a". */
+function isMissing(v: unknown): boolean {
+  const s = typeof v === "string" ? v.trim() : v;
+  return (
+    s === "" ||
+    s === undefined ||
+    s === null ||
+    s === "." ||
+    (typeof s === "string" && /^(na|n\/a|null|#n\/a)$/i.test(s))
+  );
+}
+
+/**
+ * A column is `number` when every value present is numeric, `date`
+ * when every value is a date `toIso` reads (ISO, "31 Jan 2024", "2024
+ * JAN", ...), otherwise `text`. Missing markers are skipped.
+ */
+function inferTypes(rows: Cell[][], width: number): ImportType[] {
+  const types: ImportType[] = [];
   for (let c = 0; c < width; c++) {
     let numeric = true;
+    let dates = true;
     let seen = false;
     for (const row of rows) {
       const v = row[c];
-      if (v === undefined || v === "") continue;
+      if (isMissing(v)) continue;
       seen = true;
       if (typeof v !== "number" && !NUMBER_RE.test(String(v).trim())) {
         numeric = false;
-        break;
       }
+      if (typeof v === "number" || toIso(String(v)) === null) dates = false;
+      if (!numeric && !dates) break;
     }
-    types.push(seen && numeric ? "number" : "text");
+    types.push(!seen ? "text" : numeric ? "number" : dates ? "date" : "text");
   }
   return types;
 }

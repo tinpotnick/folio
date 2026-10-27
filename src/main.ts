@@ -12,7 +12,17 @@ import {
 import "./component.js";
 import type { FolioDoc } from "./component.js";
 import { parseDoc, serializeDoc } from "./engine/doc.js";
-import { importedTable, parseImport } from "./engine/ingest.js";
+import {
+  importedTable,
+  parseImport,
+  type ParsedImport,
+} from "./engine/ingest.js";
+import {
+  parseFetched,
+  sourceBibtex,
+  sourceKey,
+  type SourceMeta,
+} from "./engine/sources.js";
 import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
 import {
@@ -26,6 +36,7 @@ import { BUNDLED_FONTS } from "./render/fonts.js";
 import {
   isDesktop,
   exportPdfFile,
+  fetchUrlDesktop,
   launchDocument,
   onFileOpened,
   openDocument,
@@ -810,6 +821,7 @@ importFile.addEventListener("change", () => {
       flash(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
       return;
     }
+    el.restoreCaret();
     el.insertImportedTable(table);
     flash(
       `Imported ${table.rows.length.toLocaleString()} rows into @${table.id}`,
@@ -817,6 +829,253 @@ importFile.addEventListener("change", () => {
   };
   reader.readAsText(f);
 });
+
+/* --- Import data dialog: from a file, from the web
+       (spec: docs/specs/data-import.md, ADR-0029) --- */
+
+const importModal = requireEl<HTMLDialogElement>("#import-modal");
+const importTabFile = requireEl<HTMLButtonElement>("#import-tab-file");
+const importTabWeb = requireEl<HTMLButtonElement>("#import-tab-web");
+const importPaneFile = requireEl<HTMLElement>("#import-pane-file");
+const importPaneWeb = requireEl<HTMLElement>("#import-pane-web");
+const importUrl = requireEl<HTMLInputElement>("#import-url");
+const importError = requireEl<HTMLElement>("#import-error");
+const importBlocked = requireEl<HTMLElement>("#import-blocked");
+const importPreview = requireEl<HTMLElement>("#import-preview");
+const importGo = requireEl<HTMLButtonElement>("#btn-import-go");
+const importId = requireEl<HTMLInputElement>("#import-id");
+const importCaption = requireEl<HTMLInputElement>("#import-caption");
+const importPublisher = requireEl<HTMLInputElement>("#import-publisher");
+const importCite = requireEl<HTMLInputElement>("#import-cite");
+const importFetchBtn = requireEl<HTMLButtonElement>("#btn-import-fetch");
+
+/** What the web pane fetched and read, waiting for Import. */
+let pending: { parsed: ParsedImport; meta: SourceMeta; url: string } | null =
+  null;
+
+function importTab(which: "file" | "web"): void {
+  importTabFile.setAttribute("aria-selected", String(which === "file"));
+  importTabWeb.setAttribute("aria-selected", String(which === "web"));
+  importPaneFile.hidden = which !== "file";
+  importPaneWeb.hidden = which !== "web";
+  importGo.hidden = which !== "web";
+  if (which === "web") importUrl.focus();
+}
+
+function openImport(which: "file" | "web" = "file"): void {
+  closeMenus();
+  if (importModal.open) return;
+  el.saveCaret();
+  importModal.showModal();
+  importTab(which);
+}
+
+function importReset(): void {
+  pending = null;
+  importError.hidden = true;
+  importBlocked.hidden = true;
+  importPreview.hidden = true;
+  importGo.disabled = true;
+}
+
+function importFail(msg: string): void {
+  importError.textContent = msg;
+  importError.hidden = false;
+}
+
+/** Today, as the ISO date an import was retrieved. */
+function todayIso(): string {
+  const d = new Date();
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** A dataset name from what the source is called. */
+function nameFor(meta: SourceMeta, url: string): string {
+  const raw =
+    meta.title && meta.title.length <= 24
+      ? meta.title
+      : (new URL(url).pathname.split("/").filter(Boolean).pop() ?? "data");
+  return tableIdFromFileName(raw.toLowerCase(), el.getDoc());
+}
+
+/** Show what came back: a sample, a name, a caption, the licence. */
+function importShow(text: string, url: string): void {
+  importReset();
+  let got: { parsed: ParsedImport; meta: SourceMeta };
+  try {
+    got = parseFetched(text, url);
+  } catch (e) {
+    importFail(e instanceof Error ? e.message : String(e));
+    return;
+  }
+  if (!got.parsed.rows.length) {
+    importFail("That address returned no rows of data");
+    return;
+  }
+  pending = { ...got, url };
+  const { parsed, meta } = got;
+  requireEl<HTMLElement>("#import-summary").textContent =
+    `${parsed.rows.length.toLocaleString()} rows · ${parsed.columns
+      .map((c) => `${c.name} (${c.type})`)
+      .join(", ")}`;
+  const table = requireEl<HTMLTableElement>("#import-sample");
+  table.textContent = "";
+  const head = table.createTHead().insertRow();
+  for (const c of parsed.columns) {
+    const th = document.createElement("th");
+    th.textContent = `${c.name} `;
+    const small = document.createElement("small");
+    small.textContent = c.type;
+    th.appendChild(small);
+    head.appendChild(th);
+  }
+  const body = table.createTBody();
+  for (const row of parsed.rows.slice(0, 5)) {
+    const tr = body.insertRow();
+    for (const v of row) tr.insertCell().textContent = String(v);
+  }
+  importId.value = nameFor(meta, url);
+  importCaption.value = meta.title ?? "";
+  importPublisher.value = meta.publisher ?? "";
+  requireEl<HTMLElement>("#import-licence").textContent = [
+    meta.licence
+      ? `Licence: ${meta.licence} - fine to share with the source credited.`
+      : "Licence unknown - check the publisher's terms before sharing a document with this data.",
+    meta.notice ? `${meta.notice}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  importPreview.hidden = false;
+  importGo.disabled = false;
+}
+
+async function importFetch(): Promise<void> {
+  const url = importUrl.value.trim();
+  importReset();
+  if (!/^https?:\/\/\S+$/i.test(url)) {
+    importFail("Enter a web address starting with https://");
+    return;
+  }
+  importFetchBtn.disabled = true;
+  importFetchBtn.textContent = "Fetching…";
+  try {
+    if (isDesktop()) {
+      const got = await fetchUrlDesktop(url);
+      if (got) importShow(got.text, url);
+      return;
+    }
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch {
+      // A browser may only read another site's data when that site
+      // allows it (CORS) - most open-data publishers do not.
+      requireEl<HTMLElement>("#import-blocked-text").textContent =
+        "This site does not let a web page fetch its data directly. Open the address to download the file, then choose it here - folio still records this address as the source. (The desktop app fetches it directly.)";
+      requireEl<HTMLAnchorElement>("#import-open-link").href = url;
+      importBlocked.hidden = false;
+      return;
+    }
+    if (!res.ok) {
+      importFail(`The site answered ${String(res.status)} ${res.statusText}`);
+      return;
+    }
+    importShow(await res.text(), url);
+  } catch (e) {
+    importFail(e instanceof Error ? e.message : String(e));
+  } finally {
+    importFetchBtn.disabled = false;
+    importFetchBtn.textContent = "Fetch";
+  }
+}
+
+function importCommit(): void {
+  if (!pending) return;
+  const { parsed, meta, url } = pending;
+  const retrieved = todayIso();
+  const id = tableIdFromFileName(importId.value || "data", el.getDoc());
+  const finalMeta: SourceMeta = {
+    ...meta,
+    ...(importCaption.value.trim()
+      ? { title: importCaption.value.trim() }
+      : {}),
+    ...(importPublisher.value.trim()
+      ? { publisher: importPublisher.value.trim() }
+      : {}),
+  };
+  const table: Table = {
+    ...importedTable(id, parsed, url),
+    retrieved,
+    ...(finalMeta.title ? { caption: finalMeta.title } : {}),
+  };
+  let reference: string | undefined;
+  if (importCite.checked) {
+    const key = sourceKey(finalMeta, id, el.referenceKeys());
+    table.cite = key;
+    reference = sourceBibtex(key, finalMeta, url, retrieved);
+  }
+  importModal.close();
+  el.restoreCaret();
+  el.insertImportedTable(table, reference);
+  flash(
+    `Imported ${table.rows.length.toLocaleString()} rows into @${table.id}${
+      table.cite ? ` - cite it as [@${table.cite}]` : ""
+    }`,
+  );
+}
+
+importTabFile.addEventListener("click", () => importTab("file"));
+importTabWeb.addEventListener("click", () => importTab("web"));
+requireEl<HTMLButtonElement>("#btn-import-data").addEventListener("click", () =>
+  openImport(),
+);
+requireEl<HTMLButtonElement>("#btn-import-choose").addEventListener(
+  "click",
+  () => {
+    importModal.close();
+    importFile.click();
+  },
+);
+requireEl<HTMLButtonElement>("#btn-import-demo").addEventListener(
+  "click",
+  () => {
+    importModal.close();
+    el.restoreCaret();
+    paletteEntries()
+      .find((e) => e.title.startsWith("Import the demo dataset"))
+      ?.action();
+  },
+);
+importFetchBtn.addEventListener("click", () => void importFetch());
+importUrl.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    void importFetch();
+  }
+});
+importUrl.addEventListener("input", importReset);
+importGo.addEventListener("click", importCommit);
+// The browser route: the user downloads the file, folio reads it as
+// if fetched, keeping the address as its source.
+requireEl<HTMLButtonElement>("#btn-import-downloaded").addEventListener(
+  "click",
+  () => {
+    const pick = document.createElement("input");
+    pick.type = "file";
+    pick.accept = ".csv,.json,text/csv,application/json";
+    pick.addEventListener("change", () => {
+      const f = pick.files?.[0];
+      if (!f) return;
+      if (f.size > IMPORT_MAX_BYTES) {
+        importFail("File too large (over 8 MB) - the document stays one file");
+        return;
+      }
+      void f.text().then((text) => importShow(text, importUrl.value.trim()));
+    });
+    pick.click();
+  },
+);
 
 const btnCodeBlock = requireEl<HTMLButtonElement>("#btn-code");
 btnCodeBlock.addEventListener("mousedown", (ev) => {
@@ -1995,6 +2254,20 @@ function paletteEntries(): PaletteEntry[] {
         );
       })();
     },
+  });
+  entries.push({
+    title: "Import data",
+    group: "Command",
+    keywords:
+      "import data dataset csv json file web url download open data source fetch",
+    action: () => openImport(),
+  });
+  entries.push({
+    title: "Import data from the web (a CSV or JSON address)",
+    group: "Command",
+    keywords:
+      "import web url address download fetch open data public source bank of england ons oecd fred land registry statistics series",
+    action: () => openImport("web"),
   });
   entries.push({
     title: "Import data from a file (CSV or JSON)",

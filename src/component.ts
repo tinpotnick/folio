@@ -3813,6 +3813,15 @@ export class FolioDoc extends HTMLElement {
       cap.textContent = block.table.caption;
       figure.appendChild(cap);
     }
+    // Imported data names its source - a citation, so it reads in the
+    // document's style and its reference is listed.
+    if (block.table.cite) {
+      const src = document.createElement("div");
+      src.className = "folio-table-source";
+      src.contentEditable = "false";
+      src.innerHTML = `Source: ${inlineMarkdownToHtml(`@${block.table.cite}`, this.inlineOpts())}`;
+      figure.appendChild(src);
+    }
     return figure;
   }
 
@@ -4737,13 +4746,49 @@ export class FolioDoc extends HTMLElement {
    * parsed data is already a model table - the import SNAPSHOT
    * (ADR-0005) - with its provenance in table.import.
    */
-  insertImportedTable(table: Table): void {
+  insertImportedTable(table: Table, reference?: string): void {
     if (!this.doc) return;
     const idx = this.blockIndexAtCaret();
     const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
     this.doc.blocks.splice(at, 0, { kind: "table", table });
+    if (reference) this.addReference(reference);
     this.render();
     this.emitChange("insert");
+  }
+
+  /** Every key the bibliography defines (an import's new key must be
+   * new). */
+  referenceKeys(): ReadonlySet<string> {
+    return this.bibliography().keys;
+  }
+
+  /**
+   * Add a BibTeX entry to the document's bibliography - the first
+   * ```bibtex block - or start one ("References", at the end, before
+   * the footnotes). The caller renders.
+   */
+  private addReference(bibtex: string): void {
+    if (!this.doc) return;
+    const blocks = this.doc.blocks;
+    const bib = blocks.find(
+      (b): b is CodeBlock => b.kind === "code" && isBibLang(b.lang),
+    );
+    if (bib) {
+      // The untouched example entry gives way to a real one.
+      bib.text =
+        bib.text === BIBTEX_STARTER
+          ? bibtex
+          : `${bib.text.trimEnd()}\n\n${bibtex}`;
+      return;
+    }
+    let at = blocks.length;
+    while (at > 0 && blocks[at - 1]?.kind === "footnotes") at--;
+    blocks.splice(
+      at,
+      0,
+      { kind: "heading", level: 2, text: "References" },
+      { kind: "code", lang: "bibtex", text: bibtex },
+    );
   }
 
   /**

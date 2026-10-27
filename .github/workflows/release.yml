@@ -57,12 +57,13 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri -> target
 
-      - name: Linux system packages (WebKitGTK, GTK)
+      - name: Linux system packages (WebKitGTK, GTK, OpenSSL for web import)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf rpm
+            libayatana-appindicator3-dev librsvg2-dev patchelf rpm \
+            libssl-dev
 
       - run: npm ci
 

@@ -113,6 +113,57 @@ document is `demo/examples/signal-processing.md` — a 64-row
 signal, its DFT/FFT spectrum, and a recursive filter, each step
 computed in the table and plotted.
 
+## Finance (2026-10-27)
+
+Spreadsheet names, argument order and SIGNS (Excel, LibreOffice,
+Google Sheets): money paid out is negative, received positive, so a
+formula learned in a spreadsheet works unchanged
+(`src/engine/finance.ts`). `type` 0 = payments at period end
+(default), 1 = start.
+
+| Function                                              | Meaning                                                                        |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `pmt(rate, nper, pv, fv?, type?)`                     | Payment per period: `pmt(4.5%/12, 300, 250000)` = −1389.58                     |
+| `fv(rate, nper, pmt, pv?, type?)`                     | Future value                                                                   |
+| `pv(rate, nper, pmt, fv?, type?)`                     | Present value                                                                  |
+| `nper(rate, pmt, pv, fv?, type?)`                     | Periods to pay off / reach fv                                                  |
+| `rate(nper, pmt, pv, fv?, type?, guess?)`             | Rate per period (Newton)                                                       |
+| `ipmt(rate, per, nper, pv, fv?, type?)` / `ppmt(...)` | Interest / principal in payment `per` (1-based)                                |
+| `npv(rate, flows…)`                                   | Net present value, flows at the end of periods 1, 2, … (an array or arguments) |
+| `irr(flows, guess?)`                                  | Internal rate of return, flows at periods 0, 1, … (needs a sign change)        |
+| `cagr(start, end, years)`                             | Compound annual growth rate                                                    |
+
+**Unary minus** works on anything: `-pmt(…)`, `-balance`, `-(a + b)`.
+Jexl 2 only has it on number literals, so `unaryMinus` rewrites `-X`
+(at the start, after an operator, bracket or comma) as `(0 - X)`
+before evaluation - in formulas and chart filters alike.
+
+## Dates (2026-10-27)
+
+A `date` column holds ISO `YYYY-MM-DD` text: readable in the source,
+sortable, unambiguous. In formulas a date column is referenced by name
+like a number column (its value is the ISO text); `self.col.d` gives
+the dates as text. Functions (`src/engine/dates.ts`; spreadsheet
+names) take ISO dates or anything import reads, and an unreadable date
+is empty, never an error:
+
+`date(y, m, d)` → ISO; `year(d)`, `month(d)`, `day(d)`; `edate(d, n)`
+(n months on, the day clamped to the month's end, as EDATE);
+`eomonth(d, n)`; `days(end, start)`; `months(start, end)` (whole
+months); `yearfrac(start, end)` (actual days / 365.25). A formula
+column may produce a date: `edate(start, self.row - 1)`.
+
+## Lookups (2026-10-27)
+
+- `@prices.col.close` - another table's WHOLE column (numbers stay
+  numbers, dates and text stay text, so a key column can be text).
+  The table recalcs first; `self.col.x` remains the own-table form.
+- `xlookup(key, keys, values)` - the value beside the key equal to
+  `key` (dates compare as dates, numbers as numbers); empty if none.
+- `asof(key, keys, values)` - the value at the LAST key on or before
+  `key`, keys ascending: the price in force on a date, from monthly
+  prices. Empty before the first key.
+
 ## Chart filters speak the same language
 
 A chart query's `filter` is a Jexl boolean expression over the
@@ -162,6 +213,12 @@ by name; `@budget` is the explicit cross-table form for parity with
 the chart query language.
 
 ## Acceptance
+
+- Finance, dates, lookups, unary minus: `tests/engine/finance.test.ts`
+  (spreadsheet-documented values; a 300-month repayment schedule that
+  ends at zero; `asof`/`xlookup` across tables); e2e
+  `tests/e2e/import-web.spec.ts` (a running mortgage balance in the
+  document).
 
 - Engine: `tests/engine/recalc.test.ts` (self.* references,
   formula history, running totals, Fibonacci, forward/empty,

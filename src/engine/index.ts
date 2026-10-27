@@ -23,10 +23,14 @@ export type Cell = string | number;
 export interface Table {
   id: string;
   caption?: string;
-  // Import provenance (ADR-0005: snapshot + metadata): the file a
-  // past import materialized this table's data from. Never a
-  // live binding.
+  // Import provenance (ADR-0005: snapshot + metadata): the file or
+  // web address a past import materialized this table's data from.
+  // Never a live binding - Refresh fetches again only when asked.
   import?: string;
+  /** When a web import was fetched (ISO date). */
+  retrieved?: string;
+  /** The bibliography key that cites this data's source. */
+  cite?: string;
   columns: Column[];
   rows: Cell[][];
   /**

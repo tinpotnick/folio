@@ -911,6 +911,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       text-align: start;
     }
     ${headingCss(theme)}
+    article.folio-doc .folio-table-source {
+      text-align: ${theme.captionAlign === "center" ? "center" : "start"};
+    }
     article.folio-doc figcaption {
       ${theme.captionAlign === "center" ? "text-align: center;" : ""}
       ${theme.captionItalic ? "font-style: italic;" : ""}
@@ -1682,6 +1685,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     a.folio-xref:hover { border-bottom-style: solid; }
     a.folio-xref.folio-xref-missing { color: var(--folio-ink-muted); font-style: italic; }
+    /* An imported table's source line, under its caption. */
+    .folio-table-source {
+      margin: 0.3em 0 0;
+      font-size: 0.8em;
+      color: var(--folio-ink-muted);
+    }
     /* Citations and the reference list (docs/specs/citations.md). */
     span.folio-cite {
       color: var(--folio-accent);

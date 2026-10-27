@@ -20,6 +20,9 @@ tauri-plugin-opener = "2"
 # Page numbers and the running header on exported PDFs (ADR-0027):
 # WebKitGTK's print engine ignores CSS page-margin boxes.
 lopdf = { version = "0.46", default-features = false }
+# Import data from a web address (ADR-0029): the reqwest tauri already
+# links, given the system's TLS (OpenSSL on Linux, the OS elsewhere).
+reqwest = { version = "0.13", default-features = false, features = ["native-tls"] }
 
 # Export to PDF prints the webview straight to a file (ADR-0025):
 # the same webkit2gtk/gtk that tauri already links, named directly.
