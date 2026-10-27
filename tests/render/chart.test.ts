@@ -200,9 +200,9 @@ describe("dense-data rendering (the clumping fix)", () => {
     expect((svg.match(/<circle /g) ?? []).length).toBe(3);
   });
 
-  it("dense series thin their markers to the x-ticks", () => {
+  it("dense series mark only their labelled points", () => {
     // 128 points: a marker per point is a bead necklace, not a
-    // line. Markers land only at x-tick positions (<= 8).
+    // line. Markers land only where a value is labelled (<= 8).
     const many: QueryResult = {
       columns: ["n", "v"],
       rows: Array.from({ length: 128 }, (_, i) => [String(i), Math.sin(i / 8)]),
@@ -213,6 +213,32 @@ describe("dense-data rendering (the clumping fix)", () => {
     expect(markers.length).toBeLessThanOrEqual(8);
     // The curve itself still covers every point.
     expect((svg.match(/<polyline /g) ?? []).length).toBe(1);
+  });
+
+  it("a dated axis reads in years (or months), never clipped ISO", () => {
+    const monthly: QueryResult = {
+      columns: ["date", "rate"],
+      rows: Array.from({ length: 120 }, (_, i) => [
+        `${String(2000 + Math.floor(i / 12))}-${String((i % 12) + 1).padStart(2, "0")}-01`,
+        5 + Math.sin(i / 10),
+      ]),
+    };
+    const svg = renderLineChart(monthly).svg;
+    const ticks = [...svg.matchAll(/class="x-tick"[^>]*>([^<]*)</g)].map(
+      (m) => m[1],
+    );
+    expect(ticks[0]).toBe("2000");
+    expect(ticks.every((t) => /^\d{4}$/.test(t ?? ""))).toBe(true);
+    // The last tick ends at its point instead of running off the edge.
+    expect(svg).toMatch(/text-anchor="end" font-size="11"[^>]*>2009</);
+    const year: QueryResult = {
+      columns: ["date", "v"],
+      rows: [
+        ["2024-01-01", 1],
+        ["2025-06-01", 2],
+      ],
+    };
+    expect(renderLineChart(year).svg).toContain(">Jan 2024<");
   });
 
   it("axis titles name the columns, with the unit", () => {

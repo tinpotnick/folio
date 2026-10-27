@@ -53,6 +53,7 @@ import {
   type InlineOptions,
 } from "./render/inline.js";
 import { parseBibtex, type Bibliography } from "./engine/bibtex.js";
+import { toIso } from "./engine/dates.js";
 import {
   citedKeys,
   formatBibliography,
@@ -260,6 +261,10 @@ const DRAWN_LANGS: Record<string, string> = {
 };
 
 /** A bibliography block (docs/specs/citations.md). */
+/** Edits to a table's shape (context menu, palette). */
+export type TableAction =
+  "row-below" | "delete-row" | "column-right" | "delete-column";
+
 function isBibLang(lang: string | undefined): boolean {
   return lang === "bibtex" || lang === "biblatex";
 }
@@ -3559,6 +3564,62 @@ export class FolioDoc extends HTMLElement {
     };
   }
 
+  /**
+   * Recalculate, keeping a broken formula to its own column: the
+   * failing formula is blanked and the table recalculated again, so the
+   * rest of the table - and its inspector - stay usable. Its cells read
+   * "#ERR"; `errors` maps the column to the message. An error from
+   * another table (or one that names no column) blanks every formula.
+   */
+  private recalcTolerant(table: Table): {
+    recalced: Table;
+    errors: Map<string, string>;
+  } {
+    const errors = new Map<string, string>();
+    let attempt = table;
+    for (let i = 0; i <= table.columns.length; i++) {
+      try {
+        const recalced = recalcTable(attempt, this.tablePool());
+        if (!errors.size) return { recalced, errors };
+        const bad = new Set(
+          table.columns.flatMap((c, ci) => (errors.has(c.name) ? [ci] : [])),
+        );
+        return {
+          recalced: {
+            ...recalced,
+            rows: recalced.rows.map((row) =>
+              row.map((v, ci) => (bad.has(ci) ? "#ERR" : v)),
+            ),
+          },
+          errors,
+        };
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        const m = /^Formula '([^']+)' in table '([^']+)'/.exec(message);
+        const col = m && m[2] === table.id ? m[1] : undefined;
+        const blank = (keep: (name: string) => boolean): Table => ({
+          ...attempt,
+          columns: attempt.columns.map((c) =>
+            c.type === "formula" && !keep(c.name) ? { ...c, expr: "''" } : c,
+          ),
+        });
+        if (col !== undefined && !errors.has(col)) {
+          errors.set(col, message);
+          attempt = blank((name) => name !== col);
+          continue;
+        }
+        // Not one of this table's own columns: blank every formula.
+        for (const c of table.columns) {
+          if (c.type === "formula" && !errors.has(c.name)) {
+            errors.set(c.name, message);
+          }
+        }
+        attempt = blank(() => false);
+      }
+    }
+    return { recalced: { ...table, rows: table.rows }, errors };
+  }
+
   private renderTable(
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     idx: number,
@@ -3575,17 +3636,23 @@ export class FolioDoc extends HTMLElement {
     // Jexl) must not take the whole render down: the error shows in
     // place, and the inspector stays up so it can be fixed from the
     // document view.
-    let recalced: Table;
-    try {
-      recalced = recalcTable(block.table, this.tablePool());
-    } catch (e) {
+    const { recalced, errors } = this.recalcTolerant(block.table);
+    const shown = new Set<string>();
+    for (const [colName, message] of errors) {
+      if (shown.has(message)) continue;
+      shown.add(message);
       const err = document.createElement("div");
       err.className = "folio-table-error";
-      err.textContent = `Table error: ${
-        e instanceof Error ? e.message : String(e)
-      }`;
+      err.textContent = `Table error: ${message}`;
+      const ci = block.table.columns.findIndex((c) => c.name === colName);
+      if (ci >= 0) {
+        err.title = "Click to fix this column's formula";
+        // The bar must be reachable from the error itself.
+        err.addEventListener("click", () =>
+          this.showInspector(figure, block, ci),
+        );
+      }
       figure.appendChild(err);
-      return figure;
     }
     const table = document.createElement("table");
     table.className = "folio-table";
@@ -3813,6 +3880,15 @@ export class FolioDoc extends HTMLElement {
       cap.textContent = block.table.caption;
       figure.appendChild(cap);
     }
+    // Imported data names its source - a citation, so it reads in the
+    // document's style and its reference is listed.
+    if (block.table.cite) {
+      const src = document.createElement("div");
+      src.className = "folio-table-source";
+      src.contentEditable = "false";
+      src.innerHTML = `Source: ${inlineMarkdownToHtml(`@${block.table.cite}`, this.inlineOpts())}`;
+      figure.appendChild(src);
+    }
     return figure;
   }
 
@@ -3914,15 +3990,22 @@ export class FolioDoc extends HTMLElement {
     const typeSel = document.createElement("select");
     typeSel.className = "insp-type";
     typeSel.title = "Column type";
-    for (const t of ["text", "number", "formula"]) {
+    for (const t of ["text", "number", "date", "formula"]) {
       const o = document.createElement("option");
       o.value = t;
       o.textContent = t;
       typeSel.appendChild(o);
     }
     typeSel.addEventListener("change", () => {
-      const type = typeSel.value as "text" | "number" | "formula";
+      const type = typeSel.value as "text" | "number" | "date" | "formula";
       const c = Math.max(colSel.selectedIndex, 0);
+      // Dates are kept ISO: what reads as a date is rewritten so.
+      if (type === "date") {
+        for (const row of block.table.rows) {
+          const iso = toIso(String(row[c] ?? ""));
+          if (iso) row[c] = iso;
+        }
+      }
       const patch: Record<string, unknown> = { type };
       // A formula column with an empty expression breaks recalc;
       // a fresh formula starts at a constant 0.
@@ -3961,10 +4044,17 @@ export class FolioDoc extends HTMLElement {
     fmtPct.value = "percent";
     fmtPct.textContent = "percent";
     fmtSel.appendChild(fmtPct);
+    const fmtMoney = document.createElement("option");
+    fmtMoney.value = "currency";
+    fmtMoney.textContent = "money (1,234.56)";
+    fmtSel.appendChild(fmtMoney);
     fmtSel.addEventListener("change", () => {
       const c = Math.max(colSel.selectedIndex, 0);
       this.patchColumn(figure, block, c, {
-        format: fmtSel.value === "percent" ? "percent" : undefined,
+        format:
+          fmtSel.value === "percent" || fmtSel.value === "currency"
+            ? fmtSel.value
+            : undefined,
       });
     });
 
@@ -4175,7 +4265,11 @@ export class FolioDoc extends HTMLElement {
     const cols = block.table.columns;
     const value = cols.find((c) => c.type === "number" || c.type === "formula");
     if (!value) return "A chart needs a number or formula column";
-    const label = cols.find((c) => c !== value && c.type === "text") ?? cols[0];
+    // A time series (a date column) is a line over time, every number
+    // column a line of its own.
+    const dated = cols.find((c) => c.type === "date");
+    const label =
+      dated ?? cols.find((c) => c !== value && c.type === "text") ?? cols[0];
     // A LONG table repeats its labels (Mon, Mon, Mon ...): a first
     // chart that plots every row reads as nonsense. When another text
     // column tells the repeats apart, split by it (one series each).
@@ -4198,9 +4292,20 @@ export class FolioDoc extends HTMLElement {
       chart: {
         id,
         source: tableId,
-        query: { select: [label?.name ?? value.name, value.name] },
-        type: "bar",
-        ...(splitBy ? { series: splitBy.name } : {}),
+        query: {
+          select: dated
+            ? [
+                dated.name,
+                ...cols
+                  .filter((c) => c.type === "number" || c.type === "formula")
+                  .slice(0, 6)
+                  .map((c) => c.name),
+              ]
+            : [label?.name ?? value.name, value.name],
+        },
+        type: dated ? "line" : "bar",
+        ...(splitBy && !dated ? { series: splitBy.name } : {}),
+        ...(block.table.caption ? { caption: block.table.caption } : {}),
       },
     });
     this.render();
@@ -4559,7 +4664,7 @@ export class FolioDoc extends HTMLElement {
     const unitInp = bar.querySelector<HTMLInputElement>(".insp-unit");
     if (unitInp) unitInp.value = col.unit ?? "";
     const fmtSel = bar.querySelector<HTMLSelectElement>(".insp-format");
-    if (fmtSel) fmtSel.value = col.format === "percent" ? "percent" : "default";
+    if (fmtSel) fmtSel.value = col.format ?? "default";
     const exprInp = bar.querySelector<HTMLInputElement>(".insp-expr");
     if (exprInp) {
       exprInp.value = col.expr ?? "";
@@ -4579,9 +4684,9 @@ export class FolioDoc extends HTMLElement {
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     c: number,
     patch: {
-      type?: "text" | "number" | "formula";
+      type?: "text" | "number" | "date" | "formula";
       unit?: string | undefined;
-      format?: "percent" | undefined;
+      format?: "percent" | "currency" | undefined;
       expr?: string;
     },
   ): void {
@@ -4737,13 +4842,49 @@ export class FolioDoc extends HTMLElement {
    * parsed data is already a model table - the import SNAPSHOT
    * (ADR-0005) - with its provenance in table.import.
    */
-  insertImportedTable(table: Table): void {
+  insertImportedTable(table: Table, reference?: string): void {
     if (!this.doc) return;
     const idx = this.blockIndexAtCaret();
     const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
     this.doc.blocks.splice(at, 0, { kind: "table", table });
+    if (reference) this.addReference(reference);
     this.render();
     this.emitChange("insert");
+  }
+
+  /** Every key the bibliography defines (an import's new key must be
+   * new). */
+  referenceKeys(): ReadonlySet<string> {
+    return this.bibliography().keys;
+  }
+
+  /**
+   * Add a BibTeX entry to the document's bibliography - the first
+   * ```bibtex block - or start one ("References", at the end, before
+   * the footnotes). The caller renders.
+   */
+  private addReference(bibtex: string): void {
+    if (!this.doc) return;
+    const blocks = this.doc.blocks;
+    const bib = blocks.find(
+      (b): b is CodeBlock => b.kind === "code" && isBibLang(b.lang),
+    );
+    if (bib) {
+      // The untouched example entry gives way to a real one.
+      bib.text =
+        bib.text === BIBTEX_STARTER
+          ? bibtex
+          : `${bib.text.trimEnd()}\n\n${bibtex}`;
+      return;
+    }
+    let at = blocks.length;
+    while (at > 0 && blocks[at - 1]?.kind === "footnotes") at--;
+    blocks.splice(
+      at,
+      0,
+      { kind: "heading", level: 2, text: "References" },
+      { kind: "code", lang: "bibtex", text: bibtex },
+    );
   }
 
   /**
@@ -5876,13 +6017,20 @@ export class FolioDoc extends HTMLElement {
   }
 
   private refreshTableBlock(
-    figure: HTMLElement | null,
+    stale: HTMLElement | null,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
   ): void {
-    if (!figure || !this.doc || !this.shadowRoot) return;
-    const host = figure.parentElement;
-    if (!host) return;
-    const idx = Number(figure.dataset.blockIndex ?? -1);
+    if (!stale || !this.doc || !this.shadowRoot) return;
+    const idx = Number(stale.dataset.blockIndex ?? -1);
+    // A blur handler may already have replaced the figure: refresh
+    // whichever figure is the block's now.
+    const host = this.shadowRoot.querySelector("article.folio-doc");
+    const figure = stale.isConnected
+      ? stale
+      : host?.querySelector<HTMLElement>(
+          `:scope > [data-block-index="${String(idx)}"]`,
+        );
+    if (!host || !figure || figure.parentElement !== host) return;
     const fresh = this.renderTable(block, idx);
     fresh.dataset.blockIndex = String(idx);
     host.replaceChild(fresh, figure);
@@ -7367,66 +7515,112 @@ export class FolioDoc extends HTMLElement {
     const root = this.shadowRoot;
     if (!root) return;
     const menu = document.createElement("div");
-    menu.className = "folio-menu";
-    const items: [string, () => void][] = [
-      [
-        "Insert row below",
-        () => {
-          block.table.rows.splice(
-            r + 1,
-            0,
-            block.table.columns.map(() => ""),
-          );
-        },
-      ],
-      [
-        "Delete row",
-        () => {
-          block.table.rows.splice(r, 1);
-        },
-      ],
-      [
-        "Insert column right",
-        () => {
-          block.table.columns.splice(c + 1, 0, {
-            name: "new",
-            type: "text",
-          });
-          block.table.rows.forEach((row) => row.splice(c + 1, 0, ""));
-        },
-      ],
-      [
-        "Delete column",
-        () => {
-          const col = block.table.columns[c];
-          if (col && col.type === "formula") return;
-          block.table.columns.splice(c, 1);
-          block.table.rows.forEach((row) => row.splice(c, 1));
-        },
-      ],
+    menu.className = "folio-menu folio-table-menu";
+    menu.setAttribute("role", "menu");
+    const items: [string, TableAction][] = [
+      ["Insert row below", "row-below"],
+      ["Delete row", "delete-row"],
+      ["Insert column right", "column-right"],
+      ["Delete column", "delete-column"],
     ];
     for (const [label, action] of items) {
       const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("role", "menuitem");
       btn.textContent = label;
+      // The press must not reach the document (caret, inspectors).
+      btn.addEventListener("mousedown", (ev) => ev.preventDefault());
       btn.addEventListener("click", () => {
-        action();
         this.closeMenu();
-        this.refreshTableBlock(figure, block);
-        this.emitChange();
+        this.applyTableAction(block, r, c, action, figure);
       });
       menu.appendChild(btn);
     }
-    const hostRect = this.getBoundingClientRect();
-    menu.style.left = `${String(x - hostRect.left)}px`;
-    menu.style.top = `${String(y - hostRect.top)}px`;
-    const host = root.querySelector("article.folio-doc");
-    if (host) host.appendChild(menu);
+    // Outside the editable article (its handlers must not see the
+    // menu), fixed at the pointer.
+    menu.style.left = `${String(Math.min(x, window.innerWidth - 180))}px`;
+    menu.style.top = `${String(Math.min(y, window.innerHeight - 170))}px`;
+    root.appendChild(menu);
     this.menu = menu;
     setTimeout(() => {
       document.addEventListener("pointerdown", this.menuCloser, {
         once: true,
       });
     });
+  }
+
+  /**
+   * One edit to a table's shape - from the context menu or the palette
+   * ("Insert a column", ...). A formula column cannot be deleted this
+   * way (other formulas may read it). Returns why not, or null.
+   */
+  private applyTableAction(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    r: number,
+    c: number,
+    action: TableAction,
+    figure: HTMLElement,
+  ): string | null {
+    const t = block.table;
+    switch (action) {
+      case "row-below":
+        t.rows.splice(
+          r + 1,
+          0,
+          t.columns.map(() => ""),
+        );
+        break;
+      case "delete-row":
+        if (t.rows.length <= 1) return "A table keeps at least one row";
+        t.rows.splice(r, 1);
+        break;
+      case "column-right": {
+        const names = new Set(t.columns.map((col) => col.name.toLowerCase()));
+        let name = "new";
+        for (let i = 2; names.has(name); i++) name = `new_${String(i)}`;
+        t.columns.splice(c + 1, 0, { name, type: "text" });
+        t.rows.forEach((row) => row.splice(c + 1, 0, ""));
+        break;
+      }
+      case "delete-column": {
+        const col = t.columns[c];
+        if (col?.type === "formula") {
+          return "Delete a formula column from its inspector (other formulas may use it)";
+        }
+        if (t.columns.length <= 1) return "A table keeps at least one column";
+        t.columns.splice(c, 1);
+        t.rows.forEach((row) => row.splice(c, 1));
+        break;
+      }
+    }
+    this.refreshTableBlock(figure, block);
+    this.emitChange();
+    return null;
+  }
+
+  /**
+   * The palette's table edits act on the table cell at the caret.
+   * Returns why not, or null.
+   */
+  tableActionAtCaret(action: TableAction): string | null {
+    const at = this.caretPoint();
+    const el =
+      at && (at.node instanceof Element ? at.node : at.node.parentElement);
+    const cell = el?.closest<HTMLElement>(
+      "td[data-row-index], th[data-col-index], td",
+    );
+    const figure = cell?.closest<HTMLElement>("figure[data-table-id]");
+    const block =
+      figure && this.doc?.blocks[Number(figure.dataset.blockIndex ?? -1)];
+    if (!cell || !figure || block?.kind !== "table") {
+      return "Click into a table cell first";
+    }
+    const tr = cell.closest<HTMLElement>("tr");
+    const r = Number(tr?.dataset.rowIndex ?? cell.dataset.rowIndex ?? 0);
+    const c = Number(
+      cell.dataset.colIndex ?? (cell as HTMLTableCellElement).cellIndex,
+    );
+    return this.applyTableAction(block, r, c, action, figure);
   }
 
   private menuCloser = (ev: Event): void => {

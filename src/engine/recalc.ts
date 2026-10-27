@@ -21,6 +21,14 @@
  */
 import jexl from "jexl";
 import type { Cell, Table } from "./index.js";
+import * as fin from "./finance.js";
+import {
+  addMonths,
+  dayNumber,
+  isoOf,
+  monthsBetween,
+  partsOf,
+} from "./dates.js";
 
 // The reporting contract predates Jexl: a division by zero is a
 // blank fact, not an error - the formula yields 0 rather than
@@ -57,7 +65,7 @@ export const KEYWORDS = new Set([
  * for both: the value first. */
 function registerFn(
   name: string,
-  fn: (v: unknown, ...args: unknown[]) => number | number[],
+  fn: (v: unknown, ...args: unknown[]) => number | number[] | string,
 ): void {
   jexl.addTransform(name, fn);
   jexl.addFunction(name, fn);
@@ -284,11 +292,73 @@ registerFn("sma", (v: unknown, i: unknown, w: unknown): number => {
   return mean(slice);
 });
 
+// --- Finance (spreadsheet names, arguments and signs) ------------------
+registerFn("pmt", (r, a, b, c, d) => fin.pmt(r, a, b, c, d));
+registerFn("fv", (r, a, b, c, d) => fin.fv(r, a, b, c, d));
+registerFn("pv", (r, a, b, c, d) => fin.pv(r, a, b, c, d));
+registerFn("nper", (r, a, b, c, d) => fin.nper(r, a, b, c, d));
+registerFn("rate", (r, a, b, c, d, g) => fin.rate(r, a, b, c, d, g));
+registerFn("ipmt", (r, a, b, c, d, e) => fin.ipmt(r, a, b, c, d, e));
+registerFn("ppmt", (r, a, b, c, d, e) => fin.ppmt(r, a, b, c, d, e));
+registerFn("npv", (r, ...a) => fin.npv(r, ...a));
+registerFn("irr", (v, g) => fin.irr(v, g));
+registerFn("cagr", (a, b, y) => fin.cagr(a, b, y));
+
+// --- Dates (ISO YYYY-MM-DD strings; spreadsheet names) -----------------
+// A date that cannot be read is empty (NaN / ""), never an error.
+registerFn("date", (y, m, d) => isoOf(Number(y), Number(m), Number(d)) ?? "");
+registerFn("year", (v) => partsOf(v)?.y ?? Number.NaN);
+registerFn("month", (v) => partsOf(v)?.m ?? Number.NaN);
+registerFn("day", (v) => partsOf(v)?.d ?? Number.NaN);
+registerFn("edate", (v, k) => addMonths(v, Number(k)) ?? "");
+registerFn("eomonth", (v, k) => addMonths(v, Number(k), true) ?? "");
+// days(end, start), as the spreadsheets order it.
+registerFn("days", (end, start) => dayNumber(end) - dayNumber(start));
+registerFn("months", (start, end) => monthsBetween(start, end));
+// Actual days over 365.25: the long-run average year.
+registerFn(
+  "yearfrac",
+  (start, end) => (dayNumber(end) - dayNumber(start)) / 365.25,
+);
+
+// --- Lookups across a column (another table's, usually) ---------------
+/** Order two keys: as dates when both read as dates, else as numbers. */
+function keyCompare(a: unknown, b: unknown): number {
+  const da = dayNumber(a);
+  const db = dayNumber(b);
+  if (Number.isFinite(da) && Number.isFinite(db)) return da - db;
+  const na = Number(a);
+  const nb = Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+  return String(a).localeCompare(String(b));
+}
+const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : [v]);
+const asCell = (v: unknown): number | string =>
+  typeof v === "number" || typeof v === "string" ? v : Number.NaN;
+// xlookup(key, keys, values): the value beside the matching key.
+registerFn("xlookup", (key, keys, vals) => {
+  const i = asList(keys).findIndex((k) => keyCompare(k, key) === 0);
+  return i < 0 ? Number.NaN : asCell(asList(vals)[i]);
+});
+// asof(key, keys, values): the value at the last key on or before
+// `key` (keys ascending) - the price on a date, from monthly prices.
+registerFn("asof", (key, keys, vals) => {
+  const ks = asList(keys);
+  let hit = -1;
+  for (let i = 0; i < ks.length; i++) {
+    if (ks[i] === "" || ks[i] === undefined) continue;
+    if (keyCompare(ks[i], key) <= 0) hit = i;
+    else break;
+  }
+  return hit < 0 ? Number.NaN : asCell(asList(vals)[hit]);
+});
+
 /** Other tables of the same document, by id (raw, not recalced). */
 export type TablePool = (id: string) => Table | undefined;
 
 type RefKind =
   | { kind: "number" }
+  | { kind: "date" }
   | { kind: "formula-earlier" }
   | { kind: "formula-self" }
   | { kind: "formula-later" }
@@ -348,6 +418,95 @@ function stripAtRefs(expr: string): string {
   return parts.join("");
 }
 
+/**
+ * Unary minus on anything but a number literal - `-pmt(r, n, pv)`,
+ * `-balance`, `-(a + b)` - which Jexl 2 cannot parse, rewritten as
+ * `(0 - X)`. A minus is unary at the start or after an operator, an
+ * opening bracket or a comma; X is the operand that follows (a name
+ * chain with any calls or brackets, or a bracketed group).
+ */
+export function unaryMinus(expr: string): string {
+  const isOpen = (c: string): boolean => /[([{,?:+\-*/%<>=!&]/.test(c);
+  const close = (s: string, i: number): number => {
+    const open = s[i];
+    const shut = open === "(" ? ")" : open === "[" ? "]" : "}";
+    let depth = 0;
+    for (let j = i; j < s.length; j++) {
+      const c = s[j];
+      if (c === "'" || c === '"') {
+        j = s.indexOf(c, j + 1);
+        if (j < 0) return s.length;
+        continue;
+      }
+      if (c === open) depth++;
+      else if (c === shut && --depth === 0) return j + 1;
+    }
+    return s.length;
+  };
+  let out = expr;
+  for (let guard = 0; guard < 100; guard++) {
+    let changed = false;
+    let prev = "";
+    for (let i = 0; i < out.length; i++) {
+      const c = out[i] ?? "";
+      if (c === "'" || c === '"') {
+        const end = out.indexOf(c, i + 1);
+        i = end < 0 ? out.length : end;
+        prev = c;
+        continue;
+      }
+      if (/\s/.test(c)) continue;
+      if (c === "-" && (prev === "" || isOpen(prev))) {
+        let j = i + 1;
+        while (/\s/.test(out[j] ?? "")) j++;
+        const start = j;
+        if (/[A-Za-z_@]/.test(out[j] ?? "")) {
+          while (/[\w@.]/.test(out[j] ?? "")) j++;
+          while (out[j] === "(" || out[j] === "[") {
+            j = close(out, j);
+            while (/[\w.]/.test(out[j] ?? "")) j++;
+          }
+        } else if (out[j] === "(") {
+          j = close(out, j);
+        } else {
+          prev = c;
+          continue; // a number literal: Jexl reads -3 itself
+        }
+        out = `${out.slice(0, i)}(0 - ${out.slice(start, j)})${out.slice(j)}`;
+        changed = true;
+        break;
+      }
+      prev = c;
+    }
+    if (!changed) break;
+  }
+  return out;
+}
+
+/**
+ * What a spreadsheet user types, read the way they mean it:
+ * - a leading `=` (`=pmt(...)`) is dropped;
+ * - function names in any case (`PMT(`, `Round(`) are folio's;
+ * - a percentage (`4.5%`, `4.5% / 12`) is that number / 100. A `%`
+ *   straight after a number is a percentage unless an operand follows
+ *   it (`10 % 3` and `10%3` stay modulo).
+ * String literals are left alone.
+ */
+export function spreadsheetHabits(expr: string): string {
+  const body = expr.replace(/^\s*=(?!=)\s*/, "");
+  return body.replace(
+    /'[^']*'|"[^"]*"|\b([A-Za-z_][A-Za-z0-9_]*)(?=\s*\()|(\d+(?:\.\d+)?)%(?!\s*[\w(@.])/g,
+    (m: string, fn?: string, pct?: string) => {
+      if (fn !== undefined) {
+        const lower = fn.toLowerCase();
+        return TRANSFORMS.has(lower) ? lower : fn;
+      }
+      if (pct !== undefined) return `(${pct} / 100)`;
+      return m;
+    },
+  );
+}
+
 export function recalcTable(table: Table, pool?: TablePool): Table {
   return recalcWithin(
     table,
@@ -401,6 +560,7 @@ function compute(
     const c = table.columns[i];
     if (c === undefined) return { kind: "unknown" };
     if (c.type === "number") return { kind: "number" };
+    if (c.type === "date") return { kind: "date" };
     if (c.type !== "formula") return { kind: "text" };
     if (i < own) return { kind: "formula-earlier" };
     if (i === own) return { kind: "formula-self" };
@@ -409,7 +569,7 @@ function compute(
 
   const rows: Cell[][] = table.rows.map((row) => row.slice());
   for (const { col, index } of formulaIndexes) {
-    const raw = col.expr ?? "";
+    const raw = spreadsheetHabits(col.expr ?? "");
     const fail = (msg: string): never => {
       throw new Error(`Formula '${col.name}' in table '${table.id}': ${msg}`);
     };
@@ -423,6 +583,7 @@ function compute(
     const selfRefs: SelfRef[] = [];
     const crossRefs: CrossRef[] = [];
     const colRefs: ColRef[] = [];
+    const crossCols: { tableId: string; name: string }[] = [];
     let selfRow = false;
     const neutralized = stripped.replace(
       /@?[A-Za-z_][A-Za-z0-9_-]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+/g,
@@ -468,10 +629,15 @@ function compute(
           }
           return chain;
         }
+        // @prices.col.close: another table's whole column (lookups).
+        if (segs[0] === "col") {
+          crossCols.push({ tableId: head, name: segs[1] ?? "" });
+          return "_row__REF__";
+        }
         const handle = parseHandle(segs[0] ?? "");
         if (handle === null) {
           throw new Error(
-            `Formula '${col.name}' in table '${table.id}': table reference '${head}' handles are prev (last row) or rN (row N), not '${segs[0]}'`,
+            `Formula '${col.name}' in table '${table.id}': table reference '${head}' handles are prev (last row), rN (row N) or col (the whole column), not '${segs[0]}'`,
           );
         }
         crossRefs.push({ tableId: head, handle, name: segs[1] ?? "" });
@@ -506,6 +672,14 @@ function compute(
       }
       if (name in CONSTANTS) continue;
       const kind = kindOf(name, index);
+      if (
+        kind.kind === "unknown" &&
+        new RegExp(`(^|[^\\w.])${name}\\s*\\(`).test(neutralized)
+      ) {
+        fail(
+          `unknown function '${name}' - the functions are listed in the help (search "formulas")`,
+        );
+      }
       if (kind.kind === "unknown") {
         if (name !== table.id && pool(name) !== undefined) {
           fail(
@@ -580,11 +754,29 @@ function compute(
       }
     }
 
+    for (const ref of crossCols) {
+      const other = ref.tableId === table.id ? table : pool(ref.tableId);
+      if (other === undefined) {
+        fail(`table reference '${ref.tableId}': unknown table`);
+      }
+      if (/-/.test(ref.tableId)) {
+        fail(
+          `table reference '${ref.tableId}': referenced table ids must be valid identifiers - no hyphens`,
+        );
+      }
+      if (ref.tableId === table.id) {
+        fail(`use self.col.${ref.name} for this table's own column`);
+      }
+      if (!(other as Table).columns.some((c) => c.name === ref.name)) {
+        fail(`table reference '${ref.tableId}': unknown column '${ref.name}'`);
+      }
+    }
+
     // Referenced tables recalc first (dependency order); the cache
     // makes each table compute once, and the visiting set turns
     // reference cycles into visible errors.
     const crossTables = new Map<string, Table>();
-    for (const ref of crossRefs) {
+    for (const ref of [...crossRefs, ...crossCols]) {
       if (crossTables.has(ref.tableId)) continue;
       if (ref.tableId === table.id) {
         crossTables.set(ref.tableId, { ...table, rows });
@@ -630,12 +822,30 @@ function compute(
     const colSnap: Record<string, unknown> = {};
     for (const ref of colRefs) {
       const i = indexByName.get(ref.name) ?? -1;
+      const isDate = table.columns[i]?.type === "date";
       colSnap[ref.name] = rows.map((row) => {
         const v = row?.[i];
+        if (isDate) return typeof v === "string" ? v : "";
         return typeof v === "number" ? v : Number.NaN;
       });
     }
 
+    // Other tables' whole columns, read once: numbers stay numbers,
+    // dates and text stay text (lookup keys).
+    const crossColSnap = new Map<string, Record<string, unknown[]>>();
+    for (const ref of crossCols) {
+      const target = crossTables.get(ref.tableId);
+      if (target === undefined) continue;
+      const i = target.columns.findIndex((c) => c.name === ref.name);
+      const cols = crossColSnap.get(ref.tableId) ?? {};
+      cols[ref.name] = target.rows.map((row) => {
+        const v = row[i];
+        return v === undefined || v === "" ? Number.NaN : v;
+      });
+      crossColSnap.set(ref.tableId, cols);
+    }
+
+    const source = unaryMinus(stripAtRefs(raw));
     table.rows.forEach((_row, r) => {
       // Constants first, so a column of the same name shadows them.
       const ctx: Record<string, unknown> = { ...CONSTANTS };
@@ -645,6 +855,10 @@ function compute(
         if (c.type === "number") {
           const v = rows[r]?.[i];
           ctx[name] = typeof v === "number" ? v : Number.NaN;
+        } else if (c.type === "date") {
+          // Dates are their ISO text; the date functions read them.
+          const v = rows[r]?.[i];
+          ctx[name] = typeof v === "string" ? v : "";
         } else if (c.type === "formula" && i < index) {
           // Earlier formula columns: computed-so-far at this row.
           const v = rows[r]?.[i];
@@ -687,11 +901,17 @@ function compute(
         ctx[ref.tableId] = entry;
       }
 
+      for (const [id, cols] of crossColSnap) {
+        const entry = (ctx[id] ?? {}) as Record<string, unknown>;
+        entry.col = cols;
+        ctx[id] = entry;
+      }
+
       const src = rows[r] ?? [];
       const out: Cell[] = table.columns.map((_, i) => src[i] ?? "");
       let result: Cell;
       try {
-        const v = jexl.evalSync(stripAtRefs(raw), ctx) as Cell;
+        const v = jexl.evalSync(source, ctx) as Cell;
         result =
           typeof v === "number"
             ? Number.isFinite(v)

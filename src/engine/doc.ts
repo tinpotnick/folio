@@ -291,6 +291,8 @@ function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
     }
     if (k === "caption") table.caption = unquote(raw);
     else if (k === "import") table.import = unquote(raw);
+    else if (k === "retrieved") table.retrieved = unquote(raw);
+    else if (k === "cite") table.cite = unquote(raw);
     else if (k === "columns") section = "columns";
     else if (k === "data") section = "data";
     else throw new ParseError(`Unknown table key: '${k}'`, 0);
@@ -311,7 +313,7 @@ function parseColumn(raw: string): Table["columns"][number] {
     type: (col["type"] ?? "text") as Table["columns"][number]["type"],
     ...(col["unit"] !== undefined ? { unit: col["unit"] } : {}),
     ...(col["format"] !== undefined
-      ? { format: col["format"] as "percent" }
+      ? { format: col["format"] as "percent" | "currency" }
       : {}),
     ...(col["expr"] !== undefined ? { expr: col["expr"] } : {}),
     ...(col["width"] !== undefined
@@ -856,6 +858,10 @@ function serializeTable(table: Table): string {
   if (table.import !== undefined) {
     lines.push(`import: "${table.import}"`);
   }
+  if (table.retrieved !== undefined) {
+    lines.push(`retrieved: ${table.retrieved}`);
+  }
+  if (table.cite !== undefined) lines.push(`cite: ${table.cite}`);
   lines.push("columns:");
   for (const col of table.columns) {
     const entries = [`name: ${col.name}`, `type: ${col.type}`];

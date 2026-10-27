@@ -909,8 +909,164 @@
         color: var(--text);
         box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
       }
-      #unsaved-modal::backdrop {
+      #unsaved-modal::backdrop,
+      #import-modal::backdrop {
         background: rgba(31, 35, 40, 0.4);
+      }
+      #import-modal {
+        width: min(620px, calc(100vw - 32px));
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
+      }
+      .import-body {
+        padding: 18px 20px 16px;
+        font-size: 13px;
+      }
+      .import-body h2 {
+        margin: 0 0 12px;
+        font-size: 15px;
+      }
+      .import-tabs {
+        display: inline-flex;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 8px;
+        background: var(--surface-2);
+        margin-bottom: 14px;
+      }
+      .import-tabs button {
+        font: inherit;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        padding: 5px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .import-tabs button[aria-selected="true"] {
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+      }
+      .import-pane p {
+        margin: 0 0 12px;
+        color: var(--text-muted);
+        line-height: 1.5;
+      }
+      .import-pane label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 500;
+      }
+      .import-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+      .import-row input {
+        flex: 1 1 260px;
+        min-width: 0;
+      }
+      .import-body input[type="text"],
+      .import-body input[type="url"] {
+        font: inherit;
+        padding: 6px 8px;
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+      }
+      .import-pane p.import-hint {
+        font-size: 12px;
+      }
+      .import-note {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px 0;
+        margin-bottom: 12px;
+        background: var(--surface-2);
+      }
+      .import-note a {
+        color: var(--accent-text);
+      }
+      .import-pane p.import-error {
+        color: var(--rec-fg);
+      }
+      .import-pane p.import-summary {
+        color: var(--text);
+      }
+      .import-sample-wrap {
+        max-height: 150px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 12px;
+      }
+      #import-sample {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      #import-sample th,
+      #import-sample td {
+        padding: 4px 8px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      #import-sample th {
+        position: sticky;
+        top: 0;
+        background: var(--surface-2);
+        font-weight: 600;
+      }
+      #import-sample th input.import-colname {
+        font: inherit;
+        font-weight: 600;
+        padding: 2px 4px;
+        margin: -2px 4px -2px -4px;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        background: transparent;
+        color: var(--text);
+      }
+      #import-sample th input.import-colname:hover,
+      #import-sample th input.import-colname:focus {
+        border-color: var(--border-strong);
+        background: var(--surface);
+      }
+      #import-sample th small {
+        font-weight: 400;
+        color: var(--text-muted);
+      }
+      .import-fields {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 8px 12px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .import-fields label {
+        margin: 0;
+        font-weight: 400;
+        color: var(--text-muted);
+      }
+      .import-pane p.import-licence {
+        font-size: 12px;
+      }
+      .import-pane label.import-check {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        font-weight: 400;
+        margin-bottom: 14px;
       }
       .unsaved-body {
         padding: 18px 20px 16px;
@@ -1541,6 +1697,25 @@
                   </svg>
                   <span class="mi-label">Vega-Lite chart</span>
                 </button>
+                <button
+                  role="menuitem"
+                  id="btn-import-data"
+                  title="Import a dataset from a file or a web address"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M8 2v7.5M5 6.5l3 3 3-3M2.5 10.5v2a1 1 0 001 1h9a1 1 0 001-1v-2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Import data…</span>
+                </button>
                 <div class="menu-heading">Media</div>
                 <button
                   role="menuitem"
@@ -2087,6 +2262,108 @@
           </button>
           <button value="save" class="plain primary" id="btn-unsaved-save">
             Save…
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="import-modal" aria-label="Import data">
+      <form method="dialog" class="import-body" id="import-form">
+        <h2>Import data</h2>
+        <div class="import-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            id="import-tab-file"
+            aria-selected="true"
+          >
+            From a file
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="import-tab-web"
+            aria-selected="false"
+          >
+            From the web
+          </button>
+        </div>
+        <section id="import-pane-file" class="import-pane">
+          <p>
+            A CSV or JSON file becomes a dataset in this document: typed columns
+            (numbers, dates, text), ready for formulas and charts.
+          </p>
+          <div class="import-row">
+            <button type="button" class="plain primary" id="btn-import-choose">
+              Choose a file…
+            </button>
+            <button type="button" class="plain" id="btn-import-demo">
+              Use the demo dataset
+            </button>
+          </div>
+        </section>
+        <section id="import-pane-web" class="import-pane" hidden>
+          <label for="import-url">Address of a CSV or JSON download</label>
+          <div class="import-row">
+            <input
+              id="import-url"
+              type="url"
+              placeholder="https://…"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="button" class="plain" id="btn-import-fetch">
+              Fetch
+            </button>
+          </div>
+          <p class="import-hint">
+            Open data imports well: the Bank of England database, ONS time
+            series, OECD, HM Land Registry. folio keeps a copy in the document
+            (it still opens offline) and records where and when it came from.
+          </p>
+          <div id="import-blocked" class="import-note" hidden>
+            <p id="import-blocked-text"></p>
+            <div class="import-row">
+              <a id="import-open-link" target="_blank" rel="noopener"
+                >Open the address</a
+              >
+              <button type="button" class="plain" id="btn-import-downloaded">
+                Choose the downloaded file…
+              </button>
+            </div>
+          </div>
+          <p id="import-error" class="import-error" role="alert" hidden></p>
+          <div id="import-preview" hidden>
+            <p id="import-summary" class="import-summary"></p>
+            <div class="import-sample-wrap">
+              <table id="import-sample"></table>
+            </div>
+            <div class="import-fields">
+              <label for="import-id">Dataset name</label>
+              <input id="import-id" type="text" spellcheck="false" />
+              <label for="import-caption">Caption</label>
+              <input id="import-caption" type="text" />
+              <label for="import-publisher">Published by</label>
+              <input id="import-publisher" type="text" />
+            </div>
+            <p id="import-licence" class="import-licence"></p>
+            <label class="import-check">
+              <input type="checkbox" id="import-cite" checked />
+              Add the source to the bibliography, so it can be cited
+            </label>
+          </div>
+        </section>
+        <div class="unsaved-actions">
+          <button value="cancel" class="plain" id="btn-import-cancel">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="plain primary"
+            id="btn-import-go"
+            hidden
+            disabled
+          >
+            Import
           </button>
         </div>
       </form>

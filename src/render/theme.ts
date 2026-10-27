@@ -911,6 +911,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       text-align: start;
     }
     ${headingCss(theme)}
+    article.folio-doc .folio-table-source {
+      text-align: ${theme.captionAlign === "center" ? "center" : "start"};
+    }
     article.folio-doc figcaption {
       ${theme.captionAlign === "center" ? "text-align: center;" : ""}
       ${theme.captionItalic ? "font-style: italic;" : ""}
@@ -976,6 +979,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.9em;
       padding: 6px 2px;
     }
+    .folio-table-error[title] { cursor: pointer; }
+    .folio-table-error[title]:hover { text-decoration: underline; }
     ${tableCss(theme.tableStyle, mode)}
     ${
       theme.pageBreakH1
@@ -1682,6 +1687,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     a.folio-xref:hover { border-bottom-style: solid; }
     a.folio-xref.folio-xref-missing { color: var(--folio-ink-muted); font-style: italic; }
+    /* An imported table's source line, under its caption. */
+    .folio-table-source {
+      margin: 0.3em 0 0;
+      font-size: 0.8em;
+      color: var(--folio-ink-muted);
+    }
     /* Citations and the reference list (docs/specs/citations.md). */
     span.folio-cite {
       color: var(--folio-accent);
@@ -1848,8 +1859,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     th { user-select: none; }
     figure[data-chart-source] { user-select: none; }
+    /* The table's menu sits at the pointer, outside the article. */
+    .folio-menu.folio-table-menu { position: fixed; }
     .folio-menu {
       position: absolute;
+      font: 14px system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--folio-ink);
       z-index: 100;
       background: var(--folio-input-bg, #ffffff);
       border: 1px solid var(--folio-rule-strong, #d0d7de);

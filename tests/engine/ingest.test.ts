@@ -32,8 +32,29 @@ describe("parseCsv", () => {
   });
 
   it("a numeric column with any text value stays text", () => {
-    const out = parseCsv("v\n1\nn/a\n");
+    const out = parseCsv("v\n1\nabout 3\n");
     expect(out.columns[0]?.type).toBe("text");
+  });
+
+  it("published missing markers (FRED's '.', NA, n/a) read as empty", () => {
+    const out = parseCsv(
+      "observation_date,rate\n2024-01-01,5.25\n2024-02-01,.\n2024-03-01,n/a\n",
+    );
+    expect(out.columns.map((c) => c.type)).toEqual(["date", "number"]);
+    expect(out.rows.map((r) => r[1])).toEqual([5.25, "", ""]);
+  });
+
+  it("date columns are inferred and written ISO", () => {
+    // The Bank of England's shape, and ONS months.
+    const boe = parseCsv("DATE,IUMABEDR\n31 Jan 2020,0.75\n29 Feb 2020,0.75\n");
+    expect(boe.columns[0]?.type).toBe("date");
+    expect(boe.rows.map((r) => r[0])).toEqual(["2020-01-31", "2020-02-29"]);
+    const ons = parseCsv("month,cpi\n2024 JAN,131.5\n2024 FEB,132.3\n");
+    expect(ons.rows[1]?.[0]).toBe("2024-02-01");
+    // Years alone are numbers, not dates.
+    expect(parseCsv("year,v\n2020,1\n2021,2\n").columns[0]?.type).toBe(
+      "number",
+    );
   });
 
   it("sanitizes header names to identifier-legal, deduped, never empty", () => {

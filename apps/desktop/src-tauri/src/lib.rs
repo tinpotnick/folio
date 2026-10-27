@@ -149,6 +149,85 @@ async fn save_text_file(
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// The largest download an import takes (a web import is a snapshot
+/// of a dataset, not a file transfer).
+const FETCH_MAX_BYTES: usize = 20 * 1024 * 1024;
+
+/// What a web address returned, for "Import data › From the web"
+/// (ADR-0029, docs/specs/data-import.md).
+#[derive(serde::Serialize)]
+struct Fetched {
+    text: String,
+    content_type: String,
+    /// The address after redirects.
+    url: String,
+}
+
+/// Whether an address may be fetched: plain web addresses only.
+fn is_fetchable(url: &str) -> bool {
+    reqwest::Url::parse(url)
+        .map(|u| matches!(u.scheme(), "http" | "https") && u.host_str().is_some())
+        .unwrap_or(false)
+}
+
+/// Fetch a public web address for an import. The webview cannot: the
+/// publishers of open data (the Bank of England, ONS, FRED) send no
+/// CORS headers, so a page's own fetch is refused. GET only, no
+/// cookies, 30 s, 20 MB; the answer is text (CSV or JSON).
+#[tauri::command]
+async fn fetch_url(url: String) -> Result<Fetched, String> {
+    if !is_fetchable(&url) {
+        return Err("Only web addresses (http:// or https://) can be imported".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        // Who is asking, with a contact address - the convention for
+        // automated clients (FRED's edge refuses a bare product name).
+        .user_agent(concat!(
+            "folio/",
+            env!("CARGO_PKG_VERSION"),
+            " (+https://github.com/tinpotnick/folio)"
+        ))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut resp = client.get(&url).send().await.map_err(|e| {
+        if e.is_timeout() {
+            "The site did not answer within 30 seconds".to_string()
+        } else if e.is_connect() {
+            "Could not reach the site - check the address and your connection".to_string()
+        } else {
+            e.to_string()
+        }
+    })?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(format!(
+            "The site answered {} {}",
+            status.as_u16(),
+            status.canonical_reason().unwrap_or("")
+        ));
+    }
+    let content_type = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let final_url = resp.url().to_string();
+    let mut body: Vec<u8> = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+        if body.len() + chunk.len() > FETCH_MAX_BYTES {
+            return Err("That download is over 20 MB - too large to import".into());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(Fetched {
+        text: String::from_utf8_lossy(&body).into_owned(),
+        content_type,
+        url: final_url,
+    })
+}
+
 /// `suggested` defaults the file name (the open document's own when
 /// it has one), and the dialog starts in its folder — or the last
 /// used folder when the document is in-memory only.
@@ -337,7 +416,8 @@ pub fn run() {
             save_text_file,
             open_external,
             export_pdf,
-            launch_document
+            launch_document,
+            fetch_url
         ])
         .build(tauri::generate_context!())
         .expect("error while building folio desktop")
@@ -390,6 +470,33 @@ mod tests {
             launch_file_from_args(&a(&["folio", "--flag", "file:///tmp/a.md"])),
             Some("/tmp/a.md".into())
         );
+    }
+
+    /// Live: fetches real open-data publishers (run by hand:
+    /// `cargo test fetches_live_publishers -- --ignored --nocapture`).
+    #[test]
+    #[ignore]
+    fn fetches_live_publishers() {
+        for url in [
+            "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/2024&Dateto=now&SeriesCodes=IUMABEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N",
+            "https://www.ons.gov.uk/generator?format=csv&uri=/economy/inflationandpriceindices/timeseries/d7bt/mm23",
+            "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SPASTT01GBM661N",
+        ] {
+            let got = tauri::async_runtime::block_on(super::fetch_url(url.into()))
+                .unwrap_or_else(|e| panic!("{url}: {e}"));
+            println!("{} bytes, {}: {:?}", got.text.len(), got.content_type, &got.text[..60.min(got.text.len())]);
+            assert!(got.text.len() > 100);
+        }
+    }
+
+    #[test]
+    fn only_web_addresses_are_fetched() {
+        assert!(super::is_fetchable("https://www.ons.gov.uk/generator?format=csv"));
+        assert!(super::is_fetchable("http://example.com/a.csv"));
+        assert!(!super::is_fetchable("file:///etc/passwd"));
+        assert!(!super::is_fetchable("ftp://example.com/a.csv"));
+        assert!(!super::is_fetchable("javascript:alert(1)"));
+        assert!(!super::is_fetchable("not a url"));
     }
 
     #[test]

@@ -359,15 +359,33 @@ document — written in the same renderer you are working with.
   language), click-header sorting (a view sort, never written to
   the document), and click-to-edit cells. Esc closes it; the
   grid button on the table's inspector bar opens it too.
-- **Import data**: the command palette (Ctrl+K) has "Import data
-  from a file (CSV or JSON)" - or try it instantly with
-  "Import the demo dataset", a shipped 72-row CSV (and a JSON one
-  at `demo/data/site-metrics.json`). The "Open example: An imported data report"
+- **Import data**: **+ Insert › Import data…** (or search "import"
+  with Ctrl+K) opens a dialog with two ways in. **From a file**: a
+  CSV or JSON file - or try it instantly with "Use the demo dataset",
+  a shipped 72-row CSV (and a JSON one at
+  `demo/data/site-metrics.json`). **From the web**: paste the address
+  of a CSV or JSON download and press Fetch; you see the rows, the
+  column types, who published it and its licence before importing.
+  Open data imports well - the Bank of England database (Bank Rate,
+  mortgage rates), ONS time series (inflation), OECD, HM Land
+  Registry - and dates such as "31 Jan 2020" or "2024 JAN" become
+  real dates. Leave **Add the source to the bibliography** ticked and
+  the table shows "Source: Bank of England (2026)" under it, the
+  References list gains the dataset with the date it was retrieved,
+  and you can cite it in the text like any reference (`[@boe_iumabedr]`).
+  The desktop app fetches any address; in a web browser most data
+  sites refuse a page's request, so folio offers a link to download
+  the file and then reads that file - still recording the web address
+  as the source. Check the licence line before sharing a document:
+  open-government data can be shared with the source credited; data
+  marked "licence unknown" may not be yours to publish. The "Open example: An imported data report"
   entry shows what a finished imported-data report looks like. The file becomes a typed table in
   the document - numeric columns are inferred, the header names
   become formula-usable column names, and `import: "file.csv"` in
-  the source records where the data came from. It is a snapshot,
-  not a link: the document stays one offline file. Big imports
+  the source records where the data came from (`retrieved:` and
+  `cite:` too, for data from the web). It is a snapshot, not a link:
+  the document stays one offline file, and says the same thing next
+  year. Big imports
   render as windowed tables (see above) and browse in the dataset
   browser.
 - Click a cell and type. Press Tab (or Enter) to finish the cell:
@@ -376,6 +394,11 @@ document — written in the same renderer you are working with.
   Tab/Enter also move the caret to the next cell and grow the table
   at the last row; in the desktop app they commit the cell — click
   the next cell to continue.
+- **Add or remove rows and columns**: right-click a cell (Insert row
+  below, Delete row, Insert column right, Delete column), or with
+  the cursor in a cell search Ctrl+K for "insert a row" / "insert a
+  column". A new column is named `new`; click its header to rename it
+  and to choose its type (text, number, date, formula).
 - Charts are not widgets — they are queries over a table. Edit the
   table and the figure updates on the next render. There is no run
   button anywhere in folio, and no execution state.
@@ -458,6 +481,36 @@ at(k)`): `sum`, `count`, `mean`, `median`, `stdev`, `first`,
 `sma`. See the *Signals and spectra* example for a full
 walkthrough.
 
+**Money** - a mortgage or loan repayment, savings growth, investment
+returns - with the spreadsheets' names, arguments and signs (money
+you pay is negative): `pmt(rate, periods, loan)` is the monthly
+payment - `-pmt(4.5% / 12, 25 * 12, 250000)` gives 1389.58 a month -
+and `fv` (future value), `pv` (present value), `nper` (how many
+payments), `rate`, `ipmt` / `ppmt` (the interest and the capital in
+payment N), `npv(rate, flows…)`, `irr(self.col.flows)`, and
+`cagr(start, end, years)` (compound annual growth). Typed the
+spreadsheet way works too: a leading `=`, `PMT` in capitals, and
+percentages (`4.5%` is 0.045). A minus sign works in front of
+anything: `-pmt(…)`, `-balance`. A running balance - what is left
+of a mortgage after each month - is a formula that reads its own
+previous row: `(self.row == 1 ? 250000 : self.prev.balance) * (1 +
+4.5% / 12) - payment`. Wrap a result in `| round(2)` for pounds and
+pence.
+
+**Dates**: a date column holds ISO dates (`2025-01-31`), and imports
+write them that way. `date(y, m, d)`, `year(d)`, `month(d)`,
+`day(d)`, `edate(d, n)` (n months later, as the spreadsheets'
+EDATE: 31 Jan + 1 month is 28/29 Feb), `eomonth(d, n)`,
+`days(end, start)`, `months(start, end)` and `yearfrac(start, end)`.
+A formula can produce a date: `edate(start, self.row - 1)` numbers
+a repayment schedule's months.
+
+**Looking up another table** (VLOOKUP / XLOOKUP in a spreadsheet):
+`@prices.col.close` is that table's whole column. `xlookup(key, keys,
+values)` finds the value beside an exact key; `asof(date, @prices.col.date, @prices.col.close)` gives the
+value on or before a date - the price in the month of each payment,
+from monthly prices.
+
 Computed cells show at most six decimal places (`0.006213`, not
 `0.0062132653273250064`); the exact value is still what formulas,
 charts and exports use. A table wider than the page scrolls
@@ -486,7 +539,7 @@ count from 1 like a spreadsheet's, but addressed by NAME):
   formula. Referenced table ids must be valid identifiers - no
   hyphens.
 - Row-context references (`self.*`, `@table.*`) may read text
-  columns too (comparisons); plain names stay numeric-only.
+  columns too (comparisons); plain names are numbers or dates.
 
 A formula may reference formula columns to its LEFT (they compute
 first); referencing a later formula column is an error, and a

@@ -46,6 +46,76 @@ data exactly like hand-authored tables.
   carries every row; a multi-MB source view is the known ceiling
   (see section-windowing.md).
 
+## The Import data dialog (2026-10-27)
+
+- **Where**: + Insert › **Import data…** (Tables and charts), and the
+  palette's "Import data", "Import data from the web (a CSV or JSON
+  address)" and "Import data from a file (CSV or JSON)". It was
+  palette-only, and users could not find it.
+- **From a file**: "Choose a file…" (the existing file path) and "Use
+  the demo dataset".
+- **From the web**: an address and Fetch (or Enter). What comes back
+  is previewed before anything changes: the row count, each column's
+  name and inferred type, the first rows, a dataset name, a caption
+  (the source's own title), the publisher, and a **licence line** -
+  "Licence: <name> - fine to share with the source credited", or
+  "Licence unknown - check the publisher's terms before sharing", plus
+  any publisher-specific notice. Import inserts the table at the
+  caret. Column names are editable in the preview (a series code
+  such as IUMBV34 is a poor name); when the source's title is only a
+  code, the caption starts empty, asks "What is IUMBV34?", and takes
+  focus. Import shows only once there is something to import.
+- **Fetching** (ADR-0029): the desktop app fetches through Rust
+  (`fetch_url`: http/https only, GET, no cookies, 30 s, 20 MB, a user
+  agent naming folio with a contact address). A browser page can only
+  read sites that allow it (CORS), and the open-data publishers do
+  not: when the page's fetch is refused, the dialog says so, links the
+  address to download, and reads the downloaded file as if fetched -
+  the web address stays the recorded source.
+- **Reading** (`src/engine/sources.ts`): CSV and JSON as for files;
+  the ONS website's CSV layout (metadata lines, then years, quarters,
+  months - the finest series present wins, its CDID names the column,
+  its Title becomes the caption); an HTML page is an error ("returned
+  a web page, not data - look for a CSV or JSON download link").
+- **Types**: `date` joins `number` and `text`: a column is a date when
+  every value present reads as one - ISO, `2024-03`, `31 Mar 2024`
+  (Bank of England), `2024 MAR` (ONS), `March 2024` - and is written
+  ISO. Day/month numeric dates (`03/04/2024`) are ambiguous and stay
+  text. Published "no value" markers (FRED's `.`, `NA`, `n/a`) are
+  empty cells, not text.
+- **Provenance and citation**: the table records `import: "<url>"`,
+  `retrieved: <ISO date>` and, when "Add the source to the
+  bibliography" is ticked (the default), `cite: <key>`. The key
+  (`boe_iumabedr`, `ons_cpi`) gets a BibTeX `@misc` entry in the
+  document's bibliography (created if there is none) with the
+  publisher as an organisation author, the title, `howpublished =
+{Dataset}`, the URL, `urldate`, and the licence as a note. The table
+  shows "Source: <narrative citation>" under its caption, so it is
+  cited in the document's style and its reference is listed: APA
+  "Bank of England. (2026). Bank Rate [Data set]. Retrieved 27 October
+  2026, from <url>"; IEEE "… Accessed: Oct. 27, 2026. [Online].
+  Available: <url>".
+- **Known publishers** (by address, with the licence their terms
+  state - checked 2026-10-27, see docs/research/open-data-licences.md):
+  ONS (OGL v3), Bank of England (OGL v3; some third-party exchange
+  rates excluded), OECD (CC BY 4.0), HM Land Registry (OGL v3), FRED
+  (no licence claimed: it re-publishes other owners' data - "check
+  the series' notes before sharing"). Any other address: publisher =
+  its host, licence unknown.
+- **Charting it**: "Chart it" on a table with a date column draws a
+  line chart over the dates, one line per number column (up to six),
+  captioned with the table's caption; dated x axes label years (or
+  "Mar 2024" over a shorter span) and keep the last label inside the
+  chart (chart-rendering).
+- **Rows and columns**: the table's right-click menu (now outside the
+  editable article, so its clicks always land; new columns are named
+  `new`, `new_2`, …) and the palette's "Insert a row below", "Insert a
+  column to the right", "Delete the row", "Delete the column", acting
+  on the cell at the caret.
+- Not yet: a picker of known sources by series code; Refresh (fetch
+  again into the same table); market prices (licensed - see the
+  research note).
+
 ## Shipped demo data
 
 - `demo/data/monthly-sales.csv` - 72 rows (24 months x 3
@@ -71,6 +141,15 @@ data exactly like hand-authored tables.
   query languages already compose over imported data.
 
 ## Acceptance
+
+- From the web: `tests/engine/sources.test.ts` (BoE, FRED, ONS
+  layouts; HTML is an error; the citation entry in both styles),
+  `tests/engine/ingest.test.ts` (dates, missing markers),
+  `tests/e2e/import-web.spec.ts` (the dialog from + Insert, preview,
+  licence, the source line and reference; the browser's
+  download-then-choose route; an HTML address); Rust
+  `only_web_addresses_are_fetched` and the hand-run
+  `fetches_live_publishers`. Eval: `evals/import-web-first-contact.md`.
 
 - Engine: `tests/engine/ingest.test.ts` (12 tests: RFC-4180
   quoting, type inference with value conversion, header

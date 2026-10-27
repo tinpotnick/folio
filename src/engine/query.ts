@@ -4,7 +4,7 @@
  */
 import jexl from "jexl";
 import type { Cell, Chart, Table } from "./index.js";
-import { CONSTANTS, KEYWORDS, TRANSFORMS } from "./recalc.js";
+import { CONSTANTS, KEYWORDS, TRANSFORMS, unaryMinus } from "./recalc.js";
 
 export interface QueryResult {
   columns: string[];
@@ -70,7 +70,7 @@ export function filterIndexes(table: Table, expr: string): number[] {
       const v = r[ci];
       ctx[c.name] = v === undefined ? Number.NaN : v;
     });
-    const keep = jexl.evalSync(expr, ctx);
+    const keep = jexl.evalSync(unaryMinus(expr), ctx);
     if (
       keep === true ||
       (typeof keep === "number" && keep !== 0 && Number.isFinite(keep))

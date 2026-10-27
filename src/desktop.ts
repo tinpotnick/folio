@@ -113,6 +113,23 @@ export async function exportPdfFile(
   }
 }
 
+/**
+ * Fetch a web address for "Import data › From the web" through the
+ * desktop app (ADR-0029): open-data publishers send no CORS headers,
+ * so the page's own fetch is refused. Null when not on desktop.
+ */
+export async function fetchUrlDesktop(
+  url: string,
+): Promise<{ text: string; url: string } | null> {
+  if (!isDesktop()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  const res = await invoke<{ text: string; content_type: string; url: string }>(
+    "fetch_url",
+    { url },
+  );
+  return { text: res.text, url: res.url };
+}
+
 /** The document the app was launched to open ("Open with folio", a
  * double-clicked .md file), once; null when there is none. */
 export async function launchDocument(): Promise<OpenedDocument | null> {

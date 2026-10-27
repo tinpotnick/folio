@@ -32,10 +32,15 @@ output by `src/render/chart.ts`. The contract for dense data:
   the bar; when that would hit the x tick labels, the floor drops
   one step to make room.
 - **Markers**: a sparse line/area series (<= 64 points) draws a
-  marker on every point; a dense one draws markers only at the
-  x-tick positions - a marker per point on a 512-sample curve is
-  a bead necklace, not a line. The polyline always covers every
-  point.
+  marker on every point; a dense one marks only the points it
+  labels (high, low, latest) - a marker per point on a 512-sample
+  curve is a bead necklace, and markers at the tick months (the
+  rule until 2026-10-27) read as data points that matter. The
+  polyline always covers every point.
+- **Dated x axes**: when every label is an ISO date, ticks read as
+  the span needs - the year over three years or more, "Mar 2024"
+  over one, the date itself within a year - and the last tick of a
+  long axis is anchored at its end so it stays inside the chart.
 - **Axis titles**: the y axis names the query's value column
   (with its table unit, e.g. `revenue (£k)`), the x axis names
   the category column. A chart explains itself.
