@@ -230,7 +230,12 @@ function tickFormatter(
   return (v) => {
     const x = format === "percent" ? v * 100 : v;
     const txt = x.toFixed(d).replace(/\.0+$/, "");
-    return `${txt === "-0" ? "0" : txt}${format === "percent" ? "%" : ""}`;
+    // Big numbers read with thousands separators: 100,000 not 100000.
+    const grouped =
+      Math.abs(x) >= 10000
+        ? Number(txt).toLocaleString("en-GB", { maximumFractionDigits: d })
+        : txt;
+    return `${grouped === "-0" ? "0" : grouped}${format === "percent" ? "%" : ""}`;
   };
 }
 

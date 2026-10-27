@@ -136,6 +136,17 @@ describe("known sources' layouts", () => {
     expect(e.meta.title).toBe(
       "Pound sterling/Euro ECB reference exchange rate",
     );
+    // Observations out of order come back in date order.
+    const lines = fx("oecd").split("\n");
+    const shuffled = [lines[0], lines[2], lines[1]].join("\n");
+    const sorted = parseFetched(
+      shuffled,
+      "https://sdmx.oecd.org/public/rest/data/x",
+    );
+    expect(sorted.parsed.rows.map((r) => String(r[0]))).toEqual([
+      "1957-12-01",
+      "1958-01-01",
+    ]);
     const s = parseFetched(
       fx("eurostat"),
       "https://ec.europa.eu/eurostat/api/x",

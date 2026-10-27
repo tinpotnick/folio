@@ -2322,6 +2322,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
+    id: "repay-or-invest",
+    title: "Repay or invest? A mortgage question",
+    file: "demo/examples/repay-or-invest.md",
+    blurb:
+      "mortgage overpay repay invest savings shares isa pension finance personal bank of england ons oecd open data",
+  },
+  {
     id: "paper",
     title: "An academic paper",
     file: "demo/examples/paper.md",

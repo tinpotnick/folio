@@ -258,9 +258,11 @@ function fromSdmx(
     if (/^\d{4}$/.test(p)) return `${p}-01-01`;
     return toIso(p) ?? p;
   };
+  // SDMX does not promise an order: observations are sorted by period.
   const rows = table.rows
     .filter((r) => String(r[vi] ?? "") !== "")
-    .map((r) => [period(String(r[ti] ?? "")), Number(r[vi])]);
+    .map((r) => [period(String(r[ti] ?? "")), Number(r[vi])])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
   const first = table.rows[0];
   const title = first
     ? at(first, "TITLE") ||
