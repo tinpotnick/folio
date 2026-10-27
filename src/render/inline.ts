@@ -27,6 +27,12 @@ export function inlineMarkdownToHtml(text: string): string {
         (m, bang: string, label: string, url: string) =>
           bang === "!" ? m : `<a href="${url}">${label}</a>`,
       )
+      // Footnote references (GitHub's [^label]): numbered by the
+      // component in reading order (spec: docs/specs/footnotes.md).
+      .replace(
+        /\[\^([\w.-]+)\]/g,
+        '<sup class="folio-fnref" data-fn="$1" contenteditable="false"><a role="doc-noteref" tabindex="0">$1</a></sup>',
+      )
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
       .replace(/~~([^~]+)~~/g, "<del>$1</del>")
@@ -45,7 +51,11 @@ function nodesToMarkdown(root: Node): string {
   let out = "";
   for (const node of Array.from(root.childNodes)) {
     if (node.nodeType === Node.TEXT_NODE) {
-      out += node.textContent ?? "";
+      // No-break spaces are the editor's, not the author's: the browser
+      // types one wherever an ordinary space would collapse (at a line's
+      // end, beside a footnote number or a reference) and turns it back
+      // only when a letter follows. They must not reach the file.
+      out += (node.textContent ?? "").replaceAll("\u00a0", " ");
       continue;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) continue;
@@ -75,6 +85,13 @@ function nodesToMarkdown(root: Node): string {
         break;
       case "BR":
         out += "\n";
+        break;
+      case "SUP":
+        if (el.classList.contains("folio-fnref")) {
+          out += `[^${el.getAttribute("data-fn") ?? ""}]`;
+          break;
+        }
+        out += nodesToMarkdown(el);
         break;
       default:
         out += nodesToMarkdown(el);

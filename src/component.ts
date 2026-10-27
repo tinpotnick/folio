@@ -5,6 +5,7 @@
  * during typing. Full re-render happens only on structural ops.
  * Row/column operations live in a context menu, not on the page.
  */
+import type { Footnote } from "./engine/doc.js";
 import {
   parseDoc,
   serializeDoc,
@@ -906,6 +907,7 @@ export class FolioDoc extends HTMLElement {
     // target (document links load in place; external URLs open in
     // a new tab). Editing lives on the toolbar's link button.
     host.addEventListener("click", (ev) => {
+      if (this.handleFootnoteClick(ev)) return;
       const a = (ev.target as Element).closest?.(
         "a[href]",
       ) as HTMLAnchorElement | null;
@@ -964,6 +966,7 @@ export class FolioDoc extends HTMLElement {
     this.doc.blocks.forEach((block, idx) => {
       host.appendChild(this.renderBlock(block, idx));
     });
+    this.renderNotes(host, true);
     root.appendChild(host);
   }
 
@@ -1052,12 +1055,272 @@ export class FolioDoc extends HTMLElement {
         this.drawChart(figure);
         return figure;
       }
+      case "footnotes": {
+        // The definitions stay where the author wrote them in the
+        // file; on the page they are gathered into the Notes section
+        // at the end (renderNotes), so here the block is a hidden
+        // placeholder that keeps the block indexes 1:1.
+        const el = document.createElement("aside");
+        el.className = "folio-fndefs";
+        el.hidden = true;
+        el.contentEditable = "false";
+        el.dataset.blockIndex = String(idx);
+        return el;
+      }
       default: {
         const el = document.createElement("p");
         el.dataset.blockIndex = String(idx);
         return el;
       }
     }
+  }
+
+  /**
+   * Insert a footnote at the caret (spec: docs/specs/footnotes.md): a
+   * numbered reference in the text and an empty note at the end, with
+   * the caret in the note. Returns why it could not, or null.
+   */
+  insertFootnote(): string | null {
+    if (!this.doc) return "No document";
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const at = this.caretPoint();
+    const el =
+      at && (at.node instanceof Element ? at.node : at.node.parentElement);
+    const block = el?.closest?.("article.folio-doc > p, article.folio-doc li");
+    if (!host || !at || !block || el?.closest(".folio-notes")) {
+      return "Put the cursor in a paragraph or list item first";
+    }
+    // The next free label: 1, 2, 3...
+    const used = new Set<string>(this.footnoteOrder(host));
+    for (const b of this.doc.blocks) {
+      if (b.kind === "footnotes") for (const n of b.notes) used.add(n.label);
+    }
+    let n = 1;
+    while (used.has(String(n))) n += 1;
+    const label = String(n);
+    const tpl = document.createElement("template");
+    tpl.innerHTML = inlineMarkdownToHtml(`[^${label}]`);
+    const sup = tpl.content.firstChild;
+    if (!sup) return "Could not insert the footnote";
+    this.plainSpaceBefore(at);
+    const range = document.createRange();
+    range.setStart(at.node, at.offset);
+    range.collapse(true);
+    range.insertNode(sup);
+    this.syncFromDom();
+    // The definition joins a footnote block at the very end, or starts
+    // one there - where GitHub-style documents keep their notes.
+    const last = this.doc.blocks[this.doc.blocks.length - 1];
+    if (last?.kind === "footnotes") last.notes.push({ label, text: "" });
+    else
+      this.doc.blocks.push({ kind: "footnotes", notes: [{ label, text: "" }] });
+    this.render();
+    this.emitChange("insert");
+    const text = this.shadowRoot?.querySelector<HTMLElement>(
+      `section.folio-notes li[data-fn="${CSS.escape(label)}"] .fn-text`,
+    );
+    if (text) {
+      text.scrollIntoView({ behavior: "smooth", block: "center" });
+      text.focus();
+      this.setCaret(text, 0);
+    }
+    return null;
+  }
+
+  /**
+   * Before inserting an inline atom (a footnote or cross-reference) at
+   * a caret: a space typed just before it is a no-break space (the
+   * browser keeps a trailing space visible that way, and turns it back
+   * only when a LETTER follows) - it must not reach the file.
+   */
+  private plainSpaceBefore(at: { node: Node; offset: number }): void {
+    if (at.node.nodeType !== Node.TEXT_NODE || at.offset === 0) return;
+    const t = at.node as Text;
+    if (t.data[at.offset - 1] === "\u00a0")
+      t.replaceData(at.offset - 1, 1, " ");
+  }
+
+  /** The labels referenced in the page, in reading order, each once. */
+  private footnoteOrder(host: Element): string[] {
+    const seen: string[] = [];
+    for (const sup of Array.from(
+      host.querySelectorAll<HTMLElement>("sup.folio-fnref"),
+    )) {
+      const label = sup.dataset.fn ?? "";
+      if (label && !seen.includes(label)) seen.push(label);
+    }
+    return seen;
+  }
+
+  private notesSignature = "";
+
+  /**
+   * Number the footnote references in reading order and build the
+   * Notes section at the end of the page (spec: docs/specs/footnotes.md):
+   * one entry per note, in the order first referred to, then any note
+   * nothing refers to. A note's text edits in place and writes back to
+   * its definition. Rebuilt only when the references change.
+   */
+  private renderNotes(host: Element, force = false): void {
+    if (!this.doc) return;
+    const notes = new Map<string, Footnote>();
+    for (const b of this.doc.blocks) {
+      if (b.kind === "footnotes")
+        for (const n of b.notes) notes.set(n.label, n);
+    }
+    const order = this.footnoteOrder(host);
+    for (const label of notes.keys())
+      if (!order.includes(label)) order.push(label);
+    const number = new Map(order.map((l, i) => [l, i + 1]));
+    // The numbers in the text, always (cheap, and refs come and go).
+    for (const sup of Array.from(
+      host.querySelectorAll<HTMLElement>("sup.folio-fnref"),
+    )) {
+      const a = sup.querySelector("a");
+      const n = number.get(sup.dataset.fn ?? "");
+      if (a) a.textContent = n === undefined ? "?" : String(n);
+      sup.title = notes.get(sup.dataset.fn ?? "")?.text ?? "No note yet";
+    }
+    const signature =
+      order.join("\u0000") + "|" + [...notes.keys()].join("\u0000");
+    const existing = host.querySelector(":scope > section.folio-notes");
+    if (!force && existing && signature === this.notesSignature) return;
+    this.notesSignature = signature;
+    existing?.remove();
+    if (order.length === 0) return;
+    const section = document.createElement("section");
+    section.className = "folio-notes";
+    section.contentEditable = "false";
+    section.setAttribute("role", "doc-endnotes");
+    const title = document.createElement("p");
+    title.className = "folio-notes-title";
+    title.textContent = "Notes";
+    const ol = document.createElement("ol");
+    for (const label of order) {
+      const li = document.createElement("li");
+      li.dataset.fn = label;
+      const text = document.createElement("span");
+      text.className = "fn-text";
+      const note = notes.get(label);
+      if (note) {
+        text.contentEditable = "true";
+        text.innerHTML = inlineMarkdownToHtml(note.text.replace(/\n/g, " "));
+        text.addEventListener("input", (ev) => {
+          // Handled here, whole: the article's input handling re-reads
+          // the page and restores ITS caret, which threw note typing
+          // into another note.
+          ev.stopPropagation();
+          note.text = htmlToInlineMarkdown(text.innerHTML).replace(/\n+$/, "");
+          const ref = host.querySelector<HTMLElement>(
+            `sup.folio-fnref[data-fn="${CSS.escape(label)}"]`,
+          );
+          if (ref) ref.title = note.text;
+          this.emitChange("type");
+        });
+      } else {
+        text.classList.add("fn-missing");
+        text.textContent = `No note for [^${label}] yet - add one in the Markdown view.`;
+      }
+      const back = document.createElement("a");
+      back.className = "fn-back";
+      back.setAttribute("role", "doc-backlink");
+      back.tabIndex = 0;
+      back.title = "Back to the text";
+      back.textContent = "↩";
+      // A no-break space: the ↩ never wraps onto a line of its own.
+      li.append(text, "\u00a0", back);
+      ol.appendChild(li);
+    }
+    section.append(title, ol);
+    // A note is its own small editor: the article's keyboard handling
+    // (block navigation, Enter splitting paragraphs, list keys) must
+    // not act on it. Enter does nothing - a note is one paragraph.
+    section.addEventListener("keydown", (ev) => {
+      ev.stopPropagation();
+      if (ev.key === "Enter") ev.preventDefault();
+      // Home / End within the note's own text: the line ends in the
+      // non-editable ↩, and the browser's End jumped past it into the
+      // NEXT note.
+      if ((ev.key === "End" || ev.key === "Home") && !ev.shiftKey) {
+        const text = (ev.target as Element).closest?.(".fn-text");
+        if (text) {
+          ev.preventDefault();
+          if (ev.key === "Home") {
+            this.setCaret(text, 0);
+          } else {
+            const w = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+            let last: Node = text;
+            for (let t = w.nextNode(); t; t = w.nextNode()) last = t;
+            this.setCaret(
+              last,
+              last === text
+                ? text.childNodes.length
+                : (last.textContent ?? "").length,
+            );
+          }
+        }
+      }
+    });
+    section.addEventListener("beforeinput", (ev) => ev.stopPropagation());
+    host.appendChild(section);
+  }
+
+  /**
+   * Jump between a reference and its note (no href: these are not
+   * links to follow). Each jump moves the CARET too - to the end of the
+   * note, or just after the reference - so typing carries on there; the
+   * note jumped to is highlighted for a moment.
+   */
+  private handleFootnoteClick(ev: MouseEvent): boolean {
+    const t = ev.target as Element;
+    const host =
+      this.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
+    if (!host) return false;
+    const ref = t.closest?.("sup.folio-fnref") as HTMLElement | null;
+    if (ref) {
+      ev.preventDefault();
+      const li = host.querySelector<HTMLElement>(
+        `section.folio-notes li[data-fn="${CSS.escape(ref.dataset.fn ?? "")}"]`,
+      );
+      if (!li) return true;
+      li.scrollIntoView({ behavior: "smooth", block: "center" });
+      li.classList.remove("folio-fn-target");
+      void li.offsetWidth; // restart the highlight
+      li.classList.add("folio-fn-target");
+      const text = li.querySelector<HTMLElement>(
+        ".fn-text[contenteditable='true']",
+      );
+      if (text) {
+        text.focus({ preventScroll: true });
+        const w = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+        let last: Node = text;
+        for (let n = w.nextNode(); n; n = w.nextNode()) last = n;
+        this.setCaret(
+          last,
+          last === text
+            ? text.childNodes.length
+            : (last.textContent ?? "").length,
+        );
+      }
+      return true;
+    }
+    const back = t.closest?.("a.fn-back");
+    if (back) {
+      ev.preventDefault();
+      const label =
+        (back.closest("li") as HTMLElement | null)?.dataset.fn ?? "";
+      const sup = host.querySelector<HTMLElement>(
+        `sup.folio-fnref[data-fn="${CSS.escape(label)}"]`,
+      );
+      if (!sup?.parentNode) return true;
+      sup.scrollIntoView({ behavior: "smooth", block: "center" });
+      host.focus({ preventScroll: true });
+      const parent = sup.parentNode;
+      this.setCaret(parent, Array.from(parent.childNodes).indexOf(sup) + 1);
+      this.trackCaret();
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -4604,12 +4867,23 @@ export class FolioDoc extends HTMLElement {
         b.kind === "diagram" ||
         b.kind === "math" ||
         b.kind === "image" ||
-        b.kind === "audio",
+        b.kind === "audio" ||
+        b.kind === "footnotes",
     );
     let gi = 0;
     const next: DocBlock[] = [];
-    for (const child of Array.from(host.children)) {
+    const blockEls = Array.from(host.children).filter(
+      (c) => !c.classList.contains("folio-notes"),
+    );
+    for (const child of blockEls) {
       const el = child as HTMLElement;
+      if (el.classList.contains("folio-notes")) continue;
+      if (el.tagName === "ASIDE" && el.classList.contains("folio-fndefs")) {
+        const g = generated[gi];
+        gi += 1;
+        if (g) next.push(g);
+        continue;
+      }
       if (el.tagName === "FIGURE" && el.classList.contains("folio-codeblock")) {
         // A code block renders as a figure (its header is the
         // inspector) but stays a text block: the body is re-derived
@@ -4660,8 +4934,8 @@ export class FolioDoc extends HTMLElement {
     // (setBlockKind, toggleCodeBlock, caret tracking) keep working
     // between renders. Only when the child count matches the rebuilt
     // model - otherwise the DOM is not 1:1 and stamping would lie.
-    if (next.length === host.children.length) {
-      Array.from(host.children).forEach((child, i) => {
+    if (next.length === blockEls.length) {
+      blockEls.forEach((child, i) => {
         (child as HTMLElement).dataset.blockIndex = String(i);
       });
     }
@@ -4676,6 +4950,15 @@ export class FolioDoc extends HTMLElement {
       return;
     }
     this.syncFromDom();
+    // Footnote numbers and the Notes section follow the text - but not
+    // while the caret is in a note (rebuilding would drop it).
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (
+      host &&
+      !(ev?.target instanceof Element && ev.target.closest(".folio-notes"))
+    ) {
+      this.renderNotes(host);
+    }
     this.scheduleJscadRedraw();
     this.autoformatList();
     this.commitCaretCell();
@@ -4926,7 +5209,8 @@ export class FolioDoc extends HTMLElement {
       block.kind === "diagram" ||
       block.kind === "math" ||
       block.kind === "image" ||
-      block.kind === "audio"
+      block.kind === "audio" ||
+      block.kind === "footnotes"
     ) {
       return;
     }

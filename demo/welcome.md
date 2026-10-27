@@ -80,6 +80,8 @@ caption: "Where the budget goes"
   a table into a dataset.
 - **Charts as queries**: bar, line, area, scatter, pie and donut,
   filtered and sorted with the same expression language as formulas.
+- **Footnotes**, numbered and gathered at the end, in GitHub's own
+  syntax.
 - **Equations, code and diagrams**: LaTeX math, syntax-highlighted
   code, Mermaid diagrams, and 3D models from JSCAD code, all rendered
   in the page.

@@ -1622,6 +1622,64 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.95em;
       pointer-events: none;
     }
+    /* Footnotes (docs/specs/footnotes.md): numbers in the theme's
+       accent; the notes gathered at the end, smaller, under a rule. */
+    sup.folio-fnref { line-height: 0; font-size: 0.72em; margin-left: 0.05em; }
+    sup.folio-fnref a {
+      color: var(--folio-accent);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      font-variant-numeric: lining-nums;
+      /* A bigger target than the digit: padding, pulled back by margin. */
+      padding: 0.35em 0.3em;
+      margin: -0.35em -0.15em;
+    }
+    sup.folio-fnref a:hover { text-decoration: underline; }
+    article.folio-doc > section.folio-notes {
+      margin-top: 3em;
+      padding-top: 1em;
+      border-top: 1px solid var(--folio-rule, #d0d7de);
+      font-size: 0.88em;
+      color: var(--folio-ink);
+    }
+    section.folio-notes .folio-notes-title {
+      margin: 0 0 0.6em;
+      font-weight: 600;
+      color: var(--folio-ink-muted);
+      font-size: 0.95em;
+    }
+    section.folio-notes ol { margin: 0; padding-left: 1.6em; }
+    section.folio-notes li { margin: 0.35em 0; }
+    section.folio-notes li::marker { color: var(--folio-ink-muted); font-variant-numeric: tabular-nums; }
+    section.folio-notes .fn-text:focus { outline: none; }
+    section.folio-notes .fn-text:empty::before {
+      content: "Type the note…";
+      color: var(--folio-ink-muted);
+      font-style: italic;
+    }
+    section.folio-notes .fn-missing { color: var(--folio-ink-muted); font-style: italic; }
+    section.folio-notes .fn-back {
+      color: var(--folio-accent);
+      text-decoration: none;
+      cursor: pointer;
+      white-space: nowrap;
+      padding: 0.2em 0.35em;
+      margin: -0.2em -0.15em;
+      border-radius: 4px;
+    }
+    section.folio-notes .fn-back:hover { background: var(--folio-hover, rgba(0,0,0,0.06)); }
+    /* The note a reference jumped to, picked out for a moment. */
+    section.folio-notes li.folio-fn-target { animation: folio-fn-flash 1.6s ease-out; }
+    @keyframes folio-fn-flash {
+      0%, 30% { background: color-mix(in srgb, var(--folio-accent) 16%, transparent); }
+      100% { background: transparent; }
+    }
+    section.folio-notes li { border-radius: 4px; }
+    @media print {
+      section.folio-notes .fn-back { display: none; }
+      sup.folio-fnref a { color: inherit; font-weight: normal; text-decoration: none; }
+    }
     article.folio-doc a {
       color: var(--folio-accent);
       text-decoration: underline;

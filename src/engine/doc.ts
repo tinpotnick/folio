@@ -28,7 +28,17 @@ export type DocBlock =
   | { kind: "chart"; chart: Chart }
   | { kind: "diagram"; diagram: { id: string; text: string } }
   | { kind: "image"; image: Image }
-  | { kind: "audio"; audio: Audio };
+  | { kind: "audio"; audio: Audio }
+  /** Footnote definitions (spec: docs/specs/footnotes.md), GitHub's
+   * syntax: `[^label]: text`, continuation lines indented. Consecutive
+   * definitions are one block so they round-trip without blank lines. */
+  | { kind: "footnotes"; notes: Footnote[] };
+
+export interface Footnote {
+  label: string;
+  /** Inline Markdown; a newline per continuation line. */
+  text: string;
+}
 
 /** A list's items (spec: docs/specs/lists.md): bulleted or
  * numbered, each item inline Markdown with an optional sub-list. */
@@ -179,6 +189,23 @@ export function parseDoc(text: string): Doc {
       const t = parsePipeTable(lines, i, `table-${String(simpleCount)}`);
       doc.blocks.push(t.block);
       i = t.end;
+      continue;
+    }
+    if (FOOTNOTE_DEF_RE.test(line)) {
+      const notes: Footnote[] = [];
+      while (i < lines.length) {
+        const m = FOOTNOTE_DEF_RE.exec(lines[i] ?? "");
+        if (!m) break;
+        let text = m[2] ?? "";
+        i++;
+        // Continuation lines: indented by 4 spaces or a tab (GFM).
+        while (i < lines.length && /^( {4}|\t)\S/.test(lines[i] ?? "")) {
+          text += "\n" + (lines[i] ?? "").replace(/^( {4}|\t)/, "");
+          i++;
+        }
+        notes.push({ label: m[1] ?? "", text });
+      }
+      doc.blocks.push({ kind: "footnotes", notes });
       continue;
     }
     if (LIST_ITEM_RE.test(line)) {
@@ -558,6 +585,9 @@ function serializePipeTable(table: Table): string {
  * number (`N. `, `N) `). */
 const LIST_ITEM_RE = /^(?:([-*+])|(\d{1,9})[.)])(?: (.*))?$/;
 
+/** A footnote definition line: `[^label]: text` (GitHub, Pandoc). */
+export const FOOTNOTE_DEF_RE = /^\[\^([^\]\s]+)\]:[ \t]?(.*)$/;
+
 /** Leading spaces (a tab counts as four). */
 function indentOf(line: string): number {
   let n = 0;
@@ -666,6 +696,7 @@ function collectProse(lines: string[], start: number): number {
       DIRECTIVE_RE.test(line) ||
       /^!\[[^\]]*\]\([^)]+\)$/.test(line.trim()) ||
       line.startsWith("#") ||
+      FOOTNOTE_DEF_RE.test(line) ||
       line.trim() === "$$" ||
       /^`{3,}/.test(line.trim())
     ) {
@@ -749,6 +780,10 @@ function serializeBlock(block: DocBlock): string {
       return block.text;
     case "list":
       return serializeList(block);
+    case "footnotes":
+      return block.notes
+        .map((n) => `[^${n.label}]: ${n.text.split("\n").join("\n    ")}`)
+        .join("\n");
     case "code":
       return (
         "```" +
