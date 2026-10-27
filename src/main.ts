@@ -2326,7 +2326,7 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     title: "Repay or invest? A mortgage question",
     file: "demo/examples/repay-or-invest.md",
     blurb:
-      "mortgage overpay repay invest savings shares isa pension finance personal bank of england ons oecd open data",
+      "mortgage repay invest interest only endowment overpay savings shares isa finance personal bank of england ons oecd open data",
   },
   {
     id: "paper",
