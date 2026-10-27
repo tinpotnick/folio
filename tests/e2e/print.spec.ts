@@ -133,4 +133,17 @@ test.describe("print and PDF", () => {
     await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
     await expect.poll(docMode).toBe("dark");
   });
+
+  test("a long table prints its row count, not its Open dataset button", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/repay-or-invest.md");
+    const more = page
+      .locator('#the-doc figure[data-table-id="plan"] .folio-table-more')
+      .first();
+    await expect(more.locator(".ds-open")).toBeVisible();
+    await page.emulateMedia({ media: "print" });
+    await expect(more.locator(".ds-open")).toBeHidden();
+    await expect(more).toContainText("201 rows");
+  });
 });
