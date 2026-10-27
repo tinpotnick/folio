@@ -33,6 +33,13 @@ export function inlineMarkdownToHtml(text: string): string {
         /\[\^([\w.-]+)\]/g,
         '<sup class="folio-fnref" data-fn="$1" contenteditable="false"><a role="doc-noteref" tabindex="0">$1</a></sup>',
       )
+      // Cross-references (Pandoc-crossref's @tbl:id / @fig:id / @sec:id):
+      // the component fills in "Table 2" (spec: docs/specs/cross-references.md).
+      // Not after a word character, so an email address is left alone.
+      .replace(
+        /(^|[^\w@])@(tbl|fig|sec):([\w-]+)/g,
+        '$1<a class="folio-xref" data-ref="$2:$3" contenteditable="false" tabindex="0">$2:$3</a>',
+      )
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
       .replace(/~~([^~]+)~~/g, "<del>$1</del>")
@@ -81,6 +88,10 @@ function nodesToMarkdown(root: Node): string {
         out += `++${nodesToMarkdown(el)}++`;
         break;
       case "A":
+        if (el.classList.contains("folio-xref")) {
+          out += `@${el.getAttribute("data-ref") ?? ""}`;
+          break;
+        }
         out += `[${nodesToMarkdown(el)}](${el.getAttribute("href") ?? ""})`;
         break;
       case "BR":

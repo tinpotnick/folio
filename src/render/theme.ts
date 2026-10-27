@@ -1622,6 +1622,44 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.95em;
       pointer-events: none;
     }
+    /* Cross-references (docs/specs/cross-references.md): the caption's
+       number is CSS-drawn from data-label, so caption text stays the
+       author's own. */
+    figcaption[data-label]::before {
+      content: attr(data-label) ". ";
+      font-weight: 600;
+      font-style: normal;
+      color: var(--folio-ink);
+    }
+    a.folio-xref {
+      color: var(--folio-accent);
+      text-decoration: none;
+      cursor: pointer;
+      border-bottom: 1px dotted color-mix(in srgb, var(--folio-accent) 50%, transparent);
+    }
+    a.folio-xref:hover { border-bottom-style: solid; }
+    a.folio-xref.folio-xref-missing { color: var(--folio-ink-muted); font-style: italic; }
+    /* A referenced figure with no caption still shows its number. */
+    figure[data-xlabel]::after {
+      content: attr(data-xlabel);
+      display: block;
+      margin-top: 0.4em;
+      font-size: 0.85em;
+      font-weight: 600;
+      text-align: center;
+      color: var(--folio-ink);
+    }
+    /* Where a reference landed, picked out for a moment. */
+    .folio-xref-target { animation: folio-fn-flash 1.6s ease-out; border-radius: 4px; }
+    /* On paper a reference is just words: "see Table 2". */
+    @media print {
+      a.folio-xref {
+        color: inherit !important;
+        border-bottom: none !important;
+        text-decoration: none !important;
+      }
+    }
+
     /* Footnotes (docs/specs/footnotes.md): numbers in the theme's
        accent; the notes gathered at the end, smaller, under a rule. */
     sup.folio-fnref { line-height: 0; font-size: 0.72em; margin-left: 0.05em; }

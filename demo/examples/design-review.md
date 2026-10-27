@@ -63,8 +63,8 @@ module.exports = { main, getParameterDefinitions }
 
 ## Mass against stiffness
 
-The ideal variant is up and to the left: stiff and light. B is the
-best compromise; C gains stiffness but weighs nearly half as much
+The ideal variant is up and to the left: stiff and light. Of the
+variants in @tbl:variants, B is the best compromise; C gains stiffness but weighs nearly half as much
 again.
 
 ```vega-lite
