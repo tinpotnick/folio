@@ -6,24 +6,28 @@ style:
 
 # Repay or invest?
 
-*Overpay the mortgage, or invest the same money? A worked example
-with real UK data since 2010. The method is the point: change the
-assumptions in @tbl:assume and every figure follows. Not financial
-advice.*
+*Pay a mortgage off, or keep the debt and invest the money that would
+have repaid it? A worked example with real UK data since 2010. The
+method is the point: change the assumptions in @tbl:assume and every
+figure follows. Not financial advice.*
 
 [[_TOC_]]
 
 ## The question
 
-You have a repayment mortgage and £200 a month to spare. Paying it
-off the mortgage earns, in effect, the mortgage rate - guaranteed, and
-tax-free. Putting it into a UK share fund earns whatever the market
-gives - more on average over long periods, but with no guarantee and
-with years when it falls.[^isa]
+A repayment mortgage pays off the loan as it goes: each month's
+payment is interest plus a slice of the capital, and after 25 years
+nothing is owed. The alternative is to keep the debt where it is -
+pay only the interest - and invest the capital part of the same
+payment each month instead, hoping the investments grow faster than
+the mortgage charges.[^endowment]
 
-This document asks what each choice would have been worth by
-September 2026 for someone who started in January 2010, using the
-actual mortgage rates, share prices and inflation of those years.
+Both choices cost the same each month. The question is which leaves
+you better off: no debt, or the full debt still owed but a pot of
+investments beside it. This document works out what each would have
+been worth by September 2026 for someone who borrowed in January
+2010, using the actual mortgage rates, share prices and inflation of
+those years.
 
 ## The data
 
@@ -54,21 +58,21 @@ caption: "Assumptions - change any of them and the model recalculates"
 columns:
   - {name: loan, type: number, unit: "£"}
   - {name: years, type: number}
-  - {name: extra, type: number, unit: "£ a month"}
   - {name: dividends, type: number, unit: "% a year"}
 data:
-  - [200000, 25, 200, 3.5]
+  - [200000, 25, 3.5]
 :::
 
-- The mortgage starts in January 2010 and is charged, each month, the
+- The loan starts in January 2010 and is charged, each month, the
   average 2-year fixed rate of that month - as if it were always on a
   recent fix.[^rate]
-- The monthly payment is the normal repayment for what is owed and the
-  term left (`pmt`). Overpaying keeps that payment and adds the extra,
-  so the debt falls faster and the term shortens.
-- Investing puts the same extra into a fund that follows the share
-  index, with dividends of 3.5% a year reinvested, no fees and no tax
-  (an ISA).
+- **Repaying**: the normal monthly repayment for what is owed and the
+  term left (`pmt`), so the debt falls to nothing over the term.
+- **Holding the debt**: the same monthly outgoing. The interest on the
+  full loan goes to the lender; the rest - what would have repaid
+  capital - goes into a fund that follows the share index, with
+  dividends of 3.5% a year reinvested, no fees and no tax (an ISA).
+  The debt stays at the full loan.
 
 ## The model
 
@@ -78,14 +82,18 @@ imported data and the assumptions:
 - `month` - the end of each month: `eomonth('2010-01-01', n - 1)`.
 - `rate` - that month's 2-year fixed rate, looked up from the Bank of
   England table: `asof(month, @rates.col.date, @rates.col.fixed_2y)`.
-- `balance` and `payment` - what is owed without overpaying, and the
-  repayment: `pmt(rate / 100 / 12, months left, balance)`.
-- `overpaid` - what is owed when the extra is paid every month as well.
-  `saved` is the difference: what overpaying has achieved so far.
-- `index` and `pot` - the share index that month, and what the extra
-  has grown to if invested instead, dividends included.
-- `cpi`, `saved_real` and `pot_real` - the same results in January 2010
-  pounds.
+- `owed_repaying` and `payment` - the repayment mortgage: what is
+  still owed, and the monthly payment, `pmt(rate / 100 / 12, months
+  left, owed)`.
+- `interest_only` and `invested` - holding the debt: the interest on
+  the full loan, and the rest of the same payment, invested.
+- `index` and `pot` - the share index that month, and what the
+  investments are worth, dividends included.
+- `net_repaying` and `net_investing` - where each choice leaves you:
+  minus what is owed, plus what is invested. `ahead` is how far holding
+  the debt and investing is ahead (negative: behind).
+- `cpi`, `net_repaying_2010` and `net_investing_2010` - the same in
+  January 2010 pounds.
 
 ::: table {#rates}
 caption: "Bank Rate and mortgage rates, monthly (%)"
@@ -729,222 +737,226 @@ data:
 :::
 
 ::: table {#plan}
-caption: "Month by month: repaying against investing"
+caption: "Month by month: repaying against holding the debt and investing"
 columns:
   - {name: n, type: number}
   - {name: month, type: formula, expr: "eomonth('2010-01-01', n - 1)"}
   - {name: rate, type: formula, unit: "%", expr: "asof(month, @rates.col.date, @rates.col.fixed_2y)"}
-  - {name: balance, type: formula, expr: "((self.row == 1 ? @assume.r1.loan : self.prev.balance) * (1 + rate / 100 / 12) + pmt(rate / 100 / 12, @assume.r1.years * 12 - n + 1, self.row == 1 ? @assume.r1.loan : self.prev.balance)) | round(2)", format: currency}
-  - {name: payment, type: formula, expr: "-pmt(rate / 100 / 12, @assume.r1.years * 12 - n + 1, self.row == 1 ? @assume.r1.loan : self.prev.balance) | round(2)", format: currency}
-  - {name: overpaid, type: formula, expr: "max((self.row == 1 ? @assume.r1.loan : self.prev.overpaid) * (1 + rate / 100 / 12) - payment - @assume.r1.extra, 0) | round(2)", format: currency}
-  - {name: saved, type: formula, expr: "(balance - overpaid) | round(2)", format: currency}
+  - {name: owed_repaying, type: formula, expr: "((self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) * (1 + rate / 100 / 12) + pmt(rate / 100 / 12, @assume.r1.years * 12 - n + 1, self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying)) | round(2)", format: currency}
+  - {name: payment, type: formula, expr: "-pmt(rate / 100 / 12, @assume.r1.years * 12 - n + 1, self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) | round(2)", format: currency}
+  - {name: interest_only, type: formula, expr: "(@assume.r1.loan * rate / 100 / 12) | round(2)", format: currency}
+  - {name: invested, type: formula, expr: "(payment - interest_only) | round(2)", format: currency}
   - {name: index, type: formula, expr: "asof(month, @uk_shares.col.date, @uk_shares.col.uk_shares)"}
-  - {name: pot, type: formula, expr: "((self.row == 1 ? 0 : self.prev.pot * index / self.prev.index * (1 + @assume.r1.dividends / 100 / 12)) + @assume.r1.extra) | round(2)", format: currency}
+  - {name: pot, type: formula, expr: "((self.row == 1 ? 0 : self.prev.pot * index / self.prev.index * (1 + @assume.r1.dividends / 100 / 12)) + invested) | round(2)", format: currency}
+  - {name: owed_investing, type: formula, expr: "@assume.r1.loan", format: currency}
+  - {name: net_repaying, type: formula, expr: "-owed_repaying", format: currency}
+  - {name: net_investing, type: formula, expr: "(pot - owed_investing) | round(2)", format: currency}
+  - {name: ahead, type: formula, expr: "(net_investing - net_repaying) | round(2)", format: currency}
   - {name: cpi, type: formula, expr: "asof(month, @cpi.col.date, @cpi.col.cpi)"}
-  - {name: saved_real, type: formula, expr: "(saved * self.r1.cpi / cpi) | round(2)", format: currency}
-  - {name: pot_real, type: formula, expr: "(pot * self.r1.cpi / cpi) | round(2)", format: currency}
+  - {name: net_repaying_2010, type: formula, expr: "(net_repaying * self.r1.cpi / cpi) | round(2)", format: currency}
+  - {name: net_investing_2010, type: formula, expr: "(net_investing * self.r1.cpi / cpi) | round(2)", format: currency}
 data:
-  - [1, "", "", "", "", "", "", "", "", "", "", ""]
-  - [2, "", "", "", "", "", "", "", "", "", "", ""]
-  - [3, "", "", "", "", "", "", "", "", "", "", ""]
-  - [4, "", "", "", "", "", "", "", "", "", "", ""]
-  - [5, "", "", "", "", "", "", "", "", "", "", ""]
-  - [6, "", "", "", "", "", "", "", "", "", "", ""]
-  - [7, "", "", "", "", "", "", "", "", "", "", ""]
-  - [8, "", "", "", "", "", "", "", "", "", "", ""]
-  - [9, "", "", "", "", "", "", "", "", "", "", ""]
-  - [10, "", "", "", "", "", "", "", "", "", "", ""]
-  - [11, "", "", "", "", "", "", "", "", "", "", ""]
-  - [12, "", "", "", "", "", "", "", "", "", "", ""]
-  - [13, "", "", "", "", "", "", "", "", "", "", ""]
-  - [14, "", "", "", "", "", "", "", "", "", "", ""]
-  - [15, "", "", "", "", "", "", "", "", "", "", ""]
-  - [16, "", "", "", "", "", "", "", "", "", "", ""]
-  - [17, "", "", "", "", "", "", "", "", "", "", ""]
-  - [18, "", "", "", "", "", "", "", "", "", "", ""]
-  - [19, "", "", "", "", "", "", "", "", "", "", ""]
-  - [20, "", "", "", "", "", "", "", "", "", "", ""]
-  - [21, "", "", "", "", "", "", "", "", "", "", ""]
-  - [22, "", "", "", "", "", "", "", "", "", "", ""]
-  - [23, "", "", "", "", "", "", "", "", "", "", ""]
-  - [24, "", "", "", "", "", "", "", "", "", "", ""]
-  - [25, "", "", "", "", "", "", "", "", "", "", ""]
-  - [26, "", "", "", "", "", "", "", "", "", "", ""]
-  - [27, "", "", "", "", "", "", "", "", "", "", ""]
-  - [28, "", "", "", "", "", "", "", "", "", "", ""]
-  - [29, "", "", "", "", "", "", "", "", "", "", ""]
-  - [30, "", "", "", "", "", "", "", "", "", "", ""]
-  - [31, "", "", "", "", "", "", "", "", "", "", ""]
-  - [32, "", "", "", "", "", "", "", "", "", "", ""]
-  - [33, "", "", "", "", "", "", "", "", "", "", ""]
-  - [34, "", "", "", "", "", "", "", "", "", "", ""]
-  - [35, "", "", "", "", "", "", "", "", "", "", ""]
-  - [36, "", "", "", "", "", "", "", "", "", "", ""]
-  - [37, "", "", "", "", "", "", "", "", "", "", ""]
-  - [38, "", "", "", "", "", "", "", "", "", "", ""]
-  - [39, "", "", "", "", "", "", "", "", "", "", ""]
-  - [40, "", "", "", "", "", "", "", "", "", "", ""]
-  - [41, "", "", "", "", "", "", "", "", "", "", ""]
-  - [42, "", "", "", "", "", "", "", "", "", "", ""]
-  - [43, "", "", "", "", "", "", "", "", "", "", ""]
-  - [44, "", "", "", "", "", "", "", "", "", "", ""]
-  - [45, "", "", "", "", "", "", "", "", "", "", ""]
-  - [46, "", "", "", "", "", "", "", "", "", "", ""]
-  - [47, "", "", "", "", "", "", "", "", "", "", ""]
-  - [48, "", "", "", "", "", "", "", "", "", "", ""]
-  - [49, "", "", "", "", "", "", "", "", "", "", ""]
-  - [50, "", "", "", "", "", "", "", "", "", "", ""]
-  - [51, "", "", "", "", "", "", "", "", "", "", ""]
-  - [52, "", "", "", "", "", "", "", "", "", "", ""]
-  - [53, "", "", "", "", "", "", "", "", "", "", ""]
-  - [54, "", "", "", "", "", "", "", "", "", "", ""]
-  - [55, "", "", "", "", "", "", "", "", "", "", ""]
-  - [56, "", "", "", "", "", "", "", "", "", "", ""]
-  - [57, "", "", "", "", "", "", "", "", "", "", ""]
-  - [58, "", "", "", "", "", "", "", "", "", "", ""]
-  - [59, "", "", "", "", "", "", "", "", "", "", ""]
-  - [60, "", "", "", "", "", "", "", "", "", "", ""]
-  - [61, "", "", "", "", "", "", "", "", "", "", ""]
-  - [62, "", "", "", "", "", "", "", "", "", "", ""]
-  - [63, "", "", "", "", "", "", "", "", "", "", ""]
-  - [64, "", "", "", "", "", "", "", "", "", "", ""]
-  - [65, "", "", "", "", "", "", "", "", "", "", ""]
-  - [66, "", "", "", "", "", "", "", "", "", "", ""]
-  - [67, "", "", "", "", "", "", "", "", "", "", ""]
-  - [68, "", "", "", "", "", "", "", "", "", "", ""]
-  - [69, "", "", "", "", "", "", "", "", "", "", ""]
-  - [70, "", "", "", "", "", "", "", "", "", "", ""]
-  - [71, "", "", "", "", "", "", "", "", "", "", ""]
-  - [72, "", "", "", "", "", "", "", "", "", "", ""]
-  - [73, "", "", "", "", "", "", "", "", "", "", ""]
-  - [74, "", "", "", "", "", "", "", "", "", "", ""]
-  - [75, "", "", "", "", "", "", "", "", "", "", ""]
-  - [76, "", "", "", "", "", "", "", "", "", "", ""]
-  - [77, "", "", "", "", "", "", "", "", "", "", ""]
-  - [78, "", "", "", "", "", "", "", "", "", "", ""]
-  - [79, "", "", "", "", "", "", "", "", "", "", ""]
-  - [80, "", "", "", "", "", "", "", "", "", "", ""]
-  - [81, "", "", "", "", "", "", "", "", "", "", ""]
-  - [82, "", "", "", "", "", "", "", "", "", "", ""]
-  - [83, "", "", "", "", "", "", "", "", "", "", ""]
-  - [84, "", "", "", "", "", "", "", "", "", "", ""]
-  - [85, "", "", "", "", "", "", "", "", "", "", ""]
-  - [86, "", "", "", "", "", "", "", "", "", "", ""]
-  - [87, "", "", "", "", "", "", "", "", "", "", ""]
-  - [88, "", "", "", "", "", "", "", "", "", "", ""]
-  - [89, "", "", "", "", "", "", "", "", "", "", ""]
-  - [90, "", "", "", "", "", "", "", "", "", "", ""]
-  - [91, "", "", "", "", "", "", "", "", "", "", ""]
-  - [92, "", "", "", "", "", "", "", "", "", "", ""]
-  - [93, "", "", "", "", "", "", "", "", "", "", ""]
-  - [94, "", "", "", "", "", "", "", "", "", "", ""]
-  - [95, "", "", "", "", "", "", "", "", "", "", ""]
-  - [96, "", "", "", "", "", "", "", "", "", "", ""]
-  - [97, "", "", "", "", "", "", "", "", "", "", ""]
-  - [98, "", "", "", "", "", "", "", "", "", "", ""]
-  - [99, "", "", "", "", "", "", "", "", "", "", ""]
-  - [100, "", "", "", "", "", "", "", "", "", "", ""]
-  - [101, "", "", "", "", "", "", "", "", "", "", ""]
-  - [102, "", "", "", "", "", "", "", "", "", "", ""]
-  - [103, "", "", "", "", "", "", "", "", "", "", ""]
-  - [104, "", "", "", "", "", "", "", "", "", "", ""]
-  - [105, "", "", "", "", "", "", "", "", "", "", ""]
-  - [106, "", "", "", "", "", "", "", "", "", "", ""]
-  - [107, "", "", "", "", "", "", "", "", "", "", ""]
-  - [108, "", "", "", "", "", "", "", "", "", "", ""]
-  - [109, "", "", "", "", "", "", "", "", "", "", ""]
-  - [110, "", "", "", "", "", "", "", "", "", "", ""]
-  - [111, "", "", "", "", "", "", "", "", "", "", ""]
-  - [112, "", "", "", "", "", "", "", "", "", "", ""]
-  - [113, "", "", "", "", "", "", "", "", "", "", ""]
-  - [114, "", "", "", "", "", "", "", "", "", "", ""]
-  - [115, "", "", "", "", "", "", "", "", "", "", ""]
-  - [116, "", "", "", "", "", "", "", "", "", "", ""]
-  - [117, "", "", "", "", "", "", "", "", "", "", ""]
-  - [118, "", "", "", "", "", "", "", "", "", "", ""]
-  - [119, "", "", "", "", "", "", "", "", "", "", ""]
-  - [120, "", "", "", "", "", "", "", "", "", "", ""]
-  - [121, "", "", "", "", "", "", "", "", "", "", ""]
-  - [122, "", "", "", "", "", "", "", "", "", "", ""]
-  - [123, "", "", "", "", "", "", "", "", "", "", ""]
-  - [124, "", "", "", "", "", "", "", "", "", "", ""]
-  - [125, "", "", "", "", "", "", "", "", "", "", ""]
-  - [126, "", "", "", "", "", "", "", "", "", "", ""]
-  - [127, "", "", "", "", "", "", "", "", "", "", ""]
-  - [128, "", "", "", "", "", "", "", "", "", "", ""]
-  - [129, "", "", "", "", "", "", "", "", "", "", ""]
-  - [130, "", "", "", "", "", "", "", "", "", "", ""]
-  - [131, "", "", "", "", "", "", "", "", "", "", ""]
-  - [132, "", "", "", "", "", "", "", "", "", "", ""]
-  - [133, "", "", "", "", "", "", "", "", "", "", ""]
-  - [134, "", "", "", "", "", "", "", "", "", "", ""]
-  - [135, "", "", "", "", "", "", "", "", "", "", ""]
-  - [136, "", "", "", "", "", "", "", "", "", "", ""]
-  - [137, "", "", "", "", "", "", "", "", "", "", ""]
-  - [138, "", "", "", "", "", "", "", "", "", "", ""]
-  - [139, "", "", "", "", "", "", "", "", "", "", ""]
-  - [140, "", "", "", "", "", "", "", "", "", "", ""]
-  - [141, "", "", "", "", "", "", "", "", "", "", ""]
-  - [142, "", "", "", "", "", "", "", "", "", "", ""]
-  - [143, "", "", "", "", "", "", "", "", "", "", ""]
-  - [144, "", "", "", "", "", "", "", "", "", "", ""]
-  - [145, "", "", "", "", "", "", "", "", "", "", ""]
-  - [146, "", "", "", "", "", "", "", "", "", "", ""]
-  - [147, "", "", "", "", "", "", "", "", "", "", ""]
-  - [148, "", "", "", "", "", "", "", "", "", "", ""]
-  - [149, "", "", "", "", "", "", "", "", "", "", ""]
-  - [150, "", "", "", "", "", "", "", "", "", "", ""]
-  - [151, "", "", "", "", "", "", "", "", "", "", ""]
-  - [152, "", "", "", "", "", "", "", "", "", "", ""]
-  - [153, "", "", "", "", "", "", "", "", "", "", ""]
-  - [154, "", "", "", "", "", "", "", "", "", "", ""]
-  - [155, "", "", "", "", "", "", "", "", "", "", ""]
-  - [156, "", "", "", "", "", "", "", "", "", "", ""]
-  - [157, "", "", "", "", "", "", "", "", "", "", ""]
-  - [158, "", "", "", "", "", "", "", "", "", "", ""]
-  - [159, "", "", "", "", "", "", "", "", "", "", ""]
-  - [160, "", "", "", "", "", "", "", "", "", "", ""]
-  - [161, "", "", "", "", "", "", "", "", "", "", ""]
-  - [162, "", "", "", "", "", "", "", "", "", "", ""]
-  - [163, "", "", "", "", "", "", "", "", "", "", ""]
-  - [164, "", "", "", "", "", "", "", "", "", "", ""]
-  - [165, "", "", "", "", "", "", "", "", "", "", ""]
-  - [166, "", "", "", "", "", "", "", "", "", "", ""]
-  - [167, "", "", "", "", "", "", "", "", "", "", ""]
-  - [168, "", "", "", "", "", "", "", "", "", "", ""]
-  - [169, "", "", "", "", "", "", "", "", "", "", ""]
-  - [170, "", "", "", "", "", "", "", "", "", "", ""]
-  - [171, "", "", "", "", "", "", "", "", "", "", ""]
-  - [172, "", "", "", "", "", "", "", "", "", "", ""]
-  - [173, "", "", "", "", "", "", "", "", "", "", ""]
-  - [174, "", "", "", "", "", "", "", "", "", "", ""]
-  - [175, "", "", "", "", "", "", "", "", "", "", ""]
-  - [176, "", "", "", "", "", "", "", "", "", "", ""]
-  - [177, "", "", "", "", "", "", "", "", "", "", ""]
-  - [178, "", "", "", "", "", "", "", "", "", "", ""]
-  - [179, "", "", "", "", "", "", "", "", "", "", ""]
-  - [180, "", "", "", "", "", "", "", "", "", "", ""]
-  - [181, "", "", "", "", "", "", "", "", "", "", ""]
-  - [182, "", "", "", "", "", "", "", "", "", "", ""]
-  - [183, "", "", "", "", "", "", "", "", "", "", ""]
-  - [184, "", "", "", "", "", "", "", "", "", "", ""]
-  - [185, "", "", "", "", "", "", "", "", "", "", ""]
-  - [186, "", "", "", "", "", "", "", "", "", "", ""]
-  - [187, "", "", "", "", "", "", "", "", "", "", ""]
-  - [188, "", "", "", "", "", "", "", "", "", "", ""]
-  - [189, "", "", "", "", "", "", "", "", "", "", ""]
-  - [190, "", "", "", "", "", "", "", "", "", "", ""]
-  - [191, "", "", "", "", "", "", "", "", "", "", ""]
-  - [192, "", "", "", "", "", "", "", "", "", "", ""]
-  - [193, "", "", "", "", "", "", "", "", "", "", ""]
-  - [194, "", "", "", "", "", "", "", "", "", "", ""]
-  - [195, "", "", "", "", "", "", "", "", "", "", ""]
-  - [196, "", "", "", "", "", "", "", "", "", "", ""]
-  - [197, "", "", "", "", "", "", "", "", "", "", ""]
-  - [198, "", "", "", "", "", "", "", "", "", "", ""]
-  - [199, "", "", "", "", "", "", "", "", "", "", ""]
-  - [200, "", "", "", "", "", "", "", "", "", "", ""]
-  - [201, "", "", "", "", "", "", "", "", "", "", ""]
+  - [1, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [2, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [3, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [4, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [5, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [6, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [7, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [8, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [9, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [10, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [11, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [12, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [13, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [14, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [15, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [16, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [17, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [18, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [19, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [20, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [21, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [22, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [23, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [24, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [25, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [26, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [27, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [28, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [29, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [30, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [31, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [32, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [33, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [34, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [35, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [36, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [37, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [38, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [39, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [40, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [41, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [42, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [43, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [44, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [45, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [46, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [47, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [48, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [49, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [50, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [51, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [52, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [53, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [54, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [55, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [56, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [57, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [58, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [59, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [60, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [61, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [62, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [63, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [64, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [65, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [66, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [67, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [68, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [69, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [70, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [71, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [72, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [73, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [74, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [75, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [76, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [77, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [78, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [79, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [80, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [81, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [82, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [83, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [84, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [85, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [86, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [87, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [88, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [89, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [90, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [91, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [92, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [93, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [94, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [95, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [96, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [97, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [98, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [99, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [100, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [101, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [102, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [103, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [104, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [105, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [106, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [107, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [108, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [109, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [110, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [111, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [112, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [113, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [114, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [115, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [116, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [117, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [118, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [119, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [120, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [121, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [122, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [123, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [124, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [125, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [126, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [127, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [128, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [129, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [130, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [131, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [132, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [133, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [134, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [135, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [136, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [137, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [138, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [139, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [140, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [141, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [142, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [143, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [144, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [145, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [146, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [147, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [148, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [149, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [150, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [151, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [152, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [153, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [154, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [155, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [156, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [157, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [158, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [159, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [160, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [161, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [162, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [163, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [164, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [165, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [166, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [167, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [168, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [169, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [170, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [171, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [172, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [173, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [174, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [175, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [176, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [177, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [178, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [179, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [180, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [181, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [182, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [183, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [184, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [185, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [186, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [187, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [188, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [189, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [190, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [191, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [192, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [193, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [194, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [195, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [196, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [197, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [198, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [199, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [200, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+  - [201, "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
 :::
 
 ## The result
@@ -952,56 +964,76 @@ data:
 ::: table {#summary}
 caption: "By September 2026"
 columns:
-  - {name: paid_in, type: formula, expr: "@plan.prev.n * @assume.r1.extra", format: currency}
-  - {name: repaying, type: formula, expr: "@plan.prev.saved", format: currency}
-  - {name: investing, type: formula, expr: "@plan.prev.pot", format: currency}
-  - {name: difference, type: formula, expr: "investing - repaying", format: currency}
-  - {name: repaying_2010, type: formula, expr: "@plan.prev.saved_real", format: currency}
-  - {name: investing_2010, type: formula, expr: "@plan.prev.pot_real", format: currency}
+  - {name: paid, type: formula, expr: "@plan.col.payment | sum()", format: currency}
+  - {name: owed_repaying, type: formula, expr: "@plan.prev.owed_repaying", format: currency}
+  - {name: owed_investing, type: formula, expr: "@plan.prev.owed_investing", format: currency}
+  - {name: investments, type: formula, expr: "@plan.prev.pot", format: currency}
+  - {name: ahead, type: formula, expr: "@plan.prev.ahead", format: currency}
+  - {name: ahead_2010, type: formula, expr: "@plan.prev.net_investing_2010 - @plan.prev.net_repaying_2010", format: currency}
 data:
   - ["", "", "", "", "", ""]
 :::
 
-@tbl:summary sets the two side by side: what was paid in, what
-overpaying has taken off the debt, and what the same money would be
-worth invested - in pounds of the day and in 2010 pounds.
-@fig:outcome-chart shows how the two grew month by month: the
-investment's value swings with the market, sometimes below what
-overpaying had achieved, while overpaying never goes backwards.
-@fig:balance-chart shows the mortgage itself shrinking faster with
-the extra payments.
+@tbl:summary sets the two side by side: the same total paid each
+way, what is still owed under each choice, the investments built up
+by holding the debt, and how far that choice is ahead (or behind) -
+in pounds of the day and in 2010 pounds.
 
-::: chart {#outcome-chart}
+@fig:net-chart is the heart of it: where each choice leaves you, month
+by month. Repaying climbs steadily towards zero debt. Holding the
+debt starts the full loan behind and only gains when the investments
+grow faster than the interest it keeps paying - and it falls back
+whenever the market does. @fig:owed-chart shows what is owed under
+each choice, and @fig:pot-chart the investments against the debt
+they are meant to clear.
+
+::: chart {#net-chart}
 source: @plan
-query: {select: [month, saved, pot]}
+query: {select: [month, net_repaying, net_investing]}
 type: line
-caption: "What each choice was worth, month by month (£)"
+caption: "Where each choice leaves you: investments minus what is owed (£)"
 :::
 
-::: chart {#balance-chart}
+::: chart {#owed-chart}
 source: @plan
-query: {select: [month, balance, overpaid]}
+query: {select: [month, owed_repaying, owed_investing]}
 type: line
-caption: "What is left of the mortgage, with and without overpaying (£)"
+caption: "What is still owed on the mortgage under each choice (£)"
+:::
+
+::: chart {#pot-chart}
+source: @plan
+query: {select: [month, pot, owed_investing]}
+type: line
+caption: "Holding the debt: the investments against the loan they must repay (£)"
 :::
 
 ## What this leaves out
 
+- **Leverage.** Holding the debt is investing borrowed money: the
+  investments must beat the mortgage rate, every year, just to break
+  even - and the whole loan is still owed at the end. If they fall
+  short, the difference has to be found. That is how many endowment
+  mortgages of the 1980s and 1990s ended.[^endowment]
 - **Dividends are assumed**, not measured: the share index is a price
   index. Change `dividends` in @tbl:assume to see how much the answer
   depends on it.
-- **Risk.** The past sixteen years include a long rise in share
-  prices. A different start date, or a crash just before you need the
-  money, gives a different answer; overpaying's return is certain.
+- **Risk and timing.** The past sixteen years include a long rise in
+  share prices and some of the lowest mortgage rates on record. A
+  different start date, a crash near the end of the term, or rates
+  like 2023's for longer, give a different answer; repaying's result
+  is certain.
+- **Interest-only is not a free choice.** Lenders offer it only with a
+  credible plan to repay the capital, often at lower loan-to-values or
+  higher rates; this model gives both choices the same rate.
 - **The index is not a fund.** It is the OECD's UK share price index,
   a monthly figure for the whole market; a real tracker has fees and
   follows its own index.
 - **Rates.** One average 2-year fixed rate stands in for the deals a
-  real borrower would have taken, and the effects of remortgaging fees,
-  early-repayment charges (many fixes cap overpayments at 10% a year)
-  and a falling loan-to-value are ignored.
-- **Tax and flexibility.** Investing inside an ISA is assumed; money
-  invested can be taken out, money overpaid usually cannot.
+  real borrower would have taken; remortgaging fees and a changing
+  loan-to-value are ignored.
+- **Tax.** Investing inside an ISA is assumed; outside one, gains and
+  dividends may be taxed.
 
 ## References
 
@@ -1037,8 +1069,10 @@ caption: "What is left of the mortgage, with and without overpaying (£)"
 }
 ```
 
-[^isa]: Inside an ISA, investment growth and dividends are free of UK
-    tax, which is the fair comparison with a mortgage overpayment.
+[^endowment]: This is how endowment mortgages worked: interest-only
+    borrowing with an investment policy meant to repay the loan. Many
+    fell short when returns disappointed, leaving homeowners with
+    debt still to clear at the end of the term.
 [^rate]: The Bank of England series is the average quoted rate on new
     2-year fixed mortgages at 75% loan-to-value - an approximation of
     what one household would pay, good enough to compare the two

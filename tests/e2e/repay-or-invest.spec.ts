@@ -24,20 +24,21 @@ test.describe("Repay or invest? example", () => {
     await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
     await page.goto("/?doc=demo/examples/repay-or-invest.md");
     const summary = page.locator('#the-doc figure[data-table-id="summary"]');
-    await expect(summary.locator("tbody td").first()).toHaveText("40,200.00");
-    const repaying = await summary.locator("tbody td").nth(1).textContent();
-    // Double the monthly extra: twice the money in, more saved.
-    const extra = page
+    const cell = (i: number) => summary.locator("tbody td").nth(i);
+    // The same total paid either way; the debt held stays the loan.
+    await expect(cell(0)).toHaveText("185,399.01");
+    await expect(cell(2)).toHaveText("200,000.00");
+    const ahead = await cell(4).textContent();
+    // A bigger loan: more paid, more owed, a different answer.
+    const loan = page
       .locator('#the-doc figure[data-table-id="assume"] tbody td')
-      .nth(2);
-    await extra.click();
+      .first();
+    await loan.click();
     await page.keyboard.press("Control+a");
-    await page.keyboard.type("400");
+    await page.keyboard.type("300000");
     await page.keyboard.press("Tab");
-    await expect(summary.locator("tbody td").first()).toHaveText("80,400.00");
-    await expect(summary.locator("tbody td").nth(1)).not.toHaveText(
-      repaying ?? "",
-    );
+    await expect(cell(2)).toHaveText("300,000.00");
+    await expect(cell(4)).not.toHaveText(ahead ?? "");
     // Its sources are cited, each with its retrieval date.
     await expect(page.locator("#the-doc ol.folio-refs li")).toHaveCount(3);
     await expect(page.locator("#the-doc ol.folio-refs")).toContainText(
