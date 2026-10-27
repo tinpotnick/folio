@@ -204,7 +204,12 @@ query: {select: [region, growth], filter: "q2 > 350 && region != 'South'"}
 
 ## Recalculation
 
-Editing any cell recomputes the whole table and refreshes every
+Typing in a cell writes the text into the model (the Markdown source
+stays live) but does not recalculate: the recalculation runs once the
+caret LEAVES the cell - Tab, Enter, a click elsewhere, blur - and before
+printing or exporting (`flushEdits`). Recalculating per keystroke took
+a visible beat per letter on a document with a large model (2026-10-27).
+Leaving an edited cell recomputes the whole table and refreshes every
 formula cell in place (text-only updates, no structural re-render,
 caret untouched), then refreshes every OTHER table's formula cells
 that may reference it, plus dependent charts.
