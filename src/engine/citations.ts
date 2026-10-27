@@ -415,6 +415,14 @@ function apa(e: BibEntry, yr: string): Run[] {
         : (f.howpublished ?? f.publisher ?? f.organization);
       if (where && !/^\\?url/i.test(where))
         runs.push({ text: sentence(where) });
+      // A dataset's terms travel with its reference: "Licence: personal
+      // use only, not for redistribution."
+      if (dataset && f.note) {
+        const last = runs[runs.length - 1]?.text ?? "";
+        runs.push({
+          text: `${last.endsWith(" ") ? "" : " "}${sentence(f.note)}`,
+        });
+      }
     }
   }
   for (const r of link(e)) {
@@ -531,6 +539,10 @@ function ieee(e: BibEntry): Run[] {
     );
   } else {
     runs.push({ text: "." });
+  }
+  // A dataset's terms travel with its reference.
+  if (/^data ?set$/i.test(f.howpublished ?? "") && f.note) {
+    runs.push({ text: ` ${sentence(f.note)}` });
   }
   return runs.filter((r) => r.text !== "");
 }

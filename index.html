@@ -952,12 +952,12 @@
         color: var(--text);
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
       }
-      .import-pane p {
+      :is(.import-pane, .import-shared) p {
         margin: 0 0 12px;
         color: var(--text-muted);
         line-height: 1.5;
       }
-      .import-pane label {
+      :is(.import-pane, .import-shared) label {
         display: block;
         margin-bottom: 6px;
         font-weight: 500;
@@ -982,7 +982,7 @@
         background: var(--surface);
         color: var(--text);
       }
-      .import-pane p.import-hint {
+      :is(.import-pane, .import-shared) p.import-hint {
         font-size: 12px;
       }
       .import-note {
@@ -995,10 +995,10 @@
       .import-note a {
         color: var(--accent-text);
       }
-      .import-pane p.import-error {
+      :is(.import-pane, .import-shared) p.import-error {
         color: var(--rec-fg);
       }
-      .import-pane p.import-summary {
+      :is(.import-pane, .import-shared) p.import-summary {
         color: var(--text);
       }
       .import-sample-wrap {
@@ -1042,7 +1042,11 @@
         border-color: var(--border-strong);
         background: var(--surface);
       }
+      #import-sample th {
+        white-space: nowrap;
+      }
       #import-sample th small {
+        margin-left: 2px;
         font-weight: 400;
         color: var(--text-muted);
       }
@@ -1058,10 +1062,52 @@
         font-weight: 400;
         color: var(--text-muted);
       }
-      .import-pane p.import-licence {
+      .import-series {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px 8px;
+        margin: 0 0 12px;
+        max-height: 220px;
+        overflow: auto;
+      }
+      .import-series legend {
+        padding: 0 4px;
+        color: var(--text-muted);
+      }
+      .import-series label {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        font-weight: 400;
+        margin: 4px 0;
+      }
+      .import-series small {
+        color: var(--text-muted);
+      }
+      :is(.import-pane, .import-shared) p.import-pub-about {
+        margin: 0;
         font-size: 12px;
       }
-      .import-pane label.import-check {
+      .import-row-tight {
+        margin: 0;
+      }
+      #import-from {
+        width: 6em;
+        flex: none;
+      }
+      .import-body select,
+      .import-body input[type="number"] {
+        font: inherit;
+        padding: 5px 8px;
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
+      }
+      :is(.import-pane, .import-shared) p.import-licence {
+        font-size: 12px;
+      }
+      :is(.import-pane, .import-shared) label.import-check {
         display: flex;
         gap: 8px;
         align-items: center;
@@ -2281,10 +2327,18 @@
           <button
             type="button"
             role="tab"
+            id="import-tab-known"
+            aria-selected="false"
+          >
+            Open data
+          </button>
+          <button
+            type="button"
+            role="tab"
             id="import-tab-web"
             aria-selected="false"
           >
-            From the web
+            From a web address
           </button>
         </div>
         <section id="import-pane-file" class="import-pane">
@@ -2299,6 +2353,41 @@
             <button type="button" class="plain" id="btn-import-demo">
               Use the demo dataset
             </button>
+          </div>
+        </section>
+        <section id="import-pane-known" class="import-pane" hidden>
+          <p>
+            Published statistics you may share in a document, with the source
+            credited: interest and mortgage rates, inflation, share price
+            indices, house prices.
+          </p>
+          <div class="import-fields">
+            <label for="import-pub">Publisher</label>
+            <select id="import-pub"></select>
+            <span></span>
+            <p id="import-pub-about" class="import-pub-about"></p>
+          </div>
+          <fieldset id="import-series" class="import-series">
+            <legend>Series</legend>
+          </fieldset>
+          <div id="import-code-row" class="import-fields" hidden>
+            <label for="import-code" id="import-code-label">Code</label>
+            <input id="import-code" type="text" spellcheck="false" />
+          </div>
+          <div class="import-fields">
+            <label for="import-from">From</label>
+            <div class="import-row import-row-tight">
+              <input
+                id="import-from"
+                type="number"
+                min="1900"
+                max="2100"
+                value="2000"
+              />
+              <button type="button" class="plain" id="btn-import-known">
+                Fetch
+              </button>
+            </div>
           </div>
         </section>
         <section id="import-pane-web" class="import-pane" hidden>
@@ -2320,6 +2409,8 @@
             series, OECD, HM Land Registry. folio keeps a copy in the document
             (it still opens offline) and records where and when it came from.
           </p>
+        </section>
+        <div class="import-shared">
           <div id="import-blocked" class="import-note" hidden>
             <p id="import-blocked-text"></p>
             <div class="import-row">
@@ -2344,14 +2435,28 @@
               <input id="import-caption" type="text" />
               <label for="import-publisher">Published by</label>
               <input id="import-publisher" type="text" />
+              <label for="import-origin" id="import-origin-label" hidden
+                >Came from</label
+              >
+              <input
+                id="import-origin"
+                type="url"
+                placeholder="The web address it was downloaded from (optional)"
+                hidden
+              />
             </div>
             <p id="import-licence" class="import-licence"></p>
             <label class="import-check">
               <input type="checkbox" id="import-cite" checked />
               Add the source to the bibliography, so it can be cited
             </label>
+            <label class="import-check">
+              <input type="checkbox" id="import-personal" />
+              Personal use only - mark it so in the document (for data whose
+              terms do not allow sharing)
+            </label>
           </div>
-        </section>
+        </div>
         <div class="unsaved-actions">
           <button value="cancel" class="plain" id="btn-import-cancel">
             Cancel

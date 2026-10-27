@@ -70,7 +70,7 @@ test.describe("import from the web", () => {
       `Source: Bank of England (${year})`,
     );
     await expect(page.locator("#the-doc ol.folio-refs li")).toHaveText([
-      `Bank of England. (${year}). Bank Rate (monthly average) [Data set]. Retrieved ${String(new Date().getDate())} ${new Date().toLocaleString("en-GB", { month: "long" })} ${year}, from ${BOE}`,
+      `Bank of England. (${year}). Bank Rate (monthly average) [Data set]. Licence: Open Government Licence v3.0. Retrieved ${String(new Date().getDate())} ${new Date().toLocaleString("en-GB", { month: "long" })} ${year}, from ${BOE}`,
     ]);
     const md = await markdown(page);
     expect(md).toContain(`import: "${BOE}"`);
@@ -307,5 +307,194 @@ data:
     const md = await markdown(page);
     expect(md).toMatch(/select: \[DATE, bank_rate, fixed_2y\]/);
     expect(md).toContain("type: line");
+  });
+
+  test("open data: a publisher and series, named and cited", async ({
+    page,
+  }) => {
+    // OECD sends CORS headers: a browser page fetches it directly.
+    await page.route("https://sdmx.oecd.org/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/vnd.sdmx.data+csv",
+        headers: { "access-control-allow-origin": "*" },
+        body: [
+          "STRUCTURE,STRUCTURE_ID,REF_AREA,Reference area,MEASURE,Measure,TIME_PERIOD,OBS_VALUE",
+          "DATAFLOW,X,GBR,United Kingdom,SHARE,Share prices,1999-12,90",
+          "DATAFLOW,X,GBR,United Kingdom,SHARE,Share prices,2000-01,95.5",
+          "DATAFLOW,X,GBR,United Kingdom,SHARE,Share prices,2000-02,97.25",
+        ].join("\n"),
+      }),
+    );
+    await open(page);
+    await page.locator("#the-doc p").first().click();
+    await page.locator("#btn-insert-menu").click();
+    await page.locator("#insert-menu #btn-import-data").click();
+    await page.locator("#import-tab-known").click();
+    await page.locator("#import-pub").selectOption("oecd");
+    await expect(page.locator("#import-pub-about")).toContainText("CC BY 4.0");
+    await page
+      .locator("#import-series label", {
+        hasText: "United Kingdom share prices",
+      })
+      .click();
+    await page.locator("#import-from").fill("2000");
+    await page.locator("#btn-import-known").click();
+    // Named by the catalogue, from the year asked for.
+    await expect(page.locator("#import-summary")).toHaveText(
+      "2 rows · date (date), uk_shares (number)",
+    );
+    await expect(page.locator("#import-caption")).toHaveValue(
+      "United Kingdom share prices (index, 2015 = 100)",
+    );
+    await expect(page.locator("#import-licence")).toContainText(
+      "Share price indices exclude dividends",
+    );
+    await page.locator("#btn-import-go").click();
+    const md = await markdown(page);
+    expect(md).toContain("::: table {#uk_shares}");
+    expect(md).toContain('licence: "CC BY 4.0"');
+    expect(md).toContain("cite: oecd_uk_shares");
+    expect(md).toContain("  - [2000-01-01, 95.5]");
+    expect(md).not.toContain("1999-12-01");
+  });
+
+  test("a downloaded file, marked personal use: on the table, its chart and export", async ({
+    page,
+  }) => {
+    await open(page);
+    await page.locator("#the-doc p").first().click();
+    await page.locator("#import-file").setInputFiles({
+      name: "VUKG.L.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        "Date,Open,Close\n2024-01-01,40.1,40.6\n2024-02-01,40.6,41.2\n",
+      ),
+    });
+    await expect(page.locator("#import-origin")).toBeVisible();
+    // No address yet: nothing to cite.
+    await expect(page.locator("#import-cite")).toBeDisabled();
+    await page
+      .locator("#import-origin")
+      .fill("https://finance.example.com/quote/VUKG.L/history");
+    await expect(page.locator("#import-cite")).toBeEnabled();
+    await page.locator("#import-caption").fill("VUKG price history");
+    await page.locator("#import-personal").check();
+    await page.locator("#btn-import-go").click();
+    const fig = page.locator("#the-doc figure[data-table-id]").first();
+    await expect(fig.locator(".folio-table-source")).toContainText(
+      "Personal use only - not for sharing",
+    );
+    await fig.locator("tbody td").first().click();
+    await fig.locator(".folio-inspector .insp-chart").click();
+    await expect(
+      page.locator("#the-doc figure[data-chart-source] .folio-personal"),
+    ).toHaveText("Personal use only - not for sharing");
+    const md = await markdown(page);
+    expect(md).toContain(
+      'import: "https://finance.example.com/quote/VUKG.L/history"',
+    );
+    expect(md).toContain('licence: "personal-use"');
+    expect(md).toContain(
+      "note         = {Licence: personal use only, not for redistribution}",
+    );
+    await page.evaluate(() =>
+      document.querySelector<HTMLElement>("#btn-view")?.click(),
+    );
+    await page.evaluate(() => {
+      window.print = (): void => undefined;
+    });
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("Export as PDF");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#status")).toContainText(
+      "This document contains personal-use data (VUKG price history)",
+    );
+  });
+
+  test("open data: several Bank of England series in one table", async ({
+    page,
+  }) => {
+    let asked = "";
+    await page.route("https://www.bankofengland.co.uk/**", (route) => {
+      asked = route.request().url();
+      return route.fulfill({
+        status: 200,
+        contentType: "application/csv",
+        headers: { "access-control-allow-origin": "*" },
+        body: [
+          "SERIES,DESCRIPTION",
+          "IUMABEDR,Monthly average of official Bank Rate",
+          "IUMBV34,Monthly interest rate ... 2 year (75% LTV) fixed rate mortgage",
+          "",
+          "DATE,IUMABEDR,IUMBV34",
+          "31 Jan 2024,5.25,4.71",
+          "29 Feb 2024,5.25,4.76",
+        ].join("\n"),
+      });
+    });
+    await open(page);
+    await page.locator("#the-doc p").first().click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("Import data");
+    await page.keyboard.press("Enter");
+    await page.locator("#import-tab-known").click();
+    // Bank of England is first; Bank Rate is ticked; add the 2-year fix.
+    await page
+      .locator("#import-series label", { hasText: "2-year fixed" })
+      .click();
+    await page.locator("#import-from").fill("2024");
+    await page.locator("#btn-import-known").click();
+    await expect(page.locator("#import-summary")).toHaveText(
+      "2 rows · date (date), bank_rate (number), fixed_2y (number)",
+    );
+    expect(asked).toContain("SeriesCodes=IUMABEDR,IUMBV34&CSVF=TT");
+    expect(asked).toContain("Datefrom=01/Jan/2024");
+    await expect(page.locator("#import-caption")).toHaveValue(
+      "Bank Rate (monthly average); 2-year fixed mortgage rate (75% LTV)",
+    );
+    await page.locator("#btn-import-go").click();
+    const md = await markdown(page);
+    // A few series: named after them; their unit in the header.
+    expect(md).toContain("::: table {#bank_rate_fixed_2y}");
+    expect(md).toContain("cite: boe_bank_rate_fixed_2y");
+    expect(md).toContain('{name: bank_rate, type: number, unit: "%"}');
+  });
+
+  test("after an import the caret follows the table: the next one, and a chart", async ({
+    page,
+  }) => {
+    await open(page);
+    await page.locator("#the-doc p").first().click();
+    for (const name of ["first.csv", "second.csv"]) {
+      await page.locator("#import-file").setInputFiles({
+        name,
+        mimeType: "text/csv",
+        buffer: Buffer.from("d,v\n2024-01-01,1\n2024-02-01,2\n"),
+      });
+      await page.locator("#btn-import-go").click();
+    }
+    const ids = await page
+      .locator("#the-doc figure[data-table-id]")
+      .evaluateAll((f) => f.map((x) => (x as HTMLElement).dataset.tableId));
+    expect(ids).toEqual(["first", "second"]);
+    // Chart from a dataset finds the table just imported.
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("Insert a chart");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("#the-doc figure[data-chart-source]"),
+    ).toHaveCount(1);
+    // The palette reaches Open data by what people look for.
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("mortgage rates");
+    await expect(page.locator("#palette-list > *").first()).toContainText(
+      "Import open data",
+    );
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#import-tab-known")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 });

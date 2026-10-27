@@ -360,25 +360,38 @@ document — written in the same renderer you are working with.
   the document), and click-to-edit cells. Esc closes it; the
   grid button on the table's inspector bar opens it too.
 - **Import data**: **+ Insert › Import data…** (or search "import"
-  with Ctrl+K) opens a dialog with two ways in. **From a file**: a
-  CSV or JSON file - or try it instantly with "Use the demo dataset",
-  a shipped 72-row CSV (and a JSON one at
-  `demo/data/site-metrics.json`). **From the web**: paste the address
-  of a CSV or JSON download and press Fetch; you see the rows, the
-  column types, who published it and its licence before importing.
-  Open data imports well - the Bank of England database (Bank Rate,
-  mortgage rates), ONS time series (inflation), OECD, HM Land
-  Registry - and dates such as "31 Jan 2020" or "2024 JAN" become
-  real dates. Leave **Add the source to the bibliography** ticked and
-  the table shows "Source: Bank of England (2026)" under it, the
-  References list gains the dataset with the date it was retrieved,
-  and you can cite it in the text like any reference (`[@boe_iumabedr]`).
-  The desktop app fetches any address; in a web browser most data
-  sites refuse a page's request, so folio offers a link to download
-  the file and then reads that file - still recording the web address
-  as the source. Check the licence line before sharing a document:
-  open-government data can be shared with the source credited; data
-  marked "licence unknown" may not be yours to publish. The "Open example: An imported data report"
+  with Ctrl+K) opens a dialog with three ways in, and the same
+  preview for each - the rows, the column types (dates become real
+  dates), names you can change, a caption, who published it and its
+  licence - before anything changes.
+  - **From a file**: a CSV or JSON file - or try "Use the demo
+    dataset". If you downloaded it from the web, fill in **Came
+    from** with the address and it is cited like any source.
+  - **Open data**: pick a publisher and the series you want, and the
+    year to start from - the Bank of England (Bank Rate, 2-, 3- and
+    5-year fixed mortgage rates, the standard variable rate, gilt
+    yields), ONS (inflation, earnings), OECD (share price indices for
+    the UK, US and others; interest rates), HM Land Registry (house
+    prices by region), the ECB (exchange rates), Eurostat. All of it
+    may be shared in a document with the source credited, and none
+    needs an account. OECD's share price indices leave out dividends:
+    add a stated dividend assumption if you model returns.
+  - **From a web address**: the address of any CSV or JSON download.
+  Leave **Add the source to the bibliography** ticked and the table
+  shows "Source: Bank of England (2026)" under it, the References
+  list gains the dataset with the date it was retrieved, and you can
+  cite it in the text like any reference (`[@boe_series]`). The
+  desktop app fetches any address; in a web browser most data sites
+  refuse a page's request, so folio offers a link to download the
+  file and then reads that file - still recording the web address as
+  the source.
+  - **Licences**: open-government data can be shared with the source
+    credited; "licence unknown" may not be yours to publish. Data
+    whose terms do not allow sharing - a price history from a broker
+    or a finance site - tick **Personal use only**: the table and its
+    charts say "Personal use only - not for sharing", on screen and on
+    paper, and Print and Export remind you before the document leaves
+    your hands. folio records the terms; you decide. The "Open example: An imported data report"
   entry shows what a finished imported-data report looks like. The file becomes a typed table in
   the document - numeric columns are inferred, the header names
   become formula-usable column names, and `import: "file.csv"` in

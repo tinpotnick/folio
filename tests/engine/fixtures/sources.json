@@ -1,0 +1,31 @@
+{
+  "oecd": [
+    "STRUCTURE,STRUCTURE_ID,STRUCTURE_NAME,ACTION,REF_AREA,Reference area,FREQ,Frequency of observation,MEASURE,Measure,UNIT_MEASURE,Unit of measure,ACTIVITY,Economic activity,ADJUSTMENT,Adjustment,TRANSFORMATION,Transformation,TIME_HORIZ,Time horizon,METHODOLOGY,Calculation methodology,TIME_PERIOD,Time period,OBS_VALUE,Observation value,OBS_STATUS,Observation status,UNIT_MULT,Unit multiplier,DECIMALS,Decimals,BASE_PER,Base period",
+    "DATAFLOW,OECD.SDD.STES:DSD_STES@DF_FINMARK(4.0),Financial market,I,GBR,United Kingdom,M,Monthly,SHARE,Share prices,IX,Index,_Z,Not applicable,_Z,Not applicable,_Z,Not applicable,_Z,Not applicable,N,National,1957-12,,1.573449,,A,Normal value,0,Units,2,Two,2015,",
+    "DATAFLOW,OECD.SDD.STES:DSD_STES@DF_FINMARK(4.0),Financial market,I,GBR,United Kingdom,M,Monthly,SHARE,Share prices,IX,Index,_Z,Not applicable,_Z,Not applicable,_Z,Not applicable,_Z,Not applicable,N,National,1958-01,,1.542084,,A,Normal value,0,Units,2,Two,2015,"
+  ],
+  "ecb": [
+    "KEY,FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE,OBS_STATUS,OBS_CONF,OBS_PRE_BREAK,OBS_COM,TIME_FORMAT,BREAKS,COLLECTION,COMPILING_ORG,DISS_ORG,DOM_SER_IDS,PUBL_ECB,PUBL_MU,PUBL_PUBLIC,UNIT_INDEX_BASE,COMPILATION,COVERAGE,DECIMALS,NAT_TITLE,SOURCE_AGENCY,SOURCE_PUB,TITLE,TITLE_COMPL,UNIT,UNIT_MULT",
+    "EXR.M.GBP.EUR.SP00.A,M,GBP,EUR,SP00,A,2024-01,0.8587309090909,A,F,,,P1M,,A,,,,,,,99Q1=100,,,5,,4F0,,Pound sterling/Euro ECB reference exchange rate,\"ECB reference exchange rate, Pound sterling/Euro, 2.15 pm (C.E.T.)\",GBP,0",
+    "EXR.M.GBP.EUR.SP00.A,M,GBP,EUR,SP00,A,2024-02,0.8546623809524,A,F,,,P1M,,A,,,,,,,99Q1=100,,,5,,4F0,,Pound sterling/Euro ECB reference exchange rate,\"ECB reference exchange rate, Pound sterling/Euro, 2.15 pm (C.E.T.)\",GBP,0"
+  ],
+  "eurostat": [
+    "DATAFLOW,LAST UPDATE,freq,unit,coicop,geo,TIME_PERIOD,OBS_VALUE,OBS_FLAG,CONF_STATUS",
+    "ESTAT:PRC_HICP_MANR(1.0),06/02/26 23:00:00,M,RCH_A,CP00,EA,2024-01,2.8,,",
+    "ESTAT:PRC_HICP_MANR(1.0),06/02/26 23:00:00,M,RCH_A,CP00,EA,2024-02,2.6,,"
+  ],
+  "hpi": [
+    "\"Name\",\"URI\",\"Region GSS code\",\"Period\",\"Sales volume\",\"Reporting period\",\"Average price All property types\",\"Percentage change (yearly) All property types\",\"Percentage change (monthly) All property types\",\"House price index All property types\",\"Sales volume All property types\",\"Average price Detached houses\",\"Percentage change (yearly) Detached houses\",\"Percentage change (monthly) Detached houses\",\"House price index Detached houses\",\"Average price Semi-detached houses\",\"Percentage change (yearly) Semi-detached houses\",\"Percentage change (monthly) Semi-detached houses\",\"House price index Semi-detached houses\",\"Average price Terraced houses\",\"Percentage change (yearly) Terraced houses\",\"Percentage change (monthly) Terraced houses\",\"House price index Terraced houses\",\"Average price Flats and maisonettes\",\"Percentage change (yearly) Flats and maisonettes\",\"Percentage change (monthly) Flats and maisonettes\",\"House price index Flats and maisonettes\",\"Average price First-time buyers\",\"Percentage change (yearly) First-time buyers\",\"Percentage change (monthly) First-time buyers\",\"House price index First-time buyers\",\"Average price Former owner-occupiers\",\"Percentage change (yearly) Former owner-occupiers\",\"Percentage change (monthly) Former owner-occupiers\",\"House price index Former owner-occupiers\",\"Average price Cash purchases\",\"Percentage change (yearly) Cash purchases\",\"Percentage change (monthly) Cash purchases\",\"House price index Cash purchases\",\"Sales volume Cash purchases\",\"Average price Mortgage purchases\",\"Percentage change (yearly) Mortgage purchases\",\"Percentage change (monthly) Mortgage purchases\",\"House price index Mortgage purchases\",\"Sales volume Mortgage purchases\",\"Average price New build\",\"Percentage change (yearly) New build\",\"Percentage change (monthly) New build\",\"House price index New build\",\"Sales volume New build\",\"Average price Existing properties\",\"Percentage change (yearly) Existing properties\",\"Percentage change (monthly) Existing properties\",\"House price index Existing properties\",\"Sales volume Existing properties\",\"Pivotable date\"",
+    "United Kingdom,http://landregistry.data.gov.uk/id/region/united-kingdom,K02000001,2024-01,51627,monthly,255972,-1.9,-0.1,98.1,51627,420315,-2.4,0.4,97.6,255737,-2.0,-0.2,98.0,212711,-1.6,-0.3,98.4,191646,-1.6,-0.1,98.4,,,,,,,,,,,,,,,,,,,325532,1.8,3.1,101.8,3565,252582,-2.1,-0.3,97.9,48062,2024-01-01",
+    "United Kingdom,http://landregistry.data.gov.uk/id/region/united-kingdom,K02000001,2024-02,56881,monthly,254633,-1.6,-0.5,97.6,56881,415397,-3.0,-1.2,96.4,255295,-1.1,-0.2,97.8,212262,-0.9,-0.2,98.2,190328,-1.6,-0.7,97.7,,,,,,,,,,,,,,,,,,,323351,0.9,-0.7,101.1,4231,251285,-1.7,-0.5,97.4,52650,2024-02-01"
+  ],
+  "boe": [
+    "SERIES,DESCRIPTION",
+    "IUMABEDR,Monthly average of official Bank Rate",
+    "IUMBV34,Monthly interest rate of UK monetary financial institutions (excl. Central Bank) sterling 2 year (75% LTV) fixed rate mortgage to households (in percent) not seasonally adjusted",
+    "",
+    "DATE,IUMABEDR,IUMBV34",
+    "31 Jan 2024,5.25,4.71",
+    "29 Feb 2024,5.25,4.76"
+  ]
+}
