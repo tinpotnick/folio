@@ -56,7 +56,14 @@ function xTickIndices(n: number, maxTicks = 8): number[] {
   const step = Math.max(1, Math.ceil(n / Math.max(1, maxTicks - 1)));
   const out: number[] = [];
   for (let i = 0; i < n; i += step) out.push(i);
-  if (out[out.length - 1] !== n - 1) out.push(n - 1);
+  if (out[out.length - 1] !== n - 1) {
+    // The last point is always labelled; a regular tick too close to
+    // it would draw on top of it (2024-12-23 over 2024-12-30).
+    if (out.length > 1 && n - 1 - (out[out.length - 1] ?? 0) < step / 2) {
+      out.pop();
+    }
+    out.push(n - 1);
+  }
   return out;
 }
 

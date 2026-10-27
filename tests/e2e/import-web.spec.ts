@@ -70,7 +70,7 @@ test.describe("import from the web", () => {
       `Source: Bank of England (${year})`,
     );
     await expect(page.locator("#the-doc ol.folio-refs li")).toHaveText([
-      `Bank of England. (${year}). Bank Rate (monthly average) [Data set]. Retrieved ${String(new Date().getDate())} ${new Date().toLocaleString("en-GB", { month: "long" })} ${year}, from ${BOE}`,
+      `Bank of England. (${year}). Bank Rate (monthly average) [Data set]. Licence: Open Government Licence v3.0. Retrieved ${String(new Date().getDate())} ${new Date().toLocaleString("en-GB", { month: "long" })} ${year}, from ${BOE}`,
     ]);
     const md = await markdown(page);
     expect(md).toContain(`import: "${BOE}"`);
@@ -455,7 +455,46 @@ data:
     );
     await page.locator("#btn-import-go").click();
     const md = await markdown(page);
-    expect(md).toContain("::: table {#boe_series}");
-    expect(md).toContain("cite: boe_series");
+    // A few series: named after them; their unit in the header.
+    expect(md).toContain("::: table {#bank_rate_fixed_2y}");
+    expect(md).toContain("cite: boe_bank_rate_fixed_2y");
+    expect(md).toContain('{name: bank_rate, type: number, unit: "%"}');
+  });
+
+  test("after an import the caret follows the table: the next one, and a chart", async ({
+    page,
+  }) => {
+    await open(page);
+    await page.locator("#the-doc p").first().click();
+    for (const name of ["first.csv", "second.csv"]) {
+      await page.locator("#import-file").setInputFiles({
+        name,
+        mimeType: "text/csv",
+        buffer: Buffer.from("d,v\n2024-01-01,1\n2024-02-01,2\n"),
+      });
+      await page.locator("#btn-import-go").click();
+    }
+    const ids = await page
+      .locator("#the-doc figure[data-table-id]")
+      .evaluateAll((f) => f.map((x) => (x as HTMLElement).dataset.tableId));
+    expect(ids).toEqual(["first", "second"]);
+    // Chart from a dataset finds the table just imported.
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("Insert a chart");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("#the-doc figure[data-chart-source]"),
+    ).toHaveCount(1);
+    // The palette reaches Open data by what people look for.
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("mortgage rates");
+    await expect(page.locator("#palette-list > *").first()).toContainText(
+      "Import open data",
+    );
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#import-tab-known")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 });

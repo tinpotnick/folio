@@ -100,7 +100,7 @@ describe("data from the web (docs/specs/data-import.md)", () => {
     ]);
     const apa = formatBibliography(entries, [key], "author-date");
     expect(runsText(apa.entries[0]?.runs ?? [])).toBe(
-      `Office for National Statistics. (2026). CPI INDEX 00: ALL ITEMS 2015=100 [Data set]. Retrieved 27 October 2026, from ${ONS}`,
+      `Office for National Statistics. (2026). CPI INDEX 00: ALL ITEMS 2015=100 [Data set]. Licence: Open Government Licence v3.0. Retrieved 27 October 2026, from ${ONS}`,
     );
     const ieee = formatBibliography(entries, [key], "numeric");
     expect(runsText(ieee.entries[0]?.runs ?? [])).toContain(

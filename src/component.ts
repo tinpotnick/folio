@@ -4360,15 +4360,34 @@ export class FolioDoc extends HTMLElement {
   insertChart(): string | null {
     if (!this.doc) return "No document";
     const at = this.blockIndexAtCaret();
+    const isDataset = (i: number): boolean => {
+      const b = this.doc?.blocks[i];
+      return b?.kind === "table" && !b.table.simple;
+    };
+    // The nearest dataset above the caret; else the nearest below (a
+    // fresh import sits just under it); else none.
+    let found = -1;
     for (let i = at >= 0 ? at : this.doc.blocks.length - 1; i >= 0; i--) {
-      const b = this.doc.blocks[i];
-      // The chart goes where the caret is, not under its dataset.
-      if (b?.kind === "table" && !b.table.simple) {
-        return this.chartTable(
-          b.table.id,
-          at >= 0 ? this.insertionPoint(at).at : undefined,
-        );
+      if (isDataset(i)) {
+        found = i;
+        break;
       }
+    }
+    if (found < 0) {
+      for (let i = Math.max(at, 0); i < this.doc.blocks.length; i++) {
+        if (isDataset(i)) {
+          found = i;
+          break;
+        }
+      }
+    }
+    const b = this.doc.blocks[found];
+    if (b?.kind === "table") {
+      // The chart goes where the caret is, not under its dataset.
+      return this.chartTable(
+        b.table.id,
+        at >= 0 ? this.insertionPoint(at).at : undefined,
+      );
     }
     return 'Charts are drawn from a dataset - insert one, or click a table\'s "Make it a dataset"';
   }
@@ -4881,6 +4900,10 @@ export class FolioDoc extends HTMLElement {
     if (reference) this.addReference(reference);
     this.render();
     this.emitChange("insert");
+    // The caret moves past the new table: the next import, chart or
+    // paragraph follows it, in reading order.
+    if (at + 1 < this.doc.blocks.length) this.focusBlockStart(at + 1);
+    else this.focusBlockStart(at, true);
   }
 
   /** Datasets imported for personal use only (export and print

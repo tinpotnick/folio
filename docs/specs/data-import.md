@@ -64,7 +64,10 @@ data exactly like hand-authored tables.
   caret. Column names are editable in the preview (a series code
   such as IUMBV34 is a poor name); when the source's title is only a
   code, the caption starts empty, asks "What is IUMBV34?", and takes
-  focus. Import shows only once there is something to import.
+  focus. Import shows only once there is something to import. After
+  an import the caret moves past the new table, so the next import,
+  chart or paragraph follows it in reading order; "Chart from a
+  dataset" uses the nearest dataset above the caret, else below it.
 - **Fetching** (ADR-0029): the desktop app fetches through Rust
   (`fetch_url`: http/https only, GET, no cookies, 30 s, 20 MB, a user
   agent naming folio with a contact address). A browser page can only
@@ -135,9 +138,14 @@ data exactly like hand-authored tables.
   - **FRED**: any series ID, with its "check the series' notes"
     notice (it re-publishes other owners' data).
   The preview names the columns as the catalogue does (`date`,
-  `bank_rate`, `fixed_2y`, `uk_shares`), the caption from the series'
-  titles, the dataset after its series (`boe_series` for several),
-  and keeps rows from the chosen year. The publishers' layouts are
+  `bank_rate`, `fixed_2y`, `uk_shares`) with the series' unit (the
+  header reads "bank_rate (%)"), the caption from the series' titles,
+  the dataset after its series (`bank_rate_fixed_2y`; `boe_series`
+  beyond three), and keeps rows from the chosen year. The palette's
+  "Import open data (Bank of England, ONS, OECD, house prices…)" opens
+  this tab, found by what people look for ("mortgage rates", "bank
+  rate", "inflation", "share prices", "house prices"); the dialog
+  reopens on the tab used last. The publishers' layouts are
   read by `parseFetched`: SDMX-CSV (OECD, ECB, Eurostat - the period
   and the value; the descriptions become the title), the House Price
   Index download (the all-property-types columns of ~60), the Bank's
@@ -149,9 +157,11 @@ data exactly like hand-authored tables.
   tick. The table records `licence: "personal-use"`; it, and every
   chart drawn from it, shows "Personal use only - not for sharing"
   on screen and on paper; the BibTeX note says "Licence: personal use
-  only, not for redistribution"; Print and Export say "This document
-  contains personal-use data (...) - check its terms before sharing" -
-  a reminder, never a block. folio records the terms; the user, who
+  only, not for redistribution", and the formatted reference shows it
+  (every dataset reference shows its licence note, in both styles);
+  Print and Export say "This document contains personal-use data
+  (...) - check its terms before sharing" - a reminder, never a block
+  (in a browser the print dialog waits 1.2 s so it can be read). folio records the terms; the user, who
   agreed to them, decides. Other imports record their licence's name
   in `licence:` too.
 - Not yet: Refresh (fetch again into the same table); keyed market-data

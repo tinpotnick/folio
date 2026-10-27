@@ -10,7 +10,7 @@ import { toIso } from "./dates.js";
 type ImportType = "text" | "number" | "date";
 
 export interface ParsedImport {
-  columns: { name: string; type: ImportType }[];
+  columns: { name: string; type: ImportType; unit?: string }[];
   rows: Cell[][];
 }
 

@@ -40,7 +40,9 @@ output by `src/render/chart.ts`. The contract for dense data:
 - **Dated x axes**: when every label is an ISO date, ticks read as
   the span needs - the year over three years or more, "Mar 2024"
   over one, the date itself within a year - and the last tick of a
-  long axis is anchored at its end so it stays inside the chart.
+  long axis is anchored at its end so it stays inside the chart. A
+  regular tick closer than half a step to the always-labelled last
+  point is dropped, so two labels never overlap.
 - **Axis titles**: the y axis names the query's value column
   (with its table unit, e.g. `revenue (£k)`), the x axis names
   the category column. A chart explains itself.
