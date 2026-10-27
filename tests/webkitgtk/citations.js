@@ -23,7 +23,9 @@ As argued [@knuth1984, p. 99]. Compare
 await new Promise((r) => setTimeout(r, 300));
 const root = host.shadowRoot;
 const first = root.querySelector("span.folio-cite")?.textContent;
-const listed = root.querySelectorAll("ol.folio-refs:not(.folio-refs-uncited) li").length;
+const listed = root.querySelectorAll(
+  "ol.folio-refs:not(.folio-refs-uncited) li",
+).length;
 const p = root.querySelector("article > p");
 const text = p.lastChild;
 root.querySelector("article").focus();
@@ -34,7 +36,9 @@ await new Promise((r) => setTimeout(r, 50));
 const why = host.insertCitation("tufte1983");
 await new Promise((r) => setTimeout(r, 100));
 const md = host.getMarkdown();
-const after = root.querySelectorAll("ol.folio-refs:not(.folio-refs-uncited) li").length;
+const after = root.querySelectorAll(
+  "ol.folio-refs:not(.folio-refs-uncited) li",
+).length;
 return (
   "| citation reads author-date: " +
   (first === "(Knuth, 1984, p. 99)") +
