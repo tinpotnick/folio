@@ -269,7 +269,7 @@ function pad(r: Cell[], width: number): Cell[] {
  * cross-table references must be able to use them), deduped, never
  * empty. Spaces and dashes become underscores.
  */
-function sanitizeNames(header: string[]): string[] {
+export function sanitizeNames(header: string[]): string[] {
   const seen = new Set<string>();
   const lower = new Set<string>();
   return header.map((raw, i) => {

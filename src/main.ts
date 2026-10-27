@@ -15,6 +15,7 @@ import { parseDoc, serializeDoc } from "./engine/doc.js";
 import {
   importedTable,
   parseImport,
+  sanitizeNames,
   type ParsedImport,
 } from "./engine/ingest.js";
 import {
@@ -858,7 +859,7 @@ function importTab(which: "file" | "web"): void {
   importTabWeb.setAttribute("aria-selected", String(which === "web"));
   importPaneFile.hidden = which !== "file";
   importPaneWeb.hidden = which !== "web";
-  importGo.hidden = which !== "web";
+  importGo.hidden = which !== "web" || pending === null;
   if (which === "web") importUrl.focus();
 }
 
@@ -876,6 +877,8 @@ function importReset(): void {
   importBlocked.hidden = true;
   importPreview.hidden = true;
   importGo.disabled = true;
+  // Import appears with something to import.
+  importGo.hidden = true;
 }
 
 function importFail(msg: string): void {
@@ -922,9 +925,18 @@ function importShow(text: string, url: string): void {
   const table = requireEl<HTMLTableElement>("#import-sample");
   table.textContent = "";
   const head = table.createTHead().insertRow();
+  // Column names are editable here: a series code (IUMBV34) is a
+  // poor name for formulas, charts and readers.
   for (const c of parsed.columns) {
     const th = document.createElement("th");
-    th.textContent = `${c.name} `;
+    const name = document.createElement("input");
+    name.type = "text";
+    name.className = "import-colname";
+    name.value = c.name;
+    name.spellcheck = false;
+    name.setAttribute("aria-label", `Name of the ${c.name} column`);
+    name.size = Math.max(6, Math.min(c.name.length + 1, 18));
+    th.appendChild(name);
     const small = document.createElement("small");
     small.textContent = c.type;
     th.appendChild(small);
@@ -936,7 +948,12 @@ function importShow(text: string, url: string): void {
     for (const v of row) tr.insertCell().textContent = String(v);
   }
   importId.value = nameFor(meta, url);
-  importCaption.value = meta.title ?? "";
+  // A bare series code is not a caption: ask for a name instead.
+  const codeOnly = /^[A-Z0-9_.,-]+$/.test(meta.title ?? "");
+  importCaption.value = codeOnly ? "" : (meta.title ?? "");
+  importCaption.placeholder = codeOnly
+    ? `What is ${meta.title ?? "it"}? e.g. "Official Bank Rate, monthly"`
+    : "";
   importPublisher.value = meta.publisher ?? "";
   requireEl<HTMLElement>("#import-licence").textContent = [
     meta.licence
@@ -948,6 +965,8 @@ function importShow(text: string, url: string): void {
     .join(" ");
   importPreview.hidden = false;
   importGo.disabled = false;
+  importGo.hidden = false;
+  if (codeOnly) importCaption.focus();
 }
 
 async function importFetch(): Promise<void> {
@@ -992,7 +1011,21 @@ async function importFetch(): Promise<void> {
 
 function importCommit(): void {
   if (!pending) return;
-  const { parsed, meta, url } = pending;
+  const { meta, url } = pending;
+  const names = sanitizeNames(
+    Array.from(
+      document.querySelectorAll<HTMLInputElement>(
+        "#import-sample .import-colname",
+      ),
+    ).map((i) => i.value.trim()),
+  );
+  const parsed: ParsedImport = {
+    ...pending.parsed,
+    columns: pending.parsed.columns.map((c, i) => ({
+      ...c,
+      name: names[i] ?? c.name,
+    })),
+  };
   const retrieved = todayIso();
   const id = tableIdFromFileName(importId.value || "data", el.getDoc());
   const finalMeta: SourceMeta = {
@@ -2255,6 +2288,34 @@ function paletteEntries(): PaletteEntry[] {
       })();
     },
   });
+  for (const [title, action, words] of [
+    [
+      "Insert a row below",
+      "row-below",
+      "add row new record line below table dataset",
+    ],
+    [
+      "Insert a column to the right",
+      "column-right",
+      "add column new field right table dataset",
+    ],
+    ["Delete the row", "delete-row", "remove row delete record table dataset"],
+    [
+      "Delete the column",
+      "delete-column",
+      "remove column delete field table dataset",
+    ],
+  ] as const) {
+    entries.push({
+      title,
+      group: "Command",
+      keywords: words,
+      action: () => {
+        const why = el.tableActionAtCaret(action);
+        if (why) flash(why);
+      },
+    });
+  }
   entries.push({
     title: "Import data",
     group: "Command",
@@ -2486,6 +2547,23 @@ function paletteEntries(): PaletteEntry[] {
 }
 
 /**
+ * How well a help topic's text answers a search: the whole query
+ * verbatim, else each word found as the start of a word in the text.
+ */
+function bodyScore(query: string, body: string): number {
+  const q = query.toLowerCase();
+  const words = q.split(/\s+/).filter((w) => w.length > 1);
+  const esc = (w: string): string => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const asWord = (w: string): boolean =>
+    new RegExp(`(^|[^a-z0-9])${esc(w)}`).test(body);
+  if (body.includes(q) && words.every(asWord)) return 10 + 2 * q.length;
+  if (words.length > 1 && words.every(asWord)) {
+    return 8 + 2 * words.reduce((n, w) => n + w.length, 0);
+  }
+  return body.includes(q) ? 6 : -1;
+}
+
+/**
  * Subsequence fuzzy match with bonuses for adjacent characters and
  * word starts. -1 means no match.
  */
@@ -2607,9 +2685,10 @@ function updatePalette(): void {
             e.title.toLowerCase().includes(query.toLowerCase())
               ? fuzzyScore(query, e.title) + 5
               : -1,
-            // A help topic whose TEXT contains the query verbatim: found,
-            // but ranked below title/keyword matches.
-            e.body?.includes(query.toLowerCase()) ? 6 : -1,
+            // A help topic whose TEXT has the query - verbatim, or every
+            // word of it as a word ("pmt", "loan payment") - above a
+            // scattered-letter match, below a title/keyword hit.
+            e.body ? bodyScore(query, e.body) : -1,
           ) -
           // "Cross-reference: Regional summary" must not outrank the
           // section itself, nor "Cite: Knuth 1984" the "Insert a
@@ -2625,7 +2704,15 @@ function updatePalette(): void {
             : 0),
       }))
       .filter((x) => x.s > 0)
-      .sort((a, b) => b.s - a.s)
+      // Equal scores: the more specific help topic (less text), then
+      // the shorter title - the more general command ("Import data"
+      // before "Import the demo dataset").
+      .sort(
+        (a, b) =>
+          b.s - a.s ||
+          (a.e.body?.length ?? 0) - (b.e.body?.length ?? 0) ||
+          a.e.title.length - b.e.title.length,
+      )
       .map((x) => x.e)
       .slice(0, 30);
   }

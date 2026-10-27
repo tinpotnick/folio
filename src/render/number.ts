@@ -17,6 +17,14 @@ export function formatComputed(
   if (typeof v !== "number") return String(v ?? "");
   if (!Number.isFinite(v)) return String(v);
   if (format === "percent") return `${(v * 100).toFixed(1)}%`;
+  // Money: two places and thousands separators - 1,389.58. A fixed
+  // grouping, so a document reads the same on every machine.
+  if (format === "currency") {
+    return v.toLocaleString("en-GB", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
   if (Number.isInteger(v)) return String(v);
   // A non-zero value too small for the fixed places would print as
   // "0" - a lie; it keeps three significant figures instead.

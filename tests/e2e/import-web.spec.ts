@@ -137,7 +137,7 @@ test.describe("import from the web", () => {
     await expect(page.locator("#import-error")).toContainText(
       "returned a web page, not data",
     );
-    await expect(page.locator("#btn-import-go")).toBeDisabled();
+    await expect(page.locator("#btn-import-go")).toBeHidden();
   });
 
   test("formulas over imported dates: a running mortgage balance", async ({
@@ -167,5 +167,145 @@ data:
     await expect(rows.nth(1)).toContainText("2025-02-01");
     await expect(rows.nth(0)).toContainText("1389.58");
     await expect(rows.nth(0)).toContainText("249547.92");
+  });
+
+  test("a broken formula breaks its column, not the table", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(String(e)));
+    await open(page);
+    await page.evaluate(() =>
+      document.querySelector<HTMLElement>("#btn-markdown")?.click(),
+    );
+    await page.locator("#editor").fill(`# Loan
+
+::: table {#loan}
+columns:
+  - {name: month, type: number}
+  - {name: payment, type: formula, expr: "=-PMT(4.5%/12, 25*12, 250000) | round(2)"}
+  - {name: oops, type: formula, expr: "VLOOKUP(month, 1, 2)"}
+data:
+  - [1, "", ""]
+  - [2, "", ""]
+:::
+`);
+    await page.evaluate(() =>
+      document.querySelector<HTMLElement>("#btn-view")?.click(),
+    );
+    const fig = page.locator('#the-doc figure[data-table-id="loan"]');
+    // The spreadsheet way of writing it works.
+    await expect(fig.locator("tbody tr").first()).toContainText("1389.58");
+    // The broken column says so, and only it.
+    await expect(fig.locator("tbody tr").first()).toContainText("#ERR");
+    const err = fig.locator(".folio-table-error");
+    await expect(err).toContainText("unknown function 'VLOOKUP'");
+    // The error opens that column's inspector, to fix it there.
+    await err.click();
+    await expect(fig.locator(".folio-inspector")).toBeVisible();
+    await expect(fig.locator(".folio-inspector .insp-col")).toHaveValue("2");
+    expect(errors).toEqual([]);
+  });
+
+  test("rows and columns: the context menu and the palette add them", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/?doc=demo/examples/paper.md");
+    const fig = page.locator('#the-doc figure[data-table-id="choices"]');
+    await fig.waitFor();
+    const headers = fig.locator("thead th");
+    const before = await headers.count();
+    await fig.locator("tbody td").first().click({ button: "right" });
+    await page
+      .locator(".folio-menu button", { hasText: "Insert column right" })
+      .click();
+    await expect(headers).toHaveCount(before + 1);
+    await expect(page.locator(".folio-menu")).toHaveCount(0);
+    // Again: a second new column gets its own name.
+    await fig.locator("tbody td").first().click({ button: "right" });
+    await page
+      .locator(".folio-menu button", { hasText: "Insert column right" })
+      .click();
+    await expect(headers).toHaveCount(before + 2);
+    await expect(headers.nth(1)).toContainText("new_2");
+    // The palette, from a cell.
+    const rows = fig.locator("tbody tr");
+    const rowCount = await rows.count();
+    await fig.locator("tbody td").nth(2).click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("insert a row");
+    await page.keyboard.press("Enter");
+    await expect(rows).toHaveCount(rowCount + 1);
+  });
+
+  test("search finds the money functions and import", async ({ page }) => {
+    await open(page);
+    for (const [query, top] of [
+      ["pmt", "Table formulas"],
+      ["loan payment", "Table formulas"],
+      ["vlookup", "Table formulas"],
+      ["import", "Import data"],
+    ] as const) {
+      await page.keyboard.press("Control+k");
+      await page.locator("#palette-input").fill(query);
+      await expect(page.locator("#palette-list > *").first()).toContainText(
+        top,
+      );
+      await page.keyboard.press("Escape");
+    }
+  });
+
+  test("Chart it on a time series draws lines over the years", async ({
+    page,
+  }) => {
+    await page.route("https://www.bankofengland.co.uk/**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/csv",
+        headers: { "access-control-allow-origin": "*" },
+        body:
+          "DATE,IUMABEDR,IUMBV34\n" +
+          Array.from({ length: 60 }, (_, i) => {
+            const y = 2015 + Math.floor(i / 12);
+            const m = String((i % 12) + 1).padStart(2, "0");
+            return `${String(y)}-${m}-01,${String(0.5 + i / 50)},${String(2 + i / 40)}`;
+          }).join("\n"),
+      }),
+    );
+    await open(page);
+    await page.locator("#the-doc p").first().click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("import data from the web");
+    await page.keyboard.press("Enter");
+    await page.locator("#import-url").fill(BOE);
+    await page.keyboard.press("Enter");
+    // A series code is not a name: the caption asks, and columns rename.
+    await expect(page.locator("#import-caption")).toHaveValue("");
+    await expect(page.locator("#import-caption")).toBeFocused();
+    await page
+      .locator("#import-caption")
+      .fill("Bank Rate and 2-year fixed rate");
+    await page
+      .locator("#import-sample .import-colname")
+      .nth(1)
+      .fill("bank rate");
+    await page
+      .locator("#import-sample .import-colname")
+      .nth(2)
+      .fill("fixed_2y");
+    await page.locator("#btn-import-go").click();
+    const fig = page.locator("#the-doc figure[data-table-id]").first();
+    await expect(fig.locator("thead")).toContainText("bank_rate");
+    await fig.locator("tbody td").first().click();
+    await fig.locator(".folio-inspector .insp-chart").click();
+    const chart = page.locator("#the-doc figure[data-chart-source]").first();
+    await expect(chart.locator("figcaption")).toContainText(
+      "Bank Rate and 2-year fixed rate",
+    );
+    await expect(chart.locator(".x-tick").first()).toHaveText("2015");
+    const md = await markdown(page);
+    expect(md).toMatch(/select: \[DATE, bank_rate, fixed_2y\]/);
+    expect(md).toContain("type: line");
   });
 });

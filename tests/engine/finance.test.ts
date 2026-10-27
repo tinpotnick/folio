@@ -18,7 +18,11 @@ import {
   pv,
   rate,
 } from "../../src/engine/finance";
-import { recalcTable, unaryMinus } from "../../src/engine/recalc";
+import {
+  recalcTable,
+  spreadsheetHabits,
+  unaryMinus,
+} from "../../src/engine/recalc";
 import type { Table } from "../../src/engine/index";
 
 /** Rounded to cents (or `p` places), as the spreadsheets show them. */
@@ -91,6 +95,41 @@ describe("unary minus (Jexl has it only on number literals)", () => {
     for (const same of ["-3", "5 - 3", "5 -3", "a - b", "1 - -2", "'-x' + y"]) {
       expect(unaryMinus(same)).toBe(same);
     }
+  });
+});
+
+describe("spreadsheet habits", () => {
+  it("reads =, upper-case functions and percentages as meant", () => {
+    expect(spreadsheetHabits("=PMT(4.5%/12, 300, 250000)")).toBe(
+      "pmt((4.5 / 100)/12, 300, 250000)",
+    );
+    expect(spreadsheetHabits("x * 20% + Round(y, 2)")).toBe(
+      "x * (20 / 100) + round(y, 2)",
+    );
+    // Modulo stays modulo; strings stay as written; == is not "=".
+    for (const same of ["10 % 3", "10%3", "a%b", "'4.5%' + PMT", "a == b"]) {
+      expect(spreadsheetHabits(same)).toBe(same);
+    }
+  });
+
+  it("a formula typed the spreadsheet way computes", () => {
+    const t: Table = {
+      id: "t",
+      columns: [
+        { name: "pay", type: "formula", expr: "=-PMT(4.5%/12, 25*12, 250000)" },
+      ],
+      rows: [[""]],
+    };
+    expect(r(Number(recalcTable(t).rows[0]?.[0]))).toBe(1389.58);
+  });
+
+  it("an unknown function says so", () => {
+    const t: Table = {
+      id: "t",
+      columns: [{ name: "x", type: "formula", expr: "vlookup(1, 2, 3)" }],
+      rows: [[""]],
+    };
+    expect(() => recalcTable(t)).toThrow(/unknown function 'vlookup'/);
   });
 });
 

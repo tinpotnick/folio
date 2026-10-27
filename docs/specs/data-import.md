@@ -61,7 +61,10 @@ data exactly like hand-authored tables.
   "Licence: <name> - fine to share with the source credited", or
   "Licence unknown - check the publisher's terms before sharing", plus
   any publisher-specific notice. Import inserts the table at the
-  caret.
+  caret. Column names are editable in the preview (a series code
+  such as IUMBV34 is a poor name); when the source's title is only a
+  code, the caption starts empty, asks "What is IUMBV34?", and takes
+  focus. Import shows only once there is something to import.
 - **Fetching** (ADR-0029): the desktop app fetches through Rust
   (`fetch_url`: http/https only, GET, no cookies, 30 s, 20 MB, a user
   agent naming folio with a contact address). A browser page can only
@@ -99,6 +102,16 @@ data exactly like hand-authored tables.
   (no licence claimed: it re-publishes other owners' data - "check
   the series' notes before sharing"). Any other address: publisher =
   its host, licence unknown.
+- **Charting it**: "Chart it" on a table with a date column draws a
+  line chart over the dates, one line per number column (up to six),
+  captioned with the table's caption; dated x axes label years (or
+  "Mar 2024" over a shorter span) and keep the last label inside the
+  chart (chart-rendering).
+- **Rows and columns**: the table's right-click menu (now outside the
+  editable article, so its clicks always land; new columns are named
+  `new`, `new_2`, …) and the palette's "Insert a row below", "Insert a
+  column to the right", "Delete the row", "Delete the column", acting
+  on the cell at the caret.
 - Not yet: a picker of known sources by series code; Refresh (fetch
   again into the same table); market prices (licensed - see the
   research note).

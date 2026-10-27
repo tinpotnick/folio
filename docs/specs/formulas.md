@@ -138,6 +138,24 @@ Jexl 2 only has it on number literals, so `unaryMinus` rewrites `-X`
 (at the start, after an operator, bracket or comma) as `(0 - X)`
 before evaluation - in formulas and chart filters alike.
 
+**Spreadsheet habits** (`spreadsheetHabits`, before the reference
+scan): a leading `=` is dropped; function names in any case are
+folio's (`PMT(` → `pmt(`); a percentage `4.5%` is `(4.5 / 100)` - a
+`%` straight after a number with no operand after it (`10 % 3` and
+`10%3` stay modulo). A name used as a function that is not one is
+"unknown function 'VLOOKUP'", not "unknown column".
+
+**A broken formula breaks its column, not its table**
+(`recalcTolerant` in the component): the failing formula is blanked
+and the table recalculated, so the rest renders; the broken column's
+cells read `#ERR`, and the error line above the table names it -
+clicking the line opens that column's inspector. (Before: the whole
+table was replaced by the message, with no way back but undo.)
+
+**Formats**: `format: currency` shows computed values with two
+places and thousands separators (1,389.58), alongside `percent`;
+both in the inspector's format menu ("money").
+
 ## Dates (2026-10-27)
 
 A `date` column holds ISO `YYYY-MM-DD` text: readable in the source,

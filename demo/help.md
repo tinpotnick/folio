@@ -394,6 +394,11 @@ document — written in the same renderer you are working with.
   Tab/Enter also move the caret to the next cell and grow the table
   at the last row; in the desktop app they commit the cell — click
   the next cell to continue.
+- **Add or remove rows and columns**: right-click a cell (Insert row
+  below, Delete row, Insert column right, Delete column), or with
+  the cursor in a cell search Ctrl+K for "insert a row" / "insert a
+  column". A new column is named `new`; click its header to rename it
+  and to choose its type (text, number, date, formula).
 - Charts are not widgets — they are queries over a table. Edit the
   table and the figure updates on the next render. There is no run
   button anywhere in folio, and no execution state.
@@ -476,13 +481,21 @@ at(k)`): `sum`, `count`, `mean`, `median`, `stdev`, `first`,
 `sma`. See the *Signals and spectra* example for a full
 walkthrough.
 
-**Money**, with the spreadsheets' names, arguments and signs (money
-you pay is negative): `pmt(rate, periods, loan)` is the payment -
-`-pmt(4.5% / 12, 300, 250000)` gives 1389.58 a month - and `fv`,
-`pv`, `nper`, `rate`, `ipmt` / `ppmt` (the interest and principal in
+**Money** - a mortgage or loan repayment, savings growth, investment
+returns - with the spreadsheets' names, arguments and signs (money
+you pay is negative): `pmt(rate, periods, loan)` is the monthly
+payment - `-pmt(4.5% / 12, 25 * 12, 250000)` gives 1389.58 a month -
+and `fv` (future value), `pv` (present value), `nper` (how many
+payments), `rate`, `ipmt` / `ppmt` (the interest and the capital in
 payment N), `npv(rate, flows…)`, `irr(self.col.flows)`, and
-`cagr(start, end, years)`. A minus sign works in front of anything:
-`-pmt(…)`, `-balance`.
+`cagr(start, end, years)` (compound annual growth). Typed the
+spreadsheet way works too: a leading `=`, `PMT` in capitals, and
+percentages (`4.5%` is 0.045). A minus sign works in front of
+anything: `-pmt(…)`, `-balance`. A running balance - what is left
+of a mortgage after each month - is a formula that reads its own
+previous row: `(self.row == 1 ? 250000 : self.prev.balance) * (1 +
+4.5% / 12) - payment`. Wrap a result in `| round(2)` for pounds and
+pence.
 
 **Dates**: a date column holds ISO dates (`2025-01-31`), and imports
 write them that way. `date(y, m, d)`, `year(d)`, `month(d)`,
@@ -492,9 +505,9 @@ EDATE: 31 Jan + 1 month is 28/29 Feb), `eomonth(d, n)`,
 A formula can produce a date: `edate(start, self.row - 1)` numbers
 a repayment schedule's months.
 
-**Looking up another table**: `@prices.col.close` is that table's
-whole column. `xlookup(key, keys, values)` finds the value beside an
-exact key; `asof(date, @prices.col.date, @prices.col.close)` gives the
+**Looking up another table** (VLOOKUP / XLOOKUP in a spreadsheet):
+`@prices.col.close` is that table's whole column. `xlookup(key, keys,
+values)` finds the value beside an exact key; `asof(date, @prices.col.date, @prices.col.close)` gives the
 value on or before a date - the price in the month of each payment,
 from monthly prices.
 

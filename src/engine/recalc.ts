@@ -483,6 +483,30 @@ export function unaryMinus(expr: string): string {
   return out;
 }
 
+/**
+ * What a spreadsheet user types, read the way they mean it:
+ * - a leading `=` (`=pmt(...)`) is dropped;
+ * - function names in any case (`PMT(`, `Round(`) are folio's;
+ * - a percentage (`4.5%`, `4.5% / 12`) is that number / 100. A `%`
+ *   straight after a number is a percentage unless an operand follows
+ *   it (`10 % 3` and `10%3` stay modulo).
+ * String literals are left alone.
+ */
+export function spreadsheetHabits(expr: string): string {
+  const body = expr.replace(/^\s*=(?!=)\s*/, "");
+  return body.replace(
+    /'[^']*'|"[^"]*"|\b([A-Za-z_][A-Za-z0-9_]*)(?=\s*\()|(\d+(?:\.\d+)?)%(?!\s*[\w(@.])/g,
+    (m: string, fn?: string, pct?: string) => {
+      if (fn !== undefined) {
+        const lower = fn.toLowerCase();
+        return TRANSFORMS.has(lower) ? lower : fn;
+      }
+      if (pct !== undefined) return `(${pct} / 100)`;
+      return m;
+    },
+  );
+}
+
 export function recalcTable(table: Table, pool?: TablePool): Table {
   return recalcWithin(
     table,
@@ -545,7 +569,7 @@ function compute(
 
   const rows: Cell[][] = table.rows.map((row) => row.slice());
   for (const { col, index } of formulaIndexes) {
-    const raw = col.expr ?? "";
+    const raw = spreadsheetHabits(col.expr ?? "");
     const fail = (msg: string): never => {
       throw new Error(`Formula '${col.name}' in table '${table.id}': ${msg}`);
     };
@@ -648,6 +672,14 @@ function compute(
       }
       if (name in CONSTANTS) continue;
       const kind = kindOf(name, index);
+      if (
+        kind.kind === "unknown" &&
+        new RegExp(`(^|[^\\w.])${name}\\s*\\(`).test(neutralized)
+      ) {
+        fail(
+          `unknown function '${name}' - the functions are listed in the help (search "formulas")`,
+        );
+      }
       if (kind.kind === "unknown") {
         if (name !== table.id && pool(name) !== undefined) {
           fail(

@@ -313,7 +313,7 @@ function parseColumn(raw: string): Table["columns"][number] {
     type: (col["type"] ?? "text") as Table["columns"][number]["type"],
     ...(col["unit"] !== undefined ? { unit: col["unit"] } : {}),
     ...(col["format"] !== undefined
-      ? { format: col["format"] as "percent" }
+      ? { format: col["format"] as "percent" | "currency" }
       : {}),
     ...(col["expr"] !== undefined ? { expr: col["expr"] } : {}),
     ...(col["width"] !== undefined

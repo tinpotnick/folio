@@ -60,6 +60,47 @@ function xTickIndices(n: number, maxTicks = 8): number[] {
   return out;
 }
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * An x tick's text and anchor. ISO dates read as the span needs - the
+ * year over three years or more, "Mar 2024" over one - not as
+ * 2026-09-30, clipped. The last tick of a long axis ends at its point
+ * (centred, it ran off the chart).
+ */
+function xLabel(
+  labels: readonly string[],
+  i: number,
+): { text: string; anchor: "middle" | "end" } {
+  const n = labels.length;
+  const raw = labels[i] ?? "";
+  const anchor = n > 8 && i === n - 1 ? "end" : "middle";
+  const iso = /^(\d{4})-(\d{2})-\d{2}$/;
+  const first = iso.exec(labels[0] ?? "");
+  const last = iso.exec(labels[n - 1] ?? "");
+  const m = iso.exec(raw);
+  if (!first || !last || !m) return { text: escapeXml(raw), anchor };
+  const span = Number(last[1]) - Number(first[1]);
+  if (span >= 3) return { text: m[1] ?? raw, anchor };
+  if (span >= 1) {
+    return { text: `${MONTHS[Number(m[2]) - 1] ?? ""} ${m[1] ?? ""}`, anchor };
+  }
+  return { text: escapeXml(raw), anchor };
+}
+
 /** The per-point value labels to draw: all of them for a sparse
  * series; for a dense one only the extremes and the latest point
  * (labeling every point of a 24-month series clumps). */
@@ -251,10 +292,13 @@ export function renderBarChart(
     parts.push(
       `<rect x="${x}" y="${y}" width="${barW}" height="${height}" fill="${color}" rx="2" />`,
     );
-    const label = escapeXml(String(row[0] ?? ""));
     if (xTickIndices(n).includes(i)) {
+      const lab = xLabel(
+        result.rows.map((r) => String(r[0] ?? "")),
+        i,
+      );
       parts.push(
-        `<text class="x-tick" x="${x + barW / 2}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${ink}">${label}</text>`,
+        `<text class="x-tick" x="${lab.anchor === "end" ? x + barW : x + barW / 2}" y="${H - padBottom + 16}" text-anchor="${lab.anchor}" font-size="11" fill="${ink}">${lab.text}</text>`,
       );
     }
     if (labelAt.includes(i)) {
@@ -374,16 +418,19 @@ function renderLineLike(
   // Dense series draw a marker per x-TICK only: a marker on every
   // point turns a smooth 512-sample line into a bead necklace.
   // Sparse series keep every marker.
+  // A dense line marks only the points it labels (high, low, latest):
+  // dots at the tick months read as data points that matter.
   const markerAt: (i: number) => boolean =
-    n > 64 ? (i) => tickAt.has(i) : () => true;
-  result.rows.forEach((row, i) => {
+    n > 64 ? (i) => labelAt.includes(i) : () => true;
+  const xLabels = result.rows.map((r) => String(r[0] ?? ""));
+  result.rows.forEach((_row, i) => {
     const x = xs[i] ?? 0;
     if (markerAt(i)) {
       parts.push(`<circle cx="${x}" cy="${ys[i]}" r="3" fill="${color}" />`);
     }
     if (tickAt.has(i)) {
       parts.push(
-        `<text class="x-tick" x="${x}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${ink}">${escapeXml(String(row[0] ?? ""))}</text>`,
+        `<text class="x-tick" x="${x}" y="${H - padBottom + 16}" text-anchor="${xLabel(xLabels, i).anchor}" font-size="11" fill="${ink}">${xLabel(xLabels, i).text}</text>`,
       );
     }
     if (labelAt.includes(i)) {
@@ -656,10 +703,11 @@ export function renderSeriesChart(
   const zeroY = yOf(0);
   const xMid = (c: number): number => padLeft + band * c + band / 2;
   const tickAt = new Set(xTickIndices(n));
-  data.categories.forEach((cat, c) => {
+  data.categories.forEach((_cat, c) => {
     if (!tickAt.has(c)) return;
+    const lab = xLabel(data.categories, c);
     parts.push(
-      `<text class="x-tick" x="${xMid(c)}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${ink}">${escapeXml(cat)}</text>`,
+      `<text class="x-tick" x="${lab.anchor === "end" ? padLeft + band * (c + 1) : xMid(c)}" y="${H - padBottom + 16}" text-anchor="${lab.anchor}" font-size="11" fill="${ink}">${lab.text}</text>`,
     );
   });
   const k = data.series.length;
