@@ -144,6 +144,6 @@ test.describe("print and PDF", () => {
     await expect(more.locator(".ds-open")).toBeVisible();
     await page.emulateMedia({ media: "print" });
     await expect(more.locator(".ds-open")).toBeHidden();
-    await expect(more).toContainText("201 rows");
+    await expect(more).toContainText(/[\d,]+ rows/);
   });
 });

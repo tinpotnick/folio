@@ -359,7 +359,15 @@ function keyIndex(keys: unknown[]): KeyIndex {
   if (cached) return cached;
   const out: KeyIndex = { keys: [], exact: new Map(), numeric: true };
   keys.forEach((raw, i) => {
-    if (raw === "" || raw === undefined || raw === null) return;
+    // Blanks (and a blank formula's NaN) are no key: never matched.
+    if (
+      raw === "" ||
+      raw === undefined ||
+      raw === null ||
+      (typeof raw === "number" && !Number.isFinite(raw))
+    ) {
+      return;
+    }
     const day = dayNumber(raw);
     const k = Number.isFinite(day) ? day : Number(raw);
     if (!Number.isFinite(k)) out.numeric = false;
@@ -388,6 +396,7 @@ function lookupKey(key: unknown): { k: number; id: string } {
 
 // xlookup(key, keys, values): the value beside the matching key.
 registerFn("xlookup", (key, keys, vals) => {
+  if (typeof key === "number" && !Number.isFinite(key)) return Number.NaN;
   const at = keyIndex(asList(keys)).exact.get(lookupKey(key).id);
   return at === undefined ? Number.NaN : asCell(asList(vals)[at]);
 });
@@ -578,12 +587,25 @@ export function spreadsheetHabits(expr: string): string {
   );
 }
 
-export function recalcTable(table: Table, pool?: TablePool): Table {
+/**
+ * Results shared between calls, by table OBJECT: a model several tables
+ * and charts read recalculates once per pass, not once per reader. The
+ * caller owns it and must drop it when any table changes (folio's
+ * component does, per task and on every edit).
+ */
+export type RecalcMemo = WeakMap<Table, Table>;
+
+export function recalcTable(
+  table: Table,
+  pool?: TablePool,
+  memo?: RecalcMemo,
+): Table {
   return recalcWithin(
     table,
     pool ?? ((): Table | undefined => undefined),
     new Map(),
     new Set(),
+    memo,
   );
 }
 
@@ -592,8 +614,9 @@ function recalcWithin(
   pool: TablePool,
   cache: Map<string, Table>,
   visiting: Set<string>,
+  memo?: RecalcMemo,
 ): Table {
-  const cached = cache.get(table.id);
+  const cached = cache.get(table.id) ?? memo?.get(table);
   if (cached !== undefined) return cached;
   if (visiting.has(table.id)) {
     throw new Error(
@@ -602,7 +625,9 @@ function recalcWithin(
   }
   visiting.add(table.id);
   try {
-    return compute(table, pool, cache, visiting);
+    const out = compute(table, pool, cache, visiting, memo);
+    memo?.set(table, out);
+    return out;
   } finally {
     visiting.delete(table.id);
   }
@@ -613,6 +638,7 @@ function compute(
   pool: TablePool,
   cache: Map<string, Table>,
   visiting: Set<string>,
+  memo?: RecalcMemo,
 ): Table {
   const formulaIndexes = table.columns
     .map((c, i) => ({ col: c, index: i }))
@@ -859,7 +885,10 @@ function compute(
           `Formula '${col.name}' in table '${table.id}': table reference '${ref.tableId}': unknown table`,
         );
       }
-      crossTables.set(ref.tableId, recalcWithin(other, pool, cache, visiting));
+      crossTables.set(
+        ref.tableId,
+        recalcWithin(other, pool, cache, visiting, memo),
+      );
     }
 
     const snapshot = (

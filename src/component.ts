@@ -15,7 +15,11 @@ import {
   type ListBody,
 } from "@folio/engine/doc";
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
-import { recalcTable, type TablePool } from "@folio/engine/recalc";
+import {
+  recalcTable,
+  type RecalcMemo,
+  type TablePool,
+} from "@folio/engine/recalc";
 import type { Audio, Cell, Chart, Image, Table } from "@folio/engine/index.js";
 import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
 import type { StrudelRepl } from "@strudel/web";
@@ -978,6 +982,7 @@ export class FolioDoc extends HTMLElement {
 
   private render(): void {
     if (!this.doc || !this.shadowRoot) return;
+    this.forgetRecalc();
     // A full render replaces every figure: music stops with it
     // (only once the library was ever loaded - never import it
     // for a document that plays nothing).
@@ -2442,7 +2447,7 @@ export class FolioDoc extends HTMLElement {
       (b) => b.kind === "table" && !b.table.simple && b.table.id === id,
     );
     if (t?.kind !== "table") return undefined;
-    const recalced = recalcTable(t.table, this.tablePool());
+    const recalced = recalcTable(t.table, this.tablePool(), this.memo());
     return recalced.rows.map((r) =>
       Object.fromEntries(t.table.columns.map((col, i) => [col.name, r[i]])),
     );
@@ -2640,7 +2645,7 @@ export class FolioDoc extends HTMLElement {
     if (t?.kind !== "table") {
       throw new Error(`no dataset @${bind.table} - params= names a dataset`);
     }
-    const recalced = recalcTable(t.table, this.tablePool());
+    const recalced = recalcTable(t.table, this.tablePool(), this.memo());
     const row = recalced.rows[bind.row - 1];
     if (!row) {
       throw new Error(
@@ -3583,6 +3588,26 @@ export class FolioDoc extends HTMLElement {
    * references (budget.r3.q2): a table's formulas may read any
    * other table of the same document.
    */
+  /** Recalculation results shared within one task (a render, a
+   * refresh): a model several tables and charts read is computed once.
+   * Dropped at the end of the task, and on every edit. */
+  private recalcMemo: RecalcMemo | null = null;
+
+  private memo(): RecalcMemo {
+    if (!this.recalcMemo) {
+      this.recalcMemo = new WeakMap();
+      queueMicrotask(() => {
+        this.recalcMemo = null;
+      });
+    }
+    return this.recalcMemo;
+  }
+
+  /** A table changed: no result computed before it may be reused. */
+  private forgetRecalc(): void {
+    this.recalcMemo = null;
+  }
+
   private tablePool(): TablePool {
     const blocks = this.doc?.blocks ?? [];
     return (id: string): Table | undefined => {
@@ -3608,7 +3633,7 @@ export class FolioDoc extends HTMLElement {
     let attempt = table;
     for (let i = 0; i <= table.columns.length; i++) {
       try {
-        const recalced = recalcTable(attempt, this.tablePool());
+        const recalced = recalcTable(attempt, this.tablePool(), this.memo());
         if (!errors.size) return { recalced, errors };
         const bad = new Set(
           table.columns.flatMap((c, ci) => (errors.has(c.name) ? [ci] : [])),
@@ -5253,7 +5278,7 @@ export class FolioDoc extends HTMLElement {
     }
     let recalced: Table;
     try {
-      recalced = recalcTable(block.table, this.tablePool());
+      recalced = recalcTable(block.table, this.tablePool(), this.memo());
     } catch (e) {
       return {
         indexes: [],
@@ -5378,7 +5403,7 @@ export class FolioDoc extends HTMLElement {
     if (!grid || !canvas || !block || block.kind !== "table") return;
     let recalced: Table;
     try {
-      recalced = recalcTable(block.table, this.tablePool());
+      recalced = recalcTable(block.table, this.tablePool(), this.memo());
     } catch {
       return; // the head already shows the guarded error line
     }
@@ -5582,7 +5607,11 @@ export class FolioDoc extends HTMLElement {
       if (!tableBlock || tableBlock.kind !== "table") {
         throw new Error(`chart source table '${block.chart.source}' not found`);
       }
-      const recalced = recalcTable(tableBlock.table, this.tablePool());
+      const recalced = recalcTable(
+        tableBlock.table,
+        this.tablePool(),
+        this.memo(),
+      );
       const result = executeQuery(recalced, block.chart);
       // The chart dresses from the theme: the series color comes
       // from the palette, and the axis titles name the query's
@@ -6013,7 +6042,8 @@ export class FolioDoc extends HTMLElement {
     figure: HTMLElement | null,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
   ): void {
-    const recalced = recalcTable(block.table, this.tablePool());
+    this.forgetRecalc();
+    const recalced = recalcTable(block.table, this.tablePool(), this.memo());
     // Formulas may reference other rows (_prev, name:row), so an
     // edit ripples through every formula cell of the table, not
     // just the edited row. Text-only updates: no structural
@@ -6045,7 +6075,7 @@ export class FolioDoc extends HTMLElement {
       if (!otherFigure) continue;
       let recalcedOther;
       try {
-        recalcedOther = recalcTable(other.table, this.tablePool());
+        recalcedOther = recalcTable(other.table, this.tablePool(), this.memo());
       } catch {
         continue; // its own error renders on its next full render
       }
@@ -6135,6 +6165,7 @@ export class FolioDoc extends HTMLElement {
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
   ): void {
     if (!stale || !this.doc || !this.shadowRoot) return;
+    this.forgetRecalc();
     const idx = Number(stale.dataset.blockIndex ?? -1);
     // A blur handler may already have replaced the figure: refresh
     // whichever figure is the block's now.
