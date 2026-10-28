@@ -438,7 +438,13 @@ function fitTable(scroller: HTMLElement, table: HTMLElement): void {
     table.dataset.fit = k < 1 ? k.toFixed(2) : "";
     fitting = false;
   };
-  const ro = new ResizeObserver(() => requestAnimationFrame(fit));
+  // Typing in a cell resizes its table on every letter, and each fit
+  // forces layout twice: fit once the size has settled.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const ro = new ResizeObserver(() => {
+    clearTimeout(timer);
+    timer = setTimeout(() => requestAnimationFrame(fit), 120);
+  });
   ro.observe(scroller);
   ro.observe(table);
 }
@@ -6048,13 +6054,25 @@ export class FolioDoc extends HTMLElement {
     // edit ripples through every formula cell of the table, not
     // just the edited row. Text-only updates: no structural
     // re-render, the caret in the edited cell is untouched.
+    // The table's rendered cells, found once (a windowed table shows
+    // only some rows: one query per cell was thousands of misses).
+    const cellsOf = (fig: Element | null | undefined): Map<string, Element> =>
+      new Map(
+        Array.from(
+          fig?.querySelectorAll<HTMLElement>(
+            "td[data-row-index][data-col-index]",
+          ) ?? [],
+        ).map((td) => [
+          `${td.dataset.rowIndex ?? ""}:${td.dataset.colIndex ?? ""}`,
+          td,
+        ]),
+      );
+    const own = cellsOf(figure);
     block.table.columns.forEach((col, c) => {
       if (col.type !== "formula") return;
-      for (let row = 0; row < block.table.rows.length; row++) {
-        const cell = figure?.querySelector(
-          `td[data-row-index="${String(row)}"][data-col-index="${String(c)}"]`,
-        );
-        if (!cell) continue;
+      for (const [key, cell] of own) {
+        const [row, cc] = key.split(":").map(Number);
+        if (cc !== c || row === undefined) continue;
         const v = recalced.rows[row]?.[c];
         cell.textContent = formatComputed(v, col.format);
         cell.classList.toggle("num", typeof v === "number");
@@ -6079,13 +6097,12 @@ export class FolioDoc extends HTMLElement {
       } catch {
         continue; // its own error renders on its next full render
       }
+      const theirs = cellsOf(otherFigure);
       other.table.columns.forEach((col, c) => {
         if (col.type !== "formula") return;
-        for (let row = 0; row < other.table.rows.length; row++) {
-          const cell = otherFigure.querySelector(
-            `td[data-row-index="${String(row)}"][data-col-index="${String(c)}"]`,
-          );
-          if (!cell) continue;
+        for (const [key, cell] of theirs) {
+          const [row, cc] = key.split(":").map(Number);
+          if (cc !== c || row === undefined) continue;
           const v = recalcedOther.rows[row]?.[c];
           cell.textContent = formatComputed(v, col.format);
           if (typeof v === "number") cell.classList.add("num");

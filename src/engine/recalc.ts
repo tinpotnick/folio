@@ -404,6 +404,9 @@ registerFn("xlookup", (key, keys, vals) => {
 // `key` (keys ascending) - the price in force on a date, from monthly
 // prices. Binary search over the keys read once.
 registerFn("asof", (key, keys, vals) => {
+  // No key (a blank month): no value - and no slow walk to find none.
+  if (key === "" || key === null || key === undefined) return Number.NaN;
+  if (typeof key === "number" && !Number.isFinite(key)) return Number.NaN;
   const ks = asList(keys);
   const index = keyIndex(ks);
   const { k } = lookupKey(key);
@@ -432,6 +435,10 @@ registerFn("asof", (key, keys, vals) => {
   }
   return hit < 0 ? Number.NaN : asCell(asList(vals)[list[hit]?.i ?? -1]);
 });
+
+/** Formulas parsed once per text, across recalculations (a formula's
+ * text is its program; contexts differ per row and per run). */
+const compiledCache = new Map<string, Expression>();
 
 /** Other tables of the same document, by id (raw, not recalced). */
 export type TablePool = (id: string) => Table | undefined;
@@ -954,9 +961,13 @@ function compute(
     const source = unaryMinus(stripAtRefs(raw));
     // Parsed once per column, evaluated per row (parsing per row was
     // most of a long model's recalculation time).
-    let compiled: Expression | null = null;
+    let compiled: Expression | null = compiledCache.get(source) ?? null;
     try {
-      compiled = jexl.compile(source);
+      if (!compiled) {
+        compiled = jexl.compile(source);
+        if (compiledCache.size > 2000) compiledCache.clear();
+        compiledCache.set(source, compiled);
+      }
     } catch {
       // A syntax error surfaces from the first row's evaluation below,
       // with the formula named.

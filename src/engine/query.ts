@@ -2,9 +2,21 @@
  * Chart query execution over typed tables (ADR-0004).
  * A chart is a query; this module computes it headlessly.
  */
-import jexl from "jexl";
+import jexl, { type Expression } from "jexl";
 import type { Cell, Chart, Table } from "./index.js";
 import { CONSTANTS, KEYWORDS, TRANSFORMS, unaryMinus } from "./recalc.js";
+
+/** A filter parsed once per text, not once per row. */
+const filterCache = new Map<string, Expression>();
+function filterExpression(expr: string): Expression {
+  let compiled = filterCache.get(expr);
+  if (!compiled) {
+    compiled = jexl.compile(unaryMinus(expr));
+    if (filterCache.size > 500) filterCache.clear();
+    filterCache.set(expr, compiled);
+  }
+  return compiled;
+}
 
 export interface QueryResult {
   columns: string[];
@@ -70,7 +82,7 @@ export function filterIndexes(table: Table, expr: string): number[] {
       const v = r[ci];
       ctx[c.name] = v === undefined ? Number.NaN : v;
     });
-    const keep = jexl.evalSync(unaryMinus(expr), ctx);
+    const keep = filterExpression(expr).evalSync(ctx);
     if (
       keep === true ||
       (typeof keep === "number" && keep !== 0 && Number.isFinite(keep))

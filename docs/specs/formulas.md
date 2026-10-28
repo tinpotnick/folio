@@ -230,6 +230,14 @@ stays live) but does not recalculate: the recalculation runs once the
 caret LEAVES the cell - Tab, Enter, a click elsewhere, blur - and before
 printing or exporting (`flushEdits`). Recalculating per keystroke took
 a visible beat per letter on a document with a large model (2026-10-27).
+Per keystroke, nothing scales with the document: the hidden Markdown
+view is refilled when it is opened (not re-serialized per letter), the
+sections list follows when typing pauses, and a table re-fits its type
+to the page once its size settles. Recalculation results are shared
+within a task, formulas and chart filters are parsed once per text,
+dates read once per string, and blank lookup keys return at once - so
+leaving a cell of the 480-month Repay or invest model takes ~130 ms
+(it took 200-330 ms per KEYSTROKE before, 2026-10-28).
 Leaving an edited cell recomputes the whole table and refreshes every
 formula cell in place (text-only updates, no structural re-render,
 caret untouched), then refreshes every OTHER table's formula cells
