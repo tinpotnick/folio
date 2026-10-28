@@ -15,12 +15,37 @@ import type { QueryResult } from "../engine/query.js";
 
 export interface RenderedChart {
   svg: string;
+  /** What a pointer, a tap or the arrow keys read off the chart (the
+   * host draws the guide and the panel; docs/specs/chart-readout.md). */
+  readout?: Readout;
+}
+
+/**
+ * A chart's points in its own (viewBox) units: per x position its label,
+ * and per series the value and where it is drawn. Blanks are null.
+ */
+export interface Readout {
+  width: number;
+  height: number;
+  /** The plot's top and bottom: the guide line's extent. */
+  top: number;
+  bottom: number;
+  xs: number[];
+  labels: string[];
+  series: {
+    name: string;
+    color: string;
+    values: (number | null)[];
+    ys: (number | null)[];
+  }[];
 }
 
 /** Theme-driven styling: the series color, the pie palette, and
  * the semantic axis titles drawn from the query's columns. */
 export interface ChartStyle {
   color?: string | undefined;
+  /** The value column's name, for the readout. */
+  seriesName?: string | undefined;
   colors?: string[] | undefined;
   xTitle?: string | undefined;
   yTitle?: string | undefined;
@@ -338,7 +363,25 @@ export function renderBarChart(
   });
 
   parts.push(`</svg>`);
-  return { svg: parts.join("") };
+  return {
+    svg: parts.join(""),
+    readout: {
+      width: W,
+      height: H,
+      top: PAD.top,
+      bottom: PAD.top + innerH,
+      xs: result.rows.map((_, i) => padLeft + band * i + band / 2),
+      labels: result.rows.map((r) => String(r[0] ?? "")),
+      series: [
+        {
+          name: style.seriesName ?? style.yTitle ?? "",
+          color,
+          values: values.map((v) => (Number.isFinite(v) ? v : null)),
+          ys: values.map((v) => (Number.isFinite(v) ? yOf(v) : null)),
+        },
+      ],
+    },
+  };
 }
 
 /**
@@ -506,7 +549,27 @@ function renderLineLike(
   });
 
   parts.push(`</svg>`);
-  return { svg: parts.join("") };
+  return {
+    svg: parts.join(""),
+    readout: {
+      width: W,
+      height: H,
+      top: PAD.top,
+      bottom: PAD.top + innerH,
+      xs,
+      labels: result.rows.map((r) => String(r[0] ?? "")),
+      series: [
+        {
+          name: style.seriesName ?? style.yTitle ?? "",
+          color,
+          values: values.map((v) => (Number.isFinite(v) ? v : null)),
+          ys: values.map((v, i) =>
+            Number.isFinite(v) ? (ys[i] ?? null) : null,
+          ),
+        },
+      ],
+    },
+  };
 }
 
 /**
@@ -569,7 +632,9 @@ export function renderScatterChart(
   }
   for (const p of pts) {
     parts.push(
-      `<circle cx="${xOf(p.x)}" cy="${yOf(p.y)}" r="3.5" fill="${color}" />`,
+      // The browser's own tooltip names the point (a scatter has no
+      // single x to read across).
+      `<circle cx="${xOf(p.x)}" cy="${yOf(p.y)}" r="3.5" fill="${color}"><title>${escapeXml(`${fmt(p.x)}, ${valueFormatter(style.valueFormat)(p.y)}`)}</title></circle>`,
     );
   }
   parts.push(`</svg>`);
@@ -634,7 +699,7 @@ export function renderPieChart(
     const y2 = cy + r * Math.sin(angle + sweep);
     const large = sweep > Math.PI ? 1 : 0;
     parts.push(
-      `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${color}" stroke="${style.paper ?? "#ffffff"}" stroke-width="1.5" />`,
+      `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${color}" stroke="${style.paper ?? "#ffffff"}" stroke-width="1.5"><title>${escapeXml(`${row.label}: ${valueFormatter(style.valueFormat)(row.value)} (${String(Math.round((row.value / total) * 100))}%)`)}</title></path>`,
     );
     const pct = Math.round((row.value / total) * 100);
     const lx = cx + (r + 22) * Math.cos(mid);
@@ -858,8 +923,30 @@ export function renderSeriesChart(
     });
   }
   parts.push("</svg>");
+  // Where each value is drawn: stacked series sit on the ones below.
+  const sums = data.categories.map(() => 0);
+  const readSeries = data.series.map((s, i) => ({
+    name: s.name,
+    color: colorOf(i),
+    values: s.values,
+    ys: s.values.map((v, c) => {
+      if (v === null) return null;
+      if (!stacked) return yOf(v);
+      sums[c] = (sums[c] ?? 0) + v;
+      return yOf(sums[c] ?? v);
+    }),
+  }));
   return {
     svg: parts.join(""),
     legend: data.series.map((s, i) => ({ name: s.name, color: colorOf(i) })),
+    readout: {
+      width: W,
+      height: H,
+      top: PAD.top,
+      bottom: PAD.top + innerH,
+      xs: data.categories.map((_, c) => xMid(c)),
+      labels: data.categories,
+      series: readSeries,
+    },
   };
 }

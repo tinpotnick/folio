@@ -1891,6 +1891,42 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-menu button:hover { background: var(--folio-hover, #f3f4f6); }
     .chart-holder svg { width: 100%; height: auto; display: block; }
+    /* The chart readout (docs/specs/chart-readout.md). */
+    .chart-holder { position: relative; }
+    .chart-holder:focus { outline: none; }
+    .chart-holder:focus-visible { outline: 2px solid var(--folio-focus, #1f3fbf); outline-offset: 4px; border-radius: 4px; }
+    .readout-guide { stroke: var(--folio-ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
+    .readout-dot { stroke: var(--folio-paper); stroke-width: 2; }
+    .chart-readout {
+      position: absolute;
+      z-index: 3;
+      pointer-events: none;
+      background: var(--folio-paper);
+      color: var(--folio-ink);
+      border: 1px solid var(--folio-rule-strong, rgba(0,0,0,0.15));
+      border-radius: 6px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+      padding: 6px 9px;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .chart-readout .readout-head { color: var(--folio-ink-muted); margin-bottom: 2px; }
+    .chart-readout .readout-row { display: flex; align-items: center; gap: 6px; }
+    .chart-readout .readout-row i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+    .chart-readout .readout-row b { margin-left: auto; padding-left: 12px; font-weight: 600; }
+    .readout-live {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+    @media print {
+      .chart-readout, .readout-layer, .readout-live { display: none !important; }
+    }
     /* A legend under a chart with several series. */
     .chart-legend {
       display: flex;
