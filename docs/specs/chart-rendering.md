@@ -75,6 +75,14 @@ output by `src/render/chart.ts`. The contract for dense data:
   reject negative values (the error contract).
 - SVG classes are part of the test surface: `.x-tick`, `.v-label`,
   `.tick-y`, `.axis-title`.
+- **Nothing to plot** (2026-10-28): when the query leaves no rows, or
+  every value is blank, the chart says so in place of the plot -
+  "Nothing to show: no rows to plot (the filter leaves none, or the
+  table is empty)." or "Nothing to show: every value is blank." - a
+  quiet dashed panel (`.chart-empty`), never an empty frame. It is
+  not an error: the chart is right, its data is just empty (a model
+  whose assumptions fall outside its data, say). The caption, legend
+  position and inspector are unchanged, and it prints as it shows.
 
 ## Several series (2026-10-21)
 
@@ -108,6 +116,9 @@ The chart bar has **Split by** (a column, or none) and **Stack**.
   "several series" (grouped, stacked totals on the axis, lines broken
   at gaps, stacked areas, legend).
 - e2e: `tests/e2e/multi-series.spec.ts`.
+- e2e: `tests/e2e/repay-or-invest.spec.ts` "a tracker can start in
+  1990" (an empty chart explains itself, and draws again when data
+  returns).
 - Unit: `tests/render/chart.test.ts` (domain rules, nice ticks,
   percent formats, label collisions and floor placement, negative
   bar label clearance, line fill below the curve, thinning,

@@ -170,21 +170,26 @@ data exactly like hand-authored tables.
 ## Shipped demo data
 
 - `demo/examples/repay-or-invest.md` - "Open example: Repay or invest?
-  A mortgage question" (2026-10-28): Bank of England Bank Rate and
-  mortgage rates, OECD UK share prices and ONS CPI, monthly from January
-  1995, imported through Open data and cited. Assumptions - loan, start
+  A mortgage question" (2026-10-28): Bank of England Bank Rate (from
+  January 1975) and mortgage rates (from January 1995), OECD UK share
+  prices (from January 1975) and ONS CPI (from January 1988), monthly,
+  imported through Open data and cited. Assumptions - loan, start
   month, term, mortgage type (2-year fix, 5-year fix, tracker, variable),
-  a tracker's margin, dividend yield - drive a month-by-month model (up
-  to 40 years) comparing a repayment mortgage with holding the debt and
-  investing the capital part of the same payment. A fix keeps the rate
-  on offer when its deal began; a tracker follows Bank Rate. The model
-  stops at the end of the term or of the data, and says which
-  (`live`); blank months stay blank (formulas.md, "Blanks"). Results,
-  the first month's split and the "key moments" (worst and best
-  points, dearest and cheapest rates, least and most invested, with
-  their months) are computed tables, so the prose stays true for any
-  assumptions; an unknown mortgage type or a start before the data is
-  explained in the "Assumptions" row. Shareable: every source is
+  a tracker's margin, dividend yield, monthly amount - drive a
+  month-by-month model (up to 40 years) comparing a repayment mortgage
+  with holding the debt and investing the capital part of the same
+  payment. A fix keeps the rate on offer when its deal began; a tracker
+  follows Bank Rate. Each type starts from its own data: a tracker from
+  1975, fixes and the variable rate from 1995. The model stops at the
+  end of the term or of the data, and says which (`live`); blank months
+  stay blank (formulas.md, "Blanks"). Results, the first month's split
+  and the "key moments" (worst and best points, dearest and cheapest
+  rates, least and most invested, with their months) are computed
+  tables, so the prose stays true for any assumptions. The "Assumptions
+  check" table, directly under the assumptions, explains an unknown
+  mortgage type or a start before that type's data (naming the type
+  that can start then), and notes that figures in start-month pounds
+  are blank before CPI begins (2026-10-28). Shareable: every source is
   open-licensed.
 
 - `demo/data/monthly-sales.csv` - 72 rows (24 months x 3

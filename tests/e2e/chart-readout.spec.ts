@@ -119,7 +119,7 @@ test.describe("chart readout: from the first-contact eval", () => {
 
   test("values carry their unit; PageDown moves a year", async ({ page }) => {
     await open(page, "demo/examples/repay-or-invest.md");
-    // Figure 1: Bank Rate and mortgage rates, a "%" unit.
+    // Figure 2: mortgage rates, a "%" unit.
     const rates = page.locator('#the-doc figure[data-chart-source="rates"]');
     await rates.locator(".chart-holder").focus();
     await expect(

@@ -415,6 +415,10 @@ document — written in the same renderer you are working with.
 - Charts are not widgets — they are queries over a table. Edit the
   table and the figure updates on the next render. There is no run
   button anywhere in folio, and no execution state.
+- **A chart says "Nothing to show"** when its query leaves no rows (a
+  filter that matches nothing, an empty table) or every value is
+  blank. Check the filter in its inspector bar, or the table it reads -
+  in a model, an assumption outside its data often blanks every row.
 
 ## Reading a chart's values
 

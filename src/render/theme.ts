@@ -1891,6 +1891,15 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-menu button:hover { background: var(--folio-hover, #f3f4f6); }
     .chart-holder svg { width: 100%; height: auto; display: block; }
+    .chart-empty {
+      margin: 0;
+      padding: 2.5em 1em;
+      text-align: center;
+      color: var(--folio-ink-muted);
+      font-style: italic;
+      border: 1px dashed var(--folio-rule-strong, rgba(0,0,0,0.2));
+      border-radius: 6px;
+    }
     /* The chart readout (docs/specs/chart-readout.md). */
     .chart-holder { position: relative; }
     .chart-holder:focus { outline: none; }

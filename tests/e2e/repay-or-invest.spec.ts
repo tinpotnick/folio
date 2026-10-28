@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * The "Repay or invest?" example (demo/examples/repay-or-invest.md):
- * real open data from 1995, a month-by-month model, and assumptions -
+ * real open data from 1975, a month-by-month model, and assumptions -
  * start date, term, mortgage type - that drive every figure.
  */
 
@@ -48,7 +48,7 @@ test.describe("Repay or invest? example", () => {
     page,
   }) => {
     await open(page);
-    await expect(valueOf(page, "period", "Assumptions")).toHaveText("fine");
+    await expect(valueOf(page, "check", "Assumptions")).toHaveText("fine");
     await expect(valueOf(page, "period", "Months modelled")).toHaveText("300");
     await expect(valueOf(page, "period", "data does not reach")).toHaveText(
       "0",
@@ -92,11 +92,11 @@ test.describe("Repay or invest? example", () => {
     await assume(page, 3, "tracker");
     await expect(paid).not.toHaveText(fixed ?? "");
     await assume(page, 3, "fixed");
-    await expect(valueOf(page, "period", "Assumptions")).toContainText(
+    await expect(valueOf(page, "check", "Assumptions")).toContainText(
       "mortgage must be 2-year fix, 5-year fix, tracker or variable",
     );
     // Its sources are cited, each with its retrieval date.
-    await expect(page.locator("#the-doc ol.folio-refs li")).toHaveCount(3);
+    await expect(page.locator("#the-doc ol.folio-refs li")).toHaveCount(4);
     await expect(page.locator("#the-doc ol.folio-refs")).toContainText(
       "Retrieved 28 October 2026",
     );
@@ -126,5 +126,41 @@ test.describe("Repay or invest? example", () => {
     await expect(valueOf(page, "period", "loan is cleared in")).toHaveText(
       "not within the months modelled",
     );
+  });
+
+  test("a tracker can start in 1990; a fix cannot, and says why", async ({
+    page,
+  }) => {
+    await open(page);
+    await assume(page, 3, "tracker");
+    await assume(page, 1, "1990-01-01");
+    await expect(valueOf(page, "check", "Assumptions")).toHaveText("fine");
+    await expect(valueOf(page, "period", "Months modelled")).toHaveText("300");
+    await expect(valueOf(page, "period", "Last month")).toHaveText(
+      "2014-12-31",
+    );
+    const net = page.locator('#the-doc figure[data-chart-source="plan"]', {
+      hasText: "Where each choice leaves you",
+    });
+    await expect(net.locator(".chart-holder svg")).toBeVisible();
+    // A 2-year fix from 1990: before its data, so the check says so,
+    // and the empty charts explain themselves rather than vanish.
+    await assume(page, 3, "2-year fix");
+    await expect(valueOf(page, "check", "Assumptions")).toContainText(
+      "too early: 2-year fix data begins in January 1995",
+    );
+    await expect(net.locator(".chart-empty")).toHaveText(
+      /^Nothing to show: no rows to plot/,
+    );
+    // Before CPI (1988): the start-month pounds figure is blank, noted.
+    await assume(page, 3, "tracker");
+    await assume(page, 1, "1980-01-01");
+    await expect(valueOf(page, "check", "Assumptions")).toContainText(
+      "CPI, which begins in January 1988",
+    );
+    await expect(
+      valueOf(page, "outcome", "in the pounds of the start month"),
+    ).toHaveText("");
+    await expect(net.locator(".chart-empty")).toHaveCount(0);
   });
 });
