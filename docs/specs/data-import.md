@@ -170,17 +170,22 @@ data exactly like hand-authored tables.
 ## Shipped demo data
 
 - `demo/examples/repay-or-invest.md` - "Open example: Repay or invest?
-  A mortgage question" (2026-10-27): Bank of England mortgage rates,
-  OECD UK share prices and ONS CPI from January 2010, imported through
-  Open data and cited; an assumptions table (loan, term, dividend
-  yield) drives a month-by-month model built from `pmt`, `asof`,
-  `eomonth` and running balances, comparing two choices with the same
-  monthly outgoings - a repayment mortgage, and holding the debt
-  (interest only) while investing the capital part of the payment - by
-  what is owed, the investments and the net position, in pounds of the
-  day and of 2010; a summary table and charts.
-  Every figure recalculates when an assumption changes. All three
-  sources are open-licensed, so the example itself is shareable.
+  A mortgage question" (2026-10-28): Bank of England Bank Rate and
+  mortgage rates, OECD UK share prices and ONS CPI, monthly from January
+  1995, imported through Open data and cited. Assumptions - loan, start
+  month, term, mortgage type (2-year fix, 5-year fix, tracker, variable),
+  a tracker's margin, dividend yield - drive a month-by-month model (up
+  to 40 years) comparing a repayment mortgage with holding the debt and
+  investing the capital part of the same payment. A fix keeps the rate
+  on offer when its deal began; a tracker follows Bank Rate. The model
+  stops at the end of the term or of the data, and says which
+  (`live`); blank months stay blank (formulas.md, "Blanks"). Results,
+  the first month's split and the "key moments" (worst and best
+  points, dearest and cheapest rates, least and most invested, with
+  their months) are computed tables, so the prose stays true for any
+  assumptions; an unknown mortgage type or a start before the data is
+  explained in the "Assumptions" row. Shareable: every source is
+  open-licensed.
 
 - `demo/data/monthly-sales.csv` - 72 rows (24 months x 3
   regions), realistic seasonality and per-region trends; the
