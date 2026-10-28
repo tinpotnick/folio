@@ -43,9 +43,7 @@ test.describe("eval polish", () => {
     for (const q of ["stacked", "grouped bar"]) {
       await page.keyboard.press("Control+k");
       await page.locator("#palette-input").fill(q);
-      await expect(page.locator("#palette-list")).toContainText(
-        "Help: Charts and the query language",
-      );
+      await expect(page.locator("#palette-list")).toContainText("Help: Charts");
       await page.keyboard.press("Escape");
     }
   });

@@ -184,54 +184,116 @@ test.describe("edits keep the document the single source of truth", () => {
 });
 
 test.describe("in-app help", () => {
-  test("Help button opens the help document; Close dismisses it", async ({
+  const panel = (page: Page) => page.locator("#help-panel");
+  const helpH1 = (page: Page) => page.locator("#help-doc h1").first();
+
+  test("help docks beside the document: topics, a topic, back, close", async ({
     page,
   }) => {
     await waitForDocument(page);
     await page.locator("#btn-help").click();
-
-    const modal = page.locator("#help-modal");
-    await expect(modal).toBeVisible();
-    await expect(
-      page.locator("#help-doc h1", { hasText: "folio help" }),
-    ).toBeVisible();
-    await expect(page.locator("#help-doc figure table").first()).toBeVisible();
+    await expect(panel(page)).toBeVisible();
+    await expect(page.locator("#btn-help")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await expect(helpH1(page)).toHaveText("folio help");
+    // Beside the document, not over it: both in view, side by side.
+    const doc = await page.locator("#the-doc").boundingBox();
+    const box = await panel(page).boundingBox();
+    expect((doc?.x ?? 0) + (doc?.width ?? 0)).toBeLessThanOrEqual(
+      (box?.x ?? 0) + 1,
+    );
+    // A topic from the list opens in the panel.
+    await page
+      .locator("#help-doc a", { hasText: "Opening and saving" })
+      .click();
+    await expect(helpH1(page)).toHaveText("Opening and saving");
     await expect(
       page.locator("#help-doc li", { hasText: "is uploaded anywhere" }),
     ).toBeVisible();
-
+    await page.locator("#btn-help-home").click();
+    await expect(helpH1(page)).toHaveText("folio help");
+    await expect(page.locator("#btn-help-home")).toBeHidden();
     await page.locator("#btn-help-close").click();
-    await expect(modal).toBeHidden();
+    await expect(panel(page)).toBeHidden();
   });
 
-  test("Esc closes the help window", async ({ page }) => {
+  test("the document stays editable while help is open", async ({ page }) => {
     await waitForDocument(page);
     await page.locator("#btn-help").click();
-    await expect(page.locator("#help-modal")).toBeVisible();
-
-    await page.keyboard.press("Escape");
-    await expect(page.locator("#help-modal")).toBeHidden();
+    await page.locator("#the-doc p").first().click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" Typed beside help.");
+    await expect(page.locator("#the-doc p").first()).toContainText(
+      "Typed beside help.",
+    );
+    await expect(panel(page)).toBeVisible();
   });
 
-  test("? and F1 open help; not while typing in the source editor", async ({
+  test("the help search finds a topic by what it says", async ({ page }) => {
+    await waitForDocument(page);
+    await page.locator("#btn-help").click();
+    // The search box has the focus on opening.
+    await page.keyboard.type("stacked");
+    await expect(page.locator("#help-results button").first()).toContainText(
+      "Charts",
+    );
+    await page.keyboard.press("Enter");
+    await expect(helpH1(page)).toHaveText("Charts");
+    await page.locator("#help-search").fill("zzqx");
+    await expect(page.locator("#help-results")).toContainText(
+      'No help topic mentions "zzqx"',
+    );
+  });
+
+  test("Esc clears the help search, then closes the panel", async ({
     page,
   }) => {
     await waitForDocument(page);
-    const modal = page.locator("#help-modal");
+    await page.locator("#btn-help").click();
+    await page.keyboard.type("lists");
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#help-search")).toHaveValue("");
+    await expect(panel(page)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(panel(page)).toBeHidden();
+  });
 
+  test("? toggles help and F1 opens it; not while typing in the source editor", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("body").click({ position: { x: 5, y: 300 } });
     await page.keyboard.press("?");
-    await expect(modal).toBeVisible();
-    await page.keyboard.press("Escape");
-
+    await expect(panel(page)).toBeVisible();
+    await page.locator("body").click({ position: { x: 5, y: 300 } });
+    await page.keyboard.press("?");
+    await expect(panel(page)).toBeHidden();
     await page.keyboard.press("F1");
-    await expect(modal).toBeVisible();
+    await expect(panel(page)).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(modal).toBeHidden();
+    await expect(panel(page)).toBeHidden();
 
     await page.locator("#btn-markdown").click();
     await page.locator("#editor").click();
     await page.keyboard.press("?");
-    await expect(modal).toBeHidden();
+    await expect(panel(page)).toBeHidden();
+  });
+
+  test("a narrow window: the panel slides over, under the toolbar", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 760, height: 800 });
+    await waitForDocument(page);
+    await page.locator("#btn-help").click();
+    const head = await page.locator("header").first().boundingBox();
+    const box = await panel(page).boundingBox();
+    expect(box?.y ?? 0).toBeGreaterThanOrEqual(
+      (head?.y ?? 0) + (head?.height ?? 0) - 1,
+    );
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(801);
+    await expect(page.locator("#btn-help-close")).toBeInViewport();
   });
 });
 

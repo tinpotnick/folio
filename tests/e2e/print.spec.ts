@@ -42,12 +42,13 @@ test.describe("print and PDF", () => {
     ).toBeVisible();
   });
 
-  test("printing closes an open help window", async ({ page }) => {
+  test("an open help panel does not print", async ({ page }) => {
     await waitForDocument(page);
     await page.locator("#btn-help").click();
-    await expect(page.locator("#help-modal")).toBeVisible();
-    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
-    await expect(page.locator("#help-modal")).toBeHidden();
+    await expect(page.locator("#help-panel")).toBeVisible();
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("#help-panel")).toBeHidden();
+    await expect(page.locator("#the-doc")).toBeVisible();
   });
 
   test("the palette print command calls window.print", async ({ page }) => {

@@ -71,4 +71,4 @@ chrome would put a widget inside a document.
   sort both directions, cell edit rippling to figure/formulas/
   source, inspector button, Esc/Done).
 - First-contact eval: `evals/dataset-browser-first-contact.md`.
-- Documented in `demo/help.md`.
+- Documented in `demo/help/tables.md`.

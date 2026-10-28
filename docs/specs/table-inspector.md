@@ -104,4 +104,4 @@ see.
   no crash, Escape and empty renames revert, Tab/Enter header
   navigation).
 - First-contact eval: `evals/table-inspector-first-contact.md`.
-- Documented in `demo/help.md`.
+- Documented in `demo/help/tables.md`.

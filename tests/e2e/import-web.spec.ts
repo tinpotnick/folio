@@ -242,9 +242,9 @@ data:
   test("search finds the money functions and import", async ({ page }) => {
     await open(page);
     for (const [query, top] of [
-      ["pmt", "Table formulas"],
-      ["loan payment", "Table formulas"],
-      ["vlookup", "Table formulas"],
+      ["pmt", "Help: Formulas"],
+      ["loan payment", "Help: Formulas"],
+      ["vlookup", "Help: Formulas"],
       ["import", "Import data"],
     ] as const) {
       await page.keyboard.press("Control+k");
