@@ -101,4 +101,30 @@ test.describe("Repay or invest? example", () => {
       "Retrieved 28 October 2026",
     );
   });
+
+  test("paying more each month: repaying clears early, then invests", async ({
+    page,
+  }) => {
+    await open(page);
+    await expect(valueOf(page, "period", "loan is cleared in")).toHaveText(
+      "2026-09-30",
+    );
+    // monthly is the seventh assumption: £1,500 a month, both ways.
+    await assume(page, 6, "1500");
+    await expect(valueOf(page, "outcome", "Paid in total")).toHaveText(
+      "450,000.00",
+    );
+    await expect(valueOf(page, "period", "loan is cleared in")).toHaveText(
+      "2017-07-31",
+    );
+    await expect(
+      valueOf(page, "outcome", "Investments - repaying"),
+    ).not.toHaveText("0.00");
+    // A later start: the loan is not cleared within the data.
+    await assume(page, 6, "0");
+    await assume(page, 1, "2010-01-01");
+    await expect(valueOf(page, "period", "loan is cleared in")).toHaveText(
+      "not within the months modelled",
+    );
+  });
 });
