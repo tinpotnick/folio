@@ -33,7 +33,7 @@ test.describe("chart readout", () => {
     await expect(panel.locator(".readout-row")).toHaveCount(2);
     // Money in its column's format: two places, thousands separators.
     await expect(panel.locator(".readout-row b").first()).toHaveText(
-      /^[\d,]+\.\d\d$/,
+      /^£[\d,]+\.\d\d$/,
     );
     // The guide (a zero-width line) and a dot on each series.
     await expect(chart.locator(".readout-layer")).not.toHaveCSS(
@@ -98,6 +98,76 @@ test.describe("chart readout", () => {
       read += 1;
     }
     expect(read).toBeGreaterThan(0);
+  });
+});
+
+test.describe("chart readout: from the first-contact eval", () => {
+  test("it goes when the pointer leaves, even with the caret in the text", async ({
+    page,
+  }) => {
+    await open(page, "demo/examples/repay-or-invest.md");
+    await page.locator("#the-doc h2").first().click();
+    const chart = holdChart(page);
+    await chart.scrollIntoViewIfNeeded();
+    const box = await chart.locator(".chart-holder svg").boundingBox();
+    if (!box) throw new Error("no chart");
+    await page.mouse.move(box.x + box.width * 0.4, box.y + box.height / 2);
+    await expect(chart.locator(".chart-readout")).toBeVisible();
+    await page.mouse.move(box.x + box.width * 0.4, box.y - 80);
+    await expect(chart.locator(".chart-readout")).toBeHidden();
+  });
+
+  test("values carry their unit; PageDown moves a year", async ({ page }) => {
+    await open(page, "demo/examples/repay-or-invest.md");
+    // Figure 1: Bank Rate and mortgage rates, a "%" unit.
+    const rates = page.locator('#the-doc figure[data-chart-source="rates"]');
+    await rates.locator(".chart-holder").focus();
+    await expect(
+      rates.locator(".chart-readout .readout-row b").first(),
+    ).toHaveText(/^\d+(\.\d{1,2})?%$/);
+    // Money: £, two places.
+    const hold = holdChart(page);
+    await hold.locator(".chart-holder").focus();
+    await page.keyboard.press("Home");
+    await expect(
+      hold.locator(".chart-readout .readout-row b").first(),
+    ).toHaveText(/^£[\d,]+\.\d\d$/);
+    await page.keyboard.press("PageDown");
+    await expect(hold.locator(".chart-readout .readout-head")).toHaveText(
+      "31 Oct 2002",
+    );
+  });
+
+  test("months read as months; a narrow chart keeps its panel inside", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 420, height: 900 });
+    await open(page, "demo/examples/report.md");
+    const chart = page.locator("#the-doc figure[data-chart-source]").first();
+    const holder = chart.locator(".chart-holder");
+    await holder.focus();
+    await expect(chart.locator(".chart-readout .readout-head")).toHaveText(
+      /^[A-Z][a-z]{2} \d{4}$/,
+    );
+    const panel = await chart.locator(".chart-readout").boundingBox();
+    const hb = await holder.boundingBox();
+    if (!panel || !hb) throw new Error("no box");
+    expect(panel.x).toBeGreaterThanOrEqual(hb.x - 1);
+    expect(panel.x + panel.width).toBeLessThanOrEqual(hb.x + hb.width + 1);
+  });
+
+  test("grouped bars: a dot on each series' own bar", async ({ page }) => {
+    await open(page, "demo/examples/sales-review.md");
+    const chart = page.locator("#the-doc figure[data-chart-source]", {
+      hasText: "Target and actual by region",
+    });
+    await chart.locator(".chart-holder").focus();
+    await expect(chart.locator(".readout-band")).toBeVisible();
+    const xs = await chart
+      .locator(".readout-dot")
+      .evaluateAll((d) => d.map((c) => Number(c.getAttribute("cx"))));
+    expect(xs.length).toBeGreaterThan(1);
+    expect(new Set(xs).size).toBe(xs.length);
   });
 });
 

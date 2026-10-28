@@ -278,8 +278,6 @@ function personalMark(after: boolean): HTMLElement {
 
 /** A readout's x label: an ISO date reads as a date ("31 Oct 2001"). */
 function readoutLabel(raw: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (!m) return raw;
   const months = [
     "Jan",
     "Feb",
@@ -294,7 +292,40 @@ function readoutLabel(raw: string): string {
     "Nov",
     "Dec",
   ];
-  return `${String(Number(m[3]))} ${months[Number(m[2]) - 1] ?? ""} ${m[1] ?? ""}`;
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(raw);
+  if (!m) return raw;
+  const month = `${months[Number(m[2]) - 1] ?? ""} ${m[1] ?? ""}`;
+  return m[3] ? `${String(Number(m[3]))} ${month}` : month;
+}
+
+/**
+ * A readout value: in its column's format (money, %), with its unit -
+ * £ $ € before, % and words after - and otherwise at most two decimal
+ * places (four significant figures below one), grouped.
+ */
+function readoutValue(
+  v: number,
+  format: "percent" | "currency" | undefined,
+  unit: string | undefined,
+): string {
+  if (format === "percent") return formatComputed(v, format);
+  const text =
+    format === "currency" || Math.abs(v) >= 1 || v === 0
+      ? v.toLocaleString("en-GB", {
+          minimumFractionDigits: format === "currency" ? 2 : 0,
+          maximumFractionDigits: 2,
+        })
+      : Number(v.toPrecision(4)).toString();
+  const u = (unit ?? "").trim();
+  if (!u) return text;
+  // A currency symbol goes first, its scale after: "£500k", "-£1.2m".
+  const cur = /^([£$€¥])(.*)$/.exec(u);
+  if (cur) {
+    const abs = v < 0 ? text.slice(1) : text;
+    return `${v < 0 ? "-" : ""}${cur[1] ?? ""}${abs}${cur[2] ?? ""}`;
+  }
+  if (u === "%") return `${text}%`;
+  return `${text} ${u}`;
 }
 
 /** A bibliography block (docs/specs/citations.md). */
@@ -5667,9 +5698,13 @@ export class FolioDoc extends HTMLElement {
       );
       const unit = valueColumn?.unit ?? undefined;
       // A series' values read in their column's own format (money, %).
-      const formatOf = (name: string): "percent" | "currency" | undefined =>
-        tableBlock.table.columns.find((c) => c.name === name)?.format ??
-        valueColumn?.format;
+      // A series' values read in their column's own terms: its format
+      // (money, %) and its unit (£ before, % and the rest after).
+      const formatOf = (name: string): ((v: number) => string) => {
+        const col =
+          tableBlock.table.columns.find((c) => c.name === name) ?? valueColumn;
+        return (v: number): string => readoutValue(v, col?.format, col?.unit);
+      };
       const style: ChartStyle = {
         seriesName: valueCol,
         color: seriesColor,
@@ -5757,7 +5792,8 @@ export class FolioDoc extends HTMLElement {
       dots: SVGCircleElement[];
       panel: HTMLElement;
       live: HTMLElement;
-      formatOf: (name: string) => "percent" | "currency" | undefined;
+      formatOf: (name: string) => (v: number) => string;
+      band: SVGRectElement | null;
       at: number;
     }
   >();
@@ -5772,7 +5808,7 @@ export class FolioDoc extends HTMLElement {
   private attachReadout(
     holder: HTMLElement,
     r: Readout,
-    formatOf: (name: string) => "percent" | "currency" | undefined,
+    formatOf: (name: string) => (v: number) => string,
   ): void {
     const svg = holder.querySelector("svg");
     if (!svg || r.xs.length === 0) return;
@@ -5780,10 +5816,21 @@ export class FolioDoc extends HTMLElement {
     const layer = document.createElementNS(NS, "g");
     layer.setAttribute("class", "readout-layer");
     layer.style.display = "none";
+    // Bars: a soft band behind the category; lines: a dashed guide.
+    let band: SVGRectElement | null = null;
+    if (r.band) {
+      band = document.createElementNS(NS, "rect");
+      band.setAttribute("class", "readout-band");
+      band.setAttribute("y", String(r.top));
+      band.setAttribute("height", String(r.bottom - r.top));
+      band.setAttribute("width", String(r.band));
+      layer.appendChild(band);
+    }
     const guide = document.createElementNS(NS, "line");
     guide.setAttribute("class", "readout-guide");
     guide.setAttribute("y1", String(r.top));
     guide.setAttribute("y2", String(r.bottom));
+    if (r.band) guide.style.display = "none";
     layer.appendChild(guide);
     const dots = r.series.map((s) => {
       const c = document.createElementNS(NS, "circle");
@@ -5811,6 +5858,7 @@ export class FolioDoc extends HTMLElement {
       panel,
       live,
       formatOf,
+      band,
       at: Math.min(before?.at ?? -1, r.xs.length - 1),
     });
     if (holder.dataset.readout) return;
@@ -5838,7 +5886,12 @@ export class FolioDoc extends HTMLElement {
         this.showReadout(holder, nearest(ev.clientX));
     });
     holder.addEventListener("pointerleave", (ev) => {
-      if (ev.pointerType !== "touch" && document.activeElement !== this) {
+      // Hide unless the chart itself has focus (the keyboard route); the
+      // caret being elsewhere in the document is not that.
+      if (
+        ev.pointerType !== "touch" &&
+        this.shadowRoot?.activeElement !== holder
+      ) {
         this.hideReadout(holder);
       }
     });
@@ -5861,13 +5914,21 @@ export class FolioDoc extends HTMLElement {
           ? Math.min(st.at + 1, last)
           : ev.key === "ArrowLeft"
             ? Math.max(st.at - 1, 0)
-            : ev.key === "Home"
-              ? 0
-              : ev.key === "End"
-                ? last
-                : null;
+            : ev.key === "PageDown"
+              ? Math.min(st.at + 12, last)
+              : ev.key === "PageUp"
+                ? Math.max(st.at - 12, 0)
+                : ev.key === "Home"
+                  ? 0
+                  : ev.key === "End"
+                    ? last
+                    : null;
+      // Esc puts the readout away - and only that: with none showing,
+      // it is left to the rest of the document.
       if (ev.key === "Escape") {
+        if (st.panel.hidden) return;
         ev.stopPropagation();
+        this.hideReadout(holder);
         holder.blur();
         return;
       }
@@ -5909,12 +5970,15 @@ export class FolioDoc extends HTMLElement {
     const x = st.r.xs[i] ?? 0;
     st.guide.setAttribute("x1", String(x));
     st.guide.setAttribute("x2", String(x));
+    if (st.band && st.r.band) {
+      st.band.setAttribute("x", String(x - st.r.band / 2));
+    }
     st.r.series.forEach((s, k) => {
       const dot = st.dots[k];
       const y = s.ys[i];
       if (!dot) return;
       dot.style.display = y === null || y === undefined ? "none" : "";
-      dot.setAttribute("cx", String(x));
+      dot.setAttribute("cx", String(x + (s.dx ?? 0)));
       dot.setAttribute("cy", String(y ?? 0));
     });
     st.layer.style.display = "";
@@ -5925,7 +5989,7 @@ export class FolioDoc extends HTMLElement {
       text:
         s.values[i] === null || s.values[i] === undefined
           ? "-"
-          : formatComputed(s.values[i], st.formatOf(s.name)),
+          : st.formatOf(s.name)(s.values[i] ?? 0),
     }));
     st.panel.textContent = "";
     const head = document.createElement("div");
@@ -5945,16 +6009,31 @@ export class FolioDoc extends HTMLElement {
       st.panel.appendChild(line);
     }
     st.panel.hidden = false;
-    // Beside the guide, on whichever side has room.
+    // Beside the guide, on whichever side has room - always inside the
+    // chart. A narrow chart has no room beside: a compact panel goes to
+    // the top corner away from the point read.
     const svg = holder.querySelector("svg");
     const box = svg?.getBoundingClientRect();
     const hb = holder.getBoundingClientRect();
     if (box) {
       const px = box.left - hb.left + (x / st.r.width) * box.width;
+      const compact = hb.width < 520;
+      st.panel.classList.toggle("compact", compact);
+      const w = st.panel.offsetWidth;
       const right = px > hb.width / 2;
-      st.panel.style.left = right ? "" : `${String(px + 10)}px`;
-      st.panel.style.right = right ? `${String(hb.width - px + 10)}px` : "";
-      st.panel.style.top = `${String(box.top - hb.top + (st.r.top / st.r.height) * box.height)}px`;
+      let left = compact
+        ? right
+          ? 0
+          : hb.width - w
+        : right
+          ? px - 10 - w
+          : px + 10;
+      left = Math.max(0, Math.min(left, hb.width - w));
+      st.panel.style.left = `${String(left)}px`;
+      st.panel.style.right = "";
+      st.panel.style.top = compact
+        ? "0px"
+        : `${String(box.top - hb.top + (st.r.top / st.r.height) * box.height)}px`;
     }
     st.live.textContent = `${label}: ${rows.map((r2) => `${r2.name} ${r2.text}`).join(", ")}`;
   }

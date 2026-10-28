@@ -61,7 +61,9 @@ test.describe("table viewport", () => {
     // The chart queries the MODEL: all 120 rows are plotted even
     // though the figure shows 50.
     await expect(
-      page.locator('figure[data-chart-source="big"] svg rect'),
+      page.locator(
+        'figure[data-chart-source="big"] svg rect:not(.readout-band)',
+      ),
     ).toHaveCount(120);
   });
 

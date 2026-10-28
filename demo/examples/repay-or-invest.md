@@ -1362,23 +1362,23 @@ columns:
   - {name: live, type: formula, expr: "n <= @assume.r1.term * 12 && @assume.r1.mortgage in ['2-year fix', '5-year fix', 'tracker', 'variable'] && eomonth(@assume.r1.start, 0) >= @rates.r1.date && eomonth(@assume.r1.start, n - 1) <= @rates.prev.date ? 1 : ''"}
   - {name: month, type: formula, expr: "live == 1 ? eomonth(@assume.r1.start, n - 1) : ''"}
   - {name: rate, type: formula, unit: "%", expr: "live != 1 ? '' : @assume.r1.mortgage == 'tracker' ? asof(month, @rates.col.date, @rates.col.bank_rate) + @assume.r1.margin : @assume.r1.mortgage == 'variable' ? asof(month, @rates.col.date, @rates.col.svr) : @assume.r1.mortgage == '5-year fix' ? asof(eomonth(@assume.r1.start, floor((n - 1) / 60) * 60), @rates.col.date, @rates.col.fixed_5y) : @assume.r1.mortgage == '2-year fix' ? asof(eomonth(@assume.r1.start, floor((n - 1) / 24) * 24), @rates.col.date, @rates.col.fixed_2y) : ''"}
-  - {name: owed_repaying, type: formula, expr: "live == 1 ? max((self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) * (1 + rate / 100 / 12) - max(-pmt(rate / 100 / 12, @assume.r1.term * 12 - n + 1, (self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying)), @assume.r1.monthly), 0) | round(2) : ''", format: currency}
-  - {name: outgoing, type: formula, expr: "live == 1 ? max(-pmt(rate / 100 / 12, @assume.r1.term * 12 - n + 1, (self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying)), @assume.r1.monthly) | round(2) : ''", format: currency}
-  - {name: payment, type: formula, expr: "min(outgoing, (self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) * (1 + rate / 100 / 12)) | round(2)", format: currency}
-  - {name: interest_repaying, type: formula, expr: "((self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) * rate / 100 / 12) | round(2)", format: currency}
-  - {name: capital_repaid, type: formula, expr: "(payment - interest_repaying) | round(2)", format: currency}
-  - {name: invested_repaying, type: formula, expr: "(outgoing - payment) | round(2)", format: currency}
-  - {name: interest_only, type: formula, expr: "(@assume.r1.loan * rate / 100 / 12) | round(2)", format: currency}
-  - {name: invested, type: formula, expr: "(outgoing - interest_only) | round(2)", format: currency}
+  - {name: owed_repaying, type: formula, unit: "£", expr: "live == 1 ? max((self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) * (1 + rate / 100 / 12) - max(-pmt(rate / 100 / 12, @assume.r1.term * 12 - n + 1, (self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying)), @assume.r1.monthly), 0) | round(2) : ''", format: currency}
+  - {name: outgoing, type: formula, unit: "£", expr: "live == 1 ? max(-pmt(rate / 100 / 12, @assume.r1.term * 12 - n + 1, (self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying)), @assume.r1.monthly) | round(2) : ''", format: currency}
+  - {name: payment, type: formula, unit: "£", expr: "min(outgoing, (self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) * (1 + rate / 100 / 12)) | round(2)", format: currency}
+  - {name: interest_repaying, type: formula, unit: "£", expr: "((self.row == 1 ? @assume.r1.loan : self.prev.owed_repaying) * rate / 100 / 12) | round(2)", format: currency}
+  - {name: capital_repaid, type: formula, unit: "£", expr: "(payment - interest_repaying) | round(2)", format: currency}
+  - {name: invested_repaying, type: formula, unit: "£", expr: "(outgoing - payment) | round(2)", format: currency}
+  - {name: interest_only, type: formula, unit: "£", expr: "(@assume.r1.loan * rate / 100 / 12) | round(2)", format: currency}
+  - {name: invested, type: formula, unit: "£", expr: "(outgoing - interest_only) | round(2)", format: currency}
   - {name: index, type: formula, expr: "asof(month, @uk_shares.col.date, @uk_shares.col.uk_shares)"}
-  - {name: pot_repaying, type: formula, expr: "((self.row == 1 ? 0 : self.prev.pot_repaying * index / self.prev.index * (1 + @assume.r1.dividends / 100 / 12)) + invested_repaying) | round(2)", format: currency}
-  - {name: pot, type: formula, expr: "((self.row == 1 ? 0 : self.prev.pot * index / self.prev.index * (1 + @assume.r1.dividends / 100 / 12)) + invested) | round(2)", format: currency}
-  - {name: owed_investing, type: formula, expr: "@assume.r1.loan * live", format: currency}
-  - {name: net_repaying, type: formula, expr: "(pot_repaying - owed_repaying) | round(2)", format: currency}
-  - {name: net_investing, type: formula, expr: "(pot - owed_investing) | round(2)", format: currency}
-  - {name: ahead, type: formula, expr: "(net_investing - net_repaying) | round(2)", format: currency}
+  - {name: pot_repaying, type: formula, unit: "£", expr: "((self.row == 1 ? 0 : self.prev.pot_repaying * index / self.prev.index * (1 + @assume.r1.dividends / 100 / 12)) + invested_repaying) | round(2)", format: currency}
+  - {name: pot, type: formula, unit: "£", expr: "((self.row == 1 ? 0 : self.prev.pot * index / self.prev.index * (1 + @assume.r1.dividends / 100 / 12)) + invested) | round(2)", format: currency}
+  - {name: owed_investing, type: formula, unit: "£", expr: "@assume.r1.loan * live", format: currency}
+  - {name: net_repaying, type: formula, unit: "£", expr: "(pot_repaying - owed_repaying) | round(2)", format: currency}
+  - {name: net_investing, type: formula, unit: "£", expr: "(pot - owed_investing) | round(2)", format: currency}
+  - {name: ahead, type: formula, unit: "£", expr: "(net_investing - net_repaying) | round(2)", format: currency}
   - {name: cpi, type: formula, expr: "asof(month, @cpi.col.date, @cpi.col.cpi)"}
-  - {name: ahead_real, type: formula, expr: "(ahead * self.r1.cpi / cpi) | round(2)", format: currency}
+  - {name: ahead_real, type: formula, unit: "£", expr: "(ahead * self.r1.cpi / cpi) | round(2)", format: currency}
 data:
   - [1, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
   - [2, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]

@@ -1897,6 +1897,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .chart-holder:focus-visible { outline: 2px solid var(--folio-focus, #1f3fbf); outline-offset: 4px; border-radius: 4px; }
     .readout-guide { stroke: var(--folio-ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
     .readout-dot { stroke: var(--folio-paper); stroke-width: 2; }
+    .readout-band { fill: var(--folio-ink); opacity: 0.06; }
+    .chart-readout.compact { font-size: 11px; padding: 4px 7px; max-width: 100%; white-space: normal; }
     .chart-readout {
       position: absolute;
       z-index: 3;

@@ -29,7 +29,7 @@ test.describe("charts with several series", () => {
       has: page.locator(".chart-legend"),
     });
     await expect(fig.locator(".legend-item")).toHaveText(["h1", "h2"]);
-    await expect(fig.locator("svg rect")).toHaveCount(6);
+    await expect(fig.locator("svg rect:not(.readout-band)")).toHaveCount(6);
     // The bar's Stack box writes `stack: true`.
     await fig.click();
     await fig.getByLabel("Stack").check();

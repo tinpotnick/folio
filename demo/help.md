@@ -424,7 +424,8 @@ document — written in the same renderer you are working with.
   phone or tablet, tap the chart.
 - **With the keyboard**: Tab to a chart (or search "read a chart's
   values" with Ctrl+K), then the left and right arrows step through it,
-  Home and End jump to the ends, and Esc puts it away. Screen readers
+  Page Up and Page Down move a year (12 points) at a time, Home and End
+  jump to the ends, and Esc puts it away. Screen readers
   hear each value.
 - On a scatter or pie chart, rest the pointer on a point or slice to
   see its value.

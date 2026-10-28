@@ -32,11 +32,16 @@ export interface Readout {
   bottom: number;
   xs: number[];
   labels: string[];
+  /** Bars: the width of the band the readout shades behind a category
+   * (a line chart gets a dashed guide instead). */
+  band?: number;
   series: {
     name: string;
     color: string;
     values: (number | null)[];
     ys: (number | null)[];
+    /** Grouped bars: this series' bar centre, from the category's. */
+    dx?: number;
   }[];
 }
 
@@ -371,6 +376,7 @@ export function renderBarChart(
       top: PAD.top,
       bottom: PAD.top + innerH,
       xs: result.rows.map((_, i) => padLeft + band * i + band / 2),
+      band: Math.min(band * 0.9, barW + 16),
       labels: result.rows.map((r) => String(r[0] ?? "")),
       series: [
         {
@@ -925,10 +931,16 @@ export function renderSeriesChart(
   parts.push("</svg>");
   // Where each value is drawn: stacked series sit on the ones below.
   const sums = data.categories.map(() => 0);
+  // Grouped bars sit side by side: each series' dot on its own bar.
+  const groupW = Math.min(band * 0.75, 28 * k + 12);
+  const grouped = type === "bar" && !stacked;
   const readSeries = data.series.map((s, i) => ({
     name: s.name,
     color: colorOf(i),
     values: s.values,
+    ...(grouped
+      ? { dx: -groupW / 2 + (groupW / k) * i + (groupW / k - 1.5) / 2 }
+      : {}),
     ys: s.values.map((v, c) => {
       if (v === null) return null;
       if (!stacked) return yOf(v);
@@ -946,6 +958,9 @@ export function renderSeriesChart(
       bottom: PAD.top + innerH,
       xs: data.categories.map((_, c) => xMid(c)),
       labels: data.categories,
+      ...(type === "bar"
+        ? { band: grouped ? groupW + 12 : Math.min(band * 0.6, 80) + 12 }
+        : {}),
       series: readSeries,
     },
   };
