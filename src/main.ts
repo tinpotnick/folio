@@ -2625,6 +2625,18 @@ function paletteEntries(): PaletteEntry[] {
     });
   }
   entries.push({
+    title: "Read a chart's values",
+    group: "Command",
+    keywords:
+      "chart values read hover tooltip point data exact number readout crosshair inspect figure",
+    action: () => {
+      const why = el.focusChartReadout();
+      flash(
+        why ?? "Left and right arrows move along the chart; Esc puts it away",
+      );
+    },
+  });
+  entries.push({
     title: "Import open data (Bank of England, ONS, OECD, house prices…)",
     group: "Command",
     keywords:

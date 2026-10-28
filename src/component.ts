@@ -49,6 +49,7 @@ import {
   renderScatterChart,
   renderSeriesChart,
   type ChartStyle,
+  type Readout,
 } from "./render/chart.js";
 import { chartSeries } from "@folio/engine/series";
 import {
@@ -273,6 +274,58 @@ function personalMark(after: boolean): HTMLElement {
   mark.title =
     "Imported under terms that do not allow sharing this data, or figures derived from it";
   return mark;
+}
+
+/** A readout's x label: an ISO date reads as a date ("31 Oct 2001"). */
+function readoutLabel(raw: string): string {
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?$/.exec(raw);
+  if (!m) return raw;
+  const month = `${months[Number(m[2]) - 1] ?? ""} ${m[1] ?? ""}`;
+  return m[3] ? `${String(Number(m[3]))} ${month}` : month;
+}
+
+/**
+ * A readout value: in its column's format (money, %), with its unit -
+ * £ $ € before, % and words after - and otherwise at most two decimal
+ * places (four significant figures below one), grouped.
+ */
+function readoutValue(
+  v: number,
+  format: "percent" | "currency" | undefined,
+  unit: string | undefined,
+): string {
+  if (format === "percent") return formatComputed(v, format);
+  const text =
+    format === "currency" || Math.abs(v) >= 1 || v === 0
+      ? v.toLocaleString("en-GB", {
+          minimumFractionDigits: format === "currency" ? 2 : 0,
+          maximumFractionDigits: 2,
+        })
+      : Number(v.toPrecision(4)).toString();
+  const u = (unit ?? "").trim();
+  if (!u) return text;
+  // A currency symbol goes first, its scale after: "£500k", "-£1.2m".
+  const cur = /^([£$€¥])(.*)$/.exec(u);
+  if (cur) {
+    const abs = v < 0 ? text.slice(1) : text;
+    return `${v < 0 ? "-" : ""}${cur[1] ?? ""}${abs}${cur[2] ?? ""}`;
+  }
+  if (u === "%") return `${text}%`;
+  return `${text} ${u}`;
 }
 
 /** A bibliography block (docs/specs/citations.md). */
@@ -5644,7 +5697,16 @@ export class FolioDoc extends HTMLElement {
         (c) => c.name === valueCol,
       );
       const unit = valueColumn?.unit ?? undefined;
+      // A series' values read in their column's own format (money, %).
+      // A series' values read in their column's own terms: its format
+      // (money, %) and its unit (£ before, % and the rest after).
+      const formatOf = (name: string): ((v: number) => string) => {
+        const col =
+          tableBlock.table.columns.find((c) => c.name === name) ?? valueColumn;
+        return (v: number): string => readoutValue(v, col?.format, col?.unit);
+      };
       const style: ChartStyle = {
+        seriesName: valueCol,
         color: seriesColor,
         colors: palette,
         text: ink.ink,
@@ -5695,23 +5757,292 @@ export class FolioDoc extends HTMLElement {
                 `<span class="legend-item"><i style="background:${l.color}"></i>${escapeHtml(l.name)}</span>`,
             )
             .join("")}</div>`;
+        if (multi.readout) {
+          this.attachReadout(holder, multi.readout, formatOf);
+        }
         return;
       }
-      holder.innerHTML =
+      const rendered =
         block.chart.type === "line"
-          ? renderLineChart(result, style).svg
+          ? renderLineChart(result, style)
           : block.chart.type === "area"
-            ? renderAreaChart(result, style).svg
+            ? renderAreaChart(result, style)
             : block.chart.type === "scatter"
-              ? renderScatterChart(result, style).svg
+              ? renderScatterChart(result, style)
               : block.chart.type === "pie"
-                ? renderPieChart(result, false, style).svg
+                ? renderPieChart(result, false, style)
                 : block.chart.type === "donut"
-                  ? renderPieChart(result, true, style).svg
-                  : renderBarChart(result, style).svg;
+                  ? renderPieChart(result, true, style)
+                  : renderBarChart(result, style);
+      holder.innerHTML = rendered.svg;
+      if (rendered.readout)
+        this.attachReadout(holder, rendered.readout, formatOf);
     } catch (e) {
       holder.textContent = `Chart error: ${e instanceof Error ? e.message : String(e)}`;
     }
+  }
+
+  /** Each chart's readout, by its holder (it is redrawn in place). */
+  private readouts = new WeakMap<
+    HTMLElement,
+    {
+      r: Readout;
+      layer: SVGGElement;
+      guide: SVGLineElement;
+      dots: SVGCircleElement[];
+      panel: HTMLElement;
+      live: HTMLElement;
+      formatOf: (name: string) => (v: number) => string;
+      band: SVGRectElement | null;
+      at: number;
+    }
+  >();
+
+  /**
+   * The chart readout (docs/specs/chart-readout.md): point at a chart -
+   * or tap it, or give it focus and use the arrow keys - and a guide
+   * marks the nearest x, with each series' value there in its column's
+   * format. A reading aid only: nothing changes, nothing prints, and a
+   * click still opens the chart's inspector.
+   */
+  private attachReadout(
+    holder: HTMLElement,
+    r: Readout,
+    formatOf: (name: string) => (v: number) => string,
+  ): void {
+    const svg = holder.querySelector("svg");
+    if (!svg || r.xs.length === 0) return;
+    const NS = "http://www.w3.org/2000/svg";
+    const layer = document.createElementNS(NS, "g");
+    layer.setAttribute("class", "readout-layer");
+    layer.style.display = "none";
+    // Bars: a soft band behind the category; lines: a dashed guide.
+    let band: SVGRectElement | null = null;
+    if (r.band) {
+      band = document.createElementNS(NS, "rect");
+      band.setAttribute("class", "readout-band");
+      band.setAttribute("y", String(r.top));
+      band.setAttribute("height", String(r.bottom - r.top));
+      band.setAttribute("width", String(r.band));
+      layer.appendChild(band);
+    }
+    const guide = document.createElementNS(NS, "line");
+    guide.setAttribute("class", "readout-guide");
+    guide.setAttribute("y1", String(r.top));
+    guide.setAttribute("y2", String(r.bottom));
+    if (r.band) guide.style.display = "none";
+    layer.appendChild(guide);
+    const dots = r.series.map((s) => {
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("class", "readout-dot");
+      c.setAttribute("r", "4");
+      c.setAttribute("fill", s.color);
+      layer.appendChild(c);
+      return c;
+    });
+    svg.appendChild(layer);
+    const panel = document.createElement("div");
+    panel.className = "chart-readout";
+    panel.hidden = true;
+    panel.setAttribute("aria-hidden", "true");
+    const live = document.createElement("div");
+    live.className = "readout-live";
+    live.setAttribute("aria-live", "polite");
+    holder.append(panel, live);
+    const before = this.readouts.get(holder);
+    this.readouts.set(holder, {
+      r,
+      layer,
+      guide,
+      dots,
+      panel,
+      live,
+      formatOf,
+      band,
+      at: Math.min(before?.at ?? -1, r.xs.length - 1),
+    });
+    if (holder.dataset.readout) return;
+    // The listeners outlive redraws: bound once, they read the current
+    // readout.
+    holder.dataset.readout = "1";
+    holder.tabIndex = 0;
+    holder.setAttribute(
+      "aria-description",
+      "Use the left and right arrow keys to read the chart's values",
+    );
+    const nearest = (clientX: number): number => {
+      const st = this.readouts.get(holder);
+      const box = holder.querySelector("svg")?.getBoundingClientRect();
+      if (!st || !box || box.width === 0) return -1;
+      const x = ((clientX - box.left) * st.r.width) / box.width;
+      let best = 0;
+      st.r.xs.forEach((xi, i) => {
+        if (Math.abs(xi - x) < Math.abs((st.r.xs[best] ?? 0) - x)) best = i;
+      });
+      return best;
+    };
+    holder.addEventListener("pointermove", (ev) => {
+      if (ev.pointerType !== "touch")
+        this.showReadout(holder, nearest(ev.clientX));
+    });
+    holder.addEventListener("pointerleave", (ev) => {
+      // Hide unless the chart itself has focus (the keyboard route); the
+      // caret being elsewhere in the document is not that.
+      if (
+        ev.pointerType !== "touch" &&
+        this.shadowRoot?.activeElement !== holder
+      ) {
+        this.hideReadout(holder);
+      }
+    });
+    // A tap shows it (no hover on touch); a tap elsewhere blurs it.
+    holder.addEventListener("pointerdown", (ev) => {
+      if (ev.pointerType === "touch")
+        this.showReadout(holder, nearest(ev.clientX));
+    });
+    holder.addEventListener("focus", () => {
+      const st = this.readouts.get(holder);
+      if (st) this.showReadout(holder, st.at >= 0 ? st.at : st.r.xs.length - 1);
+    });
+    holder.addEventListener("blur", () => this.hideReadout(holder));
+    holder.addEventListener("keydown", (ev) => {
+      const st = this.readouts.get(holder);
+      if (!st) return;
+      const last = st.r.xs.length - 1;
+      const to =
+        ev.key === "ArrowRight"
+          ? Math.min(st.at + 1, last)
+          : ev.key === "ArrowLeft"
+            ? Math.max(st.at - 1, 0)
+            : ev.key === "PageDown"
+              ? Math.min(st.at + 12, last)
+              : ev.key === "PageUp"
+                ? Math.max(st.at - 12, 0)
+                : ev.key === "Home"
+                  ? 0
+                  : ev.key === "End"
+                    ? last
+                    : null;
+      // Esc puts the readout away - and only that: with none showing,
+      // it is left to the rest of the document.
+      if (ev.key === "Escape") {
+        if (st.panel.hidden) return;
+        ev.stopPropagation();
+        this.hideReadout(holder);
+        holder.blur();
+        return;
+      }
+      if (to === null) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      this.showReadout(holder, to);
+    });
+  }
+
+  /**
+   * The palette's "Read a chart's values": focus the chart most in view
+   * (the readout then shows, and the arrow keys move it). Returns why
+   * not, or null.
+   */
+  focusChartReadout(): string | null {
+    const holders = Array.from(
+      this.shadowRoot?.querySelectorAll<HTMLElement>(
+        ".chart-holder[data-readout]",
+      ) ?? [],
+    );
+    if (!holders.length)
+      return "This document has no line or bar chart to read";
+    const mid = window.innerHeight / 2;
+    const distance = (h: HTMLElement): number => {
+      const b = h.getBoundingClientRect();
+      return Math.abs((b.top + b.bottom) / 2 - mid);
+    };
+    const best = holders.reduce((a, b) => (distance(b) < distance(a) ? b : a));
+    best.scrollIntoView({ block: "nearest" });
+    best.focus();
+    return null;
+  }
+
+  private showReadout(holder: HTMLElement, i: number): void {
+    const st = this.readouts.get(holder);
+    if (!st || i < 0 || i >= st.r.xs.length) return;
+    st.at = i;
+    const x = st.r.xs[i] ?? 0;
+    st.guide.setAttribute("x1", String(x));
+    st.guide.setAttribute("x2", String(x));
+    if (st.band && st.r.band) {
+      st.band.setAttribute("x", String(x - st.r.band / 2));
+    }
+    st.r.series.forEach((s, k) => {
+      const dot = st.dots[k];
+      const y = s.ys[i];
+      if (!dot) return;
+      dot.style.display = y === null || y === undefined ? "none" : "";
+      dot.setAttribute("cx", String(x + (s.dx ?? 0)));
+      dot.setAttribute("cy", String(y ?? 0));
+    });
+    st.layer.style.display = "";
+    const label = readoutLabel(st.r.labels[i] ?? "");
+    const rows = st.r.series.map((s) => ({
+      name: s.name,
+      color: s.color,
+      text:
+        s.values[i] === null || s.values[i] === undefined
+          ? "-"
+          : st.formatOf(s.name)(s.values[i] ?? 0),
+    }));
+    st.panel.textContent = "";
+    const head = document.createElement("div");
+    head.className = "readout-head";
+    head.textContent = label;
+    st.panel.appendChild(head);
+    for (const row of rows) {
+      const line = document.createElement("div");
+      line.className = "readout-row";
+      const sw = document.createElement("i");
+      sw.style.background = row.color;
+      const name = document.createElement("span");
+      name.textContent = row.name;
+      const val = document.createElement("b");
+      val.textContent = row.text;
+      line.append(sw, name, val);
+      st.panel.appendChild(line);
+    }
+    st.panel.hidden = false;
+    // Beside the guide, on whichever side has room - always inside the
+    // chart. A narrow chart has no room beside: a compact panel goes to
+    // the top corner away from the point read.
+    const svg = holder.querySelector("svg");
+    const box = svg?.getBoundingClientRect();
+    const hb = holder.getBoundingClientRect();
+    if (box) {
+      const px = box.left - hb.left + (x / st.r.width) * box.width;
+      const compact = hb.width < 520;
+      st.panel.classList.toggle("compact", compact);
+      const w = st.panel.offsetWidth;
+      const right = px > hb.width / 2;
+      let left = compact
+        ? right
+          ? 0
+          : hb.width - w
+        : right
+          ? px - 10 - w
+          : px + 10;
+      left = Math.max(0, Math.min(left, hb.width - w));
+      st.panel.style.left = `${String(left)}px`;
+      st.panel.style.right = "";
+      st.panel.style.top = compact
+        ? "0px"
+        : `${String(box.top - hb.top + (st.r.top / st.r.height) * box.height)}px`;
+    }
+    st.live.textContent = `${label}: ${rows.map((r2) => `${r2.name} ${r2.text}`).join(", ")}`;
+  }
+
+  private hideReadout(holder: HTMLElement): void {
+    const st = this.readouts.get(holder);
+    if (!st) return;
+    st.layer.style.display = "none";
+    st.panel.hidden = true;
   }
 
   /**

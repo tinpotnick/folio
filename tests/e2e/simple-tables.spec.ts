@@ -173,7 +173,7 @@ test.describe("simple tables: first-contact regressions", () => {
     await ds.locator("td").first().click();
     await ds.locator(".insp-chart").click();
     const chart = page.locator('#the-doc figure[data-chart-source="table-1"]');
-    await expect(chart.locator("svg rect")).toHaveCount(2);
+    await expect(chart.locator("svg rect:not(.readout-band)")).toHaveCount(2);
     const md = await source(page);
     expect(md).toContain("source: @table-1");
     expect(md).toContain("select: [Fruit, Price]");
