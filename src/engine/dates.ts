@@ -46,8 +46,22 @@ function monthOf(name: string): number {
  * (ONS months), `Mar 2024`. Day-first or month-first numeric dates
  * (`03/04/2024`) are ambiguous and are NOT read. Null when not a date.
  */
+/** Read dates repeat (a model reads the same few hundred thousands of
+ * times): each string is read once. Bounded, so it cannot grow without
+ * limit. */
+const isoCache = new Map<string, string | null>();
+
 export function toIso(v: unknown): string | null {
   if (typeof v !== "string") return null;
+  const hit = isoCache.get(v);
+  if (hit !== undefined) return hit;
+  const iso = readIso(v);
+  if (isoCache.size > 20000) isoCache.clear();
+  isoCache.set(v, iso);
+  return iso;
+}
+
+function readIso(v: string): string | null {
   const s = v.trim();
   let m =
     /^(\d{4})-(\d{2})-(\d{2})(?:[T ][\d:.]+(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(s);

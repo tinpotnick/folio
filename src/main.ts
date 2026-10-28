@@ -289,11 +289,13 @@ btnView.addEventListener("click", () => {
 });
 
 btnMd.addEventListener("click", () => {
+  // The Markdown view shows first: hiding the document may commit an
+  // open editor (an equation's), and that change must land here.
+  editor.hidden = false;
+  mdWrap.hidden = false;
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
   el.hidden = true;
-  editor.hidden = false;
-  mdWrap.hidden = false;
   renderHighlight();
   btnMd.classList.add("active");
   btnView.classList.remove("active");
@@ -1859,10 +1861,18 @@ document.addEventListener("keydown", (ev) => {
   else el.redo();
 });
 
+// Per change (per keystroke while typing): the Markdown view, when it
+// shows, follows at once; hidden, it is refilled when it is opened, so
+// serializing the whole document per letter is wasted work. The
+// sections list follows when typing pauses.
+let outlineTimer: ReturnType<typeof setTimeout> | undefined;
 el.onChange(() => {
-  const md = el.getMarkdown();
-  if (md !== null) editor.value = md;
-  refreshOutline();
+  if (!mdWrap.hidden) {
+    const md = el.getMarkdown();
+    if (md !== null) editor.value = md;
+  }
+  clearTimeout(outlineTimer);
+  outlineTimer = setTimeout(refreshOutline, 150);
 });
 
 // The wordmark is the way home: the welcome page.
