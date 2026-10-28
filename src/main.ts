@@ -3365,6 +3365,9 @@ settingsForm.addEventListener("submit", (ev) => {
  * break style keys apply here (paged media).
  */
 function preparePrint(): void {
+  // A cell still being typed in recalculates first: paper shows
+  // current figures.
+  el.flushEdits();
   if (helpModal.open) helpModal.close();
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
