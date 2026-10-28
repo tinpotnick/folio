@@ -476,3 +476,35 @@ describe("several series", () => {
     expect(r.svg.match(/<polygon class="series-\d"/g)).toHaveLength(2);
   });
 });
+
+describe("blanks in charts (a gap, never a zero)", () => {
+  it("a line breaks at blanks and labels only real points", () => {
+    const withGap: QueryResult = {
+      columns: ["m", "v"],
+      rows: [
+        ["a", 5],
+        ["b", 6],
+        ["c", ""],
+        ["d", ""],
+        ["e", 7],
+        ["f", 8],
+      ],
+    };
+    const svg = renderLineChart(withGap).svg;
+    expect((svg.match(/<polyline /g) ?? []).length).toBe(2);
+    // Four real points get markers; the blanks get none.
+    expect((svg.match(/<circle /g) ?? []).length).toBe(4);
+  });
+
+  it("a bar chart draws no bar for a blank", () => {
+    const svg = renderBarChart({
+      columns: ["m", "v"],
+      rows: [
+        ["a", 5],
+        ["b", ""],
+        ["c", 7],
+      ],
+    }).svg;
+    expect((svg.match(/<rect /g) ?? []).length).toBe(2);
+  });
+});

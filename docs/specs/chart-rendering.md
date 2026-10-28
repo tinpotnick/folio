@@ -37,6 +37,9 @@ output by `src/render/chart.ts`. The contract for dense data:
   curve is a bead necklace, and markers at the tick months (the
   rule until 2026-10-27) read as data points that matter. The
   polyline always covers every point.
+- **Blanks**: a blank value is a gap, never a zero - a line breaks
+  into runs (with its fill), a bar is left out, and no marker or value
+  label is drawn on it; the y domain covers only the values present.
 - **Dated x axes**: when every label is an ISO date, ticks read as
   the span needs - the year over three years or more, "Mar 2024"
   over one, the date itself within a year - and the last tick of a

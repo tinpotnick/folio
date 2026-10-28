@@ -108,6 +108,12 @@ function xLabel(
   return { text: escapeXml(raw), anchor };
 }
 
+/** A chart value: a number, or NaN for a blank (a gap, not a zero). */
+function cellNumber(v: unknown): number {
+  if (v === "" || v === null || v === undefined) return Number.NaN;
+  return Number(v);
+}
+
 /** The per-point value labels to draw: all of them for a sparse
  * series; for a dense one only the extremes and the latest point
  * (labeling every point of a 24-month series clumps). */
@@ -115,16 +121,20 @@ function valueLabelIndices(
   values: number[],
   maxDense = 12,
 ): { indices: number[]; dense: boolean } {
+  // Blanks (NaN) are never labelled.
+  const at = values.flatMap((v, i) => (Number.isFinite(v) ? [i] : []));
   if (values.length <= maxDense) {
-    return { indices: values.map((_, i) => i), dense: false };
+    return { indices: at, dense: false };
   }
-  let maxI = 0;
-  let minI = 0;
-  values.forEach((v, i) => {
+  let maxI = at[0] ?? 0;
+  let minI = at[0] ?? 0;
+  for (const i of at) {
+    const v = values[i] ?? 0;
     if (v > (values[maxI] ?? 0)) maxI = i;
     if (v < (values[minI] ?? 0)) minI = i;
-  });
-  const last = values.length - 1;
+  }
+  const last = at[at.length - 1] ?? values.length - 1;
+  if (!at.length) return { indices: [], dense: true };
   return {
     indices: [...new Set([maxI, minI, last])].sort((a, b) => a - b),
     dense: true,
@@ -253,16 +263,18 @@ export function renderBarChart(
   const ink = style.text ?? TEXT_DARK;
   const inkMuted = style.textMuted ?? TEXT_MUTED;
   const color = style.color ?? "#4c6ef5";
-  const values = result.rows.map((r) => Number(r[1] ?? 0));
+  // A blank is no bar and no label - never a zero.
+  const values = result.rows.map((r) => cellNumber(r[1]));
+  const present = values.filter((v) => Number.isFinite(v));
   const padBottom = style.xTitle ? 52 : 40;
   const innerH = H - PAD.top - padBottom;
   // A negative bar's label hangs under the bar's end: when that
   // would run into the x tick labels, the floor drops one step.
-  let dom = domain(values);
-  const lowest = Math.min(...values, 0);
+  let dom = domain(present.length ? present : [0]);
+  const lowest = Math.min(...present, 0);
   if (lowest < 0) {
     const roomPx = ((lowest - dom.gridMin) / dom.span) * innerH;
-    if (roomPx < 11) dom = domain([...values, dom.gridMin - dom.step / 2]);
+    if (roomPx < 11) dom = domain([...present, dom.gridMin - dom.step / 2]);
   }
   const { gridMin, gridMax, span, ticks, step } = dom;
   const tickLabel = tickFormatter(step, style.valueFormat);
@@ -293,17 +305,20 @@ export function renderBarChart(
   const zeroY = yOf(0);
   const padLeft = style.yTitle ? 78 : 60;
   const { indices: labelAt } = valueLabelIndices(values);
-  result.rows.forEach((row, i) => {
-    const value = Number(row[1] ?? 0);
+  result.rows.forEach((_row, i) => {
+    const value = values[i] ?? Number.NaN;
     const x = padLeft + band * i + (band - barW) / 2;
+    const blank = !Number.isFinite(value);
     const y = value >= 0 ? yOf(value) : zeroY;
     const height = Math.max(
       value >= 0 ? zeroY - yOf(value) : yOf(value) - zeroY,
       0,
     );
-    parts.push(
-      `<rect x="${x}" y="${y}" width="${barW}" height="${height}" fill="${color}" rx="2" />`,
-    );
+    if (!blank) {
+      parts.push(
+        `<rect x="${x}" y="${y}" width="${barW}" height="${height}" fill="${color}" rx="2" />`,
+      );
+    }
     if (xTickIndices(n).includes(i)) {
       const lab = xLabel(
         result.rows.map((r) => String(r[0] ?? "")),
@@ -352,8 +367,14 @@ function renderLineLike(
   const ink = style.text ?? TEXT_DARK;
   const inkMuted = style.textMuted ?? TEXT_MUTED;
   const color = style.color ?? "#4c6ef5";
-  const values = result.rows.map((r) => Number(r[1] ?? 0));
-  const { gridMin, gridMax, span, ticks, step } = domain(values);
+  // A blank is no value: a gap in the line, never a dive to zero.
+  const raw = result.rows.map((r) => cellNumber(r[1]));
+  const present = raw.filter((v) => Number.isFinite(v));
+  // Labels and extremes read only the points that exist.
+  const values = raw.map((v) => (Number.isFinite(v) ? v : Number.NaN));
+  const { gridMin, gridMax, span, ticks, step } = domain(
+    present.length ? present : [0],
+  );
   const tickLabel = tickFormatter(step, style.valueFormat);
   const valueLabel = valueFormatter(style.valueFormat);
   const padBottom = style.xTitle ? 52 : 40;
@@ -384,7 +405,16 @@ function renderLineLike(
   const zeroY = yOf(0);
   const xs = result.rows.map((_, i) => padLeft + band * i + band / 2);
   const ys = values.map((v) => yOf(v));
-  const points = xs.map((x, i) => `${x},${ys[i]}`).join(" ");
+  // Unbroken runs of points: the line (and its fill) breaks at blanks.
+  const runs: number[][] = [];
+  values.forEach((v, i) => {
+    if (!Number.isFinite(v)) return;
+    const last = runs[runs.length - 1];
+    if (last && last[last.length - 1] === i - 1) last.push(i);
+    else runs.push([i]);
+  });
+  const pointsOf = (run: number[]): string =>
+    run.map((i) => `${xs[i]},${ys[i]}`).join(" ");
 
   const fillParts: string[] = [];
   if (xs.length > 0) {
@@ -401,14 +431,18 @@ function renderLineLike(
     // whisper (the gradient), not a statement. (SVG y grows
     // DOWNWARD: the floor is the LARGEST y.)
     const baseY = areaMode ? zeroY : PAD.top + innerH;
-    fillParts.push(
-      `<polygon points="${xs[0]},${baseY} ${points} ${xs[xs.length - 1]},${baseY}" fill="url(#${gid})" />`,
-    );
+    for (const run of runs) {
+      fillParts.push(
+        `<polygon points="${xs[run[0] ?? 0]},${baseY} ${pointsOf(run)} ${xs[run[run.length - 1] ?? 0]},${baseY}" fill="url(#${gid})" />`,
+      );
+    }
   }
-  if (points.length > 0) {
-    fillParts.push(
-      `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`,
-    );
+  for (const run of runs) {
+    if (run.length > 1) {
+      fillParts.push(
+        `<polyline points="${pointsOf(run)}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`,
+      );
+    }
   }
   parts.push(...fillParts);
 
@@ -432,8 +466,8 @@ function renderLineLike(
   // Sparse series keep every marker.
   // A dense line marks only the points it labels (high, low, latest):
   // dots at the tick months read as data points that matter.
-  const markerAt: (i: number) => boolean =
-    n > 64 ? (i) => labelAt.includes(i) : () => true;
+  const markerAt: (i: number) => boolean = (i) =>
+    Number.isFinite(values[i]) && (n > 64 ? labelAt.includes(i) : true);
   const xLabels = result.rows.map((r) => String(r[0] ?? ""));
   result.rows.forEach((_row, i) => {
     const x = xs[i] ?? 0;
@@ -453,8 +487,8 @@ function renderLineLike(
       const below =
         dense &&
         i !== n - 1 &&
-        (values[i] ?? 0) === Math.min(...values) &&
-        (values[i] ?? 0) !== Math.max(...values);
+        (values[i] ?? 0) === Math.min(...present) &&
+        (values[i] ?? 0) !== Math.max(...present);
       // On the plot's floor there is no room below (the x ticks
       // live there): the label sits beside the point instead.
       const floorY = PAD.top + innerH;
