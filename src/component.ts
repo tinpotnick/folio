@@ -5672,6 +5672,23 @@ export class FolioDoc extends HTMLElement {
         this.memo(),
       );
       const result = executeQuery(recalced, block.chart);
+      // Nothing to plot - every row filtered out, or every value blank
+      // (a model outside its data): say so, not an empty frame.
+      const plottable = result.rows.some((r) =>
+        r
+          .slice(1)
+          .some((v) => v !== "" && v !== null && Number.isFinite(Number(v))),
+      );
+      if (!plottable) {
+        holder.textContent = "";
+        const empty = document.createElement("p");
+        empty.className = "chart-empty";
+        empty.textContent = result.rows.length
+          ? "Nothing to show: every value is blank."
+          : "Nothing to show: no rows to plot (the filter leaves none, or the table is empty).";
+        holder.appendChild(empty);
+        return;
+      }
       // The chart dresses from the theme: the series color comes
       // from the palette, and the axis titles name the query's
       // columns (with the value column's unit) - a chart that
