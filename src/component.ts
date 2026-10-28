@@ -533,6 +533,13 @@ export class FolioDoc extends HTMLElement {
           ) as HTMLElement | null)
         : null;
     if (block) this.lastBlock = block;
+    // The caret left a cell that was typed in: recalculate now.
+    if (
+      this.pendingCell &&
+      (!(n instanceof HTMLElement) || n.closest("td") !== this.pendingCell.td)
+    ) {
+      this.flushPendingRecalc();
+    }
     // (Its own record: a mousedown moves lastBlock before this runs.)
     const left = this.caretBlock;
     if (block) this.caretBlock = block;
@@ -5945,7 +5952,39 @@ export class FolioDoc extends HTMLElement {
     const idx = Number(figure?.dataset.blockIndex ?? -1);
     const block = this.doc.blocks[idx];
     if (!block || block.kind !== "table") return;
-    this.commitCell(cell, block);
+    // Per keystroke the model (and the Markdown source) follow the
+    // text, but the recalculation waits until the caret leaves the
+    // cell: on a big document it took a beat per letter.
+    this.commitCell(cell, block, true);
+  }
+
+  /** Bring every figure up to date with the text typed so far (before
+   * printing or exporting). */
+  flushEdits(): void {
+    this.flushPendingRecalc();
+  }
+
+  /** A cell edited by typing whose table has not recalculated yet. */
+  private pendingCell: { td: HTMLTableCellElement; tableId: string } | null =
+    null;
+
+  /** Recalculate the table (and what depends on it) of the cell typed
+   * in, once the caret has left it. */
+  private flushPendingRecalc(): void {
+    const pending = this.pendingCell;
+    if (!pending || !this.doc) return;
+    this.pendingCell = null;
+    const block = this.doc.blocks.find(
+      (b) => b.kind === "table" && b.table.id === pending.tableId,
+    );
+    if (block?.kind !== "table") return;
+    const figure =
+      pending.td.closest<HTMLElement>("figure") ??
+      this.shadowRoot?.querySelector<HTMLElement>(
+        `figure[data-table-id="${pending.tableId}"]`,
+      ) ??
+      null;
+    this.updateRowCalculations(figure, block);
   }
 
   private handleCellBlur(ev: FocusEvent): void {
@@ -5967,6 +6006,7 @@ export class FolioDoc extends HTMLElement {
   private commitCell(
     td: HTMLTableCellElement,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    defer = false,
   ): void {
     const r = Number(td.dataset.rowIndex);
     const c = Number(td.dataset.colIndex);
@@ -5981,9 +6021,19 @@ export class FolioDoc extends HTMLElement {
         : text;
     const row = block.table.rows[r];
     if (!row) return;
-    if (row[c] === value) return;
+    if (row[c] === value) {
+      // Leaving a cell whose typing is already in the model: its
+      // recalculation is all that is left to do.
+      if (!defer && this.pendingCell?.td === td) this.flushPendingRecalc();
+      return;
+    }
     row[c] = value;
-    this.updateRowCalculations(td.closest("figure"), block);
+    if (defer) {
+      this.pendingCell = { td, tableId: block.table.id };
+    } else {
+      if (this.pendingCell?.td === td) this.pendingCell = null;
+      this.updateRowCalculations(td.closest("figure"), block);
+    }
     this.emitChange("cell");
   }
 
