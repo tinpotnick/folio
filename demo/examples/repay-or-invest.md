@@ -39,11 +39,10 @@ last month all have.
   1995: the average 2-year and 5-year fixed rates at 75% loan-to-value,
   and the standard variable rate (@fig:rates-chart).
 - UK share prices from the OECD [@oecd_uk_shares], from January 1975:
-  a monthly index of the UK stock market. It is a price index - it
-  leaves out dividends, which @tbl:assume adds back as a stated
-  assumption.
-- Consumer prices from the ONS [@ons_cpi], from January 1988, to
-  express results in the pounds of the start date.
+  a monthly index of the UK stock market (@fig:shares-chart, below).
+- Consumer prices from the ONS [@ons_cpi], from January 1988: the
+  general level of prices, used for one figure only - what "ahead" at
+  the end is worth in the pounds of the start month.
 
 So a tracker can start in any month from January 1975; fixes and the
 standard variable rate from January 1995.
@@ -60,6 +59,40 @@ source: @rates
 query: {select: [date, fixed_2y, fixed_5y, svr]}
 type: line
 caption: "Mortgage rates since 1995 (%)"
+:::
+
+### What the investments earn
+
+The investments in this model grow with @fig:shares-chart, the OECD's
+index of UK share prices: one number a month for the UK stock market as
+a whole, set to 100 in 2015. When the index rises 1% in a month, the
+invested money rises 1% that month; when it falls, so do the
+investments. On top of that, each month adds a twelfth of the
+**dividends** assumption in @tbl:assume.
+
+What the index is not:
+
+- **Not a total return.** It follows share prices only. The dividends
+  companies pay out - historically a large part of what UK shares have
+  returned over decades - are not in it. That is why the model adds
+  them back as an assumption you can change, rather than as measured
+  data.
+- **Not a fund.** Nobody can buy the index itself. A real tracker fund
+  charges fees, follows a particular index (a FTSE index, say) and
+  trails it a little.
+- **Not adjusted for inflation.** It is in the pounds of each month,
+  as the mortgage rates are; only the final "start-month pounds" figure
+  takes inflation out.
+- **Not taxed.** Gains and dividends are taken as untaxed - as inside
+  an ISA.
+- **Not within the month.** One figure per month, so moves inside a
+  month - a crash and recovery in the same weeks - do not show.
+
+::: chart {#shares-chart}
+source: @uk_shares
+query: {select: [date, uk_shares]}
+type: line
+caption: "UK share prices since 1975 (index, 2015 = 100; dividends not included)"
 :::
 
 ## The assumptions
@@ -195,8 +228,12 @@ data and the assumptions:
   each choice's investments, dividends included.
 - `net_repaying` and `net_investing` - where each choice leaves you:
   the investments minus what is still owed. `ahead` is how far holding
-  the debt is ahead (negative: behind); `ahead_real` is the same in the
-  pounds of the start month.
+  the debt is ahead (negative: behind).
+- `cpi` and `ahead_real` - the consumer price index that month, and
+  `ahead` restated in the pounds of the start month: `ahead` times the
+  start month's CPI over this month's. A pound in 2026 buys less than
+  a pound did in 2001; this takes that out. Blank before CPI begins
+  (January 1988).
 
 ::: table {#bank}
 caption: "Bank Rate, monthly average"
