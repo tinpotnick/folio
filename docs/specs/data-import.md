@@ -171,8 +171,8 @@ data exactly like hand-authored tables.
 
 - `demo/examples/repay-or-invest.md` - "Open example: Repay or invest?
   A mortgage question" (2026-10-28): Bank of England Bank Rate (from
-  January 1975) and mortgage rates (from January 1995), OECD UK share
-  prices (from January 1975) and ONS CPI (from January 1988), monthly,
+  January 1975) and mortgage rates (from January 1995) and OECD UK
+  share prices (from January 1975), monthly,
   imported through Open data and cited. Assumptions - loan, start
   month, term, mortgage type (2-year fix, 5-year fix, tracker, variable),
   a tracker's margin, dividend yield, monthly amount - drive a
@@ -188,8 +188,9 @@ data exactly like hand-authored tables.
   tables, so the prose stays true for any assumptions. The "Assumptions
   check" table, directly under the assumptions, explains an unknown
   mortgage type or a start before that type's data (naming the type
-  that can start then), and notes that figures in start-month pounds
-  are blank before CPI begins (2026-10-28). Shareable: every source is
+  that can start then) (2026-10-28). An inflation-adjusted result
+  (ONS CPI) was tried and removed: the question is how to clear the
+  mortgage, not what money will be worth. Shareable: every source is
   open-licensed.
 
 - `demo/data/monthly-sales.csv` - 72 rows (24 months x 3

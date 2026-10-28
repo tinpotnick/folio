@@ -96,7 +96,7 @@ test.describe("Repay or invest? example", () => {
       "mortgage must be 2-year fix, 5-year fix, tracker or variable",
     );
     // Its sources are cited, each with its retrieval date.
-    await expect(page.locator("#the-doc ol.folio-refs li")).toHaveCount(4);
+    await expect(page.locator("#the-doc ol.folio-refs li")).toHaveCount(3);
     await expect(page.locator("#the-doc ol.folio-refs")).toContainText(
       "Retrieved 28 October 2026",
     );
@@ -152,15 +152,9 @@ test.describe("Repay or invest? example", () => {
     await expect(net.locator(".chart-empty")).toHaveText(
       /^Nothing to show: no rows to plot/,
     );
-    // Before CPI (1988): the start-month pounds figure is blank, noted.
+    // Back to a tracker: the charts draw again.
     await assume(page, 3, "tracker");
-    await assume(page, 1, "1980-01-01");
-    await expect(valueOf(page, "check", "Assumptions")).toContainText(
-      "CPI, which begins in January 1988",
-    );
-    await expect(
-      valueOf(page, "outcome", "in the pounds of the start month"),
-    ).toHaveText("");
+    await expect(valueOf(page, "check", "Assumptions")).toHaveText("fine");
     await expect(net.locator(".chart-empty")).toHaveCount(0);
   });
 });
