@@ -171,6 +171,22 @@ is empty, never an error:
 months); `yearfrac(start, end)` (actual days / 365.25). A formula
 column may produce a date: `edate(start, self.row - 1)`.
 
+## Blanks (2026-10-28)
+
+A blank cell is NO value - never a zero:
+
+- In a formula, a blank number or formula cell reads as NaN (the
+  current row's earlier formulas, `self.prev.x`, `@t.rN.x`), so
+  arithmetic on it gives a blank: `a * 2` of a blank `a` is blank, and a
+  running total through a blank is blank, not "carried on" (in Jexl,
+  `"" * 2` would have been 0 - a plausible wrong number). Text and date
+  cells keep `""` for comparisons. A formula can make a blank on
+  purpose: `n <= term ? ... : ""` - a model past its term or its data.
+- The aggregates skip blanks (`sum`, `count`, `mean`, `last`, ...):
+  `self.col.x | last()` is the last value, wherever the column ends.
+- Charts draw a blank as a gap: a line breaks, a bar is left out, and
+  no value label sits on it (chart-rendering.md).
+
 ## Lookups (2026-10-27)
 
 - `@prices.col.close` - another table's WHOLE column (numbers stay
@@ -180,7 +196,12 @@ column may produce a date: `edate(start, self.row - 1)`.
   `key` (dates compare as dates, numbers as numbers); empty if none.
 - `asof(key, keys, values)` - the value at the LAST key on or before
   `key`, keys ascending: the price in force on a date, from monthly
-  prices. Empty before the first key.
+  prices. Empty before the first key. Past the last key it holds the
+  last value: a model must stop at its data's end itself.
+- Speed: a lookup column is read once per formula column (its keys
+  parsed and indexed), then `asof` binary-searches and `xlookup` looks
+  up exactly; formulas are parsed once per column, not per row. 2,000
+  rows against 3,000 keys recalculates in well under a second.
 
 ## Chart filters speak the same language
 

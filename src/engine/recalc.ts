@@ -19,7 +19,7 @@
  * bolted onto Jexl. Referenced tables recalc first (dependency
  * order, cycle-detected); their ids must be valid identifiers.
  */
-import jexl from "jexl";
+import jexl, { type Expression } from "jexl";
 import type { Cell, Table } from "./index.js";
 import * as fin from "./finance.js";
 import {
@@ -114,7 +114,10 @@ export const CONSTANTS: Readonly<Record<string, number>> = {
  * as a one-sample signal, an array elementwise. */
 const samples = (v: unknown): number[] => {
   const list = Array.isArray(v) ? v : [v];
-  return list.map((x) => Number(x));
+  // A blank is no value - Number("") would make it a zero.
+  return list.map((x) =>
+    x === "" || x === null || x === undefined ? Number.NaN : Number(x),
+  );
 };
 /** Aggregate input: missing cells are skipped, not counted. */
 const finite = (v: unknown): number[] =>
@@ -335,22 +338,90 @@ function keyCompare(a: unknown, b: unknown): number {
 const asList = (v: unknown): unknown[] => (Array.isArray(v) ? v : [v]);
 const asCell = (v: unknown): number | string =>
   typeof v === "number" || typeof v === "string" ? v : Number.NaN;
+/**
+ * A lookup column read once: each key as a number to compare (a date's
+ * day number, else the number), in order, blanks left out. Cached per
+ * array - the same column array serves every row of a formula column,
+ * so a 480-row model reads its 400-row price table once, not 480 times.
+ */
+interface KeyIndex {
+  /** Comparable keys, ascending as given, with their row. */
+  keys: { k: number; i: number }[];
+  /** Exact keys -> row, for xlookup (numeric or text). */
+  exact: Map<string, number>;
+  /** Every key compared as a number (dates or numbers). */
+  numeric: boolean;
+}
+const keyIndexes = new WeakMap<object, KeyIndex>();
+
+function keyIndex(keys: unknown[]): KeyIndex {
+  const cached = keyIndexes.get(keys);
+  if (cached) return cached;
+  const out: KeyIndex = { keys: [], exact: new Map(), numeric: true };
+  keys.forEach((raw, i) => {
+    if (raw === "" || raw === undefined || raw === null) return;
+    const day = dayNumber(raw);
+    const k = Number.isFinite(day) ? day : Number(raw);
+    if (!Number.isFinite(k)) out.numeric = false;
+    out.keys.push({ k, i });
+    const id = keyId(raw, day);
+    if (!out.exact.has(id)) out.exact.set(id, i);
+  });
+  keyIndexes.set(keys, out);
+  return out;
+}
+
+/** An exact-match identity: a date by its day, a number by its value
+ * (1 and 1.0 match), anything else by its text. */
+function keyId(raw: unknown, day: number): string {
+  if (Number.isFinite(day)) return `d${String(day)}`;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return raw !== "" && Number.isFinite(n) ? `n${String(n)}` : `s${String(raw)}`;
+}
+
+/** A lookup key in the same terms as `keyIndex`. */
+function lookupKey(key: unknown): { k: number; id: string } {
+  const day = dayNumber(key);
+  if (Number.isFinite(day)) return { k: day, id: keyId(key, day) };
+  return { k: Number(key), id: keyId(key, day) };
+}
+
 // xlookup(key, keys, values): the value beside the matching key.
 registerFn("xlookup", (key, keys, vals) => {
-  const i = asList(keys).findIndex((k) => keyCompare(k, key) === 0);
-  return i < 0 ? Number.NaN : asCell(asList(vals)[i]);
+  const at = keyIndex(asList(keys)).exact.get(lookupKey(key).id);
+  return at === undefined ? Number.NaN : asCell(asList(vals)[at]);
 });
 // asof(key, keys, values): the value at the last key on or before
-// `key` (keys ascending) - the price on a date, from monthly prices.
+// `key` (keys ascending) - the price in force on a date, from monthly
+// prices. Binary search over the keys read once.
 registerFn("asof", (key, keys, vals) => {
   const ks = asList(keys);
-  let hit = -1;
-  for (let i = 0; i < ks.length; i++) {
-    if (ks[i] === "" || ks[i] === undefined) continue;
-    if (keyCompare(ks[i], key) <= 0) hit = i;
-    else break;
+  const index = keyIndex(ks);
+  const { k } = lookupKey(key);
+  if (!index.numeric || !Number.isFinite(k)) {
+    // Text keys: the linear walk.
+    let hit = -1;
+    for (let i = 0; i < ks.length; i++) {
+      if (ks[i] === "" || ks[i] === undefined) continue;
+      if (keyCompare(ks[i], key) <= 0) hit = i;
+      else break;
+    }
+    return hit < 0 ? Number.NaN : asCell(asList(vals)[hit]);
   }
-  return hit < 0 ? Number.NaN : asCell(asList(vals)[hit]);
+  const list = index.keys;
+  let lo = 0;
+  let hi = list.length - 1;
+  let hit = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if ((list[mid]?.k ?? Infinity) <= k) {
+      hit = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return hit < 0 ? Number.NaN : asCell(asList(vals)[list[hit]?.i ?? -1]);
 });
 
 /** Other tables of the same document, by id (raw, not recalced). */
@@ -810,7 +881,13 @@ function compute(
           continue;
         }
         const v = srcRows[row]?.[i];
-        snap[name] = v === undefined ? Number.NaN : v;
+        // Blank numbers read as NaN (see the current-row context);
+        // text and dates keep "" for comparisons.
+        snap[name] =
+          v === undefined ||
+          (v === "" && (c.type === "number" || c.type === "formula"))
+            ? Number.NaN
+            : v;
       }
       return snap;
     };
@@ -846,6 +923,15 @@ function compute(
     }
 
     const source = unaryMinus(stripAtRefs(raw));
+    // Parsed once per column, evaluated per row (parsing per row was
+    // most of a long model's recalculation time).
+    let compiled: Expression | null = null;
+    try {
+      compiled = jexl.compile(source);
+    } catch {
+      // A syntax error surfaces from the first row's evaluation below,
+      // with the formula named.
+    }
     table.rows.forEach((_row, r) => {
       // Constants first, so a column of the same name shadows them.
       const ctx: Record<string, unknown> = { ...CONSTANTS };
@@ -860,9 +946,11 @@ function compute(
           const v = rows[r]?.[i];
           ctx[name] = typeof v === "string" ? v : "";
         } else if (c.type === "formula" && i < index) {
-          // Earlier formula columns: computed-so-far at this row.
+          // Earlier formula columns: computed-so-far at this row. A
+          // blank result is NaN here: in arithmetic "" would be 0, and
+          // a blank must stay blank, not turn into a plausible number.
           const v = rows[r]?.[i];
-          ctx[name] = v === undefined ? Number.NaN : v;
+          ctx[name] = v === undefined || v === "" ? Number.NaN : v;
         }
       }
       const self: Record<string, unknown> = {};
@@ -911,7 +999,9 @@ function compute(
       const out: Cell[] = table.columns.map((_, i) => src[i] ?? "");
       let result: Cell;
       try {
-        const v = jexl.evalSync(source, ctx) as Cell;
+        const v = (
+          compiled ? compiled.evalSync(ctx) : jexl.evalSync(source, ctx)
+        ) as Cell;
         result =
           typeof v === "number"
             ? Number.isFinite(v)
