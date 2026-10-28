@@ -59,6 +59,20 @@ table at the edges.
   columns are skipped, wrapping across rows); Enter/Shift+Enter
   move down/up a column. Tab or Enter past the last row appends a
   row. The edited cell commits first.
+- **A new row left blank goes** (2026-10-28): the row Tab/Enter
+  appended is provisional. Typing anything in it keeps it; leaving it
+  with nothing typed - a press or focus anywhere outside it - removes
+  it again, so Enter pressed to confirm a value (a habit) never
+  leaves a stray empty row (it did in a one-row assumptions table).
+  Tab/Enter past a blank new row add no second one. Removal is in
+  place - the row element and the model row; formulas, other tables
+  and charts refresh - never a table re-render, so a press on another
+  cell of the same table still focuses it. Only the last row is ever
+  removed, never a table's only row, and rows added on purpose
+  (Insert row below) are not provisional. On WebKitGTK the caret
+  stays in the old cell after Enter, so the new row is left by the
+  next press (verified natively: `tests/webkitgtk/
+  table-new-row-native.js`).
 - **Engine differences** (verified against WebKitGTK 2.54 via
   MiniBrowser + WebKitWebDriver):
   - Chromium moves focus to the article when text is typed into a
@@ -76,7 +90,8 @@ table at the edges.
 
 - `just lint`, `just test`, `just build` green; e2e in
   `tests/e2e/app.spec.ts` ("table editing and keyboard navigation"):
-  commit + recalc + Markdown survival, Tab growth, Enter growth.
+  commit + recalc + Markdown survival, Tab growth, Enter growth, a
+  blank new row removed on leaving (and not saved), a typed one kept.
 - First-contact eval: `evals/table-entry-first-contact.md`.
 - Verified end-to-end in WebKitGTK: click, type, Tab (commit +
   recalc), click next cell, type, Tab — `[North, 400, 500]` in the

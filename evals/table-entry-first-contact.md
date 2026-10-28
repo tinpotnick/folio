@@ -7,6 +7,8 @@ steps:
   - Press Tab. Switch to Markdown view and back.
   - Click the q3 cell of the same row; type a number; press Tab.
   - Look at the growth column and the chart.
+  - In the last row, type a number and press Enter to confirm it, then
+    click elsewhere in the document.
 expected:
   - Clicking a cell focuses it; typing edits that cell only.
   - Typing never escapes the table via Tab (no toolbar focus).
@@ -17,6 +19,8 @@ expected:
   - In the browser, Tab/Enter move to the next cell and the caret
     follows; past the last row a new row appears. In the desktop
     app, Tab commits the cell; the user clicks the next cell.
+  - A row Enter added and left blank is gone once the user clicks
+    elsewhere; the number typed before Enter is kept.
 ---
 
 # First-contact eval: table entry

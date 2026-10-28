@@ -406,7 +406,9 @@ document — written in the same renderer you are working with.
   Markdown source always contains what you typed. In the browser,
   Tab/Enter also move the caret to the next cell and grow the table
   at the last row; in the desktop app they commit the cell — click
-  the next cell to continue.
+  the next cell to continue. A row added this way that you leave
+  without typing in goes away again, so pressing Enter to confirm a
+  value never leaves an empty row behind.
 - **Add or remove rows and columns**: right-click a cell (Insert row
   below, Delete row, Insert column right, Delete column), or with
   the cursor in a cell search Ctrl+K for "insert a row" / "insert a

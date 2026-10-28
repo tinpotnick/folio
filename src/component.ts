@@ -448,6 +448,13 @@ export class FolioDoc extends HTMLElement {
   private listeners: ((doc: Doc) => void)[] = [];
   private menu: HTMLElement | null = null;
   private lastCell: HTMLTableCellElement | null = null;
+  /** The row Tab/Enter just grew a table by: kept once anything is
+   * typed in it, removed if it is left blank (spec: docs/specs/
+   * table-keyboard.md, "Navigation"). */
+  private newRow: {
+    block: Extract<Doc["blocks"][number], { kind: "table" }>;
+    row: Cell[];
+  } | null = null;
   private lastHeaderName: HTMLElement | null = null;
   /** The dataset browser overlay (a singleton in the shadow root). */
   private dsBrowser: HTMLElement | null = null;
@@ -1059,6 +1066,7 @@ export class FolioDoc extends HTMLElement {
       (ev: MouseEvent) => {
         this.dragStart = { x: ev.clientX, y: ev.clientY };
         const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
+        this.leaveNewRow(el ?? null);
         const block = el?.closest("[data-block-index]") as HTMLElement | null;
         if (block) this.lastBlock = block;
         // One inspector contract for every figure (spec: docs/
@@ -3784,6 +3792,7 @@ export class FolioDoc extends HTMLElement {
         "td[data-row-index]",
       ) as HTMLTableCellElement | null;
       if (cell) this.lastCell = cell;
+      this.leaveNewRow(ev.target as HTMLElement);
       const nameSpan = (ev.target as HTMLElement).closest(
         "thead th .name",
       ) as HTMLElement | null;
@@ -7313,6 +7322,79 @@ export class FolioDoc extends HTMLElement {
    * the table when moving past the last row. Commits the current
    * cell (and recalculates formulas) before moving.
    */
+  private growTable(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    const row = block.table.columns.map(() => "");
+    block.table.rows.push(row);
+    this.newRow = { block, row };
+  }
+
+  /** Row `r` is the row Tab/Enter just added, still with nothing in
+   * it: moving past it adds no second blank row. */
+  private isBlankNewRow(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    r: number,
+  ): boolean {
+    const added = this.newRow;
+    if (added?.block !== block || block.table.rows[r] !== added.row) {
+      return false;
+    }
+    return this.isBlankRow(block, added.row);
+  }
+
+  /**
+   * Focus or a press landed on `target`: if that is outside the row
+   * Tab/Enter just added and the row is still blank, take it away
+   * again - Enter to confirm a value must not leave a stray empty row.
+   * Removed in place (its row element and the model row; formulas
+   * and charts refresh), never by re-rendering the table: the press
+   * may be on another of its cells, which must survive to take focus.
+   */
+  private leaveNewRow(target: Element | null): void {
+    const added = this.newRow;
+    if (!added) return;
+    const { block } = added;
+    const rows = block.table.rows;
+    const r = rows.indexOf(added.row);
+    const idx = this.doc?.blocks.indexOf(block) ?? -1;
+    if (idx < 0) {
+      this.newRow = null; // another document since
+      return;
+    }
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const figure = host?.querySelector<HTMLElement>(
+      `:scope > [data-block-index="${String(idx)}"]`,
+    );
+    const tr = figure
+      ?.querySelector(`td[data-row-index="${String(r)}"]`)
+      ?.closest("tr");
+    if (tr && target && tr.contains(target)) return;
+    this.newRow = null;
+    // Only the last row, only blank, never a table's only row.
+    if (r < 0 || r !== rows.length - 1 || rows.length <= 1) return;
+    if (!this.isBlankRow(block, added.row)) return;
+    rows.pop();
+    if (tr) {
+      tr.remove();
+      this.updateRowCalculations(figure ?? null, block);
+    } else {
+      this.refreshTableBlock(figure ?? null, block);
+    }
+    if (this.lastCell && !this.lastCell.isConnected) this.lastCell = null;
+    this.emitChange();
+  }
+
+  /** Nothing typed in the row (formula cells do not count). */
+  private isBlankRow(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    row: Cell[],
+  ): boolean {
+    return block.table.columns.every(
+      (col, c) => col.type === "formula" || String(row[c] ?? "").trim() === "",
+    );
+  }
+
   private handleTableNav(ev: KeyboardEvent, td: HTMLTableCellElement): void {
     if (!isTabKey(ev) && ev.key !== "Enter") return;
     const figure = td.closest("figure") as HTMLElement | null;
@@ -7336,7 +7418,8 @@ export class FolioDoc extends HTMLElement {
       } else {
         r += 1;
         if (r >= block.table.rows.length) {
-          block.table.rows.push(cols.map(() => ""));
+          if (this.isBlankNewRow(block, r - 1)) return;
+          this.growTable(block);
           needsRender = true;
         }
       }
@@ -7357,7 +7440,8 @@ export class FolioDoc extends HTMLElement {
       } else {
         const nextRow = r + 1;
         if (nextRow >= block.table.rows.length) {
-          block.table.rows.push(cols.map(() => ""));
+          if (this.isBlankNewRow(block, r)) return;
+          this.growTable(block);
           needsRender = true;
         }
         r = nextRow;

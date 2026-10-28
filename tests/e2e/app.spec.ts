@@ -419,6 +419,50 @@ test.describe("table editing and keyboard navigation", () => {
       page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr'),
     ).toHaveCount(before + 1);
   });
+
+  const rows = (page: Page) =>
+    page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr');
+
+  test("a row Enter added and left blank goes away again", async ({ page }) => {
+    await waitForDocument(page);
+    const before = await rows(page).count();
+    // Enter to confirm a value in the bottom row adds a row...
+    await page.locator(td(2, 1)).click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("333");
+    await page.keyboard.press("Enter");
+    await expect(rows(page)).toHaveCount(before + 1);
+    // ...and Enter again in the blank new row adds no second one.
+    await page.keyboard.press("Enter");
+    await expect(rows(page)).toHaveCount(before + 1);
+    // Clicking another cell of the same table takes the blank row
+    // away, and that cell still takes the caret.
+    await page.locator(td(0, 1)).click();
+    await expect(rows(page)).toHaveCount(before);
+    expect(await focusedCell(page)).toBe("0:1");
+    await page.locator("#btn-markdown").click();
+    const source = await page.locator("#editor").inputValue();
+    expect(source).toContain("333");
+    expect(source).not.toMatch(/\[""(, "")*\]/);
+  });
+
+  test("a row Tab added keeps what is typed in it", async ({ page }) => {
+    await waitForDocument(page);
+    const before = await rows(page).count();
+    await page.locator(td(2, 2)).click();
+    await page.keyboard.press("Tab");
+    await page.keyboard.type("West");
+    // Leaving for the text keeps it: something was typed.
+    await page.locator("#the-doc h1").first().click();
+    await expect(rows(page)).toHaveCount(before + 1);
+    await expect(page.locator(td(3, 0))).toHaveText("West");
+    // A blank one left for the text goes.
+    await page.locator(td(3, 2)).click();
+    await page.keyboard.press("Tab");
+    await expect(rows(page)).toHaveCount(before + 2);
+    await page.locator("#the-doc h1").first().click();
+    await expect(rows(page)).toHaveCount(before + 1);
+  });
 });
 
 test.describe("markdown+ inline formats", () => {
