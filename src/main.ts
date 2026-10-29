@@ -2487,6 +2487,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
+    id: "compute",
+    title: "Coffee forecast",
+    file: "demo/examples/compute.md",
+    blurb:
+      "python compute script pyodide forecast trend regression cafe sales projection least squares",
+  },
+  {
     id: "repay-or-invest",
     title: "Repay or invest? A mortgage question",
     file: "demo/examples/repay-or-invest.md",
@@ -2578,6 +2585,16 @@ function paletteEntries(): PaletteEntry[] {
     action: () => {
       el.insertJscad();
       flash("3D model inserted");
+    },
+  });
+  entries.push({
+    title: "Insert a compute block (Python)",
+    group: "Command",
+    keywords:
+      "compute python script data dataset transform calculate regression forecast pyodide insert",
+    action: () => {
+      el.insertCompute();
+      flash("Compute block inserted");
     },
   });
   // One entry per reference in the bibliography: "Cite: Knuth 1984 ·

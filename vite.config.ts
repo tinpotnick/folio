@@ -1,6 +1,7 @@
 import { cpSync } from "node:fs";
 import path from "node:path";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type ViteDevServer } from "vite";
+import { createReadStream, statSync } from "node:fs";
 
 /** The host page fetches the demo content (`/demo/...` - the boot
  * document, examples, help, data) at runtime: vite serves it from
@@ -11,11 +12,66 @@ function copyDemo(): Plugin {
     name: "copy-demo",
     apply: "build",
     closeBundle() {
-      cpSync(path.resolve(__dirname, "demo"), path.resolve(__dirname, "dist/demo"), {
+      cpSync(
+        path.resolve(__dirname, "demo"),
+        path.resolve(__dirname, "dist/demo"),
+        {
+          recursive: true,
+        },
+      );
+    },
+  };
+}
+
+/** The Python runtime (ADR-0030) is static files served under
+ * `/pyodide/` - the page computes that URL from its own base, so
+ * the root, a subfolder (GitHub Pages, /folio/) and the desktop
+ * app all find it. A build copies the package's dist; dev serves
+ * it straight from node_modules. Nothing is fetched at run time
+ * from anywhere else (ADR-0005). */
+function servePyodide(): Plugin {
+  const pyodideDist = path.resolve(__dirname, "node_modules/pyodide");
+  const MIME: Record<string, string> = {
+    ".js": "text/javascript",
+    ".mjs": "text/javascript",
+    ".wasm": "application/wasm",
+    ".json": "application/json",
+    ".a": "application/octet-stream",
+    ".data": "application/octet-stream",
+  };
+  return {
+    name: "serve-pyodide",
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === undefined || !req.url.startsWith("/pyodide/")) next();
+        else {
+          const file = path.join(
+            pyodideDist,
+            req.url.slice("/pyodide/".length).split("?")[0],
+          );
+          if (
+            !file.startsWith(pyodideDist) ||
+            !statSync(file, { throwIfNoEntry: false })?.isFile()
+          ) {
+            res.statusCode = 404;
+            res.end();
+            return;
+          }
+          res.setHeader(
+            "content-type",
+            MIME[path.extname(file)] ?? "application/octet-stream",
+          );
+          createReadStream(file).pipe(res);
+        }
+      });
+    },
+    apply: "build",
+    closeBundle() {
+      cpSync(pyodideDist, path.resolve(__dirname, "dist/pyodide"), {
         recursive: true,
       });
     },
-  };
+  } as Plugin;
 }
 
 export default defineConfig({
@@ -27,6 +83,9 @@ export default defineConfig({
       "@folio": path.resolve(__dirname, "./src"),
     },
   },
+  // The compute worker (ADR-0030) lazy-imports pyodide, so its
+  // chunk splits: workers must build as ES modules, not IIFE.
+  worker: { format: "es" },
   build: {
     emptyOutDir: true,
     rollupOptions: {
@@ -40,5 +99,5 @@ export default defineConfig({
     },
     outDir: path.resolve(__dirname, "dist"),
   },
-  plugins: [copyDemo()],
+  plugins: [copyDemo(), servePyodide()],
 });

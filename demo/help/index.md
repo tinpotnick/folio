@@ -47,6 +47,7 @@ Ctrl+K from anywhere.
 - [3D models](3d-models.md) - parametric parts in JSCAD, driven by a dataset
 - [Images and audio](images-audio.md) - pictures, sound clips, recording
 - [Music with Strudel](music.md) - patterns that play
+- [Python on your data](compute.md) - scripts that return tables, feeding charts
 
 ## Look and output
 
