@@ -32,23 +32,26 @@ const compute = (info: string, code: string): string =>
   `# T\n\n${BUDGET}\n\`\`\`python ${info}\n${code}\n\`\`\`\n`;
 
 test.describe("Compute blocks", () => {
-  test("the sample computes: outputs render as tables, its chart reads them", async ({
+  test("the sample computes: outputs render as tables, its charts read them", async ({
     page,
   }) => {
     await page.goto("/?doc=demo/examples/compute.md");
-    // Two compute figures, each rendering its output table(s).
+    // Two compute figures: the fit+band block, the projection block.
     const figures = page.locator("#the-doc figure.folio-python");
-    await expect(figures).toHaveCount(3);
+    await expect(figures).toHaveCount(2);
     // The multi-out block renders two tables in one figure.
-    await expect(figures.nth(1).locator(".compute-table")).toHaveCount(2, {
+    await expect(figures.nth(0).locator(".compute-table")).toHaveCount(2, {
       timeout: 15_000,
     });
-    // The totals block: 30 + 12 = 42.
-    const totals = figures.nth(0).locator(".compute-table");
-    await expect(totals).toContainText("42", { timeout: 15_000 });
-    // The chart over @forecast draws (a real SVG, not an error).
+    await expect(figures.nth(1).locator(".compute-table")).toHaveCount(1, {
+      timeout: 15_000,
+    });
+    // Both charts over the Python's outputs draw (real SVGs).
     await expect(
-      page.locator('#the-doc figure[data-chart-source="forecast"] svg'),
+      page.locator('#the-doc figure[data-chart-source="fit"] svg'),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.locator('#the-doc figure[data-chart-source="projection"] svg'),
     ).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("#the-doc .drawn-error")).toHaveCount(0);
   });

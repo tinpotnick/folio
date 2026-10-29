@@ -2,12 +2,11 @@
 name: compute-first-contact
 feature: Compute blocks (docs/specs/compute-blocks.md, ADR-0030)
 steps:
-  - From the welcome page, open the "Compute: Python on your data"
-    example.
-  - Change Engineering's cost in the budget table and watch the
-    total the Python returned follow.
-  - Click the computed table to see the code that produced it;
-    change "Total" to "Sum" in the code and watch the table follow.
+  - From the welcome page, open the "Coffee forecast" example.
+  - Change a day's takings in the sales table and watch the Python's
+    trend line, band and both charts follow.
+  - Click a computed table to see the code that produced it; change
+    the band's width (the 40s) and watch the band follow.
   - Add a compute block to any document with a dataset, without
     reading docs.
 expected:

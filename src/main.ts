@@ -2483,10 +2483,10 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
   },
   {
     id: "compute",
-    title: "Python on your data",
+    title: "Coffee forecast",
     file: "demo/examples/compute.md",
     blurb:
-      "python compute script pyodide data transform regression forecast programming",
+      "python compute script pyodide forecast trend regression cafe sales projection least squares",
   },
   {
     id: "repay-or-invest",
