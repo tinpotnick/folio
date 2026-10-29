@@ -2724,6 +2724,31 @@ export class FolioDoc extends HTMLElement {
     return values;
   }
 
+  /**
+   * A 3D model bound to this table shows the row being edited (spec:
+   * docs/specs/jscad-blocks.md, "Follows the row"): click into row 3
+   * and the model draws row 3 - and is saved so, the row picker
+   * following. Only a table's ONLY model follows: two or more models
+   * on one table show chosen rows side by side, a comparison a click
+   * must not collapse. A blank row (a new one) is not followed.
+   */
+  private modelFollowsRow(
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    r: number,
+  ): void {
+    const row = block.table.rows[r];
+    if (!row || this.isBlankRow(block, row)) return;
+    const models = Array.from(
+      this.shadowRoot?.querySelectorAll<HTMLElement>("figure.folio-jscad") ??
+        [],
+    ).filter((f) => this.jscadParams(f)?.table === block.table.id);
+    const model = models.length === 1 ? models[0] : undefined;
+    if (!model || this.jscadParams(model)?.row === r + 1) return;
+    this.setJscadInfo(model, "row", r === 0 ? null : String(r + 1));
+    const rowSel = model.querySelector<HTMLSelectElement>(".jscad-row");
+    if (rowSel) rowSel.value = String(r + 1);
+  }
+
   /** Rewrite one `key=value` of a model's fence info (or drop it). */
   private setJscadInfo(
     figure: HTMLElement,
@@ -3884,6 +3909,7 @@ export class FolioDoc extends HTMLElement {
       ) as HTMLTableCellElement | null;
       if (cell) this.lastCell = cell;
       this.leaveNewRow(ev.target as HTMLElement);
+      if (cell) this.modelFollowsRow(block, Number(cell.dataset.rowIndex));
       const nameSpan = (ev.target as HTMLElement).closest(
         "thead th .name",
       ) as HTMLElement | null;

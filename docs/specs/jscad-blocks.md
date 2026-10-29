@@ -58,6 +58,15 @@ The model is the figure; the code is how you edit it.
   (`params=` before `row=`). Editing the dataset redraws the models
   bound to it (`refreshDependents`: the one place a table's dependents
   redraw). A missing dataset or row is a Model error naming it.
+- **Follows the row** (2026-10-29): clicking into (or Tab/Enter into)
+  a cell of a model's dataset switches the model to that row - drawn,
+  the row picker following, and saved as `row=` (row 1, the default,
+  drops it) - so the model always shows the row being edited. Edits
+  still redraw it when the cell is left, never per keystroke
+  (formulas.md, "Recalculation"). Only a dataset's ONLY model follows:
+  two models on one table show chosen rows side by side, a comparison
+  a click must not collapse. A blank row (one Tab/Enter just added) is
+  not followed.
 - **Export STL** (phase 3): the header's **Export STL** writes the
   drawn faces as ASCII STL (`src/render/stl.ts`: a triangle fan per
   convex face, with normals, in model units), named `model-N.stl` or
