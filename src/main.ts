@@ -2376,15 +2376,20 @@ document.addEventListener("keydown", (ev) => {
       node.tagName === "INPUT");
   // The document's editable surface lives in the component's shadow
   // root; activeElement then resolves to the host, so pierce it.
-  if (editable(a) || editable(a?.shadowRoot?.activeElement)) return;
+  const typing = editable(a) || editable(a?.shadowRoot?.activeElement);
+  // "?" is a character: while typing it is text, not a shortcut. F1
+  // types nothing, so it works everywhere - the standard help key.
+  if (ev.key === "?" && typing) return;
   ev.preventDefault();
-  // "?" toggles, like the button; F1 only ever opens.
-  if (ev.key === "?" && !helpPanel.hidden) {
+  // Both toggle, like the toolbar button.
+  if (!helpPanel.hidden) {
     closeHelp();
     return;
   }
   openHelp();
-  if (helpShowing === null) helpSearch.focus();
+  // Opened mid-typing, the caret stays where it was: F1 again closes
+  // help and typing carries on.
+  if (helpShowing === null && !typing) helpSearch.focus();
 });
 
 /* --- Command palette (spec: docs/specs/command-palette.md) --- */
