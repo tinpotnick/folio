@@ -2482,6 +2482,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
+    id: "compute",
+    title: "Python on your data",
+    file: "demo/examples/compute.md",
+    blurb:
+      "python compute script pyodide data transform regression forecast programming",
+  },
+  {
     id: "repay-or-invest",
     title: "Repay or invest? A mortgage question",
     file: "demo/examples/repay-or-invest.md",

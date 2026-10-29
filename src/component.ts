@@ -3347,15 +3347,24 @@ export class FolioDoc extends HTMLElement {
   }
 
   private setComputeInfo(figure: HTMLElement, binding: ComputeBinding): void {
-    const block = this.doc?.blocks[Number(figure.dataset.blockIndex ?? -1)];
+    const idx = Number(figure.dataset.blockIndex ?? -1);
+    const block = this.doc?.blocks[idx];
     if (block?.kind !== "code") return;
     const info = formatComputeInfo(binding);
     if (info !== "") block.info = info;
     else delete block.info;
-    if (block.info !== undefined) figure.dataset.info = block.info;
-    else delete figure.dataset.info;
+    // Binding data is what turns inert python code into a compute
+    // FIGURE (and unbinding turns it back): the block must re-render,
+    // the drawn/inert shapes differ (the JSCAD redraw cannot - an
+    // inert block has no .code-view to draw into).
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const old = host?.children[idx] as HTMLElement | undefined;
     this.emitChange();
-    void this.drawCompute(figure);
+    if (!old || !host) return;
+    const fresh = this.renderBlock(block, idx);
+    old.replaceWith(fresh);
+    const bar = fresh.querySelector<HTMLElement>(".folio-inspector");
+    if (bar) bar.hidden = false;
   }
 
   private buildCodeInspector(

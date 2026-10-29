@@ -57,12 +57,15 @@ caption: "Rates"
 columns:
   - {name: monthly_rate, type: number, align: right}
 data:
-  - [1.0]
+  - [1]
 :::
 
 A chart can read a compute block's output — `@forecast`, a dataset
 like any other:
 
-::: chart {data: forecast, mark: line, x: month, y: spend}
+::: chart {#spend-chart}
+source: @forecast
+query: {select: [month, spend]}
+type: line
 caption: "Spend by month (from Python)"
 :::
