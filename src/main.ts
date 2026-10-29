@@ -2797,6 +2797,16 @@ function paletteEntries(): PaletteEntry[] {
     });
   }
   entries.push({
+    title: "Show code or drawing (or both)",
+    group: "Command",
+    keywords:
+      "show hide code source drawing rendered both diagram graphviz svg vega jscad model sheet music view",
+    action: () => {
+      const why = el.focusDrawnShow();
+      if (why) flash(why);
+    },
+  });
+  entries.push({
     title: "Choose how many rows a table shows",
     group: "Command",
     keywords:

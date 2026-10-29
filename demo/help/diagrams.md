@@ -11,6 +11,11 @@
 - Some code blocks draw a picture instead of showing code. The
   drawing is the figure; click it to see and edit its source (it
   redraws as you type).
+- **Show** in a drawing's header chooses what the page shows: the
+  **drawing** (its code when you click it), the **code**, or **both** -
+  the picture with its code under it, for a document that teaches the
+  code. Printing follows the choice. Search "show code" with Ctrl+K to
+  reach it.
 - **Graphviz**: a block tagged `dot` draws a graph laid out by
   [Graphviz](https://graphviz.org). List the nodes and edges
   (`a -> b`); Graphviz places them. Search "graphviz" in the palette

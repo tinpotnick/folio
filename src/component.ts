@@ -388,6 +388,15 @@ function isDrawnLang(lang: string | undefined): boolean {
   return lang !== undefined && lang in DRAWN_LANGS;
 }
 
+/** What a drawn block shows (spec: docs/specs/drawn-blocks.md,
+ * "Show"): its fence info's `show=code` or `show=both`; else the
+ * drawing alone, the code on click. */
+type DrawnShow = "drawing" | "code" | "both";
+function drawnShow(info: string | undefined): DrawnShow {
+  const v = /(?:^|\s)show=(\w+)/.exec(info ?? "")?.[1];
+  return v === "code" || v === "both" ? v : "drawing";
+}
+
 const ABC_STARTER = `X:1
 T:A small tune
 M:4/4
@@ -2210,7 +2219,7 @@ export class FolioDoc extends HTMLElement {
       : compute
         ? "folio-codeblock folio-python folio-compute"
         : drawn
-          ? `folio-codeblock folio-drawn folio-${block.lang ?? ""}`
+          ? `folio-codeblock folio-drawn folio-${block.lang ?? ""} show-${drawnShow(block.info)}`
           : "folio-codeblock";
     figure.dataset.blockIndex = String(idx);
     if (block.lang !== undefined) figure.dataset.lang = block.lang;
@@ -2254,6 +2263,55 @@ export class FolioDoc extends HTMLElement {
       void this.drawCompute(figure);
     }
     return figure;
+  }
+
+  /**
+   * A drawn block's Show picker (spec: docs/specs/drawn-blocks.md,
+   * "Show"): the drawing (its code on click), the code, or both -
+   * written to the fence as `show=`, the drawing never written.
+   */
+  private buildShowPicker(figure: HTMLElement): HTMLSelectElement {
+    const sel = document.createElement("select");
+    sel.className = "insp-select code-show";
+    sel.title = "What the page shows: the drawing, its code, or both";
+    sel.setAttribute("aria-label", "Show");
+    for (const [value, label] of [
+      ["drawing", "Show: drawing"],
+      ["code", "Show: code"],
+      ["both", "Show: both"],
+    ]) {
+      const o = document.createElement("option");
+      o.value = value ?? "";
+      o.textContent = label ?? "";
+      sel.appendChild(o);
+    }
+    sel.value = drawnShow(figure.dataset.info);
+    sel.addEventListener("change", () => {
+      const v = sel.value as DrawnShow;
+      this.setFenceInfo(figure, "show", v === "drawing" ? null : v);
+      figure.classList.remove("show-drawing", "show-code", "show-both");
+      figure.classList.add(`show-${v}`);
+    });
+    return sel;
+  }
+
+  /**
+   * The palette's "Show code or drawing (or both)": open
+   * the header of the drawn block last used and focus its Show picker.
+   */
+  focusDrawnShow(): string | null {
+    const at = this.caretPoint()?.node ?? null;
+    const el = at instanceof Element ? at : (at?.parentElement ?? null);
+    const figure =
+      el?.closest<HTMLElement>("figure.folio-drawn") ??
+      (this.lastBlock?.matches("figure.folio-drawn") ? this.lastBlock : null);
+    if (!figure?.isConnected) {
+      return "Click a drawing first (a 3D model, a Graphviz graph, a chart spec, an SVG, sheet music)";
+    }
+    const bar = figure.querySelector<HTMLElement>(".code-inspector");
+    if (bar) bar.hidden = false;
+    figure.querySelector<HTMLSelectElement>(".code-show")?.focus();
+    return null;
   }
 
   /** Draw a drawn-language figure from its code (by language). */
@@ -2810,13 +2868,13 @@ export class FolioDoc extends HTMLElement {
     ).filter((f) => this.jscadParams(f)?.table === block.table.id);
     const model = models.length === 1 ? models[0] : undefined;
     if (!model || this.jscadParams(model)?.row === r + 1) return;
-    this.setJscadInfo(model, "row", r === 0 ? null : String(r + 1));
+    this.setFenceInfo(model, "row", r === 0 ? null : String(r + 1));
     const rowSel = model.querySelector<HTMLSelectElement>(".jscad-row");
     if (rowSel) rowSel.value = String(r + 1);
   }
 
   /** Rewrite one `key=value` of a model's fence info (or drop it). */
-  private setJscadInfo(
+  private setFenceInfo(
     figure: HTMLElement,
     key: string,
     value: string | null,
@@ -2836,7 +2894,8 @@ export class FolioDoc extends HTMLElement {
     if (block.info !== undefined) figure.dataset.info = block.info;
     else delete figure.dataset.info;
     this.emitChange();
-    void this.drawJscad(figure);
+    // A model's data binding changes the model; `show=` only what shows.
+    if (key === "params" || key === "row") void this.drawJscad(figure);
   }
 
   /** Typing in a drawing's code redraws it once the typing pauses. */
@@ -2992,16 +3051,16 @@ export class FolioDoc extends HTMLElement {
     fill();
     figure.addEventListener("mousedown", fill);
     dataSel.addEventListener("change", () => {
-      this.setJscadInfo(
+      this.setFenceInfo(
         figure,
         "params",
         dataSel.value ? `@${dataSel.value}` : null,
       );
-      if (!dataSel.value) this.setJscadInfo(figure, "row", null);
+      if (!dataSel.value) this.setFenceInfo(figure, "row", null);
       fill();
     });
     rowSel.addEventListener("change", () => {
-      this.setJscadInfo(
+      this.setFenceInfo(
         figure,
         "row",
         rowSel.value === "1" ? null : rowSel.value,
@@ -3633,6 +3692,7 @@ export class FolioDoc extends HTMLElement {
     if (block.lang === "abc") {
       bar.append(...this.buildAbcControls(figure));
     }
+    if (isDrawnLang(block.lang)) bar.appendChild(this.buildShowPicker(figure));
     if (block.lang === "python") {
       bar.append(...this.buildComputeControls(figure));
     }
