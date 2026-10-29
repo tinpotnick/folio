@@ -56,6 +56,9 @@ Playwright starts its own dev server; install its browser once with
 `npx playwright install chromium`. The WebKitGTK cases need
 `npm run dev` running and PyGObject with WebKit2 4.1.
 
+CI runs the gate (lint, unit tests, build) and the end-to-end suite on
+every pull request; the WebKitGTK cases are local only.
+
 Every bug fix adds a test that fails before the fix.
 
 ## The desktop app (Tauri)

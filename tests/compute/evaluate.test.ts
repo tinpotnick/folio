@@ -5,6 +5,7 @@ import {
   formatComputeInfo,
   inputName,
   parseComputeInfo,
+  pythonError,
 } from "../../src/compute/evaluate.js";
 import type { Table } from "@folio/engine/index.js";
 
@@ -144,5 +145,35 @@ describe("computeOutputs", () => {
       { flag: true, off: false, blank: null },
     ]);
     expect(outs[0]?.rows).toEqual([[1, 0, ""]]);
+  });
+});
+
+describe("returns that are not tables", () => {
+  it("a number or None says what a table is (it crashed on null)", () => {
+    for (const v of [42, null, "text"]) {
+      expect(() =>
+        computeOutputs({ data: [], out: ["t"] }, v as never),
+      ).toThrow(/a table is a list of dicts/);
+    }
+  });
+});
+
+describe("pythonError", () => {
+  it("is the error and the script's line, not Pyodide's traceback", () => {
+    const tb = [
+      "Traceback (most recent call last):",
+      '  File "/lib/python314.zip/_pyodide/_base.py", line 619, in eval_code_async',
+      "    await CodeRunner(",
+      '  File "<exec>", line 1, in <module>',
+      '  File "<exec>", line 3, in __folio_compute__',
+      "ZeroDivisionError: division by zero",
+    ].join("\n");
+    expect(pythonError(new Error(tb))).toBe(
+      "ZeroDivisionError: division by zero (line 2)",
+    );
+  });
+
+  it("keeps a message with no script line as it is", () => {
+    expect(pythonError(new Error("NameError: x"))).toBe("NameError: x");
   });
 });

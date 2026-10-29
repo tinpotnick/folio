@@ -14,7 +14,8 @@ for (const file of examples) {
     page.on("pageerror", (e) => pageErrors.push(e.message));
     await page.goto(`/?doc=demo/examples/${file}`);
     await page.locator("#the-doc h1").first().waitFor();
-    // Drawn figures load lazily: wait until none is still "Drawing…".
+    // Drawn figures load lazily: wait until none is still "Drawing…"
+    // (or "Computing…": a Python block waits for its runtime).
     await expect
       .poll(
         () =>
@@ -23,7 +24,7 @@ for (const file of examples) {
             return Array.from(
               root.querySelectorAll(".code-view, .chart-holder"),
             ).filter((v) =>
-              /^(Drawing…|Building the model…)$/.test(
+              /^(Drawing…|Computing…|Building the model…)$/.test(
                 (v.textContent ?? "").trim(),
               ),
             ).length;

@@ -2196,7 +2196,7 @@ export class FolioDoc extends HTMLElement {
           ? "Computed table"
           : (DRAWN_LANGS[block.lang ?? ""] ?? "drawing"),
       );
-      view.textContent = "Computing…";
+      view.textContent = compute ? "Computing…" : "Drawing…";
       if (jscad) this.attachJscadRotate(figure, view);
       figure.appendChild(view);
     }
@@ -2215,6 +2215,9 @@ export class FolioDoc extends HTMLElement {
   /** Draw a drawn-language figure from its code (by language). */
   private drawDrawn(figure: HTMLElement): Promise<void> {
     const lang = figure.dataset.lang ?? "";
+    // Python joins the drawn languages beside JSCAD - it replaced the
+    // jscad line, and every 3D model stayed undrawn.
+    if (lang === "jscad") return this.drawJscad(figure);
     if (lang === "python") return this.drawCompute(figure);
     if (lang === "dot" || lang === "graphviz") return this.drawGraphviz(figure);
     if (lang === "vega-lite") return this.drawVegaLite(figure);
@@ -3013,7 +3016,13 @@ export class FolioDoc extends HTMLElement {
   private computeSeq = 0;
   private computePending = new Map<
     number,
-    { resolve: (v: ComputeReturn) => void; reject: (e: Error) => void }
+    {
+      resolve: (v: ComputeReturn) => void;
+      reject: (e: Error) => void;
+      source: string;
+      inputs: Record<string, Record<string, unknown>[]>;
+      timer?: ReturnType<typeof setTimeout>;
+    }
   >();
   /** The last computed rows per output id, so charts can query a
    * compute block's output (`refreshDependents` redraws them). */
@@ -3027,53 +3036,77 @@ export class FolioDoc extends HTMLElement {
     source: string,
     inputs: Record<string, Record<string, unknown>[]>,
   ): Promise<ComputeReturn> {
-    if (!this.computeWorker) {
-      const w = new Worker(new URL("./compute/worker.ts", import.meta.url), {
-        type: "module",
-      });
-      w.addEventListener(
-        "message",
-        (
-          ev: MessageEvent<{
-            id: number;
-            returned?: unknown;
-            error?: string;
-          }>,
-        ) => {
-          const job = this.computePending.get(ev.data.id);
-          if (!job) return;
-          this.computePending.delete(ev.data.id);
-          if (ev.data.error !== undefined) job.reject(new Error(ev.data.error));
-          else job.resolve((ev.data.returned ?? null) as ComputeReturn);
-        },
-      );
-      this.computeWorker = w;
-    }
-    const worker = this.computeWorker;
     const id = ++this.computeSeq;
     return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        worker.terminate();
-        if (this.computeWorker === worker) this.computeWorker = null;
-        for (const [k, job] of this.computePending) {
-          job.reject(
-            new Error(
-              "the script took longer than 10 seconds and was stopped - check for an endless loop",
-            ),
-          );
-          this.computePending.delete(k);
-        }
-      }, 10_000);
-      this.computePending.set(id, { resolve, reject });
-      worker.postMessage({
-        id,
-        source,
-        inputs,
-        // Base-relative, so the root, a subfolder (GitHub Pages,
-        // /folio/) and the desktop app share one bundled runtime.
-        indexURL: new URL("pyodide/", document.baseURI).href,
-      });
+      this.computePending.set(id, { resolve, reject, source, inputs });
+      this.postCompute(id);
     });
+  }
+
+  /** The sandbox worker, made on first use. */
+  private computeSandbox(): Worker {
+    if (this.computeWorker) return this.computeWorker;
+    const w = new Worker(new URL("./compute/worker.ts", import.meta.url), {
+      type: "module",
+    });
+    w.addEventListener(
+      "message",
+      (
+        ev: MessageEvent<{
+          id: number;
+          started?: boolean;
+          returned?: unknown;
+          error?: string;
+        }>,
+      ) => {
+        const job = this.computePending.get(ev.data.id);
+        if (!job) return;
+        if (ev.data.started) {
+          // The limit runs while the script runs - not while it waits
+          // its turn (the worker runs one job at a time) or while the
+          // runtime loads.
+          job.timer = setTimeout(() => this.stopCompute(w, ev.data.id), 10_000);
+          return;
+        }
+        clearTimeout(job.timer);
+        this.computePending.delete(ev.data.id);
+        if (ev.data.error !== undefined) job.reject(new Error(ev.data.error));
+        else job.resolve((ev.data.returned ?? null) as ComputeReturn);
+      },
+    );
+    this.computeWorker = w;
+    return w;
+  }
+
+  private postCompute(id: number): void {
+    const job = this.computePending.get(id);
+    if (!job) return;
+    this.computeSandbox().postMessage({
+      id,
+      source: job.source,
+      inputs: job.inputs,
+      // Base-relative, so the root, a subfolder (GitHub Pages,
+      // /folio/) and the desktop app share one bundled runtime.
+      indexURL: new URL("pyodide/", document.baseURI).href,
+    });
+  }
+
+  /** Job `id` ran past its limit: replace the worker; that job says
+   * why, and the jobs queued behind it go to the new worker. (The
+   * timer was armed for every job when SENT and never cleared, so it
+   * killed the worker 10 s after each one - whatever was running then
+   * died, and Python reloaded.) */
+  private stopCompute(worker: Worker, id: number): void {
+    worker.terminate();
+    if (this.computeWorker === worker) this.computeWorker = null;
+    const job = this.computePending.get(id);
+    this.computePending.delete(id);
+    job?.reject(
+      new Error(
+        "the script took longer than 10 seconds and was stopped - check for an endless loop",
+      ),
+    );
+    for (const k of [...this.computePending.keys()]) this.postCompute(k);
   }
 
   /** The compute binding of a code figure, from its fence info. */

@@ -3203,6 +3203,15 @@ function updatePalette(): void {
             // table shows" (tagged "fewer"), which letter-by-letter
             // matching missed.
             bodyScore(query, `${e.title} ${e.keywords}`.toLowerCase()),
+            // ...and SEVERAL words all in the TITLE beat the same words
+            // among the keywords: "compute python" is "Insert a compute
+            // block (Python)", not an example tagged "compute python".
+            // One word in a title is weak evidence - "cite" is still
+            // the command, not every "Cite: ..." target.
+            /\s/.test(query.trim()) &&
+              bodyScore(query, e.title.toLowerCase()) > 0
+              ? bodyScore(query, e.title.toLowerCase()) + 30
+              : -1,
           ) -
           // "Cross-reference: Regional summary" must not outrank the
           // section itself, nor "Cite: Knuth 1984" the "Insert a
