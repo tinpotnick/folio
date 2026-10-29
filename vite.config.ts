@@ -104,7 +104,13 @@ export default defineConfig({
   // its docs say not to do - and a cold dev server found it late (in
   // the compute worker), re-optimized and RELOADED the page, so the
   // first compute test on a fresh CI runner timed out.
-  optimizeDeps: { exclude: ["pyodide"] },
+  optimizeDeps: {
+    exclude: ["pyodide"],
+    // Imported only by the JSCAD worker, so the startup scan missed
+    // it: the first 3D model on a cold server re-optimized and
+    // RELOADED every open page - a flaky smoke test in CI.
+    include: ["@jscad/modeling"],
+  },
   build: {
     emptyOutDir: true,
     rollupOptions: {
