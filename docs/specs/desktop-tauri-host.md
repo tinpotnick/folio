@@ -58,6 +58,18 @@ synthetic DOM events cannot catch how the engine names keys). Run it
 for any
 change touching the caret, selection, or keyboard handling.
 
+It runs **headless** (2026-10-29): its windows open on a private GTK
+Broadway display (`broadwayd`, part of GTK 3) that nothing views, so
+the suite never takes over the screen or the keyboard while someone
+works. Two Broadway gaps are filled: its screen has no resolution
+(-1 dpi, which WebKitGTK turned into a devicePixelRatio of -1/96 and
+pages -122880px wide), so the runner sets 96; and its keymap reports
+each keyval as its keycode, so real key presses carry XKB keycodes from
+a table (`XKB_CODES`; a case pressing a key not in it stops with a
+message to add it). `FOLIO_WEBKITGTK_VISIBLE=1` shows the windows on
+your own display instead; `just test-webkitgtk help-panel` runs only
+the named cases.
+
 ## Toolbar and title (2026-10-21)
 
 - New, Open and Save are one toolbar group, first in the bar; New
