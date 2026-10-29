@@ -3829,7 +3829,7 @@ export class FolioDoc extends HTMLElement {
     // its head rows in flow. The model holds every row - charts,
     // formulas, and queries always see the full dataset - and the
     // status line opens the dataset browser for full-scale work.
-    const rowsWindow = this.tableRowsWindow();
+    const rowsWindow = this.tableRowsWindow(block.table);
     const totalRows = recalced.rows.length;
     const shownRows = Math.min(totalRows, rowsWindow);
     recalced.rows.slice(0, shownRows).forEach((row, r) => {
@@ -4251,6 +4251,47 @@ export class FolioDoc extends HTMLElement {
     dsBtn.addEventListener("click", () => {
       this.openDataset(block.table.id);
     });
+
+    // How many rows show in the page - the data itself is never cut
+    // (spec: docs/specs/dataset-browser.md, "Rows shown").
+    const rowsSel = document.createElement("select");
+    rowsSel.className = "insp-rows";
+    rowsSel.title = "Rows shown in the page (charts and formulas use them all)";
+    rowsSel.setAttribute("aria-label", "Rows shown");
+    const dflt = this.tableRowsWindow();
+    const counts = [5, 10, 25, 50, 100];
+    if (
+      typeof block.table.show === "number" &&
+      !counts.includes(block.table.show)
+    ) {
+      counts.push(block.table.show);
+      counts.sort((a, b) => a - b);
+    }
+    for (const [value, label] of [
+      ["default", `Rows: default (${String(dflt)})`],
+      ...counts.map((n) => [String(n), `Rows: ${String(n)}`]),
+      ["all", "Rows: all"],
+    ]) {
+      const o = document.createElement("option");
+      o.value = value ?? "";
+      o.textContent = label ?? "";
+      rowsSel.appendChild(o);
+    }
+    rowsSel.value =
+      block.table.show === undefined ? "default" : String(block.table.show);
+    rowsSel.addEventListener("change", () => {
+      const v = rowsSel.value;
+      if (v === "default") delete block.table.show;
+      else block.table.show = v === "all" ? "all" : Number(v);
+      const c = Math.max(colSel.selectedIndex, 0);
+      const host = figure.parentElement;
+      this.refreshTableBlock(figure, block);
+      const fresh = host?.querySelector<HTMLElement>(
+        `figure[data-table-id="${block.table.id}"]`,
+      );
+      if (fresh) this.showInspector(fresh, block, c);
+      this.emitChange();
+    });
     bar.append(
       kind,
       dsBtn,
@@ -4261,6 +4302,7 @@ export class FolioDoc extends HTMLElement {
       fx,
       exprInp,
       capInp,
+      rowsSel,
       chartBtn,
       convert,
       note,
@@ -5237,8 +5279,11 @@ export class FolioDoc extends HTMLElement {
     this.emitChange("insert");
   }
 
-  /** The theme's in-flow row window (table.rows.show, default 50). */
-  private tableRowsWindow(): number {
+  /** How many rows a table shows in flow: its own `show:`, else the
+   * document's table.rows.show (default 50). */
+  private tableRowsWindow(table?: Table): number {
+    if (table?.show === "all") return Infinity;
+    if (typeof table?.show === "number") return table.show;
     if (!this.doc) return 50;
     return themeFromDoc(this.doc).tableRowsShow;
   }
@@ -8215,6 +8260,29 @@ export class FolioDoc extends HTMLElement {
       cell.dataset.colIndex ?? (cell as HTMLTableCellElement).cellIndex,
     );
     return this.applyTableAction(block, r, c, action, figure);
+  }
+
+  /**
+   * The palette's "Choose how many rows a table shows": open the bar
+   * of the table at the caret on its Rows picker. A message when there
+   * is no dataset there.
+   */
+  focusTableRows(): string | null {
+    const at = this.caretPoint();
+    const el =
+      at && (at.node instanceof Element ? at.node : at.node.parentElement);
+    const figure = el?.closest<HTMLElement>("figure[data-table-id]");
+    const block =
+      figure && this.doc?.blocks[Number(figure.dataset.blockIndex ?? -1)];
+    if (!figure || block?.kind !== "table") {
+      return "Click into a table first";
+    }
+    if (block.table.simple) {
+      return "A simple table shows the document's number of rows - make it a dataset to choose";
+    }
+    this.showInspector(figure, block, 0);
+    figure.querySelector<HTMLSelectElement>(".insp-rows")?.focus();
+    return null;
   }
 
   private menuCloser = (ev: Event): void => {

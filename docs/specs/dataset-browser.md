@@ -23,6 +23,18 @@ chrome would put a widget inside a document.
   minimum 3; a table at or under the window renders exactly as
   before). Print/PDF shows the same compact view: the paper
   artifact cites the dataset with its row count.
+- **Rows shown, per table** (2026-10-29): a dataset may set its own
+  window with `show: 12` (a whole number of rows) or `show: all`,
+  written after the provenance keys and before `columns:`; absent,
+  the document's `table.rows.show` applies. The table bar's **Rows**
+  picker writes it - "default (50)", 5, 10, 25, 50, 100, "all", plus
+  the table's own number if it is another - and the palette's
+  "Choose how many rows a table shows" opens that picker for the
+  table at the caret. It is a content choice, like a chart's query -
+  how much of the data the page quotes - not styling (ADR-0002): the
+  data is never cut, and charts, formulas and the browser still see
+  every row. A bad value is a parse error naming the table. Simple
+  (pipe) tables keep the document's window.
 - **Browser (overlay)**: opened from the status line or the
   table inspector's grid button; closed with Esc or Done. It
   owns the viewport: continuous virtualized scrolling (only
@@ -69,6 +81,8 @@ chrome would put a widget inside a document.
   style key override, small tables unchanged, virtualized
   scrolling to the last row, Jexl filter with typo error, view
   sort both directions, cell edit rippling to figure/formulas/
-  source, inspector button, Esc/Done).
+  source, inspector button, Esc/Done); `tests/e2e/table-rows-shown.spec.ts`
+  (the Rows picker, `show:` in the source, all, back to default,
+  the palette entry). Engine: `tests/engine/table-show.test.ts`.
 - First-contact eval: `evals/dataset-browser-first-contact.md`.
 - Documented in `demo/help/tables.md`.

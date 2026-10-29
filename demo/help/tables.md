@@ -35,7 +35,9 @@
   read-only; that is what the inspector is for.
 - A table longer than the theme's window (`table.rows.show`,
   default 50) shows its head rows plus a "120 rows x 3 columns -
-  showing first 50" line. The full data is always in the document
+  showing first 50" line. To choose for one dataset, click it and
+  pick **Rows** on its bar (5, 10, 25, 50, 100 or all), or search
+  "rows shown" with Ctrl+K; it saves as `show: 12` on the table. The full data is always in the document
   (charts, formulas, and queries see every row); click **Open
   dataset** for the full-browse surface: continuous scrolling, a
   Jexl filter (`v > 115 && region != "South"` - the charts'

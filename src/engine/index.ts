@@ -34,6 +34,11 @@ export interface Table {
   /** The terms the data came under: a licence's name, or
    * "personal-use" for data whose terms do not allow sharing. */
   licence?: string;
+  /** How many rows the table shows in the page (spec: docs/specs/
+   * dataset-browser.md, "Rows shown"): a count, or "all". Absent: the
+   * document's `table.rows.show`. The data is never cut - charts,
+   * formulas and the dataset browser see every row. */
+  show?: number | "all";
   columns: Column[];
   rows: Cell[][];
   /**
