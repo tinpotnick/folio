@@ -75,86 +75,65 @@ describe("datasetRows", () => {
   });
 });
 
-describe("computeOutputs", () => {
-  it("accepts one table for one out, giving it the id", () => {
-    const outs = computeOutputs({ data: ["budget"], out: ["forecast"] }, [
-      { month: 1, spend: 7 },
-    ]);
-    expect(outs[0]?.id).toBe("forecast");
-    expect(outs[0]?.columns).toEqual([
-      { name: "month", type: "number" },
-      { name: "spend", type: "number" },
-    ]);
-    expect(outs[0]?.rows).toEqual([[1, 7]]);
-  });
-
-  it("accepts a tuple matching several outs, by position", () => {
-    const outs = computeOutputs({ data: [], out: ["forecast", "warning"] }, [
-      [{ a: 1 }],
-      [{ b: "high" }],
-    ]);
-    expect(outs.map((t) => t.id)).toEqual(["forecast", "warning"]);
-    expect(outs[1]?.rows).toEqual([["high"]]);
-  });
-
-  it("accepts the explicit {columns, rows} form", () => {
-    const outs = computeOutputs(
-      { data: [], out: ["forecast"] },
-      {
-        columns: [
-          { name: "month", type: "number", unit: "mo" },
-          { name: "spend", type: "number", unit: "£k" },
-        ],
-        rows: [[1, 7]],
-      },
-    );
-    expect(outs[0]?.columns[0]).toEqual({
-      name: "month",
-      type: "number",
-      unit: "mo",
+describe("parseComputeInfo: out= alone", () => {
+  it("a script may make data from nothing (out= without data=)", () => {
+    expect(parseComputeInfo("out=greeting")).toEqual({
+      data: [],
+      out: ["greeting"],
     });
-    expect(outs[0]?.rows).toEqual([[1, 7]]);
-  });
-
-  it("errors on a count mismatch with out=", () => {
-    expect(() =>
-      computeOutputs({ data: [], out: ["a", "b"] }, [{ x: 1 }]),
-    ).toThrow(/out= names 2/);
-  });
-
-  it("errors on a missing out=", () => {
-    expect(() => computeOutputs({ data: [], out: [] }, [{ x: 1 }])).toThrow(
-      /no out=/,
-    );
-  });
-
-  it("errors on an empty inferred table", () => {
-    expect(() =>
-      computeOutputs({ data: [], out: ["a", "b"] }, [[], []]),
-    ).toThrow(/empty/);
-  });
-
-  it("errors on a non-table return", () => {
-    expect(() => computeOutputs({ data: [], out: ["a"] }, 42 as never)).toThrow(
-      /list of dicts/,
-    );
-  });
-
-  it("normalizes cells: booleans to 1/0, null to empty", () => {
-    const outs = computeOutputs({ data: [], out: ["a"] }, [
-      { flag: true, off: false, blank: null },
-    ]);
-    expect(outs[0]?.rows).toEqual([[1, 0, ""]]);
   });
 });
 
-describe("returns that are not tables", () => {
-  it("a number or None says what a table is (it crashed on null)", () => {
-    for (const v of [42, null, "text"]) {
-      expect(() =>
-        computeOutputs({ data: [], out: ["t"] }, v as never),
-      ).toThrow(/a table is a list of dicts/);
-    }
+describe("computeOutputs: variables become datasets and values", () => {
+  const binding = { data: ["budget"], out: ["fit", "slope", "when"] };
+
+  it("a table becomes a computed dataset; a number or date a value", () => {
+    const [fit, slope, when] = computeOutputs(binding, {
+      fit: {
+        columns: ["day", "trend", "note"],
+        rows: [
+          [1, 410, "low"],
+          [2, 418.6, ""],
+        ],
+      },
+      slope: { value: 8.56 },
+      when: { value: "2026-01-31" },
+    });
+    expect(fit).toEqual({
+      id: "fit",
+      computed: "python",
+      columns: [
+        { name: "day", type: "number" },
+        { name: "trend", type: "number" },
+        { name: "note", type: "text" },
+      ],
+      rows: [
+        [1, 410, "low"],
+        [2, 418.6, ""],
+      ],
+    });
+    expect(slope).toMatchObject({
+      id: "slope",
+      value: true,
+      columns: [{ name: "value", type: "number" }],
+      rows: [[8.56]],
+    });
+    expect(when?.columns[0]?.type).toBe("date");
+  });
+
+  it("a variable the script could not publish says why, by name", () => {
+    expect(() =>
+      computeOutputs(
+        { data: [], out: ["xs"] },
+        { xs: { error: "xs is a list - publish a table ..." } },
+      ),
+    ).toThrow(/^xs is a list/);
+  });
+
+  it("no out= says how to publish", () => {
+    expect(() => computeOutputs({ data: [], out: [] }, {})).toThrow(
+      /name the variables to publish/,
+    );
   });
 });
 
@@ -164,8 +143,7 @@ describe("pythonError", () => {
       "Traceback (most recent call last):",
       '  File "/lib/python314.zip/_pyodide/_base.py", line 619, in eval_code_async',
       "    await CodeRunner(",
-      '  File "<exec>", line 1, in <module>',
-      '  File "<exec>", line 3, in __folio_compute__',
+      '  File "<exec>", line 2, in <module>',
       "ZeroDivisionError: division by zero",
     ].join("\n");
     expect(pythonError(new Error(tb))).toBe(
@@ -175,5 +153,15 @@ describe("pythonError", () => {
 
   it("keeps a message with no script line as it is", () => {
     expect(pythonError(new Error("NameError: x"))).toBe("NameError: x");
+  });
+
+  it("a leftover return (the first design) says what replaced it", () => {
+    const tb = [
+      '  File "<exec>", line 3',
+      "SyntaxError: 'return' outside function",
+    ].join("\n");
+    expect(pythonError(new Error(tb))).toMatch(
+      /publishes variables instead: name them in out=/,
+    );
   });
 });

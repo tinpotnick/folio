@@ -39,6 +39,19 @@ export interface Table {
    * document's `table.rows.show`. The data is never cut - charts,
    * formulas and the dataset browser see every row. */
   show?: number | "all";
+  /**
+   * Made by a script, not typed (spec: docs/specs/compute-blocks.md,
+   * ADR-0030): the language that produced it ("python"). A computed
+   * table is the SNAPSHOT of a compute block's output, stored right
+   * after the block (ADR-0005) and not shown on the page; charts,
+   * formulas and the dataset browser read it like any table.
+   */
+  computed?: string;
+  /**
+   * A single named value (`::: value {#slope}`), not a table: one
+   * column `value`, one row. A formula reads it bare, `@slope`.
+   */
+  value?: true;
   columns: Column[];
   rows: Cell[][];
   /**

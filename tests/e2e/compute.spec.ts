@@ -2,13 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Compute blocks (spec: docs/specs/compute-blocks.md, ADR-0030): a
- * ```python fence WITH binding info (`data=@a,@b out=x,y`) renders
- * as its OUTPUT TABLES - datasets in the @id graph, which charts
- * read like any dataset. A plain ```python fence is inert code,
- * exactly as on GitHub.
+ * ```python fence with `data=` / `out=` is CODE - it never draws its
+ * own tables. `data=@takings` hands the script a dataset; the
+ * variables named in `out=` become `@names` (a dataset, or a single
+ * value) that charts, formulas and other scripts use, stored in the
+ * document right after the block. One line under the code says what
+ * the script published, or what went wrong.
  */
 
 async function loadDoc(page: Page, markdown: string): Promise<void> {
+  await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
   await page.goto("/");
   await page.locator("folio-doc h1").first().waitFor();
   await page.locator("#btn-markdown").click();
@@ -17,97 +20,121 @@ async function loadDoc(page: Page, markdown: string): Promise<void> {
   await page.locator("#the-doc h1").first().waitFor();
 }
 
+async function source(page: Page): Promise<string> {
+  await page.locator("#btn-markdown").click();
+  const md = await page.locator("#editor").inputValue();
+  await page.locator("#btn-view").click();
+  return md;
+}
+
 const BUDGET = `::: table {#budget}
 caption: "Budget"
 columns:
   - {name: item, type: text}
-  - {name: cost, type: number, unit: "k", align: right}
+  - {name: cost, type: number}
 data:
   - [Engineering, 30]
   - [Design, 12]
 :::
 `;
 
-const compute = (info: string, code: string): string =>
-  `# T\n\n${BUDGET}\n\`\`\`python ${info}\n${code}\n\`\`\`\n`;
+/** A formula that reads a value: `@total * 2`. */
+const DOUBLE = `::: table {#double}
+columns:
+  - {name: what, type: text}
+  - {name: twice, type: formula, expr: "@total * 2"}
+data:
+  - [Total, ""]
+:::
+`;
+
+const compute = (info: string, code: string, after = ""): string =>
+  `# T\n\n${BUDGET}\n\`\`\`python ${info}\n${code}\n\`\`\`\n\n${after}`;
+
+const block = (page: Page) => page.locator("#the-doc figure.folio-compute");
+const status = (page: Page) => block(page).locator(".compute-status");
+const T = { timeout: 25_000 };
 
 test.describe("Compute blocks", () => {
-  test("the sample computes: outputs render as tables, its charts read them", async ({
+  test("the example: code stays code; charts and a formula read its outputs", async ({
     page,
   }) => {
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
     await page.goto("/?doc=demo/examples/compute.md");
-    // Two compute figures: the fit+band block, the projection block.
-    const figures = page.locator("#the-doc figure.folio-python");
-    await expect(figures).toHaveCount(2);
-    // The multi-out block renders two tables in one figure.
-    await expect(figures.nth(0).locator(".compute-table")).toHaveCount(2, {
-      timeout: 15_000,
-    });
-    await expect(figures.nth(1).locator(".compute-table")).toHaveCount(1, {
-      timeout: 15_000,
-    });
-    // Both charts over the Python's outputs draw (real SVGs).
+    await expect(block(page)).toHaveCount(2);
+    await expect(status(page).nth(0)).toHaveText(
+      /^→ @fit \(14 rows\) · @slope = [\d.]+$/,
+      T,
+    );
+    await expect(status(page).nth(1)).toHaveText("→ @projection (14 rows)", T);
+    // The code is the block - no output tables of its own.
+    await expect(block(page).first().locator("pre.folio-code")).toBeVisible();
+    await expect(page.locator("#the-doc .compute-table")).toHaveCount(0);
+    await expect(page.locator("#the-doc .folio-computed")).toHaveCount(3);
+    await expect(page.locator("#the-doc .folio-computed").first()).toBeHidden();
+    // Charts over the outputs, and a formula over @slope.
     await expect(
       page.locator('#the-doc figure[data-chart-source="fit"] svg'),
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible();
     await expect(
       page.locator('#the-doc figure[data-chart-source="projection"] svg'),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator("#the-doc .drawn-error")).toHaveCount(0);
+    ).toBeVisible();
+    await expect(
+      page.locator('#the-doc figure[data-table-id="growth"] tbody tr').first(),
+    ).toContainText(/\d+\.\d\d/);
   });
 
-  test("the output is the figure; code hidden until click; edits recalculate", async ({
+  test("a value: published, read bare by a formula, stored in the document", async ({
     page,
   }) => {
     await loadDoc(
       page,
       compute(
-        "data=@budget out=totals",
-        `scale = 1\ntotal = sum(r["cost"] for r in budget) * scale\nreturn [{ "item": "Total", "cost": total }]`,
+        "data=@budget out=total",
+        `total = sum(budget.col("cost"))`,
+        DOUBLE,
       ),
     );
-    const fig = page.locator("#the-doc figure.folio-python");
-    await expect(fig.locator(".compute-table")).toContainText("42", {
-      timeout: 20_000,
-    });
-    await expect(fig.locator("pre.folio-code")).toBeHidden();
-    // Click the table: the code shows, the header reveals.
-    await fig.locator(".compute-table").click();
-    await expect(fig.locator("pre.folio-code")).toBeVisible();
-    // Edit the code: scale = 1 becomes 2, and 42 becomes 84. (The
-    // first line: Ctrl+End went to the DOCUMENT's end, and a second
-    // `return` typed after the first never ran.)
-    const code = await fig.locator("pre.folio-code code").boundingBox();
+    await expect(status(page)).toHaveText("→ @total = 42", T);
+    await expect(
+      page.locator('#the-doc figure[data-table-id="double"] td').nth(1),
+    ).toHaveText("84");
+    const md = await source(page);
+    expect(md).toContain(
+      '```python data=@budget out=total\ntotal = sum(budget.col("cost"))\n```\n\n::: value {#total}\ncomputed: python\nvalue: 42\n:::',
+    );
+  });
+
+  test("editing the code runs it again, and its readers follow", async ({
+    page,
+  }) => {
+    await loadDoc(
+      page,
+      compute(
+        "data=@budget out=total",
+        `scale = 1\ntotal = sum(r["cost"] for r in budget) * scale`,
+        DOUBLE,
+      ),
+    );
+    await expect(status(page)).toHaveText("→ @total = 42", T);
+    const code = await block(page).locator("pre.folio-code code").boundingBox();
     if (!code) throw new Error("no code");
     await page.mouse.click(code.x + 3, code.y + 5);
     await page.keyboard.press("End");
     await page.keyboard.press("Backspace");
     await page.keyboard.type("2");
-    await expect
-      .poll(async () => fig.locator(".compute-table").innerText(), {
-        timeout: 20_000,
-      })
-      .toContain("84");
-    // Clicking away hides the code again.
-    await page.locator("#the-doc h1").click();
-    await expect(fig.locator("pre.folio-code")).toBeHidden();
+    await expect(status(page)).toHaveText("→ @total = 84", T);
+    await expect(
+      page.locator('#the-doc figure[data-table-id="double"] td').nth(1),
+    ).toHaveText("168");
   });
 
-  test("editing the dataset recalculates the output and its chart", async ({
-    page,
-  }) => {
+  test("editing the data runs it again", async ({ page }) => {
     await loadDoc(
       page,
-      `${compute(
-        "data=@budget out=totals",
-        `return [{ "item": "Total", "cost": sum(r["cost"] for r in budget) }]`,
-      )}\n::: chart {#totals-chart}\nsource: @totals\nquery: {select: [item, cost]}\ntype: bar\ncaption: "Totals"\n:::\n`,
+      compute("data=@budget out=total", `total = sum(budget.col("cost"))`),
     );
-    const fig = page.locator("#the-doc figure.folio-python");
-    await expect(fig.locator(".compute-table")).toContainText("42", {
-      timeout: 20_000,
-    });
-    // Engineering 30 -> 50: total 62, chart follows.
+    await expect(status(page)).toHaveText("→ @total = 42", T);
     const cell = page.locator(
       '#the-doc figure[data-table-id="budget"] td[data-row-index="0"][data-col-index="1"]',
     );
@@ -115,56 +142,66 @@ test.describe("Compute blocks", () => {
     await page.keyboard.press("Control+a");
     await page.keyboard.type("50");
     await page.keyboard.press("Tab");
-    await expect
-      .poll(async () => fig.locator(".compute-table").innerText(), {
-        timeout: 20_000,
-      })
-      .toContain("62");
+    await expect(status(page)).toHaveText("→ @total = 62", T);
   });
 
-  test("a broken script says what is wrong, as the figure", async ({
-    page,
-  }) => {
-    await loadDoc(page, compute("data=@budget out=totals", "x = 1\n1 / 0"));
-    await expect(page.locator("#the-doc .drawn-error")).toHaveText(
-      "Compute error: ZeroDivisionError: division by zero (line 2)",
-      { timeout: 20_000 },
-    );
-  });
-
-  test("a missing dataset says so, as the figure", async ({ page }) => {
+  test("a dataset output opens in the dataset browser", async ({ page }) => {
     await loadDoc(
       page,
       compute(
-        "data=@nope out=totals",
-        `return [{ "item": "Total", "cost": 0 }]`,
+        "data=@budget out=costly",
+        `costly = [r for r in budget if r["cost"] > 20]`,
       ),
     );
-    await expect(page.locator("#the-doc .drawn-error")).toContainText(
-      "no dataset @nope",
-      { timeout: 20_000 },
+    await expect(status(page)).toHaveText("→ @costly (1 row)", T);
+    await status(page).getByRole("button", { name: "@costly" }).click();
+    await expect(page.locator("#the-doc .folio-ds-panel")).toContainText(
+      "Engineering",
     );
   });
 
-  test("a return that is not a table, or the wrong count, says so", async ({
+  test("errors say what is wrong, under the code", async ({ page }) => {
+    await loadDoc(
+      page,
+      compute("data=@budget out=total", "x = 1\ntotal = 1 / 0"),
+    );
+    await expect(status(page)).toHaveText(
+      "Compute error: ZeroDivisionError: division by zero (line 2)",
+      T,
+    );
+    await expect(block(page).locator("pre.folio-code")).toBeVisible();
+  });
+
+  test("a variable that cannot be published, or was never set, says so", async ({
     page,
   }) => {
-    await loadDoc(page, compute("data=@budget out=totals", "return 42"));
-    await expect(page.locator("#the-doc .drawn-error")).toContainText(
-      "list of dicts",
-      { timeout: 20_000 },
+    await loadDoc(page, compute("data=@budget out=xs", "xs = [1, 2]"));
+    await expect(status(page)).toContainText("xs is a list", T);
+    await loadDoc(page, compute("data=@budget out=nope", "x = 1"));
+    await expect(status(page)).toContainText(
+      "out= names nope, but the script never sets it",
+      T,
     );
+  });
+
+  test("an output may not reuse a name the document has", async ({ page }) => {
+    await loadDoc(page, compute("out=budget", "budget = 1"));
+    await expect(status(page)).toContainText(
+      "@budget is already used in this document",
+      T,
+    );
+  });
+
+  test("a missing dataset says so", async ({ page }) => {
+    await loadDoc(page, compute("data=@nope out=x", "x = 1"));
+    await expect(status(page)).toContainText("no dataset @nope", T);
   });
 
   test("an endless loop is stopped after ten seconds", async ({ page }) => {
-    await loadDoc(
-      page,
-      compute("data=@budget out=totals", "while True:\n    pass"),
-    );
-    await expect(page.locator("#the-doc .drawn-error")).toContainText(
-      "longer than 10 seconds",
-      { timeout: 25_000 },
-    );
+    await loadDoc(page, compute("data=@budget out=x", "while True:\n    pass"));
+    await expect(status(page)).toContainText("longer than 10 seconds", {
+      timeout: 30_000,
+    });
   });
 
   test("the sandbox has no network", async ({ page }) => {
@@ -175,56 +212,69 @@ test.describe("Compute blocks", () => {
     await loadDoc(
       page,
       compute(
-        "data=@budget out=totals",
-        `import urllib.request\nurllib.request.urlopen("https://example.com/x")\nreturn [{ "item": "x", "cost": 1 }]`,
+        "data=@budget out=x",
+        `import urllib.request\nurllib.request.urlopen("https://example.com/x")\nx = 1`,
       ),
     );
-    await expect(page.locator("#the-doc .drawn-error")).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(status(page)).toContainText("Compute error", T);
     expect(remote).toEqual([]);
   });
 
-  test("a plain python fence is inert code, never a compute figure", async ({
-    page,
-  }) => {
+  test("a plain python fence is inert code", async ({ page }) => {
     await loadDoc(page, "# T\n\n```python\nprint('hello')\n```\n");
-    await expect(page.locator("#the-doc figure.folio-python")).toHaveCount(0);
+    await expect(block(page)).toHaveCount(0);
     await expect(page.locator("#the-doc pre.folio-code code")).toHaveText(
       "print('hello')",
     );
   });
 
-  test("the header's data picker binds a dataset and writes data=", async ({
+  test("the header binds a dataset, then publishes a ticked variable", async ({
     page,
   }) => {
     await loadDoc(
       page,
-      `# T\n\n${BUDGET}\n\`\`\`python\nreturn [{ "x": 1 }]\n\`\`\`\n`,
+      `# T\n\n${BUDGET}\n\`\`\`python\nanswer = len(budget)\n\`\`\`\n`,
     );
     const fig = page.locator("#the-doc figure.folio-codeblock");
-    // Plain python: inert, but its header still offers the picker.
     await fig.locator("pre.folio-code code").click();
     await fig.getByLabel("Input dataset").selectOption("budget");
-    // Its own output: the script returns one row, x = 1.
-    await expect(fig.locator(".compute-table td")).toHaveText("1", {
-      timeout: 20_000,
-    });
-    // The fence now carries the binding, out= defaulted.
-    await page.locator("#btn-markdown").click();
-    expect(await page.locator("#editor").inputValue()).toContain(
-      "```python data=@budget out=output",
+    // It runs, publishes nothing yet, and offers what it could.
+    await expect(status(page)).toContainText(
+      "name the variables to publish",
+      T,
     );
+    await block(page).locator("pre.folio-code code").click();
+    // (Ticking re-renders the block, so click - check() would wait on
+    // the old box.)
+    await block(page).getByRole("checkbox", { name: "answer" }).click();
+    await expect(status(page)).toHaveText("→ @answer = 2", T);
+    expect(await source(page)).toContain("```python data=@budget out=answer");
   });
 
-  test("the palette inserts a starter compute block", async ({ page }) => {
+  test("the palette inserts a starter that publishes", async ({ page }) => {
     await loadDoc(page, `# T\n\n${BUDGET}\n`);
-    await page.locator("#the-doc p, #the-doc h1").first().click();
+    await page.locator("#the-doc h1").first().click();
     await page.keyboard.press("Control+k");
     await page.locator("#palette-input").fill("compute python");
     await page.keyboard.press("Enter");
+    await expect(status(page)).toHaveText("→ @budget_rows = 2", T);
+  });
+
+  test("stored outputs draw the charts even when Python cannot load", async ({
+    page,
+  }) => {
+    await page.route("**/pyodide/**", (route) => route.abort());
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/?doc=demo/examples/compute.md");
     await expect(
-      page.locator("#the-doc figure.folio-python .compute-table"),
-    ).toBeVisible({ timeout: 20_000 });
+      page.locator('#the-doc figure[data-chart-source="fit"] svg'),
+    ).toBeVisible();
+    await expect(
+      page.locator('#the-doc figure[data-chart-source="projection"] svg'),
+    ).toBeVisible();
+    await expect(status(page).first()).toContainText(
+      "could not load the Python runtime",
+      T,
+    );
   });
 });

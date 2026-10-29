@@ -22,7 +22,9 @@ for (const file of examples) {
           page.locator("#the-doc").evaluate((host) => {
             const root = host.shadowRoot as ShadowRoot;
             return Array.from(
-              root.querySelectorAll(".code-view, .chart-holder"),
+              root.querySelectorAll(
+                ".code-view, .chart-holder, .compute-status",
+              ),
             ).filter((v) =>
               /^(Drawing…|Computing…|Building the model…)$/.test(
                 (v.textContent ?? "").trim(),
@@ -37,7 +39,7 @@ for (const file of examples) {
       return [
         ...Array.from(
           root.querySelectorAll(
-            ".drawn-error, .jscad-error, .folio-table-error",
+            ".drawn-error, .jscad-error, .folio-table-error, .compute-error",
           ),
         ).map((e) => e.textContent ?? ""),
         ...Array.from(root.querySelectorAll(".chart-holder"))

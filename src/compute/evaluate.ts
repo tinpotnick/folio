@@ -16,25 +16,22 @@ export interface ComputeBinding {
   out: string[];
 }
 
-const INFO_RE = /(?:^|\s)data=([@\w,-]+)(?:\s+out=([\w,-]+))?/;
-
 /** Parse a fence's info string. Null when the block does not
  * compute (a plain ```python fence is inert code, like GitHub's). */
 export function parseComputeInfo(
   info: string | undefined,
 ): ComputeBinding | null {
-  if (info === undefined || info === "") return null;
-  const m = INFO_RE.exec(info);
-  if (!m) return null;
-  const data = (m[1] ?? "")
-    .split(",")
-    .map((s) => s.replace(/^@/, ""))
-    .filter(Boolean);
-  const out = (m[2] ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return { data, out };
+  // Either key makes a python fence compute: data= (what it reads),
+  // out= (what it publishes) - a script may make data from nothing.
+  const data = /(?:^|\s)data=(\S+)/.exec(info ?? "")?.[1];
+  const out = /(?:^|\s)out=(\S+)/.exec(info ?? "")?.[1];
+  if (data === undefined && out === undefined) return null;
+  const list = (v: string | undefined, strip: boolean): string[] =>
+    (v ?? "")
+      .split(",")
+      .map((x) => (strip ? x.replace(/^@/, "") : x).trim())
+      .filter(Boolean);
+  return { data: list(data, true), out: list(out, false) };
 }
 
 /** Canonical fence-info form the header writes: `data=` before
@@ -109,109 +106,104 @@ const KEYWORDS = new Set([
 ]);
 
 /** The value shape a compute script returns: a table. */
-export type ComputeTable =
-  | Record<string, unknown>[] // columns inferred from the first row
-  | { columns: Column[]; rows: unknown[][] }; // explicit
+/** A compute block's inputs, by Python name: rows and column names. */
+export type ComputeInputs = Record<
+  string,
+  { rows: Record<string, unknown>[]; columns: string[] } | { value: unknown }
+>;
 
-/** A script's return value: one table, or a tuple matching `out=`. */
-export type ComputeReturn = ComputeTable | ComputeTable[];
+/** A run's result: the `out=` variables, and every variable the
+ * script could publish (for the header's tick-boxes). */
+export interface ComputeResult {
+  outputs: Record<string, ComputeExport>;
+  found: string[];
+}
 
-/** Validate a script's return value against the declared outputs
- * (matched by position) and normalize each to a Table model with
- * the declared id. Errors carry the spec's wording. */
+/** One `out=` variable as the worker exported it (ADR-0030). */
+export type ComputeExport =
+  | { columns: string[]; rows: unknown[][] }
+  | { value: unknown }
+  | { error: string };
+
+/**
+ * The `out=` variables as document blocks: a table becomes a dataset,
+ * a single number, text or date a value - each with its variable's
+ * name as its `@id`, marked `computed: "python"` (the snapshot stored
+ * after the block). A variable the script did not set, or one that is
+ * neither, is an error naming it.
+ */
 export function computeOutputs(
   binding: ComputeBinding,
-  returned: ComputeReturn,
+  exported: Record<string, ComputeExport>,
 ): Table[] {
   if (binding.out.length === 0)
-    throw new Error("no out= - a compute block must name its output datasets");
-  // One out: the whole return is ONE table (a list of dicts is
-  // rows, not a tuple). Several: a tuple, matched by position.
-  const values =
-    binding.out.length === 1
-      ? [returned]
-      : Array.isArray(returned)
-        ? returned
-        : [returned];
-  if (values.length !== binding.out.length)
     throw new Error(
-      `returned ${String(values.length)} table${values.length === 1 ? "" : "s"} but out= names ${String(binding.out.length)} - return one table per name, as a tuple`,
+      "no out= - name the variables to publish (out=fit,slope), or tick them in the header",
     );
-  return values.map((value, i) => {
-    const id = binding.out[i] ?? "";
-    const table = normalizeTable(value as ComputeTable);
-    return { ...table, id };
+  return binding.out.map((id) => {
+    const x = exported[id];
+    if (x === undefined)
+      throw new Error(`out= names ${id}, but it was not exported`);
+    if ("error" in x) throw new Error(x.error);
+    if ("value" in x) {
+      const v = normalizeCell(x.value);
+      const type =
+        typeof v === "number"
+          ? "number"
+          : /^\d{4}-\d{2}-\d{2}$/.test(v)
+            ? "date"
+            : "text";
+      return {
+        id,
+        computed: "python",
+        value: true,
+        columns: [{ name: "value", type }],
+        rows: [[v]],
+      } satisfies Table;
+    }
+    const rows = x.rows.map((r) => r.map(normalizeCell));
+    const columns: Column[] = x.columns.map((name, c) => ({
+      name,
+      type: inferType(rows.map((r) => r[c])),
+    }));
+    return { id, computed: "python", columns, rows } satisfies Table;
   });
 }
 
-/** A return value as a Table: a list of dicts infers columns from
- * the first row (types as table import infers them), or a
- * `{columns, rows}` dict names them explicitly. */
-function normalizeTable(value: ComputeTable): Omit<Table, "id"> {
-  if (Array.isArray(value)) {
-    if (value.length === 0)
-      throw new Error(
-        "returned an empty table - the first row names the columns",
-      );
-    const first = value[0];
-    if (typeof first !== "object" || first === null)
-      throw new Error("a table is a list of dicts keyed by column name");
-    const columns: Column[] = Object.keys(first).map((name) => ({
-      name,
-      type: inferType(value.map((r) => (r as Record<string, unknown>)[name])),
-    }));
-    const rows = value.map((r) =>
-      columns.map((c) => normalizeCell((r as Record<string, unknown>)[c.name])),
-    );
-    return { columns, rows };
-  }
-  // Explicit form: column names/types/units given by the script.
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    !Array.isArray(value.columns) ||
-    !Array.isArray(value.rows)
-  )
-    throw new Error(
-      "a table is a list of dicts, or {columns, rows} with names and types",
-    );
-  return {
-    columns: value.columns,
-    rows: value.rows.map((row) =>
-      (row as unknown[]).map((cell) => normalizeCell(cell)),
-    ),
-  };
-}
-
-/** The declared/inferred column types, as table import infers. */
+/** A column's type, as table import infers: numbers, ISO dates, text. */
 function inferType(values: unknown[]): Column["type"] {
-  for (const v of values) {
-    if (v === null || v === undefined) continue;
-    if (typeof v === "number" || typeof v === "boolean") return "number";
-    return "text";
-  }
+  const filled = values.filter(
+    (v) => v !== "" && v !== null && v !== undefined,
+  );
+  if (filled.length === 0) return "text";
+  if (filled.every((v) => typeof v === "number")) return "number";
+  if (
+    filled.every((v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v))
+  )
+    return "date";
   return "text";
 }
 
 /** A cell as the document model stores it. */
 function normalizeCell(value: unknown): Cell {
-  if (typeof value === "number") return value;
-  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : "";
+  if (typeof value === "boolean") return value ? "true" : "false";
   if (value === null || value === undefined) return "";
   return String(value);
 }
 
 /**
- * A Python error as the figure says it: the error itself and the
+ * A Python error as the block says it: the error itself and the
  * script's line - not Pyodide's traceback through its own internals.
- * The script runs as the body of `__folio_compute__`, one line below
- * the `async def`, so the user's line is one less than Python's.
  */
 export function pythonError(e: unknown): string {
   const msg = (e instanceof Error ? e.message : String(e)).trim();
   const last = msg.split("\n").pop() ?? msg;
   const at = [...msg.matchAll(/File "<exec>", line (\d+)/g)].pop();
-  if (!at) return last;
-  const line = Number(at[1]) - 1;
-  return line >= 1 ? `${last} (line ${String(line)})` : last;
+  const said = at ? `${last} (line ${at[1] ?? ""})` : last;
+  // The first design returned tables; a script still doing so is told
+  // what replaced it.
+  return /'return' outside function/.test(last)
+    ? `${said} - a script publishes variables instead: name them in out=`
+    : said;
 }
