@@ -4,8 +4,8 @@
  * it never runs in the page: it runs here, in a worker with no DOM,
  * no network, no scripts and no storage - the JSCAD doors
  * (src/jscad/worker.ts), shut BEFORE any document code runs. The
- * page sends `{ id, source, inputs }` and gets back the returned
- * tables or an error; a script that runs too long is terminated by
+ * page sends `{ id, source, inputs, out }` and gets back the `out=`
+ * variables (tables and values) or an error; a script that runs too long is terminated by
  * the page (the worker is replaced).
  */
 import { inputName, pythonError } from "./evaluate.js";
@@ -68,54 +68,165 @@ for (const name of [
 type Job = {
   id: number;
   source: string;
-  /** Dataset id (sans @) -> rows as dicts keyed by column name. */
-  inputs: Record<string, Record<string, unknown>[]>;
+  /** Input name -> the dataset's rows (dicts keyed by column name) and
+   * its column names, in order. */
+  inputs: Record<
+    string,
+    { rows: Record<string, unknown>[]; columns: string[] } | { value: unknown }
+  >;
+  /** The variables to publish (`out=`), in order. */
+  out: string[];
   /** The page's `/pyodide/` base - the host computes it from its
    * own base URL, so the root, a subfolder and the desktop app
    * all find the same bundled runtime. */
   indexURL: string;
 };
 
-let boot: Promise<unknown> | null = null;
+/**
+ * Python that folio defines once, beside every script (ADR-0030):
+ * `Table`, what an input arrives as - a list of row dicts, so plain
+ * loops and indexing work, plus helpers that can grow without
+ * breaking a script; and the export, which turns the `out=` variables
+ * into plain tables and values (and lists the script's other
+ * publishable variables, for the header's tick-boxes).
+ */
+const PRELUDE = `
+import json as _json, math as _math, datetime as _dt
+
+class Table(list):
+    """A folio dataset: a list of row dicts (one per row), plus helpers."""
+    def __init__(self, rows=(), columns=()):
+        super().__init__(rows)
+        self.columns = list(columns)
+    def col(self, name):
+        """One column, top to bottom, as a list."""
+        if name not in self.columns:
+            raise KeyError(f"no column {name!r} - the columns are: {', '.join(self.columns)}")
+        return [r.get(name) for r in self]
+
+def _folio_cell(v):
+    if v is None:
+        return ""
+    if hasattr(v, "item") and not isinstance(v, (list, tuple, dict)):
+        v = v.item()  # a numpy number
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return "" if isinstance(v, float) and not _math.isfinite(v) else v
+    if isinstance(v, _dt.datetime):
+        return v.isoformat()
+    if isinstance(v, _dt.date):
+        return v.isoformat()
+    return str(v)
+
+def _folio_table(v):
+    """Rows and columns, or None when v is not a table."""
+    if hasattr(v, "to_dict") and hasattr(v, "columns"):  # pandas
+        cols = [str(c) for c in v.columns]
+        return cols, [[_folio_cell(x) for x in r] for r in v.itertuples(index=False)]
+    if isinstance(v, dict) and v and all(isinstance(c, (list, tuple)) for c in v.values()):
+        cols = [str(k) for k in v]
+        n = max(len(c) for c in v.values())
+        return cols, [[_folio_cell(c[i] if i < len(c) else None) for c in v.values()] for i in range(n)]
+    if isinstance(v, (list, tuple)) and v and all(isinstance(r, dict) for r in v):
+        cols = list(getattr(v, "columns", []) or [])
+        for r in v:
+            for k in r:
+                if str(k) not in cols:
+                    cols.append(str(k))
+        return cols, [[_folio_cell(r.get(c)) for c in cols] for r in v]
+    return None
+
+def _folio_value(v):
+    if hasattr(v, "item") and not isinstance(v, (list, tuple, dict, str)):
+        try:
+            v = v.item()
+        except Exception:
+            return None
+    if isinstance(v, (bool, int, float, str, _dt.date)):
+        return _folio_cell(v)
+    return None
+
+def _folio_export(names, ns, skip):
+    out = {}
+    for n in names:
+        if n not in ns:
+            out[n] = {"error": f"out= names {n}, but the script never sets it"}
+            continue
+        v = ns[n]
+        t = _folio_table(v)
+        if t is not None:
+            out[n] = {"columns": t[0], "rows": t[1]}
+            continue
+        if isinstance(v, (list, tuple, dict)) and not v:
+            out[n] = {"error": f"{n} is empty - a table needs at least one row (its keys name the columns)"}
+            continue
+        x = _folio_value(v)
+        if x is not None:
+            out[n] = {"value": x}
+            continue
+        out[n] = {"error": f"{n} is a {type(v).__name__} - publish a table (a list of row dicts, a dict of column lists, a DataFrame) or a single number, text or date"}
+    found = [
+        k for k, v in ns.items()
+        if not k.startswith("_") and k not in skip and k != "Table"
+        and (_folio_table(v) is not None or _folio_value(v) is not None)
+    ]
+    return _json.dumps({"outputs": out, "found": found})
+`;
+
+type Py = {
+  runPythonAsync: (
+    code: string,
+    opts?: { globals?: unknown },
+  ) => Promise<unknown>;
+  toPy: (value: unknown) => unknown;
+  globals: { get: (name: string) => unknown };
+};
+
+let boot: Promise<Py> | null = null;
 let bootURL = "";
 
 /** Load Pyodide once (its chunk loads with this worker, so only
- * documents with a compute block pay for it). */
-async function pyodide(indexURL: string): Promise<unknown> {
+ * documents with a compute block pay for it), and define the prelude. */
+async function pyodide(indexURL: string): Promise<Py> {
   if (boot === null || bootURL !== indexURL) {
     bootURL = indexURL;
-    boot = import("pyodide").then((m) =>
-      (m as { loadPyodide: (o: object) => Promise<unknown> }).loadPyodide({
-        // The bundled runtime, never fetched at run time (ADR-0005):
-        // vite copies pyodide's dist to /pyodide (vite.config.ts).
-        indexURL,
-      }),
-    );
+    boot = import("pyodide")
+      .then((m) =>
+        (m as { loadPyodide: (o: object) => Promise<unknown> }).loadPyodide({
+          // The bundled runtime, never fetched at run time (ADR-0005):
+          // vite copies pyodide's dist to /pyodide (vite.config.ts).
+          indexURL,
+        }),
+      )
+      .then(async (raw) => {
+        const py = raw as Py;
+        await py.runPythonAsync(PRELUDE);
+        return py;
+      });
   }
   return boot;
 }
 
-// One job at a time. A job's inputs, its script (defined as the global
-// __folio_compute__) and its cleanup all live in Python's globals, and
-// a job awaits several times; two jobs interleaved - two blocks
-// rendering together - ran each other's scripts ("returned 14 tables")
-// and deleted each other's inputs (KeyError: 'takings').
+// One job at a time: a job awaits several times, and two interleaved
+// (two blocks rendering together) once ran each other's scripts and
+// deleted each other's inputs. Each job also gets FRESH variables (its
+// own namespace), so nothing leaks from one block - or one run - to
+// the next.
 let queue: Promise<void> = Promise.resolve();
 self.addEventListener("message", (ev: MessageEvent<Job>) => {
   queue = queue.then(() => runJob(ev.data));
 });
 
 async function runJob(job: Job): Promise<void> {
-  const { id, source, inputs, indexURL } = job;
+  const { id, source, inputs, out, indexURL } = job;
   // The runtime's folder, fixed by the first job (see runtimeOnly).
-  if (runtimeBase === "")
+  if (runtimeBase === "") {
     runtimeBase = new URL(indexURL, self.location.href).href;
-  let py: {
-    runPythonAsync: (code: string) => Promise<unknown>;
-    toPy: (value: unknown) => { destroy?: () => void };
-  };
+  }
+  let py: Py;
   try {
-    py = (await pyodide(indexURL)) as typeof py;
+    py = await pyodide(indexURL);
   } catch (e) {
     // Say why: a bare "could not load" hid a sandbox that had shut
     // the runtime's own fetch.
@@ -129,48 +240,42 @@ async function runJob(job: Job): Promise<void> {
   // The page's time limit runs from here: not while the job waits its
   // turn, nor while the runtime loads.
   self.postMessage({ id, started: true });
-  const names: string[] = [];
-  let globals: Map<string, unknown> | null = null;
   try {
-    globals = (
-      py as unknown as {
-        runPythonAsync: (code: string) => Promise<unknown>;
-        toPy: (value: unknown) => { destroy?: () => void };
-        globals: Map<string, unknown> & { destroy?: (name: string) => void };
-      }
-    ).globals as unknown as Map<string, unknown>;
-    // Each bound dataset arrives as a named variable, and every
-    // job runs clean: its inputs are cleared after it (finally).
-    for (const [key, rows] of Object.entries(inputs)) {
+    const makeDict = py.globals.get("dict") as () => {
+      set: (k: string, v: unknown) => void;
+      destroy?: () => void;
+    };
+    const ns = makeDict();
+    const TableCls = py.globals.get("Table") as (
+      rows: unknown,
+      columns: unknown,
+    ) => unknown;
+    ns.set("Table", TableCls);
+    const names: string[] = [];
+    for (const [key, data] of Object.entries(inputs)) {
       const name = inputName(key);
-      const value = py.toPy(rows);
-      globals.set(name, value);
+      // A dataset arrives as a Table; a single value as itself.
+      ns.set(
+        name,
+        "value" in data
+          ? data.value
+          : TableCls(py.toPy(data.rows), py.toPy(data.columns)),
+      );
       names.push(name);
     }
-    globals.set("inputs", py.toPy(inputs));
-    // Top-level `return` is not Python - the script is the body of
-    // a function, so `return [{...}]` and `return a, b` work as the
-    // spec writes them, and the script's own imports/defs stay
-    // local to the job.
-    const wrapped = `async def __folio_compute__():\n${source
-      .split("\n")
-      .map((l) => (l === "" ? "" : `    ${l}`))
-      .join("\n")}\n`;
-    await py.runPythonAsync(wrapped);
-    const returned = await py.runPythonAsync("await __folio_compute__()");
-    // A Python object converts; a plain value (`return 42`) is already
-    // one, and goes as it is - so the page can say it is not a table
-    // (it went as undefined, and the check crashed on null).
-    const proxy = returned as { toJs?: (o?: object) => unknown } | null;
-    const plain =
-      typeof proxy?.toJs === "function"
-        ? proxy.toJs({ dict_converter: Object.fromEntries })
-        : returned;
-    self.postMessage({ id, returned: plain ?? null });
+    await py.runPythonAsync(source, { globals: ns });
+    const exportFn = py.globals.get("_folio_export") as (
+      names: unknown,
+      ns: unknown,
+      skip: unknown,
+    ) => string;
+    const result = JSON.parse(exportFn(py.toPy(out), ns, py.toPy(names))) as {
+      outputs: Record<string, unknown>;
+      found: string[];
+    };
+    ns.destroy?.();
+    self.postMessage({ id, outputs: result.outputs, found: result.found });
   } catch (e) {
     self.postMessage({ id, error: pythonError(e) });
-  } finally {
-    // Cleared even when the script fails: the next job starts clean.
-    for (const name of [...names, "inputs"]) globals?.delete(name);
   }
 }

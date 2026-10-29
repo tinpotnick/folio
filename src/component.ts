@@ -38,7 +38,9 @@ import {
   inputName,
   parseComputeInfo,
   type ComputeBinding,
-  type ComputeReturn,
+  type ComputeExport,
+  type ComputeInputs,
+  type ComputeResult,
 } from "./compute/evaluate.js";
 import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
 import { onlineSampleSources } from "./audio/online-samples.js";
@@ -277,6 +279,22 @@ const DRAWN_LANGS: Record<string, string> = {
   bibtex: "References",
   biblatex: "References",
 };
+
+/** A table figure's rendered cells by "row:col", found once (a windowed
+ * table shows only some rows: one query per cell was thousands of
+ * misses). */
+function cellsOf(fig: Element | null | undefined): Map<string, Element> {
+  return new Map(
+    Array.from(
+      fig?.querySelectorAll<HTMLElement>(
+        "td[data-row-index][data-col-index]",
+      ) ?? [],
+    ).map((td) => [
+      `${td.dataset.rowIndex ?? ""}:${td.dataset.colIndex ?? ""}`,
+      td,
+    ]),
+  );
+}
 
 /** "Personal use only" - on a table or chart whose data's terms do not
  * allow sharing (docs/specs/data-import.md). */
@@ -1226,6 +1244,21 @@ export class FolioDoc extends HTMLElement {
         return this.renderCode(block, idx);
       }
       case "table": {
+        if (block.table.computed !== undefined || block.table.value) {
+          // A compute block's stored output (ADR-0030): data, not a
+          // figure - charts and tables show it; the block's status line
+          // opens it. A placeholder keeps the block indexes aligned - a
+          // FIGURE, so the DOM -> model sync keeps the block (a div was
+          // read back as an empty paragraph, losing the output on the
+          // first keystroke).
+          const held = document.createElement("figure");
+          held.className = "folio-computed";
+          held.hidden = true;
+          held.contentEditable = "false";
+          held.dataset.blockIndex = String(idx);
+          held.dataset.computedId = block.table.id;
+          return held;
+        }
         return this.renderTable(block, idx);
       }
       case "diagram": {
@@ -2170,13 +2203,15 @@ export class FolioDoc extends HTMLElement {
     // the tag alone never signals execution (ADR-0030).
     const compute =
       block.lang === "python" && parseComputeInfo(block.info) !== null;
-    const drawn = compute || isDrawnLang(block.lang);
+    const drawn = isDrawnLang(block.lang);
     const figure = document.createElement("figure");
     figure.className = strudel
       ? "folio-codeblock folio-strudel"
-      : drawn
-        ? `folio-codeblock folio-drawn folio-${block.lang ?? ""}`
-        : "folio-codeblock";
+      : compute
+        ? "folio-codeblock folio-python folio-compute"
+        : drawn
+          ? `folio-codeblock folio-drawn folio-${block.lang ?? ""}`
+          : "folio-codeblock";
     figure.dataset.blockIndex = String(idx);
     if (block.lang !== undefined) figure.dataset.lang = block.lang;
     // The fence info beyond the language rides on the figure, so the
@@ -2192,11 +2227,9 @@ export class FolioDoc extends HTMLElement {
       view.setAttribute("role", "img");
       view.setAttribute(
         "aria-label",
-        compute
-          ? "Computed table"
-          : (DRAWN_LANGS[block.lang ?? ""] ?? "drawing"),
+        DRAWN_LANGS[block.lang ?? ""] ?? "drawing",
       );
-      view.textContent = compute ? "Computing…" : "Drawing…";
+      view.textContent = "Drawing…";
       if (jscad) this.attachJscadRotate(figure, view);
       figure.appendChild(view);
     }
@@ -2209,16 +2242,24 @@ export class FolioDoc extends HTMLElement {
     figure.appendChild(pre);
     void this.highlightCode(figure);
     if (drawn) void this.drawDrawn(figure);
+    if (compute) {
+      // The block is its code (ADR-0030); one line under it says what
+      // the script published, or what went wrong.
+      const status = document.createElement("div");
+      status.className = "compute-status";
+      status.contentEditable = "false";
+      status.setAttribute("role", "status");
+      status.textContent = "Computing…";
+      figure.appendChild(status);
+      void this.drawCompute(figure);
+    }
     return figure;
   }
 
   /** Draw a drawn-language figure from its code (by language). */
   private drawDrawn(figure: HTMLElement): Promise<void> {
     const lang = figure.dataset.lang ?? "";
-    // Python joins the drawn languages beside JSCAD - it replaced the
-    // jscad line, and every 3D model stayed undrawn.
     if (lang === "jscad") return this.drawJscad(figure);
-    if (lang === "python") return this.drawCompute(figure);
     if (lang === "dot" || lang === "graphviz") return this.drawGraphviz(figure);
     if (lang === "vega-lite") return this.drawVegaLite(figure);
     if (lang === "svg") return this.drawSvg(figure);
@@ -2802,12 +2843,18 @@ export class FolioDoc extends HTMLElement {
   private scheduleJscadRedraw(): void {
     const at = this.caretPoint()?.node ?? null;
     const el = at instanceof Element ? at : (at?.parentElement ?? null);
-    const figure = el?.closest<HTMLElement>("figure.folio-drawn");
+    // A compute block is code, not a drawing (ADR-0030), but its edits
+    // run it again the same way.
+    const figure = el?.closest<HTMLElement>(
+      "figure.folio-drawn, figure.folio-compute",
+    );
     if (!figure) return;
     if (this.jscadRedraw) clearTimeout(this.jscadRedraw);
     this.jscadRedraw = setTimeout(() => {
       this.jscadRedraw = null;
-      void this.drawDrawn(figure);
+      void (figure.classList.contains("folio-compute")
+        ? this.drawCompute(figure)
+        : this.drawDrawn(figure));
     }, 600);
   }
 
@@ -3017,16 +3064,17 @@ export class FolioDoc extends HTMLElement {
   private computePending = new Map<
     number,
     {
-      resolve: (v: ComputeReturn) => void;
+      resolve: (v: ComputeResult) => void;
       reject: (e: Error) => void;
       source: string;
-      inputs: Record<string, Record<string, unknown>[]>;
+      inputs: ComputeInputs;
+      out: string[];
       timer?: ReturnType<typeof setTimeout>;
     }
   >();
-  /** The last computed rows per output id, so charts can query a
-   * compute block's output (`refreshDependents` redraws them). */
-  private computeOutputsById = new Map<string, Table>();
+  /** The variables each block's last run could publish (the
+   * header's tick-boxes). */
+  private computeFound = new WeakMap<HTMLElement, string[]>();
 
   /** Evaluate a script in the sandbox: its returned tables, or why
    * not. The JSCAD lifecycle: one worker, per-job timeout, and a
@@ -3034,11 +3082,12 @@ export class FolioDoc extends HTMLElement {
    * figure says why. */
   private runCompute(
     source: string,
-    inputs: Record<string, Record<string, unknown>[]>,
-  ): Promise<ComputeReturn> {
+    inputs: ComputeInputs,
+    out: string[],
+  ): Promise<ComputeResult> {
     const id = ++this.computeSeq;
     return new Promise((resolve, reject) => {
-      this.computePending.set(id, { resolve, reject, source, inputs });
+      this.computePending.set(id, { resolve, reject, source, inputs, out });
       this.postCompute(id);
     });
   }
@@ -3055,7 +3104,8 @@ export class FolioDoc extends HTMLElement {
         ev: MessageEvent<{
           id: number;
           started?: boolean;
-          returned?: unknown;
+          outputs?: Record<string, ComputeExport>;
+          found?: string[];
           error?: string;
         }>,
       ) => {
@@ -3071,7 +3121,11 @@ export class FolioDoc extends HTMLElement {
         clearTimeout(job.timer);
         this.computePending.delete(ev.data.id);
         if (ev.data.error !== undefined) job.reject(new Error(ev.data.error));
-        else job.resolve((ev.data.returned ?? null) as ComputeReturn);
+        else
+          job.resolve({
+            outputs: ev.data.outputs ?? {},
+            found: ev.data.found ?? [],
+          });
       },
     );
     this.computeWorker = w;
@@ -3085,6 +3139,7 @@ export class FolioDoc extends HTMLElement {
       id,
       source: job.source,
       inputs: job.inputs,
+      out: job.out,
       // Base-relative, so the root, a subfolder (GitHub Pages,
       // /folio/) and the desktop app share one bundled runtime.
       indexURL: new URL("pyodide/", document.baseURI).href,
@@ -3116,90 +3171,175 @@ export class FolioDoc extends HTMLElement {
     return parseComputeInfo(block.info);
   }
 
-  /** The bound datasets' recalculated rows, keyed by input name. */
-  private computeInputs(
-    binding: ComputeBinding,
-  ): Record<string, Record<string, unknown>[]> {
-    const inputs: Record<string, Record<string, unknown>[]> = {};
+  /** The bound datasets (recalculated), by input name: rows as dicts,
+   * and the column names in order. A block may not read what it
+   * publishes. */
+  private computeInputs(binding: ComputeBinding): ComputeInputs {
+    const inputs: ComputeInputs = {};
     for (const id of binding.data) {
+      if (binding.out.includes(id)) {
+        throw new Error(
+          `@${id} is this block's own output - it cannot also be its input`,
+        );
+      }
       const block = this.doc?.blocks.find(
         (b) => b.kind === "table" && !b.table.simple && b.table.id === id,
       );
       if (block?.kind !== "table")
         throw new Error(`no dataset @${id} - data= names a dataset`);
-      const another = this.computeOutputsById.get(id);
-      const rows = another
-        ? datasetRows(another)
-        : datasetRows(recalcTable(block.table, this.tablePool(), this.memo()));
-      inputs[inputName(id)] = rows;
+      if (block.table.value) {
+        // A single value arrives as itself (a number, text or date).
+        inputs[inputName(id)] = { value: block.table.rows[0]?.[0] ?? "" };
+        continue;
+      }
+      const t = recalcTable(block.table, this.tablePool(), this.memo());
+      inputs[inputName(id)] = {
+        rows: datasetRows(t),
+        columns: t.columns.map((c) => c.name),
+      };
     }
     return inputs;
   }
 
-  /** Build (or rebuild) a compute figure from its code: the output
-   * tables ARE the figure (stacked, themed); errors are the
-   * figure's text - the JSCAD error shape. */
+  /**
+   * Run a compute block (ADR-0030): its `out=` variables become the
+   * document's datasets and values - stored right after the block, the
+   * snapshot charts and formulas read - and its status line says what
+   * it published, or what went wrong.
+   */
   private async drawCompute(figure: HTMLElement): Promise<void> {
     const code = figure.querySelector<HTMLElement>("pre.folio-code > code");
-    const view = figure.querySelector<HTMLElement>(".code-view");
-    if (!code || !view) return;
+    const status = figure.querySelector<HTMLElement>(".compute-status");
+    if (!code || !status) return;
     const binding = this.computeBinding(figure);
     if (!binding) return;
-    view.classList.add("jscad-building");
-    view.title = "Computing…";
+    status.classList.add("computing");
     try {
       const inputs = this.computeInputs(binding);
-      const returned = await this.runCompute(this.codeText(code), inputs);
-      const tables = computeOutputs(binding, returned);
-      for (const t of tables) this.computeOutputsById.set(t.id, t);
-      view.replaceChildren();
-      view.classList.remove("drawn-error");
-      for (const t of tables) {
-        view.appendChild(this.computeTableHtml(t));
+      const result = await this.runCompute(
+        this.codeText(code),
+        inputs,
+        binding.out,
+      );
+      this.computeFound.set(figure, result.found);
+      const tables = computeOutputs(binding, result.outputs);
+      const changed = this.storeComputed(figure, tables);
+      this.showComputeStatus(status, tables);
+      for (const id of changed) {
+        this.rippleFormulas(id);
+        this.refreshDependents(id);
       }
-      for (const t of tables) this.refreshDependents(t.id);
     } catch (e) {
-      view.classList.add("drawn-error");
-      view.textContent = `Compute error: ${e instanceof Error ? e.message : String(e)}`;
+      status.classList.add("compute-error");
+      status.textContent = `Compute error: ${e instanceof Error ? e.message : String(e)}`;
     } finally {
-      view.classList.remove("jscad-building");
-      view.title = "";
+      status.classList.remove("computing");
     }
   }
 
-  /** One output table as themed HTML (a read-only view of the
-   * model's Table - the same look the dataset browser shows). */
-  private computeTableHtml(table: Table): HTMLElement {
-    const wrap = document.createElement("div");
-    wrap.className = "compute-table";
-    if (table.caption) {
-      const cap = document.createElement("figcaption");
-      cap.textContent = table.caption;
-      wrap.appendChild(cap);
-    }
-    const el = document.createElement("table");
-    const thead = document.createElement("thead");
-    const hr = document.createElement("tr");
-    for (const c of table.columns) {
-      const th = document.createElement("th");
-      th.textContent = c.unit ? `${c.name} (${c.unit})` : c.name;
-      hr.appendChild(th);
-    }
-    thead.appendChild(hr);
-    el.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const row of table.rows) {
-      const tr = document.createElement("tr");
-      for (const cell of row) {
-        const td = document.createElement("td");
-        td.textContent = cell === null ? "" : String(cell);
-        tr.appendChild(td);
+  /** "→ @fit (14 rows) · @slope = 8.6" - each dataset opens in the
+   * dataset browser. */
+  private showComputeStatus(status: HTMLElement, tables: Table[]): void {
+    status.classList.remove("compute-error");
+    status.replaceChildren(document.createTextNode("→ "));
+    tables.forEach((t, n) => {
+      if (n > 0) status.append(" · ");
+      if (t.value) {
+        const v = t.rows[0]?.[0] ?? "";
+        status.append(
+          `@${t.id} = ${typeof v === "number" ? formatComputed(v) : String(v)}`,
+        );
+        return;
       }
-      tbody.appendChild(tr);
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "compute-open";
+      open.textContent = `@${t.id}`;
+      open.title = `Open @${t.id} in the dataset browser`;
+      // The press must not reach the figure: it opens the code header,
+      // which pushes this line down before the button is released - and
+      // the click never lands.
+      open.addEventListener("mousedown", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+      });
+      open.addEventListener("click", () => this.openDataset(t.id));
+      status.append(
+        open,
+        ` (${t.rows.length.toLocaleString()} row${t.rows.length === 1 ? "" : "s"})`,
+      );
+    });
+  }
+
+  /**
+   * Store a block's outputs as the computed blocks right after it (the
+   * snapshot, ADR-0005): the run of `computed: python` blocks that
+   * follows a compute block is its own. Unchanged outputs are left as
+   * they are; an id another block already uses is an error. Returns
+   * the ids whose data changed.
+   */
+  private storeComputed(figure: HTMLElement, tables: Table[]): string[] {
+    const blocks = this.doc?.blocks;
+    if (!blocks) return [];
+    const at = Number(figure.dataset.blockIndex ?? -1);
+    if (blocks[at]?.kind !== "code") return [];
+    let end = at + 1;
+    while (end < blocks.length) {
+      const b = blocks[end];
+      if (b?.kind !== "table" || b.table.computed === undefined) break;
+      end++;
     }
-    el.appendChild(tbody);
-    wrap.appendChild(el);
-    return wrap;
+    const mine = blocks.slice(at + 1, end);
+    for (const t of tables) {
+      const clash = blocks.find(
+        (b, k) =>
+          (k <= at || k >= end) &&
+          ((b.kind === "table" && b.table.id === t.id) ||
+            (b.kind === "chart" && b.chart.id === t.id)),
+      );
+      if (clash) {
+        throw new Error(
+          `out= names ${t.id}, but @${t.id} is already used in this document - choose another name`,
+        );
+      }
+    }
+    const fresh = tables.map((table) => ({ kind: "table" as const, table }));
+    const same = (a: Table, b: Table): boolean =>
+      JSON.stringify([a.value, a.columns, a.rows]) ===
+      JSON.stringify([b.value, b.columns, b.rows]);
+    const changed = tables
+      .filter((t) => {
+        const old = mine.find((b) => b.kind === "table" && b.table.id === t.id);
+        return !(old?.kind === "table" && same(old.table, t));
+      })
+      .map((t) => t.id);
+    const removed = mine
+      .filter(
+        (b) => b.kind === "table" && !tables.some((t) => t.id === b.table.id),
+      )
+      .map((b) => (b.kind === "table" ? b.table.id : ""));
+    if (changed.length === 0 && removed.length === 0) return [];
+    blocks.splice(at + 1, mine.length, ...fresh);
+    this.forgetRecalc();
+    if (fresh.length !== mine.length) {
+      // Block indexes after this one moved: render again (outputs
+      // added or removed only when out= changes, not while typing).
+      this.render();
+    }
+    this.emitDerived();
+    return [...changed, ...removed];
+  }
+
+  /**
+   * A change that follows from another (a compute block's outputs
+   * after its code or data changed): the document is saved with it,
+   * but it is not an undo step of its own - undoing the edit runs the
+   * block again.
+   */
+  private emitDerived(): void {
+    if (!this.doc) return;
+    if (this.committed !== null) this.committed = cloneBlocks(this.doc.blocks);
+    for (const fn of this.listeners) fn(this.doc);
   }
 
   /** Insert a starter compute block after the caret's block: a
@@ -3215,14 +3355,12 @@ export class FolioDoc extends HTMLElement {
     let info: string;
     let text: string;
     if (nearest?.kind === "table" && /^[A-Za-z_]\w*$/.test(nearest.table.id)) {
-      info = formatComputeInfo({
-        data: [nearest.table.id],
-        out: [`${nearest.table.id}-out`],
-      });
-      text = `# The dataset ${nearest.table.id} is a list of dicts keyed by\n# column name. Return a table - here, one row per column's total.\nreturn [{ "measure": "rows", "count": len(${nearest.table.id}) }]`;
+      const id = nearest.table.id;
+      info = formatComputeInfo({ data: [id], out: [`${id}_rows`] });
+      text = `# @${id} arrives as \`${id}\`: a list of rows (dicts by column name).\n# ${id}.col("name") is one column; ${id}.columns names them all.\n# Variables named in out= (tick them in the header) become @names\n# that charts, tables and formulas can use.\n${id}_rows = len(${id})`;
     } else {
-      info = "";
-      text = `# Add a dataset to this block in its header (data picker),\n# or bind one by hand: \`\`\`python data=@budget out=forecast\nreturn [{ "hello": "world" }]`;
+      info = formatComputeInfo({ data: [], out: ["greeting"] });
+      text = `# Pick a dataset in the header to read it here. Variables named\n# in out= (tick them in the header) become @names the document uses.\ngreeting = "hello"`;
     }
     this.doc.blocks.splice(at, replace, {
       kind: "code",
@@ -3358,12 +3496,12 @@ export class FolioDoc extends HTMLElement {
     dataSel.className = "insp-select compute-data";
     dataSel.title = "The dataset this script reads (binding one makes it run)";
     dataSel.setAttribute("aria-label", "Input dataset");
-    const outInp = document.createElement("input");
-    outInp.type = "text";
-    outInp.className = "insp-input compute-out";
-    outInp.placeholder = "out= (output names)";
-    outInp.title = "The output dataset names, comma separated (out=)";
-    outInp.setAttribute("aria-label", "Output dataset names");
+    // Publish: one tick-box per variable the last run could publish,
+    // plus any out= name it did not find - ticking writes out=.
+    const publish = document.createElement("span");
+    publish.className = "compute-publish";
+    publish.setAttribute("role", "group");
+    publish.setAttribute("aria-label", "Publish variables");
     const fill = (): void => {
       const binding = this.computeBinding(figure);
       dataSel.textContent = "";
@@ -3373,13 +3511,49 @@ export class FolioDoc extends HTMLElement {
       dataSel.appendChild(none);
       for (const b of this.doc?.blocks ?? []) {
         if (b.kind !== "table" || b.table.simple) continue;
+        if (binding?.out.includes(b.table.id)) continue;
         const o = document.createElement("option");
         o.value = b.table.id;
         o.textContent = `@${b.table.id}`;
         dataSel.appendChild(o);
       }
       dataSel.value = binding?.data[0] ?? "";
-      outInp.value = binding?.out.join(",") ?? "";
+      publish.replaceChildren();
+      const out = binding?.out ?? [];
+      const names = [
+        ...out,
+        ...(this.computeFound.get(figure) ?? []).filter(
+          (n) => !out.includes(n),
+        ),
+      ];
+      publish.hidden = binding === null;
+      if (names.length === 0) {
+        const hint = document.createElement("span");
+        hint.className = "compute-publish-hint";
+        hint.textContent = "Publish: set a variable in the script";
+        publish.appendChild(hint);
+        return;
+      }
+      const label = document.createElement("span");
+      label.className = "compute-publish-label";
+      label.textContent = "Publish:";
+      publish.appendChild(label);
+      for (const name of names) {
+        const lab = document.createElement("label");
+        lab.className = "compute-var";
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.checked = out.includes(name);
+        box.addEventListener("change", () => {
+          const b = this.computeBinding(figure) ?? { data: [], out: [] };
+          const next = box.checked
+            ? [...b.out.filter((n) => n !== name), name]
+            : b.out.filter((n) => n !== name);
+          this.setComputeInfo(figure, { data: b.data, out: next });
+        });
+        lab.append(box, ` ${name}`);
+        publish.appendChild(lab);
+      }
     };
     fill();
     figure.addEventListener("mousedown", fill);
@@ -3388,20 +3562,9 @@ export class FolioDoc extends HTMLElement {
       const data = dataSel.value
         ? [dataSel.value, ...binding.data.slice(1)]
         : binding.data.slice(1);
-      const out = binding.out.length > 0 ? binding.out : ["output"];
-      this.setComputeInfo(figure, { data, out });
-      fill();
+      this.setComputeInfo(figure, { data, out: binding.out });
     });
-    outInp.addEventListener("change", () => {
-      const binding = this.computeBinding(figure) ?? { data: [], out: [] };
-      const out = outInp.value
-        .split(",")
-        .map((s) => s.trim().replace(/^@/, ""))
-        .filter(Boolean);
-      this.setComputeInfo(figure, { data: binding.data, out });
-      fill();
-    });
-    return [dataSel, outInp];
+    return [dataSel, publish];
   }
 
   private setComputeInfo(figure: HTMLElement, binding: ComputeBinding): void {
@@ -4037,9 +4200,7 @@ export class FolioDoc extends HTMLElement {
       for (const b of blocks) {
         if (b.kind === "table" && b.table.id === id) return b.table;
       }
-      // A compute block's output (ADR-0030): a first-class dataset
-      // in the @id graph, so formulas and charts can query it.
-      return this.computeOutputsById.get(id);
+      return undefined;
     };
   }
 
@@ -6076,17 +6237,19 @@ export class FolioDoc extends HTMLElement {
       const tableBlock = this.doc.blocks.find(
         (b) => b.kind === "table" && b.table.id === block.chart.source,
       );
-      // A chart over a compute block's output (ADR-0030): the
-      // output is not a table BLOCK, it is the pool's published
-      // table for that id.
-      const computed = this.computeOutputsById.get(block.chart.source);
-      if (tableBlock?.kind !== "table" && computed === undefined) {
+      if (tableBlock?.kind !== "table") {
         throw new Error(`chart source table '${block.chart.source}' not found`);
       }
-      const sourceTable: Table =
-        tableBlock?.kind === "table"
-          ? recalcTable(tableBlock.table, this.tablePool(), this.memo())
-          : (computed as Table);
+      if (tableBlock.table.value) {
+        throw new Error(
+          `@${block.chart.source} is a single value - a chart needs a dataset`,
+        );
+      }
+      const sourceTable: Table = recalcTable(
+        tableBlock.table,
+        this.tablePool(),
+        this.memo(),
+      );
       const tableBlock2 = { table: sourceTable };
       const result = executeQuery(sourceTable, block.chart);
       // Nothing to plot - every row filtered out, or every value blank
@@ -6821,17 +6984,6 @@ export class FolioDoc extends HTMLElement {
     // re-render, the caret in the edited cell is untouched.
     // The table's rendered cells, found once (a windowed table shows
     // only some rows: one query per cell was thousands of misses).
-    const cellsOf = (fig: Element | null | undefined): Map<string, Element> =>
-      new Map(
-        Array.from(
-          fig?.querySelectorAll<HTMLElement>(
-            "td[data-row-index][data-col-index]",
-          ) ?? [],
-        ).map((td) => [
-          `${td.dataset.rowIndex ?? ""}:${td.dataset.colIndex ?? ""}`,
-          td,
-        ]),
-      );
     const own = cellsOf(figure);
     block.table.columns.forEach((col, c) => {
       if (col.type !== "formula") return;
@@ -6843,13 +6995,23 @@ export class FolioDoc extends HTMLElement {
         cell.classList.toggle("num", typeof v === "number");
       }
     });
-    const host = this.shadowRoot?.querySelector("article.folio-doc");
     this.refreshDependents(block.table.id);
     // Cross-table references ripple: another table's formulas may
     // read this one (budget.r3.q2), so their cells refresh too -
     // text-only updates in place, the edited caret untouched.
+    this.rippleFormulas(block.table.id);
+  }
+
+  /**
+   * Every OTHER table's formula cells, recalculated in place (text
+   * only, never a re-render, so a caret anywhere stays put): after a
+   * table they may read changed - an edited table, or a compute
+   * block's output (ADR-0030).
+   */
+  private rippleFormulas(changedId: string): void {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
     for (const other of this.doc?.blocks ?? []) {
-      if (other.kind !== "table" || other.table.id === block.table.id) {
+      if (other.kind !== "table" || other.table.id === changedId) {
         continue;
       }
       const otherFigure = host?.querySelector(
@@ -6999,9 +7161,7 @@ export class FolioDoc extends HTMLElement {
     // refreshDependents redraws when the compute block republishes
     // (spec: compute-blocks.md, "Outputs").
     for (const cf of Array.from(
-      host?.querySelectorAll<HTMLElement>(
-        'figure.folio-drawn[data-lang="python"]',
-      ) ?? [],
+      host?.querySelectorAll<HTMLElement>("figure.folio-compute") ?? [],
     )) {
       if (this.computeBinding(cf)?.data.includes(tableId))
         void this.drawCompute(cf);

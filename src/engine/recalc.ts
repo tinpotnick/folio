@@ -485,6 +485,21 @@ function parseHandle(raw: string): RowHandle | null {
 }
 
 /**
+ * A named value (ADR-0030: `::: value {#slope}`, a compute block's
+ * single output) is read bare - `@slope * 30`. It is held as a one-cell
+ * table, so a bare reference becomes that cell, `@slope.r1.value`, and
+ * the cross-table machinery does the rest. Quoted strings are left
+ * alone, and `@slope.` (a path into it) is reported by the scan.
+ */
+function valueRefs(expr: string, pool: TablePool): string {
+  return expr.replace(
+    /'[^']*'|"[^"]*"|@([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_.-])/g,
+    (m: string, id: string | undefined) =>
+      id !== undefined && pool(id)?.value ? `@${id}.r1.value` : m,
+  );
+}
+
+/**
  * Strip the folio reference marker: "@budget" reads as "budget".
  * `@` is not a Jexl token, so this is a pure token rename with no
  * disambiguation rules - but quoted strings keep their `@` intact.
@@ -673,7 +688,7 @@ function compute(
 
   const rows: Cell[][] = table.rows.map((row) => row.slice());
   for (const { col, index } of formulaIndexes) {
-    const raw = spreadsheetHabits(col.expr ?? "");
+    const raw = valueRefs(spreadsheetHabits(col.expr ?? ""), pool);
     const fail = (msg: string): never => {
       throw new Error(`Formula '${col.name}' in table '${table.id}': ${msg}`);
     };
@@ -720,6 +735,15 @@ function compute(
           }
           selfRefs.push({ handle, name: segs[1] ?? null });
           return "_row__REF__";
+        }
+        // A named value (ADR-0030) is read bare: `@slope`, which
+        // valueRefs turned into its one cell. Anything else into it is
+        // a mistake, said plainly.
+        if (
+          pool(head)?.value &&
+          !(segs.length === 2 && segs[0] === "r1" && segs[1] === "value")
+        ) {
+          fail(`@${head} is a value, not a table - write @${head} on its own`);
         }
         // A table reference (possibly this table's own id).
         if (segs.length !== 2) {
