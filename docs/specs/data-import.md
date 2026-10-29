@@ -234,4 +234,4 @@ data exactly like hand-authored tables.
   inference + provenance, JSON import, the 2,000-row viewport
   case, invalid file is a visible error, palette entry).
 - First-contact eval: `evals/data-import-first-contact.md`.
-- Documented in `demo/help.md`.
+- Documented in `demo/help/import-data.md`.

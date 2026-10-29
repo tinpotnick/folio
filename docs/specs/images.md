@@ -60,5 +60,5 @@ caption: "Q3 all-hands"
   canonicalizes, inspector alt/caption/replace, Backspace
   removal, uniform dismissal, oversized refusal).
 - First-contact eval: `evals/images-first-contact.md`.
-- Documented in `demo/help.md`; ADR-0013 records the storage
+- Documented in `demo/help/images-audio.md`; ADR-0013 records the storage
   decision.

@@ -2207,20 +2207,164 @@ editor.addEventListener("input", keepDraftSoon);
 
 /* --- In-app help (spec: docs/specs/in-app-help.md) --- */
 
+// Help docks beside the document: one folio document per topic
+// (demo/help/), listed by its index. The topics are fetched once for
+// searching - here and in the palette.
+const HELP_DIR = "demo/help/";
 const btnHelp = requireEl<HTMLButtonElement>("#btn-help");
-const helpModal = requireEl<HTMLDialogElement>("#help-modal");
+const helpPanel = requireEl<HTMLElement>("#help-panel");
+const helpDoc = requireEl<FolioDoc>("#help-doc");
+const helpHome = requireEl<HTMLButtonElement>("#btn-help-home");
+const helpSearch = requireEl<HTMLInputElement>("#help-search");
+const helpResults = requireEl<HTMLElement>("#help-results");
+const helpScroll = requireEl<HTMLElement>("#help-panel .help-scroll");
 
-function openHelp(): void {
-  if (!helpModal.open) helpModal.showModal();
+interface HelpTopic {
+  title: string;
+  file: string;
+  group: string;
+  /** What the topic says, lower case, for searching. */
+  text: string;
+}
+let helpTopics: HelpTopic[] = [];
+/** The topic showing, or null for the list of topics. */
+let helpShowing: string | null = null;
+
+async function loadHelpTopics(): Promise<void> {
+  try {
+    const index = await (await fetch(`${HELP_DIR}index.md`)).text();
+    const listed: Omit<HelpTopic, "text">[] = [];
+    let group = "";
+    for (const line of index.split("\n")) {
+      const g = /^## (.+)/.exec(line);
+      if (g) group = g[1] ?? "";
+      const t = /^- \[([^\]]+)\]\(([\w-]+\.md)\)/.exec(line);
+      if (t) listed.push({ title: t[1] ?? "", file: t[2] ?? "", group });
+    }
+    helpTopics = await Promise.all(
+      listed.map(async (t) => {
+        const md = await (await fetch(HELP_DIR + t.file)).text();
+        return { ...t, text: md.replace(/[`*_#>[\]()]/g, " ").toLowerCase() };
+      }),
+    );
+  } catch {
+    helpTopics = [];
+  }
+  // A palette opened before the topics arrived lists them now.
+  if (paletteModal.open) updatePalette();
+}
+void loadHelpTopics();
+
+function setHelpOpen(open: boolean): void {
+  helpPanel.hidden = !open;
+  btnHelp.setAttribute("aria-pressed", String(open));
 }
 
-btnHelp.addEventListener("click", openHelp);
+/** Show one topic (a file in demo/help/), or the list with null. */
+function showHelp(file: string | null): void {
+  helpShowing = file;
+  helpHome.hidden = file === null;
+  helpSearch.value = "";
+  showHelpResults("");
+  void helpDoc.load(HELP_DIR + (file ?? "index.md"));
+  helpScroll.scrollTop = 0;
+}
+
+/** Open the panel - at a topic, or where it was. */
+function openHelp(file?: string): void {
+  setHelpOpen(true);
+  if (file !== undefined) showHelp(file);
+}
+
+function closeHelp(): void {
+  const inside = helpPanel.contains(document.activeElement);
+  setHelpOpen(false);
+  if (inside) btnHelp.focus();
+}
+
+btnHelp.addEventListener("click", () => {
+  if (helpPanel.hidden) {
+    openHelp();
+    if (helpShowing === null) helpSearch.focus();
+  } else {
+    closeHelp();
+  }
+});
 requireEl<HTMLButtonElement>("#btn-help-close").addEventListener(
   "click",
-  () => {
-    helpModal.close();
-  },
+  closeHelp,
 );
+helpHome.addEventListener("click", () => {
+  showHelp(null);
+  helpSearch.focus();
+});
+
+/** The topics that answer `query`, best first. */
+function helpMatches(query: string): HelpTopic[] {
+  // Words, not scattered letters: a title that starts a word with
+  // the query ranks first, then topics that say it.
+  const q = query.toLowerCase();
+  return helpTopics
+    .map((t) => ({
+      t,
+      score:
+        bodyScore(q, t.title.toLowerCase()) > 0
+          ? 100 + bodyScore(q, t.title.toLowerCase())
+          : bodyScore(q, t.text),
+    }))
+    .filter((m) => m.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((m) => m.t);
+}
+
+function showHelpResults(query: string): void {
+  const q = query.trim();
+  helpResults.hidden = q === "";
+  helpDoc.hidden = q !== "";
+  helpResults.textContent = "";
+  if (q === "") return;
+  const hits = helpMatches(q);
+  if (hits.length === 0) {
+    const none = document.createElement("p");
+    none.className = "help-none";
+    none.textContent = `No help topic mentions "${q}".`;
+    helpResults.appendChild(none);
+    return;
+  }
+  hits.forEach((t, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("role", "option");
+    if (i === 0) b.classList.add("active");
+    const title = document.createElement("span");
+    title.className = "hit-title";
+    title.textContent = t.title;
+    const group = document.createElement("span");
+    group.className = "hit-group";
+    group.textContent = t.group;
+    b.append(title, group);
+    b.addEventListener("click", () => showHelp(t.file));
+    helpResults.appendChild(b);
+  });
+}
+
+helpSearch.addEventListener("input", () => {
+  showHelpResults(helpSearch.value);
+});
+helpSearch.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    const first = helpMatches(helpSearch.value.trim())[0];
+    if (first) showHelp(first.file);
+  } else if (ev.key === "Escape" && helpSearch.value !== "") {
+    // Esc clears the search first; a second Esc closes the panel.
+    ev.stopPropagation();
+    helpSearch.value = "";
+    showHelpResults("");
+  }
+});
+helpPanel.addEventListener("keydown", (ev) => {
+  if (ev.key === "Escape" && !ev.defaultPrevented) closeHelp();
+});
 
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "?" && ev.key !== "F1") return;
@@ -2234,7 +2378,13 @@ document.addEventListener("keydown", (ev) => {
   // root; activeElement then resolves to the host, so pierce it.
   if (editable(a) || editable(a?.shadowRoot?.activeElement)) return;
   ev.preventDefault();
+  // "?" toggles, like the button; F1 only ever opens.
+  if (ev.key === "?" && !helpPanel.hidden) {
+    closeHelp();
+    return;
+  }
   openHelp();
+  if (helpShowing === null) helpSearch.focus();
 });
 
 /* --- Command palette (spec: docs/specs/command-palette.md) --- */
@@ -2242,16 +2392,16 @@ document.addEventListener("keydown", (ev) => {
 const paletteModal = requireEl<HTMLDialogElement>("#palette-modal");
 const paletteInput = requireEl<HTMLInputElement>("#palette-input");
 const paletteList = requireEl<HTMLElement>("#palette-list");
-const helpDoc = requireEl<FolioDoc>("#help-doc");
-
-// Links in the help (graphviz.org, strudel.cc, ...) follow like the
-// document's own: they did nothing, because only the document
-// listened. A document link closes the help first.
+// Links in the help: another topic (`charts.md`) opens in the panel;
+// anything else (graphviz.org, an example) follows like the
+// document's own links, the panel staying open beside it.
 helpDoc.addEventListener("folio-link", (ev) => {
   const href = (ev as CustomEvent<{ href: string }>).detail?.href;
   if (!href) return;
-  if (/\.md($|[?#])/.test(href) && !/^[a-z][a-z0-9+.-]*:/i.test(href)) {
-    helpModal.close();
+  const topic = /^([\w-]+\.md)$/.exec(href)?.[1];
+  if (topic) {
+    showHelp(topic);
+    return;
   }
   void openLinkedDocument(href);
 });
@@ -2718,10 +2868,13 @@ function paletteEntries(): PaletteEntry[] {
     action: () => btnSidebar.click(),
   });
   entries.push({
-    title: "Open the help document",
+    title: "Open help",
     group: "Command",
-    keywords: "help reference manual documentation how to",
-    action: () => openHelp(),
+    keywords: "help reference manual documentation how to topics panel",
+    action: () => {
+      openHelp();
+      if (helpShowing === null) helpSearch.focus();
+    },
   });
   entries.push({
     title: "Document settings",
@@ -2856,18 +3009,15 @@ function paletteEntries(): PaletteEntry[] {
       action: () => el.revealBlock(section.blockIndex),
     });
   }
-  for (const topic of helpDoc.getOutline()) {
+  for (const topic of helpTopics) {
     entries.push({
-      title: `Help: ${topic.text}`,
+      title: `Help: ${topic.title}`,
       group: "Help",
       keywords: "help how to documentation guide",
-      // What the topic SAYS: "stacked", "grouped bar" find the chart
-      // help even though its title is "Charts and the query language".
-      body: helpDoc.sectionText(topic.blockIndex).toLowerCase(),
-      action: () => {
-        openHelp();
-        helpDoc.revealBlock(topic.blockIndex);
-      },
+      // What the topic SAYS: "stacked", "grouped bar" find the charts
+      // topic even though its title is just "Charts".
+      body: topic.text,
+      action: () => openHelp(topic.file),
     });
   }
   return entries;
@@ -3390,7 +3540,6 @@ function preparePrint(): void {
   // A cell still being typed in recalculates first: paper shows
   // current figures.
   el.flushEdits();
-  if (helpModal.open) helpModal.close();
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
   if (!mdWrap.hidden) btnView.click();

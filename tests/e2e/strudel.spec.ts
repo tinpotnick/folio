@@ -366,7 +366,9 @@ test.describe("strudel music blocks", () => {
     await page.locator("#btn-search").click();
     await page.locator("#palette-input").fill("strudel");
     await expect(
-      page.locator("#palette-list button", { hasText: "Strudel" }),
+      page.locator("#palette-list button", {
+        hasText: "Insert a Strudel music block",
+      }),
     ).toBeVisible();
   });
 });

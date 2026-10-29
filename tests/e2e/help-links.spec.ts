@@ -16,6 +16,9 @@ test("a link in the help opens in a new tab", async ({ page, context }) => {
   await page.goto("/?doc=demo/examples/poem.md");
   await page.locator("#the-doc h1").first().waitFor();
   await page.locator("#btn-help").click();
+  await page
+    .locator("#help-doc a", { hasText: "Diagrams and drawings" })
+    .click();
   const link = page.locator("#help-doc a", { hasText: "Graphviz" }).first();
   await link.scrollIntoViewIfNeeded();
   const [tab] = await Promise.all([context.waitForEvent("page"), link.click()]);

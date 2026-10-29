@@ -16,7 +16,7 @@ test("shipped documents load by app-relative paths", async ({ page }) => {
   await page.locator("#btn-help").click();
   await expect(page.locator("#help-doc h1").first()).toHaveText("folio help");
   expect(fetched).toContain("/demo/examples/poem.md");
-  expect(fetched).toContain("/demo/help.md");
+  expect(fetched).toContain("/demo/help/index.md");
   // The address keeps the app-relative form.
   expect(page.url()).toContain("?doc=demo/examples/poem.md");
 });

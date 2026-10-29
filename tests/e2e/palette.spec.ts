@@ -96,7 +96,7 @@ test.describe("command palette", () => {
     expect(settledTop).toBeGreaterThanOrEqual(0);
   });
 
-  test("a help topic opens the help document at that topic", async ({
+  test("a help topic opens the help panel at that topic's top", async ({
     page,
   }) => {
     await waitForDocument(page);
@@ -106,10 +106,14 @@ test.describe("command palette", () => {
       page.locator("#palette-list .palette-item").first(),
     ).toContainText("Help: Keyboard shortcuts");
     await page.keyboard.press("Enter");
-    await expect(page.locator("#help-modal")).toBeVisible();
-    await expect(
-      page.locator("#help-doc h2", { hasText: "Keyboard shortcuts" }),
-    ).toBeVisible();
+    await expect(page.locator("#help-panel")).toBeVisible();
+    await expect(page.locator("#help-doc h1").first()).toHaveText(
+      "Keyboard shortcuts",
+    );
+    // The panel's own header stays in view: a jump into the old
+    // single help page scrolled it away, leaving a sliver of Close.
+    await expect(page.locator("#btn-help-close")).toBeInViewport();
+    await expect(page.locator("#help-doc h1").first()).toBeInViewport();
   });
 
   test("ArrowDown moves the selection and Enter runs the moved-to item", async ({

@@ -135,5 +135,5 @@ later from the palette: Ctrl+K, then "example".
 
 - **Ctrl+K** opens the command palette. Search for what you want in
   your own words: "new", "table", "theme", "print", "dark", "guide".
-- **?** opens the help document.
+- **?** opens help beside your document.
 - **The M↓ button** switches to the Markdown source and back.

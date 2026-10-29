@@ -273,4 +273,4 @@ the chart query language.
 - e2e: `tests/e2e/editor.spec.ts` (running totals render and
   recalculate on edit; `self.rN` row references; `@budget`
   cross-table render + live ripple on edit).
-- Documented in `demo/help.md`; engine contract in ADR-0012.
+- Documented in `demo/help/formulas.md`; engine contract in ADR-0012.

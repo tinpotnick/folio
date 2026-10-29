@@ -61,15 +61,12 @@ test("clicking a chart caption lights no block button", async ({ page }) => {
   await expect(page.locator("#block-bar button.active")).toHaveCount(0);
 });
 
-test("the help window's title is not flush against its header", async ({
+test("the help panel's title is not flush against its header", async ({
   page,
 }) => {
   await page.goto("/");
   await page.locator("#btn-help").click();
-  const head = await page
-    .locator("#help-modal .help-head, #help-modal header, #help-modal > div")
-    .first()
-    .boundingBox();
+  const head = await page.locator("#help-panel .help-search").boundingBox();
   const h1 = await page.locator("#help-doc h1").first().boundingBox();
   expect((h1?.y ?? 0) - ((head?.y ?? 0) + (head?.height ?? 0))).toBeGreaterThan(
     12,
