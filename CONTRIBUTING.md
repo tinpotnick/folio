@@ -47,7 +47,7 @@ desktop host).
 ```bash
 just test             # unit tests (vitest)
 just test-e2e         # end-to-end tests of the app (Playwright)
-just test-webkitgtk   # the desktop engine (WebKitGTK), Linux only
+just test-webkitgtk   # the desktop engine (WebKitGTK), Linux only; headless
 just lint             # eslint + prettier
 just build            # type-check + production build
 ```

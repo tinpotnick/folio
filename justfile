@@ -36,9 +36,11 @@ verify-agent:
     just build
     echo "All contracts green."
 
-# The Linux desktop's real engine (WebKitGTK); needs `npm run dev`.
-test-webkitgtk:
-    python3 tests/webkitgtk/run.py
+# The Linux desktop's real engine (WebKitGTK), headless; needs
+# `npm run dev`. Name cases to run only those; FOLIO_WEBKITGTK_VISIBLE=1
+# shows the windows.
+test-webkitgtk *cases:
+    python3 tests/webkitgtk/run.py {{cases}}
 
 # How folio is being found and installed: release downloads (including
 # Fedora dnf installs), 14-day traffic, stars.
