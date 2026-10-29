@@ -47,7 +47,7 @@ desktop host).
 ```bash
 just test             # unit tests (vitest)
 just test-e2e         # end-to-end tests of the app (Playwright)
-just test-webkitgtk   # the desktop engine (WebKitGTK), Linux only
+just test-webkitgtk   # the desktop engine (WebKitGTK), Linux only; headless
 just lint             # eslint + prettier
 just build            # type-check + production build
 ```
@@ -55,6 +55,9 @@ just build            # type-check + production build
 Playwright starts its own dev server; install its browser once with
 `npx playwright install chromium`. The WebKitGTK cases need
 `npm run dev` running and PyGObject with WebKit2 4.1.
+
+CI runs the gate (lint, unit tests, build) and the end-to-end suite on
+every pull request; the WebKitGTK cases are local only.
 
 Every bug fix adds a test that fails before the fix.
 

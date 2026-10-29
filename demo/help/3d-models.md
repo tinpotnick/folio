@@ -14,6 +14,10 @@
 - A model can take its sizes from a **dataset**: write
   `params=@sizes row=2` after `jscad` on the fence, or pick the
   dataset and row in the model's header. The row's columns replace
-  the parameter defaults by name, and editing the table redraws the
-  model. **Export STL** in the header saves the model for 3D
-  printing or CAD.
+  the parameter defaults by name. **Export STL** in the header saves
+  the model for 3D printing or CAD.
+- **The model follows the row you work in**: click a cell of its
+  dataset and the model shows that row. Change a number and press Tab
+  or Enter (or click elsewhere) - the model redraws when you leave the
+  cell, not on every key. When two models read the same dataset, each
+  keeps the row it was given, so they can be compared.

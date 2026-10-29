@@ -1528,6 +1528,61 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       opacity: 0.45;
       cursor: default;
     }
+    /* Compute blocks (ADR-0030): the output tables are the figure,
+       themed like every table; the out= names field sits in the bar. */
+    /* Compute blocks (ADR-0030): the block is its code; one quiet
+       line under it says what it published, or what went wrong. */
+    figure.folio-compute .compute-status {
+      font-family: ${theme.monoFont};
+      font-size: 0.8em;
+      color: var(--folio-ink-muted);
+      margin: 4px 2px 0;
+    }
+    figure.folio-compute .compute-status.computing { opacity: 0.6; }
+    figure.folio-compute .compute-status.compute-error {
+      color: var(--folio-unit);
+      font-family: ${theme.monoFont};
+      white-space: pre-wrap;
+    }
+    figure.folio-compute .compute-open {
+      font: inherit;
+      color: var(--folio-accent);
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: underline dotted;
+      text-underline-offset: 2px;
+    }
+    figure.folio-compute .compute-publish {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 4px 10px;
+      font-size: 12px;
+    }
+    figure.folio-compute .compute-publish[hidden] { display: none; }
+    figure.folio-compute .compute-publish-label,
+    figure.folio-compute .compute-publish-hint {
+      color: var(--folio-ink-muted);
+    }
+    figure.folio-compute .compute-var {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-family: ${theme.monoFont};
+    }
+    figure.folio-codeblock .folio-inspector input.insp-input {
+      flex: none;
+      width: 140px;
+      font: inherit;
+      font-size: 12px;
+      padding: 3px 8px;
+      border: 1px solid var(--folio-rule-strong);
+      border-radius: 5px;
+      background: var(--folio-input-bg);
+      color: var(--folio-ink);
+    }
     /* Code shows what was typed: no ligatures (-> must not become an
        arrow glyph while writing DOT or JavaScript). */
     pre.folio-code,
@@ -2002,6 +2057,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       /* Paper shows the document, never the editing furniture: an
          inspector bar left open, or a drawn figure's source. */
       .folio-inspector,
+      figure.folio-compute .compute-status,
       figure.folio-drawn > pre.folio-code,
       .folio-table-more .ds-open {
         display: none !important;

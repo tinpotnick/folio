@@ -33,11 +33,15 @@ short of the section; every open rendered all of it.)
   in `<folio-doc id="help-doc">` a size smaller than the document
   (zoom 0.86), its paper filling the panel.
 - **Opening**: the **?** toolbar button toggles the panel (it shows
-  pressed while open); the `?` key toggles it and `F1` opens it, both
-  only when the user is not typing (the guard pierces the component's
-  shadow root). Opening on the topic list focuses the search box.
+  pressed while open); `F1` and the `?` key toggle it too. `?` is a
+  character, so only when the user is not typing (the guard pierces
+  the component's shadow root); `F1` types nothing, so it works
+  everywhere, the standard help key (2026-10-29). Opening on the
+  topic list focuses the search box - except by F1 mid-typing, which
+  leaves the caret where it was, so F1 again closes help and typing
+  carries on.
   The panel keeps its topic between openings.
-- **Closing**: the close button, the toolbar button, `?`, or `Esc`
+- **Closing**: the close button, the toolbar button, `F1`, `?`, or `Esc`
   from inside the panel. `Esc` in a search box with text clears it
   first.
 - **Search**: the box lists matching topics as you type - a title
@@ -66,7 +70,7 @@ short of the section; every open rendered all of it.)
 - Unit: `tests/engine/help-topics.test.ts` - every topic round-trips
   byte for byte, and the index lists exactly the topic files.
 - e2e: `tests/e2e/app.spec.ts` ("in-app help": beside the document,
-  topics and back, editing alongside, search, Esc, `?`/F1 and the
+  topics and back, editing alongside, search, Esc, `?`/F1 toggling and the
   typing guard, the narrow overlay), `palette.spec.ts` (a topic opens
   at its top with the panel head in view), `print.spec.ts` (never
   prints), `help-links.spec.ts`, `subfolder.spec.ts`.

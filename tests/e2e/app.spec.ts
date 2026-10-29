@@ -260,7 +260,7 @@ test.describe("in-app help", () => {
     await expect(panel(page)).toBeHidden();
   });
 
-  test("? toggles help and F1 opens it; not while typing in the source editor", async ({
+  test("? toggles help; not while typing in the source editor", async ({
     page,
   }) => {
     await waitForDocument(page);
@@ -279,6 +279,34 @@ test.describe("in-app help", () => {
     await page.locator("#editor").click();
     await page.keyboard.press("?");
     await expect(panel(page)).toBeHidden();
+  });
+
+  test("F1 opens and closes help, even mid-typing, and typing carries on", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    // From the toolbar's focus: F1 opens, F1 again closes.
+    await page.locator("#btn-help").focus();
+    await page.keyboard.press("F1");
+    await expect(panel(page)).toBeVisible();
+    await page.keyboard.press("F1");
+    await expect(panel(page)).toBeHidden();
+    // Mid-typing in the document: the caret stays put.
+    const para = page.locator("#the-doc p").first();
+    await para.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" one");
+    await page.keyboard.press("F1");
+    await expect(panel(page)).toBeVisible();
+    await page.keyboard.type(" two");
+    await page.keyboard.press("F1");
+    await expect(panel(page)).toBeHidden();
+    await expect(para).toContainText("one two");
+    // In the Markdown source too.
+    await page.locator("#btn-markdown").click();
+    await page.locator("#editor").click();
+    await page.keyboard.press("F1");
+    await expect(panel(page)).toBeVisible();
   });
 
   test("a narrow window: the panel slides over, under the toolbar", async ({

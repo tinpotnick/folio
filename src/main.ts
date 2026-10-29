@@ -2376,15 +2376,20 @@ document.addEventListener("keydown", (ev) => {
       node.tagName === "INPUT");
   // The document's editable surface lives in the component's shadow
   // root; activeElement then resolves to the host, so pierce it.
-  if (editable(a) || editable(a?.shadowRoot?.activeElement)) return;
+  const typing = editable(a) || editable(a?.shadowRoot?.activeElement);
+  // "?" is a character: while typing it is text, not a shortcut. F1
+  // types nothing, so it works everywhere - the standard help key.
+  if (ev.key === "?" && typing) return;
   ev.preventDefault();
-  // "?" toggles, like the button; F1 only ever opens.
-  if (ev.key === "?" && !helpPanel.hidden) {
+  // Both toggle, like the toolbar button.
+  if (!helpPanel.hidden) {
     closeHelp();
     return;
   }
   openHelp();
-  if (helpShowing === null) helpSearch.focus();
+  // Opened mid-typing, the caret stays where it was: F1 again closes
+  // help and typing carries on.
+  if (helpShowing === null && !typing) helpSearch.focus();
 });
 
 /* --- Command palette (spec: docs/specs/command-palette.md) --- */
@@ -2482,6 +2487,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb: "3d models jscad cad parts gear bracket parametric drawing",
   },
   {
+    id: "compute",
+    title: "Coffee forecast",
+    file: "demo/examples/compute.md",
+    blurb:
+      "python compute script pyodide forecast trend regression cafe sales projection least squares",
+  },
+  {
     id: "repay-or-invest",
     title: "Repay or invest? A mortgage question",
     file: "demo/examples/repay-or-invest.md",
@@ -2573,6 +2585,16 @@ function paletteEntries(): PaletteEntry[] {
     action: () => {
       el.insertJscad();
       flash("3D model inserted");
+    },
+  });
+  entries.push({
+    title: "Insert a compute block (Python)",
+    group: "Command",
+    keywords:
+      "compute python script data dataset transform calculate regression forecast pyodide insert",
+    action: () => {
+      el.insertCompute();
+      flash("Compute block inserted");
     },
   });
   // One entry per reference in the bibliography: "Cite: Knuth 1984 ·
@@ -2781,6 +2803,16 @@ function paletteEntries(): PaletteEntry[] {
       "show hide code source drawing rendered both diagram graphviz svg vega jscad model sheet music view",
     action: () => {
       const why = el.focusDrawnShow();
+      if (why) flash(why);
+    },
+  });
+  entries.push({
+    title: "Choose how many rows a table shows",
+    group: "Command",
+    keywords:
+      "rows shown show more fewer lines display length limit long table dataset page all",
+    action: () => {
+      const why = el.focusTableRows();
       if (why) flash(why);
     },
   });
@@ -3176,6 +3208,20 @@ function updatePalette(): void {
             // word of it as a word ("pmt", "loan payment") - above a
             // scattered-letter match, below a title/keyword hit.
             e.body ? bodyScore(query, e.body) : -1,
+            // Every word of the query among the title and keywords, in
+            // any order: "fewer rows" finds "Choose how many rows a
+            // table shows" (tagged "fewer"), which letter-by-letter
+            // matching missed.
+            bodyScore(query, `${e.title} ${e.keywords}`.toLowerCase()),
+            // ...and SEVERAL words all in the TITLE beat the same words
+            // among the keywords: "compute python" is "Insert a compute
+            // block (Python)", not an example tagged "compute python".
+            // One word in a title is weak evidence - "cite" is still
+            // the command, not every "Cite: ..." target.
+            /\s/.test(query.trim()) &&
+              bodyScore(query, e.title.toLowerCase()) > 0
+              ? bodyScore(query, e.title.toLowerCase()) + 30
+              : -1,
           ) -
           // "Cross-reference: Regional summary" must not outrank the
           // section itself, nor "Cite: Knuth 1984" the "Insert a

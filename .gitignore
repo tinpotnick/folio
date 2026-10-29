@@ -12,3 +12,6 @@ packaging/flatpak/build/
 packaging/flatpak/repo/
 packaging/flatpak/.flatpak-builder/
 .flatpak-builder/
+
+# Throwaway probe scripts (never part of the project).
+/zz*
