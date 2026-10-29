@@ -17,7 +17,19 @@ follow), so each new language adds only its own drawing function.
   folio-<lang>`; the picture lives in `.code-view`.
 - **The code shows only while the header is open** (the one inspector
   contract): click the picture to reveal the header and code, click
-  away to hide both.
+  away to hide both - unless the block says otherwise:
+- **Show** (2026-10-29): the header's **Show** picker - "drawing",
+  "code", "both" - writes `show=code` or `show=both` into the fence
+  info (```` ```dot show=both ````); "drawing" is the default and is
+  never written. `code`: the page shows the code, not the picture, as
+  a code block reads. `both`: the picture with its code under it,
+  header open or not. Print follows the choice (the code prints only
+  when shown). The figure carries `show-drawing|code|both`; nothing
+  re-renders on a change. Ctrl+K "Show a drawing's code, the drawing,
+  or both" opens the picker for the drawn block last used. On GitHub
+  the fence stays a code block (info after the language is ignored).
+  Mermaid diagrams are `::: mermaid` blocks, not fences, and are not
+  covered.
 - **Redraw**: typing in the code redraws 600 ms after the pause;
   switching light/dark redraws in the mode's colours.
 - **Errors are the figure**: "<What> error: message" in

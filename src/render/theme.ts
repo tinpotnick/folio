@@ -1480,6 +1480,17 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-bottom: 1px dashed var(--folio-rule);
       margin-bottom: 8px;
     }
+    /* Show (drawn-blocks.md): the code alone, or the drawing and its
+       code together, whether or not the header is open. */
+    figure.folio-drawn.show-code > .folio-inspector[hidden] ~ pre.folio-code,
+    figure.folio-drawn.show-both > .folio-inspector[hidden] ~ pre.folio-code {
+      display: block;
+    }
+    figure.folio-drawn.show-code > .code-view { display: none; }
+    figure.folio-drawn.show-both > .code-view {
+      border-bottom: 1px dashed var(--folio-rule);
+      margin-bottom: 8px;
+    }
     figure.folio-drawn .code-view {
       color: var(--folio-ink-muted);
       font-size: 0.9em;
@@ -1998,6 +2009,14 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       figure.folio-drawn > .code-view {
         border-bottom: none !important;
         margin-bottom: 0 !important;
+      }
+      /* ...unless the block asks for its code: it prints as shown. */
+      figure.folio-drawn.show-code > pre.folio-code,
+      figure.folio-drawn.show-both > pre.folio-code {
+        display: block !important;
+      }
+      figure.folio-drawn.show-both > .code-view {
+        margin-bottom: 8px !important;
       }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
