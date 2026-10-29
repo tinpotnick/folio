@@ -40,7 +40,9 @@ test("Support folio opens Buy Me a Coffee in a new tab", async ({
   await page.goto("/?doc=demo/examples/poem.md");
   await page.locator("#the-doc h1").first().waitFor();
   await page.keyboard.press("Control+k");
-  await page.locator("#palette-input").fill("coffee");
+  // "coffee" alone also names the Coffee forecast example (a title
+  // word); the phrase a supporter types finds this first.
+  await page.locator("#palette-input").fill("buy me a coffee");
   await expect(
     page.locator("#palette-list .palette-item").first(),
   ).toContainText("Support folio");

@@ -8,11 +8,42 @@
  * tables or an error; a script that runs too long is terminated by
  * the page (the worker is replaced).
  */
-import { inputName } from "./evaluate.js";
+import { inputName, pythonError } from "./evaluate.js";
 
 const scope = self as unknown as Record<string, unknown>;
+
+// fetch stays - for the bundled runtime ONLY. Pyodide fetches its own
+// files (pyodide.asm.wasm, the standard library, the lock file) from
+// the page's /pyodide/ folder; with fetch removed outright, as the
+// other doors are, Python could never start ("could not load the
+// Python runtime", everywhere). The folder is set by the first job,
+// before anything loads; any other address is refused, so a script
+// still reaches no network (urllib, which uses XMLHttpRequest, finds
+// that door shut).
+const realFetch = self.fetch.bind(self);
+let runtimeBase = "";
+const runtimeOnly = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> => {
+  const url = new URL(
+    input instanceof Request ? input.url : String(input),
+    self.location.href,
+  ).href;
+  if (runtimeBase !== "" && url.startsWith(runtimeBase)) {
+    return realFetch(input, init);
+  }
+  return Promise.reject(
+    new TypeError(`no network in a compute block (${url})`),
+  );
+};
+Object.defineProperty(scope, "fetch", {
+  value: runtimeOnly,
+  writable: false,
+  configurable: false,
+});
+
 for (const name of [
-  "fetch",
   "XMLHttpRequest",
   "WebSocket",
   "EventSource",
@@ -64,20 +95,44 @@ async function pyodide(indexURL: string): Promise<unknown> {
   return boot;
 }
 
-self.addEventListener("message", async (ev: MessageEvent<Job>) => {
-  const { id, source, inputs, indexURL } = ev.data;
+// One job at a time. A job's inputs, its script (defined as the global
+// __folio_compute__) and its cleanup all live in Python's globals, and
+// a job awaits several times; two jobs interleaved - two blocks
+// rendering together - ran each other's scripts ("returned 14 tables")
+// and deleted each other's inputs (KeyError: 'takings').
+let queue: Promise<void> = Promise.resolve();
+self.addEventListener("message", (ev: MessageEvent<Job>) => {
+  queue = queue.then(() => runJob(ev.data));
+});
+
+async function runJob(job: Job): Promise<void> {
+  const { id, source, inputs, indexURL } = job;
+  // The runtime's folder, fixed by the first job (see runtimeOnly).
+  if (runtimeBase === "")
+    runtimeBase = new URL(indexURL, self.location.href).href;
   let py: {
     runPythonAsync: (code: string) => Promise<unknown>;
     toPy: (value: unknown) => { destroy?: () => void };
   };
   try {
     py = (await pyodide(indexURL)) as typeof py;
-  } catch {
-    self.postMessage({ id, error: "could not load the Python runtime" });
+  } catch (e) {
+    // Say why: a bare "could not load" hid a sandbox that had shut
+    // the runtime's own fetch.
+    const why = e instanceof Error ? e.message : String(e);
+    self.postMessage({
+      id,
+      error: `could not load the Python runtime (${why})`,
+    });
     return;
   }
+  // The page's time limit runs from here: not while the job waits its
+  // turn, nor while the runtime loads.
+  self.postMessage({ id, started: true });
+  const names: string[] = [];
+  let globals: Map<string, unknown> | null = null;
   try {
-    const globals = (
+    globals = (
       py as unknown as {
         runPythonAsync: (code: string) => Promise<unknown>;
         toPy: (value: unknown) => { destroy?: () => void };
@@ -85,8 +140,7 @@ self.addEventListener("message", async (ev: MessageEvent<Job>) => {
       }
     ).globals as unknown as Map<string, unknown>;
     // Each bound dataset arrives as a named variable, and every
-    // job runs clean: previous inputs (and returns) are cleared.
-    const names: string[] = [];
+    // job runs clean: its inputs are cleared after it (finally).
     for (const [key, rows] of Object.entries(inputs)) {
       const name = inputName(key);
       const value = py.toPy(rows);
@@ -104,20 +158,19 @@ self.addEventListener("message", async (ev: MessageEvent<Job>) => {
       .join("\n")}\n`;
     await py.runPythonAsync(wrapped);
     const returned = await py.runPythonAsync("await __folio_compute__()");
-    let plain: unknown;
-    try {
-      plain = (returned as { toJs?: (o?: object) => unknown }).toJs?.({
-        dict_converter: Object.fromEntries,
-      });
-    } catch {
-      plain = undefined;
-    }
-    for (const name of [...names, "inputs"]) globals.delete(name);
-    self.postMessage({ id, returned: plain });
+    // A Python object converts; a plain value (`return 42`) is already
+    // one, and goes as it is - so the page can say it is not a table
+    // (it went as undefined, and the check crashed on null).
+    const proxy = returned as { toJs?: (o?: object) => unknown } | null;
+    const plain =
+      typeof proxy?.toJs === "function"
+        ? proxy.toJs({ dict_converter: Object.fromEntries })
+        : returned;
+    self.postMessage({ id, returned: plain ?? null });
   } catch (e) {
-    self.postMessage({
-      id,
-      error: e instanceof Error ? e.message : String(e),
-    });
+    self.postMessage({ id, error: pythonError(e) });
+  } finally {
+    // Cleared even when the script fails: the next job starts clean.
+    for (const name of [...names, "inputs"]) globals?.delete(name);
   }
-});
+}

@@ -167,6 +167,7 @@ function normalizeTable(value: ComputeTable): Omit<Table, "id"> {
   }
   // Explicit form: column names/types/units given by the script.
   if (
+    value === null ||
     typeof value !== "object" ||
     !Array.isArray(value.columns) ||
     !Array.isArray(value.rows)
@@ -198,4 +199,19 @@ function normalizeCell(value: unknown): Cell {
   if (typeof value === "boolean") return value ? 1 : 0;
   if (value === null || value === undefined) return "";
   return String(value);
+}
+
+/**
+ * A Python error as the figure says it: the error itself and the
+ * script's line - not Pyodide's traceback through its own internals.
+ * The script runs as the body of `__folio_compute__`, one line below
+ * the `async def`, so the user's line is one less than Python's.
+ */
+export function pythonError(e: unknown): string {
+  const msg = (e instanceof Error ? e.message : String(e)).trim();
+  const last = msg.split("\n").pop() ?? msg;
+  const at = [...msg.matchAll(/File "<exec>", line (\d+)/g)].pop();
+  if (!at) return last;
+  const line = Number(at[1]) - 1;
+  return line >= 1 ? `${last} (line ${String(line)})` : last;
 }

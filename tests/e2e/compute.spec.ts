@@ -63,7 +63,7 @@ test.describe("Compute blocks", () => {
       page,
       compute(
         "data=@budget out=totals",
-        `total = sum(r["cost"] for r in budget)\nreturn [{ "item": "Total", "cost": total }]`,
+        `scale = 1\ntotal = sum(r["cost"] for r in budget) * scale\nreturn [{ "item": "Total", "cost": total }]`,
       ),
     );
     const fig = page.locator("#the-doc figure.folio-python");
@@ -74,12 +74,15 @@ test.describe("Compute blocks", () => {
     // Click the table: the code shows, the header reveals.
     await fig.locator(".compute-table").click();
     await expect(fig.locator("pre.folio-code")).toBeVisible();
-    // Edit the code: 42 becomes 84.
-    await fig.locator("pre.folio-code code").click();
-    await page.keyboard.press("Control+End");
-    await page.keyboard.type(
-      '\n\nreturn [{ "item": "Double", "cost": total * 2 }]',
-    );
+    // Edit the code: scale = 1 becomes 2, and 42 becomes 84. (The
+    // first line: Ctrl+End went to the DOCUMENT's end, and a second
+    // `return` typed after the first never ran.)
+    const code = await fig.locator("pre.folio-code code").boundingBox();
+    if (!code) throw new Error("no code");
+    await page.mouse.click(code.x + 3, code.y + 5);
+    await page.keyboard.press("End");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type("2");
     await expect
       .poll(async () => fig.locator(".compute-table").innerText(), {
         timeout: 20_000,
@@ -122,9 +125,9 @@ test.describe("Compute blocks", () => {
   test("a broken script says what is wrong, as the figure", async ({
     page,
   }) => {
-    await loadDoc(page, compute("data=@budget out=totals", "1 / 0"));
-    await expect(page.locator("#the-doc .drawn-error")).toContainText(
-      "Compute error:",
+    await loadDoc(page, compute("data=@budget out=totals", "x = 1\n1 / 0"));
+    await expect(page.locator("#the-doc .drawn-error")).toHaveText(
+      "Compute error: ZeroDivisionError: division by zero (line 2)",
       { timeout: 20_000 },
     );
   });
@@ -203,7 +206,8 @@ test.describe("Compute blocks", () => {
     // Plain python: inert, but its header still offers the picker.
     await fig.locator("pre.folio-code code").click();
     await fig.getByLabel("Input dataset").selectOption("budget");
-    await expect(fig.locator(".compute-table")).toContainText("rows", {
+    // Its own output: the script returns one row, x = 1.
+    await expect(fig.locator(".compute-table td")).toHaveText("1", {
       timeout: 20_000,
     });
     // The fence now carries the binding, out= defaulted.

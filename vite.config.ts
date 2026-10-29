@@ -29,8 +29,14 @@ function copyDemo(): Plugin {
  * app all find it. A build copies the package's dist; dev serves
  * it straight from node_modules. Nothing is fetched at run time
  * from anywhere else (ADR-0005). */
+const pyodideDist = path.resolve(__dirname, "node_modules/pyodide");
+
+/** Dev: serve `/pyodide/*` straight from node_modules. Its own plugin,
+ * `apply: "serve"` - it shared one with the build copy under
+ * `apply: "build"`, so the dev server never served the runtime: every
+ * `/pyodide/` request fell through to index.html and Python never
+ * started (`npm run dev`, the desktop app's tauri dev, the e2e). */
 function servePyodide(): Plugin {
-  const pyodideDist = path.resolve(__dirname, "node_modules/pyodide");
   const MIME: Record<string, string> = {
     ".js": "text/javascript",
     ".mjs": "text/javascript",
@@ -41,37 +47,45 @@ function servePyodide(): Plugin {
   };
   return {
     name: "serve-pyodide",
+    apply: "serve",
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        if (req.url === undefined || !req.url.startsWith("/pyodide/")) next();
-        else {
-          const file = path.join(
-            pyodideDist,
-            req.url.slice("/pyodide/".length).split("?")[0],
-          );
-          if (
-            !file.startsWith(pyodideDist) ||
-            !statSync(file, { throwIfNoEntry: false })?.isFile()
-          ) {
-            res.statusCode = 404;
-            res.end();
-            return;
-          }
-          res.setHeader(
-            "content-type",
-            MIME[path.extname(file)] ?? "application/octet-stream",
-          );
-          createReadStream(file).pipe(res);
+        const url = req.url ?? "";
+        if (!url.startsWith("/pyodide/")) {
+          next();
+          return;
         }
+        const rel = url.slice("/pyodide/".length).split("?")[0] ?? "";
+        const file = path.join(pyodideDist, rel);
+        if (
+          !file.startsWith(pyodideDist + path.sep) ||
+          !statSync(file, { throwIfNoEntry: false })?.isFile()
+        ) {
+          res.statusCode = 404;
+          res.end();
+          return;
+        }
+        res.setHeader(
+          "content-type",
+          MIME[path.extname(file)] ?? "application/octet-stream",
+        );
+        createReadStream(file).pipe(res);
       });
     },
+  };
+}
+
+/** Build: copy the runtime to dist/pyodide, beside the page. */
+function copyPyodide(): Plugin {
+  return {
+    name: "copy-pyodide",
     apply: "build",
     closeBundle() {
       cpSync(pyodideDist, path.resolve(__dirname, "dist/pyodide"), {
         recursive: true,
       });
     },
-  } as Plugin;
+  };
 }
 
 export default defineConfig({
@@ -99,5 +113,5 @@ export default defineConfig({
     },
     outDir: path.resolve(__dirname, "dist"),
   },
-  plugins: [copyDemo(), servePyodide()],
+  plugins: [copyDemo(), servePyodide(), copyPyodide()],
 });
