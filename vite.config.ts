@@ -100,6 +100,11 @@ export default defineConfig({
   // The compute worker (ADR-0030) lazy-imports pyodide, so its
   // chunk splits: workers must build as ES modules, not IIFE.
   worker: { format: "es" },
+  // Pyodide loads its own files at run time; pre-bundling it is what
+  // its docs say not to do - and a cold dev server found it late (in
+  // the compute worker), re-optimized and RELOADED the page, so the
+  // first compute test on a fresh CI runner timed out.
+  optimizeDeps: { exclude: ["pyodide"] },
   build: {
     emptyOutDir: true,
     rollupOptions: {
