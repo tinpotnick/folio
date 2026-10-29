@@ -1517,6 +1517,39 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       opacity: 0.45;
       cursor: default;
     }
+    /* Compute blocks (ADR-0030): the output tables are the figure,
+       themed like every table; the out= names field sits in the bar. */
+    figure.folio-python .code-view .compute-table { margin: 8px 0; }
+    figure.folio-python .code-view .compute-table table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92em;
+    }
+    figure.folio-python .code-view .compute-table th,
+    figure.folio-python .code-view .compute-table td {
+      padding: 4px 10px;
+      border-bottom: 1px solid var(--folio-rule);
+      text-align: left;
+    }
+    figure.folio-python .code-view .compute-table td { color: var(--folio-ink); }
+    figure.folio-python .code-view .compute-table figcaption {
+      caption-side: top;
+      text-align: left;
+      color: var(--folio-ink-muted);
+      font-size: 0.85em;
+      padding-bottom: 4px;
+    }
+    figure.folio-codeblock .folio-inspector input.insp-input {
+      flex: none;
+      width: 140px;
+      font: inherit;
+      font-size: 12px;
+      padding: 3px 8px;
+      border: 1px solid var(--folio-rule-strong);
+      border-radius: 5px;
+      background: var(--folio-input-bg);
+      color: var(--folio-ink);
+    }
     /* Code shows what was typed: no ligatures (-> must not become an
        arrow glyph while writing DOT or JavaScript). */
     pre.folio-code,

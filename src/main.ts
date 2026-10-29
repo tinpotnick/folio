@@ -2575,6 +2575,16 @@ function paletteEntries(): PaletteEntry[] {
       flash("3D model inserted");
     },
   });
+  entries.push({
+    title: "Insert a compute block (Python)",
+    group: "Command",
+    keywords:
+      "compute python script data dataset transform calculate regression forecast pyodide insert",
+    action: () => {
+      el.insertCompute();
+      flash("Compute block inserted");
+    },
+  });
   // One entry per reference in the bibliography: "Cite: Knuth 1984 ·
   // Literate Programming" (docs/specs/citations.md).
   for (const c of el.citationChoices()) {
