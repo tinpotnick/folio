@@ -2780,6 +2780,16 @@ function paletteEntries(): PaletteEntry[] {
     });
   }
   entries.push({
+    title: "Choose how many rows a table shows",
+    group: "Command",
+    keywords:
+      "rows shown show more fewer lines display length limit long table dataset page all",
+    action: () => {
+      const why = el.focusTableRows();
+      if (why) flash(why);
+    },
+  });
+  entries.push({
     title: "Read a chart's values",
     group: "Command",
     keywords:
@@ -3171,6 +3181,11 @@ function updatePalette(): void {
             // word of it as a word ("pmt", "loan payment") - above a
             // scattered-letter match, below a title/keyword hit.
             e.body ? bodyScore(query, e.body) : -1,
+            // Every word of the query among the title and keywords, in
+            // any order: "fewer rows" finds "Choose how many rows a
+            // table shows" (tagged "fewer"), which letter-by-letter
+            // matching missed.
+            bodyScore(query, `${e.title} ${e.keywords}`.toLowerCase()),
           ) -
           // "Cross-reference: Regional summary" must not outrank the
           // section itself, nor "Cite: Knuth 1984" the "Insert a

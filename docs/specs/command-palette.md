@@ -41,7 +41,11 @@ magnifier button in the toolbar.
   word-start bonus), not letter by letter - the letter walk took the
   first "g" for "guide" and lost "Getting started guide" to help
   topics. A query found in an entry's TITLE scores above the same
-  query among keywords ("new" is New document). Empty query lists EVERY command, then the first ten
+  query among keywords ("new" is New document). Every word of a
+  query found as a word among an entry's title and keywords matches
+  too, in any order (2026-10-29): "fewer rows" finds "Choose how
+  many rows a table shows", which the letter walk missed because the
+  words came in another order. Empty query lists EVERY command, then the first ten
   sections and the first ten help topics: one global cap let each
   new command push sections and help out of the empty state.
 - **Command actions reuse the toolbar handlers** (`.click()` on the

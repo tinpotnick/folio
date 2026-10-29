@@ -278,6 +278,17 @@ function readDirectiveBody(
   throw new ParseError(`Unterminated directive '{#${id}}'`, start + 1);
 }
 
+/** A table's `show:` - a whole number of rows, or `all`. */
+function parseShow(raw: string, id: string): number | "all" {
+  const v = raw.trim();
+  if (v === "all") return "all";
+  if (/^[1-9]\d*$/.test(v)) return Number(v);
+  throw new ParseError(
+    `table '${id}': show must be a number of rows or 'all', not '${v}'`,
+    0,
+  );
+}
+
 function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
   const table: Table = { id, columns: [], rows: [] };
   let section: "none" | "columns" | "data" = "none";
@@ -294,6 +305,7 @@ function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
     else if (k === "retrieved") table.retrieved = unquote(raw);
     else if (k === "cite") table.cite = unquote(raw);
     else if (k === "licence") table.licence = unquote(raw);
+    else if (k === "show") table.show = parseShow(unquote(raw), id);
     else if (k === "columns") section = "columns";
     else if (k === "data") section = "data";
     else throw new ParseError(`Unknown table key: '${k}'`, 0);
@@ -866,6 +878,7 @@ function serializeTable(table: Table): string {
   if (table.licence !== undefined) {
     lines.push(`licence: "${table.licence}"`);
   }
+  if (table.show !== undefined) lines.push(`show: ${String(table.show)}`);
   lines.push("columns:");
   for (const col of table.columns) {
     const entries = [`name: ${col.name}`, `type: ${col.type}`];
