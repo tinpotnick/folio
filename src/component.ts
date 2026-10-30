@@ -6229,9 +6229,14 @@ export class FolioDoc extends HTMLElement {
       canvas.appendChild(header);
     }
     header.textContent = "";
-    header.style.gridTemplateColumns = `${DS_GUTTER} repeat(${
+    const tracks = `${DS_GUTTER} repeat(${
       block.table.columns.length
     }, minmax(110px, 1fr))`;
+    header.style.gridTemplateColumns = tracks;
+    // The header's painted box must span the full scroll width:
+    // without a min-width it ends at the grid's visible width and
+    // the scrolled-right area shows through (transparent cells).
+    header.style.minWidth = `calc(${DS_GUTTER} + ${String(block.table.columns.length)} * 110px)`;
     const gutterHead = document.createElement("div");
     gutterHead.className = "folio-ds-gutterhead";
     header.appendChild(gutterHead);
@@ -6293,6 +6298,7 @@ export class FolioDoc extends HTMLElement {
       row.style.gridTemplateColumns = `${DS_GUTTER} repeat(${
         block.table.columns.length
       }, minmax(110px, 1fr))`;
+      row.style.minWidth = `calc(${DS_GUTTER} + ${String(block.table.columns.length)} * 110px)`;
       row.dataset.modelRow = String(modelRow);
       row.dataset.display = String(display);
       const gutter = document.createElement("div");

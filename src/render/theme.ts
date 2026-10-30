@@ -1351,6 +1351,10 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-bottom: 1px solid var(--folio-rule-strong, #d0d7de);
     }
     .folio-ds-gutterhead {
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      background: var(--folio-surface, #f6f8fa);
       border-right: 1px solid var(--folio-rule-strong, #d0d7de);
     }
     .folio-ds-hcell {
@@ -1380,6 +1384,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       background: var(--folio-paper, #ffffff);
     }
     .folio-ds-gutter {
+      position: sticky;
+      left: 0;
+      z-index: 1;
       display: flex;
       align-items: center;
       justify-content: flex-end;

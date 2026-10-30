@@ -60,7 +60,11 @@ chrome would put a widget inside a document.
   the column's `expr`); an editable cell shows its raw value.
   Arrow keys move the selection (kept in view), Enter opens the
   editor on the selected editable cell, Escape closes the browser
-  (or reverts an open editor).
+  (or reverts an open editor). On a sheet wider than the window
+  the header row and every row carry a min-width of the grid's
+  minimum track width, so the header's background paints across
+  the whole scroll width (no transparent heading cells when
+  scrolled right), and the row-number gutter is sticky-left.
 - **Editing**: cell commits are model writes - the value lands
   in `block.table.rows`, the in-flow figure's rendered cell and
   formula cells refresh, charts redraw, and the Markdown source
@@ -95,14 +99,15 @@ chrome would put a widget inside a document.
 - Engine: `tests/engine/query.test.ts` (filterIndexes/sortIndexes
   model-order indexes, unknown-column error, view sort leaves the
   model untouched, filter+sort composition regression).
-- e2e: `tests/e2e/dataset.spec.ts` (11 tests: window + status
+- e2e: `tests/e2e/dataset.spec.ts` (12 tests: window + status
   line, chart over a windowed table still plots every row,
   style key override, small tables unchanged, virtualized
   scrolling to the last row, Jexl filter with typo error, view
   sort asc/desc/unsorted cycle, row numbers + formula bar +
   arrow-key selection, cell edit rippling to figure/formulas/
   source, inspector button, Esc/✕ returning to the table's
-  figure); `tests/e2e/table-rows-shown.spec.ts`
+  figure, wide sheet scrolled right keeps the header painted
+  and the gutter stuck); `tests/e2e/table-rows-shown.spec.ts`
   (the Rows picker, `show:` in the source, all, back to default,
   the palette entry). Engine: `tests/engine/table-show.test.ts`.
 - First-contact eval: `evals/dataset-browser-first-contact.md`.

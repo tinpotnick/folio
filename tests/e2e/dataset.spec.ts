@@ -248,4 +248,44 @@ test.describe("dataset browser", () => {
     await page.locator(".folio-ds-done").click();
     await expect(page.locator(".folio-ds-overlay")).toBeHidden();
   });
+
+  test("a wide sheet keeps the header painted and row numbers stuck when scrolled right", async ({
+    page,
+  }) => {
+    const cols = Array.from(
+      { length: 14 },
+      (_, i) => `  - {name: c${String(i)}, type: number}`,
+    ).join("\n");
+    const data = Array.from(
+      { length: 60 },
+      (_, i) =>
+        `  - [${Array.from({ length: 14 }, (_, j) => String(i * 14 + j)).join(", ")}]`,
+    ).join("\n");
+    await loadDoc(
+      page,
+      `# T\n\n::: table {#wide}\ncolumns:\n${cols}\ndata:\n${data}\n:::\n`,
+    );
+    await page.locator('figure[data-table-id="wide"] .ds-open').click();
+    await expect(page.locator(".folio-ds-overlay")).toBeVisible();
+    const grid = page.locator(".folio-ds-grid");
+    await grid.evaluate((el) => (el.scrollLeft = el.scrollWidth));
+    await page.waitForTimeout(200);
+    // The header's box spans the whole scroll width, so its
+    // background still covers the scrolled-right columns...
+    const header = page.locator(".folio-ds-header");
+    const bg = await header.evaluate(
+      (el) => getComputedStyle(el).backgroundColor,
+    );
+    expect(bg).not.toBe("rgba(0, 0, 0, 0)");
+    const headerWidth = await header.evaluate(
+      (el) => el.getBoundingClientRect().width,
+    );
+    const scrollWidth = await grid.evaluate((el) => el.scrollWidth);
+    expect(headerWidth).toBeGreaterThanOrEqual(scrollWidth);
+    // ...and the row-number gutter stays visible at the left edge.
+    await expect(page.locator(".folio-ds-gutterhead")).toBeVisible();
+    await expect(
+      page.locator(".folio-ds-row").first().locator(".folio-ds-gutter"),
+    ).toBeVisible();
+  });
 });
