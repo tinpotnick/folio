@@ -672,7 +672,6 @@ export function themeFromDoc(doc: Doc): Theme {
  */
 const CHROME: Record<Mode, Record<string, string>> = {
   light: {
-    desk: "#f3f4f6",
     "rule-strong": "#d0d7de",
     "surface-2": "#fafbfc",
     "input-bg": "#ffffff",
@@ -691,7 +690,6 @@ const CHROME: Record<Mode, Record<string, string>> = {
     "sy-red-bg": "#ffebe9",
   },
   dark: {
-    desk: "#0d0d0f",
     "rule-strong": "#3f3f46",
     "surface-2": "#1f1f23",
     "input-bg": "#18181b",
@@ -1201,77 +1199,55 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-inspector .insp-dataset:hover { background: var(--folio-hover, #f3f4f6); }
 
-    /* --- Dataset browser: a full-screen sheet of the document's own
-         paper on the desk (spec: docs/specs/dataset-browser.md). No
-         dimmed backdrop, no floating card - the dataset reads as a
-         page of the same document. --- */
+    /* --- Dataset browser: a full-bleed spreadsheet surface on the
+         document's paper (spec: docs/specs/dataset-browser.md). No
+         card edge, no desk, no backdrop - toolbar, formula bar, then
+         the grid with a row-number gutter. Chrome (toolbar, gutter,
+         header row) sits on the surface tint; the grid sits on paper
+         with light gridlines, like a sheet. --- */
     .folio-ds-overlay {
       position: fixed;
       inset: 0;
       z-index: 200;
-      background: var(--folio-desk, #f3f4f6);
-      padding: 28px;
-      box-sizing: border-box;
+      background: var(--folio-paper, #ffffff);
       display: flex;
       overflow: hidden;
     }
     .folio-ds-overlay[hidden] { display: none; }
     .folio-ds-panel {
-      background: var(--folio-paper, #ffffff);
-      color: var(--folio-ink, #1f2328);
-      border-radius: var(--folio-page-radius, 3px);
-      box-shadow: var(--folio-page-shadow, 0 8px 30px rgba(0, 0, 0, 0.25));
-      width: min(1180px, 100%);
-      height: 100%;
-      margin: 0 auto;
+      flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
-    }
-    @media (max-width: 760px) {
-      .folio-ds-overlay { padding: 0; }
-      .folio-ds-panel {
-        width: 100%;
-        border-radius: 0;
-        box-shadow: none;
-      }
+      background: var(--folio-paper, #ffffff);
+      color: var(--folio-ink, #1f2328);
     }
     .folio-ds-head {
-      display: flex;
-      gap: 14px;
-      align-items: center;
-      padding: 14px 22px;
-      border-bottom: 1px solid var(--folio-rule, #e6e8eb);
       flex: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--folio-surface, #f6f8fa);
+      border-bottom: 1px solid var(--folio-rule-strong, #d0d7de);
     }
     .folio-ds-id {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      min-width: 0;
-      flex: none;
-    }
-    .folio-ds-kicker {
-      font-size: 10px;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--folio-ink-muted, #57606a);
-    }
-    .folio-ds-titlerow {
       display: flex;
       align-items: baseline;
       gap: 8px;
       min-width: 0;
+      flex: none;
     }
     .folio-ds-title {
       font-weight: 600;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 15px;
+      font-size: 13px;
       color: var(--folio-heading, var(--folio-ink, #1f2328));
       white-space: nowrap;
     }
     .folio-ds-where {
-      font-size: 12.5px;
+      font-size: 12px;
       color: var(--folio-ink-muted, #57606a);
       white-space: nowrap;
       overflow: hidden;
@@ -1282,7 +1258,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       min-width: 120px;
       font: inherit;
       font-size: 13px;
-      padding: 6px 10px;
+      padding: 5px 9px;
       border: 1px solid var(--folio-rule-strong, #d0d7de);
       border-radius: 6px;
       background: var(--folio-input-bg, #ffffff);
@@ -1301,24 +1277,61 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
+    /* Window chrome, not a web "back" link: an icon-only close at the
+       toolbar's far right. Esc does the same. */
     .folio-ds-done {
-      font: inherit;
-      font-size: 13px;
-      font-weight: 600;
+      flex: none;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      font-size: 15px;
+      line-height: 1;
       border: none;
-      background: var(--folio-accent, #1f3fbf);
-      color: ${mode === "dark" ? "var(--folio-heading)" : "var(--folio-paper, #ffffff)"};
       border-radius: 6px;
-      padding: 6px 14px;
+      background: transparent;
+      color: var(--folio-ink-muted, #57606a);
       cursor: pointer;
-      white-space: nowrap;
     }
     .folio-ds-done:hover {
-      background: color-mix(
-        in srgb,
-        var(--folio-accent, #1f3fbf) 86%,
-        var(--folio-ink, #1f2328)
-      );
+      background: var(--folio-hover, #f3f4f6);
+      color: var(--folio-ink, #1f2328);
+    }
+    /* The formula bar: name box (cell ref), ƒx, the selected cell's
+       content - its formula for computed columns. */
+    .folio-ds-fbar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 12px;
+      background: var(--folio-surface, #f6f8fa);
+      border-bottom: 1px solid var(--folio-rule, #e6e8eb);
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12.5px;
+    }
+    .folio-ds-ref {
+      min-width: 64px;
+      padding: 2px 8px;
+      background: var(--folio-input-bg, #ffffff);
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 4px;
+      text-align: center;
+      white-space: nowrap;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-ds-fx {
+      color: var(--folio-ink-muted, #57606a);
+      font-style: italic;
+      user-select: none;
+    }
+    .folio-ds-fxcontent {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--folio-ink, #1f2328);
     }
     .folio-ds-grid {
       flex: 1;
@@ -1334,8 +1347,11 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       z-index: 2;
       display: grid;
       height: 36px;
-      background: var(--folio-paper, #ffffff);
-      border-bottom: 1px solid var(--folio-table-rule, #d0d7de);
+      background: var(--folio-surface, #f6f8fa);
+      border-bottom: 1px solid var(--folio-rule-strong, #d0d7de);
+    }
+    .folio-ds-gutterhead {
+      border-right: 1px solid var(--folio-rule-strong, #d0d7de);
     }
     .folio-ds-hcell {
       display: flex;
@@ -1352,7 +1368,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       white-space: nowrap;
       text-overflow: ellipsis;
     }
-    .folio-ds-hcell:hover { background: var(--folio-hover, #f3f4f6); }
+    .folio-ds-hcell:hover { background: var(--folio-hover, #eceff2); }
     .folio-ds-hcell.sorted { color: var(--folio-accent, #1f3fbf); }
     .folio-ds-row {
       position: absolute;
@@ -1363,12 +1379,16 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-bottom: 1px solid var(--folio-rule, #eef0f3);
       background: var(--folio-paper, #ffffff);
     }
-    .folio-ds-row:hover {
-      background: color-mix(
-        in srgb,
-        var(--folio-ink, #1f2328) 4%,
-        var(--folio-paper, #ffffff)
-      );
+    .folio-ds-gutter {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 8px;
+      font-size: 11px;
+      color: var(--folio-ink-muted, #57606a);
+      background: var(--folio-surface, #f6f8fa);
+      border-right: 1px solid var(--folio-rule-strong, #d0d7de);
+      user-select: none;
     }
     .folio-ds-cell {
       display: flex;
@@ -1380,8 +1400,16 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       white-space: nowrap;
       text-overflow: ellipsis;
     }
+    .folio-ds-cell.selected {
+      box-shadow: inset 0 0 0 2px var(--folio-accent, #1f3fbf);
+      background: color-mix(
+        in srgb,
+        var(--folio-accent, #1f3fbf) 8%,
+        var(--folio-paper, #ffffff)
+      );
+    }
     .folio-ds-cell.num { justify-content: flex-end; }
-    .folio-ds-cell:not(.computed):hover {
+    .folio-ds-cell:not(.computed):not(.selected):hover {
       background: var(--folio-hover, #f3f4f6);
       cursor: text;
     }

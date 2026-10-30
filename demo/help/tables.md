@@ -39,10 +39,14 @@
   pick **Rows** on its bar (5, 10, 25, 50, 100 or all), or search
   "rows shown" with Ctrl+K; it saves as `show: 12` on the table. The full data is always in the document
   (charts, formulas, and queries see every row); click **Open
-  dataset** for the full-screen dataset sheet - a page of the
-  same document that owns the whole window: continuous scrolling,
-  a Jexl filter (`v > 115 && region != "South"` - the charts'
-  language), click-header sorting (a view sort, never written to
-  the document), and click-to-edit cells. **Back to document**
-  (or Esc) closes it and returns to the table; the grid button on
-  the table's inspector bar opens it too.
+  dataset** for the full-screen dataset view - the whole window,
+  dressed like a spreadsheet: a toolbar with the dataset name, a
+  Jexl filter (`v > 115 && region != "South"` - the charts'
+  language), and the row count; a formula bar that shows the
+  selected cell's value - or its formula for a computed column;
+  and a numbered grid with continuous scrolling, click-header
+  sorting (asc, then desc, then unsorted - a view sort, never
+  written to the document), and click-to-edit cells (arrow keys
+  move the selection, Enter edits). **✕** (or Esc) closes it and
+  returns to the table; the grid button on the table's inspector
+  bar opens it too.

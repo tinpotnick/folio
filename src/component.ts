@@ -545,6 +545,12 @@ function fitTable(scroller: HTMLElement, table: HTMLElement): void {
   ro.observe(table);
 }
 
+/** Dataset browser geometry: row height and header height (px),
+ * and the row-number gutter's grid track. */
+const DS_ROW_H = 32;
+const DS_HEAD_H = 36;
+const DS_GUTTER = "44px";
+
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
     return ["src", "mode"];
@@ -570,7 +576,9 @@ export class FolioDoc extends HTMLElement {
     filter: string;
     sortBy: string | null;
     sortDir: "asc" | "desc";
-  } = { filter: "", sortBy: null, sortDir: "asc" };
+    /** The selected cell, as a DISPLAY row (post filter/sort) + column. */
+    selected: { display: number; col: number } | null;
+  } = { filter: "", sortBy: null, sortDir: "asc", selected: null };
   private lastBlock: HTMLElement | null = null;
   /** The block the caret was last seen in (typed atoms hydrate on leaving it). */
   private caretBlock: HTMLElement | null = null;
@@ -5896,7 +5904,7 @@ export class FolioDoc extends HTMLElement {
       this.shadowRoot?.appendChild(overlay);
     }
     overlay.dataset.tableId = tableId;
-    this.dsState = { filter: "", sortBy: null, sortDir: "asc" };
+    this.dsState = { filter: "", sortBy: null, sortDir: "asc", selected: null };
     const filter = overlay.querySelector<HTMLInputElement>(".folio-ds-filter");
     if (filter) filter.value = "";
     overlay.hidden = false;
@@ -5936,10 +5944,12 @@ export class FolioDoc extends HTMLElement {
       }
     });
 
-    // A full-screen SHEET of the document's own paper (spec:
-    // docs/specs/dataset-browser.md), not a floating dialog: the desk
-    // shows around it, the page carries the host's lift, and the
-    // header names the dataset and the section it lives in.
+    // A full-bleed spreadsheet surface on the document's paper (spec:
+    // docs/specs/dataset-browser.md): a toolbar (dataset name and its
+    // section, the Jexl filter, the row count, a window-chrome close),
+    // a formula bar that shows the selected cell's raw value - or its
+    // formula for computed columns - then the grid with a row-number
+    // gutter. No card, no desk, no backdrop.
     const panel = document.createElement("div");
     panel.className = "folio-ds-panel";
 
@@ -5947,17 +5957,11 @@ export class FolioDoc extends HTMLElement {
     head.className = "folio-ds-head";
     const idWrap = document.createElement("div");
     idWrap.className = "folio-ds-id";
-    const kicker = document.createElement("span");
-    kicker.className = "folio-ds-kicker";
-    kicker.textContent = "Dataset";
-    const titleRow = document.createElement("span");
-    titleRow.className = "folio-ds-titlerow";
     const title = document.createElement("span");
     title.className = "folio-ds-title";
     const where = document.createElement("span");
     where.className = "folio-ds-where";
-    titleRow.append(title, where);
-    idWrap.append(kicker, titleRow);
+    idWrap.append(title, where);
     const filter = document.createElement("input");
     filter.className = "folio-ds-filter";
     filter.type = "text";
@@ -5972,11 +5976,25 @@ export class FolioDoc extends HTMLElement {
     const done = document.createElement("button");
     done.className = "folio-ds-done";
     done.type = "button";
-    done.textContent = "← Back to document";
+    done.textContent = "✕";
     done.title =
       "Close the dataset and return to its table in the document (Esc)";
+    done.setAttribute("aria-label", "Back to document");
     done.addEventListener("click", () => this.closeDataset(true));
     head.append(idWrap, filter, count, done);
+
+    // The formula bar: name box (cell ref), ƒx, and the selected
+    // cell's content - the formula itself for computed columns.
+    const fbar = document.createElement("div");
+    fbar.className = "folio-ds-fbar";
+    const ref = document.createElement("span");
+    ref.className = "folio-ds-ref";
+    const fx = document.createElement("span");
+    fx.className = "folio-ds-fx";
+    fx.textContent = "ƒx";
+    const fxContent = document.createElement("span");
+    fxContent.className = "folio-ds-fxcontent";
+    fbar.append(ref, fx, fxContent);
 
     const grid = document.createElement("div");
     grid.className = "folio-ds-grid";
@@ -5989,8 +6007,67 @@ export class FolioDoc extends HTMLElement {
     grid.addEventListener("scroll", () => {
       this.renderDatasetRows();
     });
+    // Spreadsheet keys: arrows move the selection (kept in view),
+    // Enter opens the editor on the selected editable cell.
+    grid.addEventListener("keydown", (ev) => {
+      // The cell editor owns its keys (Enter commits, Escape reverts);
+      // those events arrive here already handled.
+      if (ev.defaultPrevented) return;
+      if (this.dsBrowser?.querySelector(".folio-ds-edit") !== null) return;
+      const block = this.doc?.blocks.find(
+        (b) =>
+          b.kind === "table" && b.table.id === this.dsBrowser?.dataset.tableId,
+      );
+      if (!block || block.kind !== "table") return;
+      const { indexes } = this.datasetDisplayIndexes();
+      if (indexes.length === 0) return;
+      const sel = this.dsState.selected ?? { display: 0, col: 0 };
+      let display = sel.display;
+      let col = sel.col;
+      switch (ev.key) {
+        case "ArrowDown":
+          display = Math.min(indexes.length - 1, display + 1);
+          break;
+        case "ArrowUp":
+          display = Math.max(0, display - 1);
+          break;
+        case "ArrowRight":
+          col = Math.min(block.table.columns.length - 1, col + 1);
+          break;
+        case "ArrowLeft":
+          col = Math.max(0, col - 1);
+          break;
+        case "Enter": {
+          ev.preventDefault();
+          const modelRow = indexes[display];
+          const rowEl = canvas.querySelector<HTMLElement>(
+            `.folio-ds-row[data-display="${String(display)}"]`,
+          );
+          // +1: the gutter cell is the row's first child.
+          const cellEl = rowEl?.children[col + 1] as HTMLElement | undefined;
+          if (
+            modelRow !== undefined &&
+            rowEl &&
+            cellEl &&
+            !cellEl.classList.contains("computed")
+          )
+            this.openDatasetCellEditor(rowEl, cellEl, modelRow, col, block);
+          return;
+        }
+        default:
+          return;
+      }
+      ev.preventDefault();
+      this.dsState.selected = { display, col };
+      const top = DS_HEAD_H + display * DS_ROW_H;
+      if (top < grid.scrollTop + DS_HEAD_H)
+        grid.scrollTop = Math.max(0, top - DS_HEAD_H);
+      else if (top + DS_ROW_H > grid.scrollTop + grid.clientHeight)
+        grid.scrollTop = top + DS_ROW_H - grid.clientHeight;
+      this.renderDatasetRows();
+    });
 
-    panel.append(head, grid);
+    panel.append(head, fbar, grid);
     overlay.appendChild(panel);
     return overlay;
   }
@@ -6086,12 +6163,55 @@ export class FolioDoc extends HTMLElement {
           ? `${indexes.length.toLocaleString()} rows${filtered}${sorted}`
           : error;
     }
+    // A filter/sort change can push the selection out of range.
+    if (
+      this.dsState.selected &&
+      this.dsState.selected.display >= indexes.length
+    )
+      this.dsState.selected = null;
     const grid = overlay.querySelector<HTMLElement>(".folio-ds-grid");
     const canvas = overlay.querySelector<HTMLElement>(".folio-ds-canvas");
     if (!grid || !canvas) return;
-    canvas.style.height = `${indexes.length * 32 + 32}px`;
+    canvas.style.height = `${indexes.length * DS_ROW_H + DS_HEAD_H}px`;
     this.renderDatasetHeader();
     this.renderDatasetRows();
+  }
+
+  /** The formula bar: the selected cell's ref, and its content -
+   *  the raw value, or the formula itself for computed columns. */
+  private updateDatasetFormulaBar(): void {
+    const overlay = this.dsBrowser;
+    if (!overlay || overlay.hidden) return;
+    const ref = overlay.querySelector<HTMLElement>(".folio-ds-ref");
+    const content = overlay.querySelector<HTMLElement>(".folio-ds-fxcontent");
+    if (!ref || !content) return;
+    const block = this.doc?.blocks.find(
+      (b) => b.kind === "table" && b.table.id === overlay.dataset.tableId,
+    );
+    const sel = this.dsState.selected;
+    if (!block || block.kind !== "table" || !sel) {
+      ref.textContent = "";
+      content.textContent = "";
+      return;
+    }
+    const col = block.table.columns[sel.col];
+    if (!col) {
+      ref.textContent = "";
+      content.textContent = "";
+      return;
+    }
+    ref.textContent = `${col.name}${String(sel.display + 1)}`;
+    if (col.type === "formula") {
+      content.textContent = col.expr ?? "";
+    } else {
+      const { indexes } = this.datasetDisplayIndexes();
+      const modelRow = indexes[sel.display];
+      content.textContent = String(
+        modelRow !== undefined
+          ? (block.table.rows[modelRow]?.[sel.col] ?? "")
+          : "",
+      );
+    }
   }
 
   private renderDatasetHeader(): void {
@@ -6109,13 +6229,12 @@ export class FolioDoc extends HTMLElement {
       canvas.appendChild(header);
     }
     header.textContent = "";
-    const cols = block.table.columns
-      .map((c) => c.name)
-      .map((n) => `${n}`)
-      .join(" ");
-    header.style.gridTemplateColumns = `repeat(${
+    header.style.gridTemplateColumns = `${DS_GUTTER} repeat(${
       block.table.columns.length
     }, minmax(110px, 1fr))`;
+    const gutterHead = document.createElement("div");
+    gutterHead.className = "folio-ds-gutterhead";
+    header.appendChild(gutterHead);
     block.table.columns.forEach((col) => {
       const cell = document.createElement("div");
       cell.className = "folio-ds-hcell";
@@ -6125,11 +6244,11 @@ export class FolioDoc extends HTMLElement {
         cell.textContent =
           this.dsState.sortDir === "asc" ? `${col.name} ▲` : `${col.name} ▼`;
       }
-      cell.title = `Sort by ${col.name}`;
+      cell.title = `Sort by ${col.name} (asc, then desc, then unsorted)`;
       cell.addEventListener("click", () => {
         if (this.dsState.sortBy === col.name) {
-          this.dsState.sortDir =
-            this.dsState.sortDir === "asc" ? "desc" : "asc";
+          if (this.dsState.sortDir === "asc") this.dsState.sortDir = "desc";
+          else this.dsState.sortBy = null; // third click clears the view sort
         } else {
           this.dsState.sortBy = col.name;
           this.dsState.sortDir = "asc";
@@ -6138,7 +6257,6 @@ export class FolioDoc extends HTMLElement {
       });
       header.appendChild(cell);
     });
-    void cols;
   }
 
   /** Draw the visible slice of the (filtered, sorted) row window. */
@@ -6159,31 +6277,55 @@ export class FolioDoc extends HTMLElement {
       return; // the head already shows the guarded error line
     }
     const { indexes } = this.datasetDisplayIndexes();
-    const first = Math.max(0, Math.floor(grid.scrollTop / 32) - 2);
-    const count = Math.ceil(grid.clientHeight / 32) + 4;
+    const first = Math.max(0, Math.floor(grid.scrollTop / DS_ROW_H) - 2);
+    const count = Math.ceil(grid.clientHeight / DS_ROW_H) + 4;
     const slice = indexes.slice(first, first + count);
     for (const el of Array.from(
       canvas.querySelectorAll<HTMLElement>(".folio-ds-row"),
     )) {
       el.remove();
     }
-    const host = this.shadowRoot?.querySelector("article.folio-doc");
-    const figure = host?.querySelector(
-      `figure[data-table-id="${block.table.id}"]`,
-    ) as HTMLElement | null;
     slice.forEach((modelRow, displayPos) => {
+      const display = first + displayPos;
       const row = document.createElement("div");
       row.className = "folio-ds-row";
-      row.style.top = `${(first + displayPos) * 32 + 32}px`;
-      row.style.gridTemplateColumns = `repeat(${
+      row.style.top = `${DS_HEAD_H + display * DS_ROW_H}px`;
+      row.style.gridTemplateColumns = `${DS_GUTTER} repeat(${
         block.table.columns.length
       }, minmax(110px, 1fr))`;
       row.dataset.modelRow = String(modelRow);
+      row.dataset.display = String(display);
+      const gutter = document.createElement("div");
+      gutter.className = "folio-ds-gutter";
+      gutter.textContent = String(display + 1);
+      row.appendChild(gutter);
       block.table.columns.forEach((col, c) => {
         const cell = document.createElement("div");
         cell.className = "folio-ds-cell";
         cell.dataset.col = String(c);
+        if (
+          this.dsState.selected !== null &&
+          this.dsState.selected.display === display &&
+          this.dsState.selected.col === c
+        )
+          cell.classList.add("selected");
         const v = recalced.rows[modelRow]?.[c];
+        cell.addEventListener("click", () => {
+          const active =
+            canvas.querySelector<HTMLInputElement>(".folio-ds-edit");
+          if (active !== null) return; // one editor at a time
+          this.dsState.selected = { display, col: c };
+          if (col.type === "formula") {
+            // Computed cells are read-only: selecting one shows its
+            // formula in the formula bar. Focus the grid so the
+            // arrow keys move the selection.
+            this.renderDatasetRows();
+            grid.focus({ preventScroll: true });
+          } else {
+            this.updateDatasetFormulaBar();
+            this.openDatasetCellEditor(row, cell, modelRow, c, block);
+          }
+        });
         if (col.type === "formula") {
           cell.classList.add("computed");
           cell.textContent = formatComputed(v, col.format);
@@ -6191,18 +6333,12 @@ export class FolioDoc extends HTMLElement {
         } else {
           if (typeof v === "number") cell.classList.add("num");
           cell.textContent = String(v ?? "");
-          cell.addEventListener("click", () => {
-            const active =
-              canvas.querySelector<HTMLInputElement>(".folio-ds-edit");
-            if (active !== null) return; // one editor at a time
-            this.openDatasetCellEditor(row, cell, modelRow, c, block);
-          });
         }
         row.appendChild(cell);
       });
-      void figure;
       canvas.appendChild(row);
     });
+    this.updateDatasetFormulaBar();
   }
 
   /**

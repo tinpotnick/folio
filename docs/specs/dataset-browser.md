@@ -35,24 +35,32 @@ chrome would put a widget inside a document.
   data is never cut, and charts, formulas and the browser still see
   every row. A bad value is a parse error naming the table. Simple
   (pipe) tables keep the document's window.
-- **Browser (full-screen sheet)**: opened from the status line or
-  the table inspector's grid button. It is NOT a modal: no dimmed
-  backdrop, no floating card - it owns the whole viewport as a
-  sheet of the document's own paper on the desk (`--folio-paper`,
-  the host's `--folio-page-radius`/`--folio-page-shadow`, desk
-  in `--folio-desk`; under 760px the sheet goes edge-to-edge).
-  The header names the dataset (`@id`) and the section it lives
-  in (the nearest heading above the table), then the Jexl filter
-  box, the row count, and a single accent "← Back to document"
-  button. Closed with that button or Esc, which scrolls the
-  document back to the table's figure. Inside the sheet:
+- **Browser (full-screen spreadsheet surface)**: opened from the
+  status line or the table inspector's grid button. It is NOT a
+  modal and not a page: no backdrop, no card edge, no desk - it
+  owns the whole viewport, full-bleed, on the document's paper
+  (`--folio-paper`; chrome rows sit on `--folio-surface`). It
+  dresses as a spreadsheet: a toolbar row (dataset `@id` and the
+  section it lives in, the Jexl filter box, the row count, and an
+  icon-only ✕ close at the far right - window chrome, not a web
+  "back" link), a formula bar below it, then the grid with a
+  row-number gutter. Closed with ✕ or Esc, which scrolls the
+  document back to the table's figure. Inside the grid:
   continuous virtualized scrolling (only the visible window of
   rows is in the DOM), a Jexl filter box using the charts' exact
   filter language (`v > 115`, `region != "South"` - unknown
-  columns are a visible error), click-to-toggle header sorting
-  (a VIEW sort - it never writes the model's sort), and
-  click-to-edit cells. The sheet never prints (hidden in
-  `@media print`).
+  columns are a visible error), click-header sorting that cycles
+  asc → desc → unsorted (a VIEW sort - it never writes the
+  model's sort), and click-to-edit cells. The surface never
+  prints (hidden in `@media print`).
+- **Selection and the formula bar**: clicking any cell selects it
+  (accent ring); clicking an editable cell also opens its editor,
+  while a computed cell is read-only and selecting one shows its
+  FORMULA in the formula bar (`ƒx` row: cell ref like `d12`, then
+  the column's `expr`); an editable cell shows its raw value.
+  Arrow keys move the selection (kept in view), Enter opens the
+  editor on the selected editable cell, Escape closes the browser
+  (or reverts an open editor).
 - **Editing**: cell commits are model writes - the value lands
   in `block.table.rows`, the in-flow figure's rendered cell and
   formula cells refresh, charts redraw, and the Markdown source
@@ -87,13 +95,14 @@ chrome would put a widget inside a document.
 - Engine: `tests/engine/query.test.ts` (filterIndexes/sortIndexes
   model-order indexes, unknown-column error, view sort leaves the
   model untouched, filter+sort composition regression).
-- e2e: `tests/e2e/dataset.spec.ts` (9 tests: window + status
+- e2e: `tests/e2e/dataset.spec.ts` (11 tests: window + status
   line, chart over a windowed table still plots every row,
   style key override, small tables unchanged, virtualized
   scrolling to the last row, Jexl filter with typo error, view
-  sort both directions, cell edit rippling to figure/formulas/
-  source, inspector button, Esc/Back-to-document returning to
-  the table's figure); `tests/e2e/table-rows-shown.spec.ts`
+  sort asc/desc/unsorted cycle, row numbers + formula bar +
+  arrow-key selection, cell edit rippling to figure/formulas/
+  source, inspector button, Esc/✕ returning to the table's
+  figure); `tests/e2e/table-rows-shown.spec.ts`
   (the Rows picker, `show:` in the source, all, back to default,
   the palette entry). Engine: `tests/engine/table-show.test.ts`.
 - First-contact eval: `evals/dataset-browser-first-contact.md`.

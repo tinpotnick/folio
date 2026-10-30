@@ -150,6 +150,47 @@ test.describe("dataset browser", () => {
     await expect(page.locator(".folio-ds-row").first()).toContainText(
       "Region 119",
     );
+    // A third click clears the view sort (back to document order).
+    await page.locator(".folio-ds-hcell", { hasText: "v ▼" }).click();
+    await expect(page.locator(".folio-ds-count")).toContainText("120 rows");
+    await expect(page.locator(".folio-ds-count")).not.toContainText("sorted");
+    await expect(page.locator(".folio-ds-row").first()).toContainText(
+      "Region 0",
+    );
+  });
+
+  test("row numbers, and selecting a computed cell shows its formula", async ({
+    page,
+  }) => {
+    await openBig(page);
+    await expect(
+      page.locator(".folio-ds-row").first().locator(".folio-ds-gutter"),
+    ).toHaveText("1");
+    // The formula column (d = v * 2) is read-only: clicking it
+    // selects the cell and the formula bar shows the formula.
+    await page
+      .locator(".folio-ds-row")
+      .first()
+      .locator(".folio-ds-cell")
+      .nth(2)
+      .click();
+    await expect(page.locator(".folio-ds-cell.selected")).toHaveCount(1);
+    await expect(page.locator(".folio-ds-ref")).toHaveText("d1");
+    await expect(page.locator(".folio-ds-fxcontent")).toHaveText("v * 2");
+    // Arrow keys move the selection (spreadsheet keys); the formula
+    // bar follows with the raw value of an editable cell.
+    await page.keyboard.press("ArrowLeft");
+    await expect(page.locator(".folio-ds-ref")).toHaveText("v1");
+    await expect(page.locator(".folio-ds-fxcontent")).toHaveText("0");
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator(".folio-ds-ref")).toHaveText("v2");
+    await expect(page.locator(".folio-ds-fxcontent")).toHaveText("1");
+    // Enter on a selected editable cell opens its editor.
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".folio-ds-edit")).toBeVisible();
+    await page.keyboard.press("Escape"); // reverts the editor only
+    await expect(page.locator(".folio-ds-edit")).toHaveCount(0);
+    await expect(page.locator(".folio-ds-overlay")).toBeVisible();
   });
 
   test("cell edits are model writes: figure, formulas, and source follow", async ({
