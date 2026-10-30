@@ -1199,67 +1199,143 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-inspector .insp-dataset:hover { background: var(--folio-hover, #f3f4f6); }
 
-    /* --- Dataset browser overlay --- */
+    /* --- Dataset browser: a full-bleed spreadsheet surface on the
+         document's paper (spec: docs/specs/dataset-browser.md). No
+         card edge, no desk, no backdrop - toolbar, formula bar, then
+         the grid with a row-number gutter. Chrome (toolbar, gutter,
+         header row) sits on the surface tint; the grid sits on paper
+         with light gridlines, like a sheet. --- */
     .folio-ds-overlay {
       position: fixed;
       inset: 0;
       z-index: 200;
-      background: rgba(31, 35, 40, 0.4);
+      background: var(--folio-paper, #ffffff);
       display: flex;
-      align-items: center;
-      justify-content: center;
+      overflow: hidden;
     }
     .folio-ds-overlay[hidden] { display: none; }
     .folio-ds-panel {
-      background: var(--folio-input-bg, #ffffff);
-      border-radius: 10px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-      width: min(1000px, 92vw);
-      height: min(640px, 84vh);
+      flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      background: var(--folio-paper, #ffffff);
+      color: var(--folio-ink, #1f2328);
     }
     .folio-ds-head {
+      flex: none;
       display: flex;
-      gap: 10px;
       align-items: center;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--folio-rule, #e6e8eb);
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--folio-surface, #f6f8fa);
+      border-bottom: 1px solid var(--folio-rule-strong, #d0d7de);
+    }
+    .folio-ds-id {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
       flex: none;
     }
     .folio-ds-title {
       font-weight: 600;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
       font-size: 13px;
-      color: var(--folio-ink, #1f2328);
+      color: var(--folio-heading, var(--folio-ink, #1f2328));
+      white-space: nowrap;
+    }
+    .folio-ds-where {
+      font-size: 12px;
+      color: var(--folio-ink-muted, #57606a);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .folio-ds-filter {
       flex: 1;
+      min-width: 120px;
       font: inherit;
       font-size: 13px;
-      padding: 4px 8px;
+      padding: 5px 9px;
       border: 1px solid var(--folio-rule-strong, #d0d7de);
       border-radius: 6px;
+      background: var(--folio-input-bg, #ffffff);
+      color: var(--folio-ink, #1f2328);
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .folio-ds-filter:focus {
+      outline: none;
+      border-color: var(--folio-accent, #1f3fbf);
+      box-shadow: 0 0 0 3px
+        color-mix(in srgb, var(--folio-accent, #1f3fbf) 25%, transparent);
     }
     .folio-ds-count {
       font-size: 12px;
       color: var(--folio-ink-muted, #57606a);
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
+    /* Window chrome, not a web "back" link: an icon-only close at the
+       toolbar's far right. Esc does the same. */
     .folio-ds-done {
-      font: inherit;
-      font-size: 13px;
-      border: 1px solid var(--folio-rule-strong, #d0d7de);
-      background: var(--folio-input-bg, #ffffff);
+      flex: none;
+      width: 28px;
+      height: 28px;
+      display: grid;
+      place-items: center;
+      font-size: 15px;
+      line-height: 1;
+      border: none;
       border-radius: 6px;
-      padding: 3px 12px;
+      background: transparent;
+      color: var(--folio-ink-muted, #57606a);
       cursor: pointer;
     }
-    .folio-ds-done:hover { background: var(--folio-hover, #f3f4f6); }
+    .folio-ds-done:hover {
+      background: var(--folio-hover, #f3f4f6);
+      color: var(--folio-ink, #1f2328);
+    }
+    /* The formula bar: name box (cell ref), ƒx, the selected cell's
+       content - its formula for computed columns. */
+    .folio-ds-fbar {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 12px;
+      background: var(--folio-surface, #f6f8fa);
+      border-bottom: 1px solid var(--folio-rule, #e6e8eb);
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 12.5px;
+    }
+    .folio-ds-ref {
+      min-width: 64px;
+      padding: 2px 8px;
+      background: var(--folio-input-bg, #ffffff);
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 4px;
+      text-align: center;
+      white-space: nowrap;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-ds-fx {
+      color: var(--folio-ink-muted, #57606a);
+      font-style: italic;
+      user-select: none;
+    }
+    .folio-ds-fxcontent {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      color: var(--folio-ink, #1f2328);
+    }
     .folio-ds-grid {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       position: relative;
       font-variant-numeric: tabular-nums;
@@ -1270,23 +1346,34 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       top: 0;
       z-index: 2;
       display: grid;
-      height: 32px;
+      height: 36px;
       background: var(--folio-surface, #f6f8fa);
       border-bottom: 1px solid var(--folio-rule-strong, #d0d7de);
+    }
+    .folio-ds-gutterhead {
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      background: var(--folio-surface, #f6f8fa);
+      border-right: 1px solid var(--folio-rule-strong, #d0d7de);
     }
     .folio-ds-hcell {
       display: flex;
       align-items: center;
-      padding: 0 10px;
+      padding: 0 12px;
       font-size: 12px;
       font-weight: 600;
+      letter-spacing: 0.02em;
       color: var(--folio-ink, #1f2328);
       cursor: pointer;
       border-right: 1px solid var(--folio-rule, #e6e8eb);
       user-select: none;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
     .folio-ds-hcell:hover { background: var(--folio-hover, #eceff2); }
-    .folio-ds-hcell.sorted { color: var(--folio-focus, #1f3fbf); }
+    .folio-ds-hcell.sorted { color: var(--folio-accent, #1f3fbf); }
     .folio-ds-row {
       position: absolute;
       left: 0;
@@ -1294,31 +1381,55 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       height: 32px;
       display: grid;
       border-bottom: 1px solid var(--folio-rule, #eef0f3);
+      background: var(--folio-paper, #ffffff);
+    }
+    .folio-ds-gutter {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 8px;
+      font-size: 11px;
+      color: var(--folio-ink-muted, #57606a);
+      background: var(--folio-surface, #f6f8fa);
+      border-right: 1px solid var(--folio-rule-strong, #d0d7de);
+      user-select: none;
     }
     .folio-ds-cell {
       display: flex;
       align-items: center;
-      padding: 0 10px;
-      font-size: 13px;
+      padding: 0 12px;
+      font-size: 13.5px;
       border-right: 1px solid var(--folio-rule, #eef0f3);
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
     }
+    .folio-ds-cell.selected {
+      box-shadow: inset 0 0 0 2px var(--folio-accent, #1f3fbf);
+      background: color-mix(
+        in srgb,
+        var(--folio-accent, #1f3fbf) 8%,
+        var(--folio-paper, #ffffff)
+      );
+    }
     .folio-ds-cell.num { justify-content: flex-end; }
-    .folio-ds-cell:not(.computed):hover {
-      background: rgba(76, 110, 245, 0.06);
+    .folio-ds-cell:not(.computed):not(.selected):hover {
+      background: var(--folio-hover, #f3f4f6);
       cursor: text;
     }
     .folio-ds-cell.computed { color: var(--folio-ink-muted, #57606a); }
     .folio-ds-edit {
       font: inherit;
-      font-size: 13px;
+      font-size: 13.5px;
       width: 100%;
       border: none;
       outline: none;
       padding: 0;
       background: transparent;
+      color: inherit;
     }
     figure.folio-image {
       margin: 1.2em 0;
@@ -2059,7 +2170,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       .folio-inspector,
       figure.folio-compute .compute-status,
       figure.folio-drawn > pre.folio-code,
-      .folio-table-more .ds-open {
+      .folio-table-more .ds-open,
+      .folio-ds-overlay {
         display: none !important;
       }
       figure.folio-drawn > .code-view {
