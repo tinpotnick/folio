@@ -672,6 +672,7 @@ export function themeFromDoc(doc: Doc): Theme {
  */
 const CHROME: Record<Mode, Record<string, string>> = {
   light: {
+    desk: "#f3f4f6",
     "rule-strong": "#d0d7de",
     "surface-2": "#fafbfc",
     "input-bg": "#ffffff",
@@ -690,6 +691,7 @@ const CHROME: Record<Mode, Record<string, string>> = {
     "sy-red-bg": "#ffebe9",
   },
   dark: {
+    desk: "#0d0d0f",
     "rule-strong": "#3f3f46",
     "surface-2": "#1f1f23",
     "input-bg": "#18181b",
@@ -1199,67 +1201,128 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-inspector .insp-dataset:hover { background: var(--folio-hover, #f3f4f6); }
 
-    /* --- Dataset browser overlay --- */
+    /* --- Dataset browser: a full-screen sheet of the document's own
+         paper on the desk (spec: docs/specs/dataset-browser.md). No
+         dimmed backdrop, no floating card - the dataset reads as a
+         page of the same document. --- */
     .folio-ds-overlay {
       position: fixed;
       inset: 0;
       z-index: 200;
-      background: rgba(31, 35, 40, 0.4);
+      background: var(--folio-desk, #f3f4f6);
+      padding: 28px;
+      box-sizing: border-box;
       display: flex;
-      align-items: center;
-      justify-content: center;
+      overflow: hidden;
     }
     .folio-ds-overlay[hidden] { display: none; }
     .folio-ds-panel {
-      background: var(--folio-input-bg, #ffffff);
-      border-radius: 10px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
-      width: min(1000px, 92vw);
-      height: min(640px, 84vh);
+      background: var(--folio-paper, #ffffff);
+      color: var(--folio-ink, #1f2328);
+      border-radius: var(--folio-page-radius, 3px);
+      box-shadow: var(--folio-page-shadow, 0 8px 30px rgba(0, 0, 0, 0.25));
+      width: min(1180px, 100%);
+      height: 100%;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
+    @media (max-width: 760px) {
+      .folio-ds-overlay { padding: 0; }
+      .folio-ds-panel {
+        width: 100%;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
     .folio-ds-head {
       display: flex;
-      gap: 10px;
+      gap: 14px;
       align-items: center;
-      padding: 10px 12px;
+      padding: 14px 22px;
       border-bottom: 1px solid var(--folio-rule, #e6e8eb);
       flex: none;
+    }
+    .folio-ds-id {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      min-width: 0;
+      flex: none;
+    }
+    .folio-ds-kicker {
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--folio-ink-muted, #57606a);
+    }
+    .folio-ds-titlerow {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
     }
     .folio-ds-title {
       font-weight: 600;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
-      font-size: 13px;
-      color: var(--folio-ink, #1f2328);
+      font-size: 15px;
+      color: var(--folio-heading, var(--folio-ink, #1f2328));
+      white-space: nowrap;
+    }
+    .folio-ds-where {
+      font-size: 12.5px;
+      color: var(--folio-ink-muted, #57606a);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .folio-ds-filter {
       flex: 1;
+      min-width: 120px;
       font: inherit;
       font-size: 13px;
-      padding: 4px 8px;
+      padding: 6px 10px;
       border: 1px solid var(--folio-rule-strong, #d0d7de);
       border-radius: 6px;
+      background: var(--folio-input-bg, #ffffff);
+      color: var(--folio-ink, #1f2328);
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    }
+    .folio-ds-filter:focus {
+      outline: none;
+      border-color: var(--folio-accent, #1f3fbf);
+      box-shadow: 0 0 0 3px
+        color-mix(in srgb, var(--folio-accent, #1f3fbf) 25%, transparent);
     }
     .folio-ds-count {
       font-size: 12px;
       color: var(--folio-ink-muted, #57606a);
       white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
     .folio-ds-done {
       font: inherit;
       font-size: 13px;
-      border: 1px solid var(--folio-rule-strong, #d0d7de);
-      background: var(--folio-input-bg, #ffffff);
+      font-weight: 600;
+      border: none;
+      background: var(--folio-accent, #1f3fbf);
+      color: ${mode === "dark" ? "var(--folio-heading)" : "var(--folio-paper, #ffffff)"};
       border-radius: 6px;
-      padding: 3px 12px;
+      padding: 6px 14px;
       cursor: pointer;
+      white-space: nowrap;
     }
-    .folio-ds-done:hover { background: var(--folio-hover, #f3f4f6); }
+    .folio-ds-done:hover {
+      background: color-mix(
+        in srgb,
+        var(--folio-accent, #1f3fbf) 86%,
+        var(--folio-ink, #1f2328)
+      );
+    }
     .folio-ds-grid {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       position: relative;
       font-variant-numeric: tabular-nums;
@@ -1270,23 +1333,27 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       top: 0;
       z-index: 2;
       display: grid;
-      height: 32px;
-      background: var(--folio-surface, #f6f8fa);
-      border-bottom: 1px solid var(--folio-rule-strong, #d0d7de);
+      height: 36px;
+      background: var(--folio-paper, #ffffff);
+      border-bottom: 1px solid var(--folio-table-rule, #d0d7de);
     }
     .folio-ds-hcell {
       display: flex;
       align-items: center;
-      padding: 0 10px;
+      padding: 0 12px;
       font-size: 12px;
       font-weight: 600;
+      letter-spacing: 0.02em;
       color: var(--folio-ink, #1f2328);
       cursor: pointer;
       border-right: 1px solid var(--folio-rule, #e6e8eb);
       user-select: none;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
-    .folio-ds-hcell:hover { background: var(--folio-hover, #eceff2); }
-    .folio-ds-hcell.sorted { color: var(--folio-focus, #1f3fbf); }
+    .folio-ds-hcell:hover { background: var(--folio-hover, #f3f4f6); }
+    .folio-ds-hcell.sorted { color: var(--folio-accent, #1f3fbf); }
     .folio-ds-row {
       position: absolute;
       left: 0;
@@ -1294,12 +1361,20 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       height: 32px;
       display: grid;
       border-bottom: 1px solid var(--folio-rule, #eef0f3);
+      background: var(--folio-paper, #ffffff);
+    }
+    .folio-ds-row:hover {
+      background: color-mix(
+        in srgb,
+        var(--folio-ink, #1f2328) 4%,
+        var(--folio-paper, #ffffff)
+      );
     }
     .folio-ds-cell {
       display: flex;
       align-items: center;
-      padding: 0 10px;
-      font-size: 13px;
+      padding: 0 12px;
+      font-size: 13.5px;
       border-right: 1px solid var(--folio-rule, #eef0f3);
       overflow: hidden;
       white-space: nowrap;
@@ -1307,18 +1382,19 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-ds-cell.num { justify-content: flex-end; }
     .folio-ds-cell:not(.computed):hover {
-      background: rgba(76, 110, 245, 0.06);
+      background: var(--folio-hover, #f3f4f6);
       cursor: text;
     }
     .folio-ds-cell.computed { color: var(--folio-ink-muted, #57606a); }
     .folio-ds-edit {
       font: inherit;
-      font-size: 13px;
+      font-size: 13.5px;
       width: 100%;
       border: none;
       outline: none;
       padding: 0;
       background: transparent;
+      color: inherit;
     }
     figure.folio-image {
       margin: 1.2em 0;
@@ -2059,7 +2135,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       .folio-inspector,
       figure.folio-compute .compute-status,
       figure.folio-drawn > pre.folio-code,
-      .folio-table-more .ds-open {
+      .folio-table-more .ds-open,
+      .folio-ds-overlay {
         display: none !important;
       }
       figure.folio-drawn > .code-view {

@@ -35,14 +35,24 @@ chrome would put a widget inside a document.
   data is never cut, and charts, formulas and the browser still see
   every row. A bad value is a parse error naming the table. Simple
   (pipe) tables keep the document's window.
-- **Browser (overlay)**: opened from the status line or the
-  table inspector's grid button; closed with Esc or Done. It
-  owns the viewport: continuous virtualized scrolling (only
-  the visible window of rows is in the DOM), a Jexl filter box
-  using the charts' exact filter language (`v > 115`,
-  `region != "South"` - unknown columns are a visible error),
-  click-to-toggle header sorting (a VIEW sort - it never
-  writes the model's sort), and click-to-edit cells.
+- **Browser (full-screen sheet)**: opened from the status line or
+  the table inspector's grid button. It is NOT a modal: no dimmed
+  backdrop, no floating card - it owns the whole viewport as a
+  sheet of the document's own paper on the desk (`--folio-paper`,
+  the host's `--folio-page-radius`/`--folio-page-shadow`, desk
+  in `--folio-desk`; under 760px the sheet goes edge-to-edge).
+  The header names the dataset (`@id`) and the section it lives
+  in (the nearest heading above the table), then the Jexl filter
+  box, the row count, and a single accent "← Back to document"
+  button. Closed with that button or Esc, which scrolls the
+  document back to the table's figure. Inside the sheet:
+  continuous virtualized scrolling (only the visible window of
+  rows is in the DOM), a Jexl filter box using the charts' exact
+  filter language (`v > 115`, `region != "South"` - unknown
+  columns are a visible error), click-to-toggle header sorting
+  (a VIEW sort - it never writes the model's sort), and
+  click-to-edit cells. The sheet never prints (hidden in
+  `@media print`).
 - **Editing**: cell commits are model writes - the value lands
   in `block.table.rows`, the in-flow figure's rendered cell and
   formula cells refresh, charts redraw, and the Markdown source
@@ -67,9 +77,10 @@ chrome would put a widget inside a document.
   view is the real ceiling for very large datasets (a multi-MB
   Markdown source needs its own virtualization, tracked in
   docs/specs/section-windowing.md).
-- The overlay lives in the component's shadow root (sibling of
+- The sheet lives in the component's shadow root (sibling of
   the article), so the article's structural sync never sees it;
-  a document reload closes it.
+  a document reload closes it (without the return-to-figure
+  scroll - only the button and Esc return).
 
 ## Acceptance
 
@@ -81,7 +92,8 @@ chrome would put a widget inside a document.
   style key override, small tables unchanged, virtualized
   scrolling to the last row, Jexl filter with typo error, view
   sort both directions, cell edit rippling to figure/formulas/
-  source, inspector button, Esc/Done); `tests/e2e/table-rows-shown.spec.ts`
+  source, inspector button, Esc/Back-to-document returning to
+  the table's figure); `tests/e2e/table-rows-shown.spec.ts`
   (the Rows picker, `show:` in the source, all, back to default,
   the palette entry). Engine: `tests/engine/table-show.test.ts`.
 - First-contact eval: `evals/dataset-browser-first-contact.md`.

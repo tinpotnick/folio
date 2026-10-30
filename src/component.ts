@@ -562,8 +562,10 @@ export class FolioDoc extends HTMLElement {
     row: Cell[];
   } | null = null;
   private lastHeaderName: HTMLElement | null = null;
-  /** The dataset browser overlay (a singleton in the shadow root). */
+  /** The dataset browser sheet (a singleton in the shadow root). */
   private dsBrowser: HTMLElement | null = null;
+  /** The block the open browser was opened from (the way back). */
+  private dsBlockIndex = -1;
   private dsState: {
     filter: string;
     sortBy: string | null;
@@ -5871,19 +5873,22 @@ export class FolioDoc extends HTMLElement {
   /**
    * The dataset browser (spec: docs/specs/dataset-browser.md): a
    * dedicated, viewport-owning surface for a table of any size.
-   * The in-flow figure shows a head window; this overlay is where
-   * the full dataset is browsed - continuous virtualized scrolling,
-   * a Jexl filter (the charts' language), click-header sorting,
-   * and cell editing. It is a model projection like every
+   * The in-flow figure shows a head window; this full-screen sheet
+   * is where the full dataset is browsed - continuous virtualized
+   * scrolling, a Jexl filter (the charts' language), click-header
+   * sorting, and cell editing. It is a model projection like every
    * inspector: edits are model writes; the browser never becomes
-   * a source of truth. Esc or Done closes it.
+   * a source of truth. "Back to document" or Esc closes it and
+   * returns to the table's figure.
    */
   openDataset(tableId: string): void {
     if (!this.doc) return;
-    const block = this.doc.blocks.find(
+    const index = this.doc.blocks.findIndex(
       (b) => b.kind === "table" && b.table.id === tableId,
     );
+    const block = index >= 0 ? this.doc.blocks[index] : undefined;
     if (!block || block.kind !== "table") return;
+    this.dsBlockIndex = index;
     let overlay = this.dsBrowser;
     if (overlay === null || this.shadowRoot?.contains(overlay) !== true) {
       overlay = this.buildDatasetBrowser();
@@ -5899,8 +5904,24 @@ export class FolioDoc extends HTMLElement {
     filter?.focus();
   }
 
-  private closeDataset(): void {
-    if (this.dsBrowser) this.dsBrowser.hidden = true;
+  private closeDataset(returnToDocument = false): void {
+    if (!this.dsBrowser) return;
+    this.dsBrowser.hidden = true;
+    if (!returnToDocument) return;
+    // The way back: the sheet closes onto the table's own figure in
+    // the document, so the reader lands where they came from.
+    const index = this.dsBlockIndex;
+    this.dsBlockIndex = -1;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const el =
+      index >= 0
+        ? (host?.children[index] as HTMLElement | undefined)
+        : undefined;
+    if (!host || !el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    this.holdReveal(host, el);
+    if (host.getAttribute("contenteditable") === "true")
+      (host as HTMLElement).focus({ preventScroll: true });
   }
 
   private buildDatasetBrowser(): HTMLElement {
@@ -5911,21 +5932,37 @@ export class FolioDoc extends HTMLElement {
     overlay.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") {
         ev.preventDefault();
-        this.closeDataset();
+        this.closeDataset(true);
       }
     });
 
+    // A full-screen SHEET of the document's own paper (spec:
+    // docs/specs/dataset-browser.md), not a floating dialog: the desk
+    // shows around it, the page carries the host's lift, and the
+    // header names the dataset and the section it lives in.
     const panel = document.createElement("div");
     panel.className = "folio-ds-panel";
 
     const head = document.createElement("div");
     head.className = "folio-ds-head";
+    const idWrap = document.createElement("div");
+    idWrap.className = "folio-ds-id";
+    const kicker = document.createElement("span");
+    kicker.className = "folio-ds-kicker";
+    kicker.textContent = "Dataset";
+    const titleRow = document.createElement("span");
+    titleRow.className = "folio-ds-titlerow";
     const title = document.createElement("span");
     title.className = "folio-ds-title";
+    const where = document.createElement("span");
+    where.className = "folio-ds-where";
+    titleRow.append(title, where);
+    idWrap.append(kicker, titleRow);
     const filter = document.createElement("input");
     filter.className = "folio-ds-filter";
     filter.type = "text";
     filter.placeholder = 'filter (Jexl), e.g. v > 100 && region != "South"';
+    filter.setAttribute("aria-label", "Filter rows (Jexl)");
     filter.addEventListener("input", () => {
       this.dsState.filter = filter.value.trim();
       this.refreshDatasetBrowser();
@@ -5935,9 +5972,11 @@ export class FolioDoc extends HTMLElement {
     const done = document.createElement("button");
     done.className = "folio-ds-done";
     done.type = "button";
-    done.textContent = "Done";
-    done.addEventListener("click", () => this.closeDataset());
-    head.append(title, filter, count, done);
+    done.textContent = "← Back to document";
+    done.title =
+      "Close the dataset and return to its table in the document (Esc)";
+    done.addEventListener("click", () => this.closeDataset(true));
+    head.append(idWrap, filter, count, done);
 
     const grid = document.createElement("div");
     grid.className = "folio-ds-grid";
@@ -6012,6 +6051,25 @@ export class FolioDoc extends HTMLElement {
     if (!block || block.kind !== "table") return;
     const title = overlay.querySelector<HTMLElement>(".folio-ds-title");
     if (title) title.textContent = `@${block.table.id}`;
+    // Name the section the dataset lives in: in a full-screen sheet
+    // the document around it is not visible, so the header carries
+    // that context.
+    const where = overlay.querySelector<HTMLElement>(".folio-ds-where");
+    if (where) {
+      let label = "";
+      const idx =
+        this.doc?.blocks.findIndex(
+          (b) => b.kind === "table" && b.table.id === tableId,
+        ) ?? -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        const b = this.doc?.blocks[i];
+        if (b?.kind === "heading") {
+          label = `in “${b.text}”`;
+          break;
+        }
+      }
+      where.textContent = label;
+    }
     const { indexes, error } = this.datasetDisplayIndexes();
     const count = overlay.querySelector<HTMLElement>(".folio-ds-count");
     if (count) {
