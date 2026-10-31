@@ -1397,7 +1397,9 @@
       /* Printing (and PDF via the OS print dialog) shows the
          document, not the app chrome. */
       @page {
-        size: A4;
+        /* The document's `page.size` style key, written by preparePrint;
+           A4 is the default for a raw Markdown file. */
+        size: var(--folio-page-size, A4);
         margin: 18mm 16mm;
       }
       @media print {
@@ -2239,6 +2241,11 @@
               />
             </svg>
           </button>
+          <button id="btn-play" title="Play slideshow">
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <path d="M4 2.5v11l9-5.5-9-5.5z" />
+            </svg>
+          </button>
         </div>
         <button
           id="btn-search"
@@ -2662,6 +2669,15 @@
         <select id="set-page-header">
           <option value="default">Title, from page 2</option>
           <option value="off">None</option>
+        </select>
+        <label for="set-page-size">Paper size</label>
+        <select id="set-page-size">
+          <option value="default">Theme default (a4)</option>
+          <option value="a4">A4</option>
+          <option value="a5">A5</option>
+          <option value="letter">US Letter</option>
+          <option value="16:9">Slide 16:9</option>
+          <option value="4:3">Slide 4:3</option>
         </select>
         <div class="settings-actions">
           <button type="button" id="btn-settings-cancel" class="plain">

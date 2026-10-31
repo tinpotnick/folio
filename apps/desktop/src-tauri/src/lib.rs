@@ -288,7 +288,8 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
 
 /// Export the document as a PDF (ADR-0025): a save dialog, then the
 /// webview prints itself straight to that file with the print
-/// stylesheet (A4, 18 x 16 mm margins, as `@page` says) - no print
+/// stylesheet (the document's `page.size`, 18 x 16 mm margins, as
+/// `@page` says; the furniture payload carries the size) - no print
 /// dialog, the same pages Print makes.
 #[tauri::command]
 async fn export_pdf(
@@ -311,7 +312,8 @@ async fn export_pdf(
         .into_path()
         .map_err(|e| e.to_string())?;
     remember_dir(&app, &path);
-    print_to_pdf(&window, &path).await?;
+    let page_size = furniture.as_ref().map(|f| f.page_size.clone());
+    print_to_pdf(&window, &path, page_size.as_deref()).await?;
     // The running header and page numbers: WebKitGTK ignores the print
     // stylesheet's page-margin boxes, so they are stamped on after.
     if let Some(f) = furniture {
@@ -321,7 +323,11 @@ async fn export_pdf(
 }
 
 #[cfg(target_os = "linux")]
-async fn print_to_pdf(window: &tauri::WebviewWindow, path: &Path) -> Result<(), String> {
+async fn print_to_pdf(
+    window: &tauri::WebviewWindow,
+    path: &Path,
+    page_size: Option<&str>,
+) -> Result<(), String> {
     use webkit2gtk::PrintOperationExt;
     let uri = gtk::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
@@ -334,7 +340,26 @@ async fn print_to_pdf(window: &tauri::WebviewWindow, path: &Path) -> Result<(), 
             settings.set("output-uri", Some(uri.as_str()));
             op.set_print_settings(&settings);
             let page = gtk::PageSetup::new();
-            page.set_paper_size(&gtk::PaperSize::new(Some("iso_a4")));
+            // The document's `page.size` key (docs/specs/slides.md);
+            // A4 is the default for a raw Markdown file.
+            let paper = match page_size.unwrap_or("a4") {
+                "a5" => gtk::PaperSize::new(Some("iso_a5")),
+                "letter" => gtk::PaperSize::new(Some("na_letter")),
+                "16:9" => gtk::PaperSize::new_custom(
+                    "folio-16x9",
+                    16.0 * 25.4,
+                    9.0 * 25.4,
+                    gtk::Unit::Mm,
+                ),
+                "4:3" => gtk::PaperSize::new_custom(
+                    "folio-4x3",
+                    (32.0 / 3.0) * 25.4,
+                    8.0 * 25.4,
+                    gtk::Unit::Mm,
+                ),
+                _ => gtk::PaperSize::new(Some("iso_a4")),
+            };
+            page.set_paper_size(&paper);
             page.set_top_margin(18.0, gtk::Unit::Mm);
             page.set_bottom_margin(18.0, gtk::Unit::Mm);
             page.set_left_margin(16.0, gtk::Unit::Mm);
@@ -453,6 +478,7 @@ mod tests {
             &super::pdf_furniture::Furniture {
                 header: Some("Q3 Sales Review — £ test".into()),
                 numbers: true,
+                page_size: "a4".into(),
             },
         )
         .unwrap();

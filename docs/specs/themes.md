@@ -44,6 +44,24 @@ a document may outlive a theme.
 | `elegant` | Elegant | Playfair Display over airy Inter, centered title, gold table rules, emerald and gold |
 | `academic` | Academic | Justified Source Serif, compact heads, centered title, narrow measure, greyscale figures |
 | `swiss` | Swiss | Bold Inter, oversized tight title, rules above h2, signal-red accent |
+| `deck-clean` | Deck (light) | Light slide deck: Space Grotesk heads, striped tables, corporate blues, `slide.scale` 1.7 |
+| `deck` | Deck (dark) | Dark slide deck: light ink on #14161c, uppercase h3 labels, ledger tables, centered titles |
+
+## Slide keys (`slide.*`, docs/specs/slides.md)
+
+Applied on top of ANY theme while the slideshow is playing (never
+written to documents):
+
+| Key | Values | Meaning |
+|---|---|---|
+| `slide.scale` | number (default 1.6) | multiplies the theme's type ramp for slides |
+| `slide.aspect` | `16/9` (default) or `4/3` | slide aspect; also the print page size while playing |
+| `slide.background.light` / `.dark` | color | solid deck background per rendition |
+| `slide.valign` | `start` (default) or `center` | vertical placement of slide bodies |
+| `slide.title` | `corner` (default) or `centered` | title-slide treatment |
+| `slide.image.placement` | `above` (default) or `background` | image with content: stacks, or fills behind with scrim |
+| `slide.image.width` | CSS length | contained image width on content slides |
+| `slide.scrim.light` / `.dark` | color+alpha | legibility scrim under background images |
 
 ## Table styles (`table.style`)
 

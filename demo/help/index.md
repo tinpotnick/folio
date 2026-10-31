@@ -54,6 +54,7 @@ Ctrl+K from anywhere.
 - [Themes](themes.md) - the whole look in one choice
 - [Document settings](settings.md) - fonts, sizes, table style, page breaks
 - [Printing and PDF](printing.md) - print, export as PDF, page numbers
+- [Presenting slides](slides.md) - play any document as a slideshow, one slide per H1
 
 ## About
 

@@ -553,7 +553,7 @@ const DS_GUTTER = "44px";
 
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ["src", "mode"];
+    return ["src", "mode", "slides"];
   }
 
   private doc: Doc | null = null;
@@ -787,6 +787,7 @@ export class FolioDoc extends HTMLElement {
       this.load(value);
     }
     if (name === "mode" && old !== value) this.restyle();
+    if (name === "slides" && old !== value) this.restyle();
   }
 
   /**
@@ -1234,6 +1235,7 @@ export class FolioDoc extends HTMLElement {
     this.renderNotes(host, true);
     root.appendChild(host);
     this.renderCrossRefs(host);
+    this.refreshSlideState();
   }
 
   private renderBlock(block: Doc["blocks"][number], idx: number): HTMLElement {
@@ -1522,7 +1524,10 @@ export class FolioDoc extends HTMLElement {
       i: number;
     }[];
     const h1s = heads.filter((h) => h.b.level === 1).length;
-    const top = h1s === 1 ? 2 : 1;
+    // While slide rendering is on every H1 is a slide, so the TOC
+    // lists them all (docs/specs/slides.md); otherwise a lone H1 is
+    // the document's title and is left out.
+    const top = h1s === 1 && !this.slides ? 2 : 1;
     const shown = heads.filter((h) => h.b.level >= top && h.b.level < top + 3);
     const signature = shown
       .map((h) => `${String(h.i)}:${String(h.b.level)}:${h.b.text}`)
@@ -6433,6 +6438,66 @@ export class FolioDoc extends HTMLElement {
     return this.getAttribute("mode") === "dark" ? "dark" : "light";
   }
 
+  /** Whether slide rendering is on (the host sets `slides`). */
+  get slides(): boolean {
+    return this.hasAttribute("slides");
+  }
+
+  /**
+   * Slide mode bookkeeping (docs/specs/slides.md), called after every
+   * render and structural sync: mark sparse slides (a lone H1, or an
+   * H1 with a single body block, center via CSS) and report overflow
+   * to the host as the `slides="overflow"` attribute value. The DOM is
+   * never windowed - every slide stays in the article.
+   */
+  private refreshSlideState(): void {
+    const host =
+      this.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
+    if (!host) return;
+    const kids = Array.from(host.children).filter(
+      (c) => !(c as HTMLElement).classList.contains("folio-notes"),
+    );
+    let overflow = false;
+    for (const child of kids) {
+      const el = child as HTMLElement;
+      if (el.tagName === "H1") {
+        const next = el.nextElementSibling;
+        const solo =
+          next === null ||
+          (next === kids[kids.length - 1] &&
+            (next.tagName === "P" || next.tagName === "BLOCKQUOTE"));
+        el.classList.toggle("slides-solo", solo && this.slides);
+        if (this.slides && el.scrollHeight > el.clientHeight + 1)
+          overflow = true;
+      } else if (this.slides && el.scrollHeight > el.clientHeight + 1) {
+        overflow = true;
+      }
+    }
+    this.setAttribute("slides", overflow ? "overflow" : "");
+    if (host) host.classList.toggle("slides-scrim", this.hasImageBackground());
+  }
+
+  /** True when any slide pairs an image figure with other content. */
+  private hasImageBackground(): boolean {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return false;
+    const kids = Array.from(host.children);
+    let inSlide = false;
+    let image = false;
+    for (const child of kids) {
+      const el = child as HTMLElement;
+      if (el.tagName === "H1") {
+        if (inSlide && image) return true;
+        inSlide = true;
+        image = false;
+        continue;
+      }
+      if (!inSlide) continue;
+      if (el.tagName === "FIGURE" && el.querySelector("img")) image = true;
+    }
+    return inSlide && image;
+  }
+
   /**
    * Re-dress for a mode change WITHOUT a re-render: swap the theme
    * stylesheet and re-paint the figures that bake colors in (charts,
@@ -6445,6 +6510,9 @@ export class FolioDoc extends HTMLElement {
     const style = root.querySelector("style#folio-theme");
     if (style)
       style.textContent = themeCss(themeFromDoc(this.doc), this.mode());
+    this.refreshSlideState();
+    const hostEl = root.querySelector("article.folio-doc");
+    if (hostEl) this.renderContents(hostEl);
     for (const fig of Array.from(
       root.querySelectorAll<HTMLElement>("[data-chart-source]"),
     )) {

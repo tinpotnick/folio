@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseDoc } from "@folio/engine/doc";
 import {
   PALETTES,
+  pageSizeCss,
   presetTheme,
   themeCss,
   themeFromDoc,
@@ -39,8 +40,10 @@ function contrast(a: string, b: string): number {
 describe("theme style keys", () => {
   it("the default theme has no page-break rules and is booktabs", () => {
     const css = themeOf("");
-    expect(css).not.toContain("break-before");
-    expect(css).not.toContain("page-break-before");
+    // Slide rules are scoped to [slides] and print; the plain
+    // document emits no break rules.
+    expect(css).not.toContain("article.folio-doc > h1:not(:first-child)");
+    expect(css).not.toContain("article.folio-doc:not([slides])");
     expect(docTheme("").tableStyle).toBe("booktabs");
   });
 
@@ -55,7 +58,7 @@ describe("theme style keys", () => {
 
   it("a page-break rule is not emitted for other values", () => {
     const css = themeOf("---\nstyle:\n  pagebreak.h1: never\n---\n\n");
-    expect(css).not.toContain("break-before");
+    expect(css).not.toContain("article.folio-doc > h1:not(:first-child)");
   });
 
   it("table.style plain emits the full grid", () => {
@@ -91,9 +94,11 @@ describe("theme style keys", () => {
 describe("shipped themes", () => {
   const names = themeNames();
 
-  it("ships ten themes, default first", () => {
-    expect(names).toHaveLength(10);
+  it("ships twelve themes, default first", () => {
+    expect(names).toHaveLength(12);
     expect(names[0]).toBe("default");
+    expect(names).toContain("deck");
+    expect(names).toContain("deck-clean");
   });
 
   it("every theme names only bundled faces (offline, identical everywhere)", () => {
@@ -188,5 +193,54 @@ describe("renditions", () => {
   it("a bundled family gets its category fallback; others a serif", () => {
     expect(fontStack("Inter")).toContain("sans-serif");
     expect(fontStack("Merriweather")).toBe('"Merriweather", Georgia, serif');
+  });
+});
+
+describe("slides (docs/specs/slides.md)", () => {
+  it("slide rules are scoped to [slides] and never apply to the plain document", () => {
+    const css = themeOf("");
+    expect(css).toContain("article.folio-doc[slides]");
+    expect(css).not.toContain("article.folio-doc:not([slides])");
+    expect(css).toContain("aspect-ratio: 16 / 9");
+  });
+
+  it("slide CSS scales the theme ramp by slide.scale", () => {
+    const css = themeOf("---\nstyle:\n  slide.scale: 2\n---\n\n");
+    expect(css).toContain("font-size: calc(17px * 2)");
+  });
+
+  it("slide.aspect 4/3 changes the slide aspect and print size", () => {
+    const css = themeOf("---\nstyle:\n  slide.aspect: 4/3\n---\n\n");
+    expect(css).toContain("aspect-ratio: 4 / 3");
+  });
+
+  it("slide rendering breaks every H1 onto its own printed page", () => {
+    const css = themeOf("");
+    expect(css).toContain("article.folio-doc[slides] > h1:not(:first-child)");
+    expect(css).toContain("break-before: page");
+  });
+
+  it("page.size is a typed style key, default a4, 16:9 maps to 16in 9in", () => {
+    expect(docTheme("").pageSize).toBe("a4");
+    expect(docTheme("---\nstyle:\n  page.size: letter\n---\n\n").pageSize).toBe(
+      "letter",
+    );
+    expect(docTheme("---\nstyle:\n  page.size: 16:9\n---\n\n").pageSize).toBe(
+      "16:9",
+    );
+    expect(docTheme("---\nstyle:\n  page.size: bogus\n---\n\n").pageSize).toBe(
+      "a4",
+    );
+    expect(pageSizeCss("a4")).toBe("A4");
+    expect(pageSizeCss("16:9")).toBe("16in 9in");
+    expect(pageSizeCss("4:3")).toBe("10.67in 8in");
+  });
+
+  it("deck themes ship with slide keys and pass the legibility rules", () => {
+    for (const name of ["deck", "deck-clean"]) {
+      const t = presetTheme(name);
+      expect(t.slide.scale).toBeGreaterThan(1);
+      expect(["16/9", "4/3"]).toContain(t.slide.aspect);
+    }
   });
 });

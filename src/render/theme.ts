@@ -76,6 +76,34 @@ export interface Theme {
   pageBreakH2: boolean;
   /** How citations read (docs/specs/citations.md). */
   citationStyle: CitationStyle;
+  /** Paper size for print/PDF (`page.size` style key, default a4). */
+  pageSize: PageSize;
+  /** Slide look, applied on top of any theme while playing (slides.md). */
+  slide: SlideTheme;
+}
+
+/** Typed `page.size` values (docs/specs/slides.md). */
+export const PAGE_SIZES = ["a4", "a5", "letter", "16:9", "4:3"] as const;
+export type PageSize = (typeof PAGE_SIZES)[number];
+
+/** The slide.* keys: closed, typed, theme-side only (ADR-0002). */
+export interface SlideTheme {
+  /** Multiplies the theme's type ramp while slide rendering is on. */
+  scale: number;
+  /** Slide page aspect; also the print page size while playing. */
+  aspect: "16/9" | "4/3";
+  /** Solid deck background per mode (overrides the paper color). */
+  background: Record<Mode, string>;
+  /** Vertical placement of the slide body. */
+  valign: "start" | "center";
+  /** Title-slide treatment for a pure title slide. */
+  title: "corner" | "centered";
+  /** Image placement on content slides; alone-on-a-slide is always full-bleed. */
+  imagePlacement: "above" | "background";
+  /** Contained image width on content slides. */
+  imageWidth: string;
+  /** Scrim under overlaid content when an image is the background. */
+  scrim: Record<Mode, string>;
 }
 
 /**
@@ -85,8 +113,8 @@ export interface Theme {
  */
 export const PALETTES: Record<string, Record<Mode, string[]>> = {
   muted: {
-    light: ["#3d5a98", "#2a9d8f", "#b5761c", "#c8553d", "#7a5c99", "#5c7c5a"],
-    dark: ["#8ea6dd", "#5fc4b6", "#e8b66a", "#e08a74", "#b49ad3", "#93b58f"],
+    light: ["#2f4a86", "#1f7d70", "#9c6210", "#b04228", "#644a86", "#4a6647"],
+    dark: ["#a8bdf2", "#7adccc", "#f4cca0", "#f0aa96", "#ccb8e8", "#b0d0aa"],
   },
   corporate: {
     light: ["#1f3a5f", "#3f72a6", "#5a8cbc", "#a8875b", "#5b6b7a"],
@@ -97,8 +125,8 @@ export const PALETTES: Record<string, Record<Mode, string[]>> = {
     dark: ["#93a8c4", "#5eb8ad", "#d9a35b", "#a78bda", "#cbd5e1"],
   },
   warm: {
-    light: ["#b4442c", "#b8701c", "#5f8a6b", "#8e4b6e", "#3f6a92"],
-    dark: ["#e4806a", "#e9ae62", "#8fbd9b", "#c587a8", "#86acd1"],
+    light: ["#9c3520", "#9c5c10", "#47704f", "#703854", "#2d5278"],
+    dark: ["#f4a08e", "#f4c87e", "#a8dcbe", "#dfa8cc", "#a8cdf0"],
   },
   sepia: {
     light: ["#7a4a2a", "#a8763e", "#5d6b4a", "#8c3b3b", "#4a5a6e"],
@@ -173,6 +201,20 @@ const DEFAULT_THEME: Theme = {
   pageBreakH1: false,
   pageBreakH2: false,
   citationStyle: "author-date",
+  pageSize: "a4",
+  slide: {
+    scale: 1.6,
+    aspect: "16/9",
+    background: { light: "#ffffff", dark: "#1c1c1f" },
+    valign: "start",
+    title: "corner",
+    imagePlacement: "above",
+    imageWidth: "70%",
+    scrim: {
+      light: "rgba(255, 255, 255, 0.72)",
+      dark: "rgba(20, 20, 24, 0.72)",
+    },
+  },
 };
 
 function palette(name: string): Record<Mode, string[]> {
@@ -605,6 +647,128 @@ export const THEME_PRESETS: Record<
       },
     },
   },
+  "deck-clean": {
+    info: {
+      label: "Deck (light)",
+      description: "Light slides: big type, full-bleed image slides, airy",
+    },
+    look: {
+      bodyFont: fontStack("Inter"),
+      headingFont: fontStack("Space Grotesk"),
+      h1Font: fontStack("Space Grotesk"),
+      bodySize: "16px",
+      lineHeight: 1.55,
+      h1Size: "34pt",
+      h2Size: "22pt",
+      h3Size: "17pt",
+      headingWeight: 700,
+      headingTracking: "-0.02em",
+      h1Align: "start",
+      h2Rule: "below",
+      h3Case: "small-caps",
+      tableStyle: "striped",
+      palette: {
+        light: PALETTES["corporate"]?.light ?? DEFAULT_THEME.palette.light,
+        dark: PALETTES["corporate"]?.light ?? DEFAULT_THEME.palette.dark,
+      },
+      colors: {
+        light: {
+          paper: "#ffffff",
+          ink: "#17202a",
+          muted: "#5b6675",
+          heading: "#101820",
+          accent: "#2b5d94",
+          rule: "#17202a",
+          hairline: "#dfe5ec",
+          tint: "#f2f6fa",
+        },
+        dark: {
+          paper: "#ffffff",
+          ink: "#17202a",
+          muted: "#5b6675",
+          heading: "#101820",
+          accent: "#2b5d94",
+          rule: "#17202a",
+          hairline: "#dfe5ec",
+          tint: "#f2f6fa",
+        },
+      },
+      slide: {
+        scale: 1.7,
+        aspect: "16/9",
+        background: { light: "#ffffff", dark: "#ffffff" },
+        valign: "start",
+        title: "corner",
+        imagePlacement: "above",
+        imageWidth: "68%",
+        scrim: {
+          light: "rgba(255, 255, 255, 0.72)",
+          dark: "rgba(255, 255, 255, 0.72)",
+        },
+      },
+    },
+  },
+  deck: {
+    info: {
+      label: "Deck (dark)",
+      description: "Dark slides: light ink on a dark page, muted charts",
+    },
+    look: {
+      bodyFont: fontStack("Inter"),
+      headingFont: fontStack("Inter"),
+      h1Font: fontStack("Inter"),
+      bodySize: "16px",
+      lineHeight: 1.55,
+      h1Size: "34pt",
+      h2Size: "22pt",
+      h3Size: "17pt",
+      headingWeight: 700,
+      headingTracking: "-0.02em",
+      h1Align: "center",
+      h2Rule: "above",
+      h3Case: "uppercase",
+      tableStyle: "ledger",
+      palette: {
+        light: PALETTES["muted"]?.dark ?? DEFAULT_THEME.palette.light,
+        dark: PALETTES["muted"]?.dark ?? DEFAULT_THEME.palette.dark,
+      },
+      colors: {
+        light: {
+          paper: "#14161c",
+          ink: "#e8ebf1",
+          muted: "#9aa4b2",
+          heading: "#f5f7fb",
+          accent: "#8fb0f5",
+          rule: "#e8ebf1",
+          hairline: "#333947",
+          tint: "#1d2029",
+        },
+        dark: {
+          paper: "#14161c",
+          ink: "#e8ebf1",
+          muted: "#9aa4b2",
+          heading: "#f5f7fb",
+          accent: "#8fb0f5",
+          rule: "#e8ebf1",
+          hairline: "#333947",
+          tint: "#1d2029",
+        },
+      },
+      slide: {
+        scale: 1.7,
+        aspect: "16/9",
+        background: { light: "#14161c", dark: "#14161c" },
+        valign: "start",
+        title: "centered",
+        imagePlacement: "above",
+        imageWidth: "68%",
+        scrim: {
+          light: "rgba(20, 22, 28, 0.72)",
+          dark: "rgba(20, 22, 28, 0.72)",
+        },
+      },
+    },
+  },
 };
 
 /** The theme names the settings dialog offers, in order. */
@@ -662,6 +826,59 @@ export function themeFromDoc(doc: Doc): Theme {
     )
       ? (style.get("citation.style") as CitationStyle)
       : base.citationStyle,
+    pageSize: (PAGE_SIZES as readonly string[]).includes(
+      style.get("page.size") ?? "",
+    )
+      ? (style.get("page.size") as PageSize)
+      : base.pageSize,
+    slide: slideFromStyle(base.slide, style),
+  };
+}
+
+/** The slide.* style keys overlay the theme's slide block. */
+function slideFromStyle(
+  base: SlideTheme,
+  style: Map<string, string>,
+): SlideTheme {
+  const scale = Number(style.get("slide.scale"));
+  const aspect = style.get("slide.aspect");
+  const valign = style.get("slide.valign");
+  const title = style.get("slide.title");
+  const placement = style.get("slide.image.placement");
+  const scrimLight = style.get("slide.scrim.light");
+  const scrimDark = style.get("slide.scrim.dark");
+  const bgLight = style.get("slide.background.light");
+  const bgDark = style.get("slide.background.dark");
+  return {
+    scale: Number.isFinite(scale) && scale > 0 ? scale : base.scale,
+    aspect: aspect === "4/3" ? "4/3" : aspect === "16/9" ? "16/9" : base.aspect,
+    background: {
+      light: bgLight ?? base.background.light,
+      dark: bgDark ?? base.background.dark,
+    },
+    valign:
+      valign === "center"
+        ? "center"
+        : valign === "start"
+          ? "start"
+          : base.valign,
+    title:
+      title === "centered"
+        ? "centered"
+        : title === "corner"
+          ? "corner"
+          : base.title,
+    imagePlacement:
+      placement === "background"
+        ? "background"
+        : placement === "above"
+          ? "above"
+          : base.imagePlacement,
+    imageWidth: style.get("slide.image.width") ?? base.imageWidth,
+    scrim: {
+      light: scrimLight ?? base.scrim.light,
+      dark: scrimDark ?? base.scrim.dark,
+    },
   };
 }
 
@@ -802,6 +1019,147 @@ function tableCss(style: TableStyle, mode: Mode): string {
     case "booktabs":
       return "";
   }
+}
+
+/** The CSS `@page { size: ... }` value for a typed page size. */
+export function pageSizeCss(size: PageSize): string {
+  switch (size) {
+    case "a4":
+      return "A4";
+    case "a5":
+      return "A5";
+    case "letter":
+      return "letter";
+    case "16:9":
+      return "16in 9in";
+    case "4:3":
+      return "10.67in 8in";
+  }
+}
+
+/**
+ * Slide rendering (docs/specs/slides.md): applied only while the
+ * component's `slides` attribute is set - one slide per H1, full DOM,
+ * no windowing. Type scales by slide.scale over the theme's ramp;
+ * composition and image rules are theme decisions. Print paginates
+ * one slide per page and uses the slide aspect as the page size.
+ */
+export function slideCss(theme: Theme, mode: Mode): string {
+  const s = theme.slide;
+  const aspect = s.aspect === "4/3" ? "4 / 3" : "16 / 9";
+  const scrim = s.scrim[mode];
+  const bg = s.background[mode];
+  const titleCentered = s.title === "centered";
+  const valignCenter = s.valign === "center";
+  return `
+    article.folio-doc[slides] {
+      max-width: none;
+      margin: 0;
+      background: ${bg};
+      padding: 0;
+      overflow: hidden;
+      font-size: calc(${theme.bodySize} * ${String(s.scale)});
+    }
+    article.folio-doc[slides] > * {
+      box-sizing: border-box;
+      aspect-ratio: ${aspect};
+      width: 100%;
+      max-width: calc((100vh - 0px) * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"});
+      max-height: 100vh;
+      margin: 0 auto;
+      padding: 6vh 7vw;
+      display: flex;
+      flex-direction: column;
+      justify-content: ${valignCenter ? "center" : "flex-start"};
+      overflow: hidden;
+      background: ${bg};
+    }
+    article.folio-doc[slides] > h1 {
+      font-size: calc(${theme.h1Size} * ${String(s.scale)});
+      flex: none;
+    }
+    /* Sparse slides center on their own: a lone sentence, a lone
+       blockquote (pull-quote), or an empty body (pure title slide). */
+    article.folio-doc[slides] > h1.slides-solo,
+    article.folio-doc[slides] > h1:has(+ :last-child) {
+      margin-top: ${titleCentered ? "auto" : "0"};
+      margin-bottom: ${titleCentered ? "auto" : "0.4em"};
+      ${titleCentered ? "text-align: center;" : ""}
+    }
+    article.folio-doc[slides] > h1:only-child {
+      margin: auto;
+      ${titleCentered ? "text-align: center;" : ""}
+    }
+    article.folio-doc[slides] > h2 { font-size: calc(${theme.h2Size} * ${String(s.scale)}); }
+    article.folio-doc[slides] > h3 { font-size: calc(${theme.h3Size} * ${String(s.scale)}); }
+    article.folio-doc[slides] li { margin: 0.35em 0; }
+    article.folio-doc[slides] blockquote {
+      font-size: 1.25em;
+      font-style: italic;
+      border-left: 0.12em solid var(--folio-accent, currentColor);
+      padding-left: 0.8em;
+      margin: 0.8em 0;
+    }
+    article.folio-doc[slides] figure {
+      margin: 0.6em 0;
+      max-width: 100%;
+    }
+    article.folio-doc[slides] figure img,
+    article.folio-doc[slides] figure svg {
+      max-width: 100%;
+      max-height: 62vh;
+      object-fit: contain;
+    }
+    /* Image-only slide: full-bleed divider/background. */
+    article.folio-doc[slides] > figure:only-of-type {
+      aspect-ratio: ${aspect};
+      padding: 0;
+      margin: 0 auto;
+      width: 100%;
+      max-width: calc(100vh * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"});
+    }
+    article.folio-doc[slides] > figure:only-of-type img,
+    article.folio-doc[slides] > figure:only-of-type > img {
+      width: 100%;
+      height: 100%;
+      max-height: none;
+      object-fit: cover;
+    }
+    article.folio-doc[slides] > figure:only-of-type figcaption {
+      position: absolute;
+    }
+    /* Image with content: stacks above it, or fills the slide as a
+       background with a scrim under the text. */
+    article.folio-doc[slides] > figure:not(:only-of-type) {
+      width: ${s.imagePlacement === "background" ? "100%" : s.imageWidth};
+      ${s.imagePlacement === "background" ? `position: absolute; inset: 0; margin: 0; padding: 0; z-index: -1;` : ""}
+    }
+    article.folio-doc[slides] > figure:not(:only-of-type) img {
+      ${s.imagePlacement === "background" ? "width: 100%; height: 100%; max-height: none; object-fit: cover;" : ""}
+    }
+    article.folio-doc[slides].slides-scrim::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: ${scrim};
+      z-index: -1;
+    }
+    article.folio-doc[slides] > pre,
+    article.folio-doc[slides] figure.folio-codeblock {
+      font-size: ${theme.bodySize};
+    }
+    @media print {
+      article.folio-doc[slides] > h1:not(:first-child) {
+        break-before: page;
+        page-break-before: always;
+      }
+      article.folio-doc[slides] > * {
+        aspect-ratio: ${aspect};
+        max-height: none;
+        break-inside: avoid;
+      }
+    }
+  `;
 }
 
 /** The theme's heading treatment (font, weight, rules, case). */
@@ -994,6 +1352,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
         ? `@media print { article.folio-doc > h2:not(:first-child) { break-before: page; page-break-before: always; } }`
         : ""
     }
+    ${slideCss(theme, mode)}
     /* Numbers right-align (ADR-0002, derived from the column type).
        Specific enough to beat the bidi rule's text-align: start. */
     article.folio-doc td.num,

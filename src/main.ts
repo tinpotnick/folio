@@ -8,6 +8,7 @@ import {
   furnitureCss,
   furnitureFont,
   furnitureFor,
+  pageSizeFor,
 } from "./render/page-furniture";
 import "./component.js";
 import type { FolioDoc } from "./component.js";
@@ -35,8 +36,11 @@ import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
 import {
   PALETTES,
+  PAGE_SIZES,
   TABLE_STYLES,
+  pageSizeCss,
   presetTheme,
+  themeFromDoc,
   themeInfo,
   themeNames,
 } from "./render/theme.js";
@@ -70,6 +74,7 @@ const el = requireEl<FolioDoc>("#the-doc");
 const editor = requireEl<HTMLTextAreaElement>("#editor");
 const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
+const btnPlay = requireEl<HTMLButtonElement>("#btn-play");
 const status = requireEl<HTMLElement>("#status");
 const sidebar = requireEl<HTMLElement>("#sidebar");
 const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
@@ -289,6 +294,9 @@ btnView.addEventListener("click", () => {
 });
 
 btnMd.addEventListener("click", () => {
+  // Leaving for the source view stops the slideshow (spec:
+  // docs/specs/slides.md): play is a flag on the document view.
+  if (playing) setPlaying(false);
   // The Markdown view shows first: hiding the document may commit an
   // open editor (an equation's), and that change must land here.
   editor.hidden = false;
@@ -299,6 +307,110 @@ btnMd.addEventListener("click", () => {
   renderHighlight();
   btnMd.classList.add("active");
   btnView.classList.remove("active");
+});
+
+/* --- Slideshow (spec: docs/specs/slides.md) --- */
+
+/**
+ * Play is a session flag, never written to the document: it sets the
+ * component's `slides` attribute (one slide per H1, full DOM) and
+ * fullscreen. Arrow keys / click advance while playing; Esc exits
+ * both. The saved file is byte-identical before and after.
+ */
+let playing = false;
+let currentSlide = 0;
+
+function slideHeads(): HTMLElement[] {
+  const root = el.shadowRoot;
+  if (!root) return [];
+  return Array.from(
+    root.querySelectorAll<HTMLElement>("article.folio-doc > h1"),
+  );
+}
+
+function reflectPlay(): void {
+  btnPlay.classList.toggle("active", playing);
+  btnPlay.title = playing ? "Stop slideshow" : "Play slideshow";
+  btnPlay.setAttribute("aria-label", btnPlay.title);
+  const heads = slideHeads();
+  const n = heads.length;
+  if (playing && n > 0) {
+    currentSlide = Math.min(currentSlide, n - 1);
+    status.textContent = `Slide ${String(currentSlide + 1)} of ${String(n)}`;
+    status.classList.add("show");
+  } else if (playing) {
+    status.textContent = "No slides - add an H1 heading";
+    status.classList.add("show");
+  }
+  // An overflowing slide is marked by the component on `slides`.
+  if (playing && el.getAttribute("slides") === "overflow") {
+    status.textContent += " - a slide overflows";
+  }
+}
+
+function setPlaying(on: boolean): void {
+  if (on === playing) return;
+  playing = on;
+  currentSlide = 0;
+  if (on) {
+    if (mdWrap.hidden === false) btnView.click();
+    el.setAttribute("slides", "");
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  } else {
+    el.removeAttribute("slides");
+    if (document.fullscreenElement) void document.exitFullscreen();
+  }
+  reflectPlay();
+}
+
+function advanceSlide(delta: number): void {
+  const heads = slideHeads();
+  if (heads.length === 0) return;
+  // Clamp at the last slide (spec: edge cases).
+  currentSlide = Math.max(0, Math.min(heads.length - 1, currentSlide + delta));
+  heads[currentSlide]?.scrollIntoView({ block: "start" });
+  reflectPlay();
+}
+
+btnPlay.addEventListener("click", () => setPlaying(!playing));
+
+document.addEventListener("fullscreenchange", () => {
+  // Esc out of fullscreen ends the show too.
+  if (playing && !document.fullscreenElement) setPlaying(false);
+});
+
+document.addEventListener("keydown", (ev) => {
+  if (!playing) return;
+  if (ev.key === "Escape") {
+    setPlaying(false);
+    return;
+  }
+  // While the caret is in the document's text, arrows move the caret
+  // (play is a display flag, not a lock); otherwise they advance.
+  const sel = window.getSelection();
+  const anchor = sel?.anchorNode;
+  const inText =
+    anchor instanceof Node &&
+    anchor.nodeType === Node.TEXT_NODE &&
+    el.shadowRoot?.contains(anchor) === true;
+  if (inText && ev.key.startsWith("Arrow")) return;
+  if (ev.key === "ArrowRight" || ev.key === "PageDown" || ev.key === " ") {
+    ev.preventDefault();
+    advanceSlide(1);
+  } else if (ev.key === "ArrowLeft" || ev.key === "PageUp") {
+    ev.preventDefault();
+    advanceSlide(-1);
+  }
+});
+
+// Click advances while playing (unless it landed in editable text).
+document.addEventListener("click", (ev) => {
+  if (!playing) return;
+  const t = ev.target instanceof HTMLElement ? ev.target : null;
+  if (t && t.closest("folio-doc")) {
+    const inText = t.closest("p, li, h2, h3, h4, h5, h6, blockquote, td, th");
+    if (!inText) advanceSlide(1);
+  }
 });
 
 function currentEditable(): HTMLElement | null {
@@ -2543,6 +2655,14 @@ function paletteEntries(): PaletteEntry[] {
     action: () => (inMd ? btnView : btnMd).click(),
   });
   entries.push({
+    title: playing ? "Stop slideshow" : "Play slideshow",
+    group: "Command",
+    keywords: playing
+      ? "stop exit end slideshow presentation play present fullscreen quit"
+      : "play slideshow present presentation fullscreen slides deck h1",
+    action: () => btnPlay.click(),
+  });
+  entries.push({
     title: "Insert a table",
     group: "Command",
     keywords: "table insert new add simple markdown pipe grid rows columns",
@@ -3330,6 +3450,7 @@ const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
 const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
 const setPageNumbers = requireEl<HTMLSelectElement>("#set-page-numbers");
 const setPageHeader = requireEl<HTMLSelectElement>("#set-page-header");
+const setPageSize = requireEl<HTMLSelectElement>("#set-page-size");
 const overrideNote = requireEl<HTMLElement>("#settings-override-note");
 const btnSettingsReset = requireEl<HTMLButtonElement>("#btn-settings-reset");
 
@@ -3438,7 +3559,17 @@ function reflectThemeDefaults(): void {
   setH1Size.placeholder = look.h1Size;
   setH2Size.placeholder = look.h2Size;
   setH3Size.placeholder = look.h3Size;
+  namedPageSizeDefault();
   reflectOverrides();
+}
+
+/** The paper-size dropdown's default names the theme's value. */
+function namedPageSizeDefault(): void {
+  const def = setPageSize.querySelector<HTMLOptionElement>(
+    'option[value="default"]',
+  );
+  if (def)
+    def.textContent = `Theme default (${presetTheme(selectedTheme()).pageSize})`;
 }
 
 const overrideFields = (): (HTMLSelectElement | HTMLInputElement)[] => [
@@ -3451,6 +3582,7 @@ const overrideFields = (): (HTMLSelectElement | HTMLInputElement)[] => [
   setTableStyle,
   setPalette,
   setCitationStyle,
+  setPageSize,
 ];
 
 /** Say how many fields override the theme - they would mask it. */
@@ -3498,6 +3630,8 @@ function fillSettings(): void {
   setPageNumbers.value =
     style.get("page.numbers") === "off" ? "off" : "default";
   setPageHeader.value = style.get("page.header") === "off" ? "off" : "default";
+  fillOptions(setPageSize, PAGE_SIZES, style.get("page.size"));
+  namedPageSizeDefault();
   reflectThemeDefaults();
 }
 
@@ -3543,6 +3677,7 @@ settingsForm.addEventListener("submit", (ev) => {
       "pagebreak.h2": setPbH2.value,
       "page.numbers": setPageNumbers.value,
       "page.header": setPageHeader.value,
+      "page.size": setPageSize.value,
     };
     // The theme name rides the `theme:` frontmatter line;
     // "default" removes it so the fallback look applies.
@@ -3599,17 +3734,37 @@ function preparePrint(): void {
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
   if (!mdWrap.hidden) btnView.click();
+  // Fullscreen ends before the print dialog (spec: slides.md).
+  if (document.fullscreenElement) void document.exitFullscreen();
   // Paper is light whatever the app's mode: a dark rendition's charts
   // and diagrams would print pale-on-white. Restored after printing.
   for (const doc of Array.from(document.querySelectorAll("folio-doc"))) {
     doc.setAttribute("mode", "light");
   }
-  // The running header and page numbers, as @page margin boxes - they
-  // only apply from the document's own stylesheet.
-  printFurnitureStyle.textContent = furnitureCss(
-    furnitureFor(el.getDoc()),
-    furnitureFont(el.getDoc()),
+  // Paper size follows the document's `page.size` key - the slide
+  // aspect while slide rendering is on (spec: docs/specs/slides.md).
+  const doc = el.getDoc();
+  const size =
+    playing || el.hasAttribute("slides")
+      ? doc
+        ? themeFromDoc(doc).slide.aspect === "4/3"
+          ? "4:3"
+          : "16:9"
+        : "16:9"
+      : pageSizeFor(doc);
+  document.documentElement.style.setProperty(
+    "--folio-page-size",
+    pageSizeCss(size),
   );
+  // The running header and page numbers, as @page margin boxes - they
+  // only apply from the document's own stylesheet. Suppressed on
+  // slides (one slide per page needs no furniture).
+  const furniture = furnitureFor(doc);
+  if (playing || el.hasAttribute("slides")) {
+    furniture.header = null;
+    furniture.numbers = false;
+  }
+  printFurnitureStyle.textContent = furnitureCss(furniture, furnitureFont(doc));
 }
 const printFurnitureStyle = document.head.appendChild(
   document.createElement("style"),

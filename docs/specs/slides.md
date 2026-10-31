@@ -1,6 +1,6 @@
 # Slideshow (present a document as slides)
 
-## Status: proposed (2026-10-31) - spec only, no implementation yet
+## Status: accepted (2026-10-31)
 
 ## Decision
 
