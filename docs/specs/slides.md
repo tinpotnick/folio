@@ -69,21 +69,33 @@ cross-references semantics identical in every view.
 - **Slide rendering (theme-driven)**: a slide is a full-viewport page
   (`aspect-ratio` from the theme's `slide.aspect`, default `16/9`;
   `4/3` is a valid theme value), scaled to fit, with the H1 as its title and
-  the body flowed under it. Per-block theme decisions: bullets render
-  as slide bullets, an image block alone on a slide renders full-bleed
-  (an image-only slide is a divider/background slide), tables and
-  charts render at slide scale. New typed theme keys (closed schema,
-  ADR-0002) such as `slide.background`, `slide.title.size`,
-  `slide.body.size`, `slide.image: full-bleed | contained` - values
-  live in themes, never in the document, and the rules apply only
-  while slide rendering is on.
+  the body flowed under it.
+- **Slide typography is a scale, not new sizes**: the theme's normal
+  type ramp (body size, line height, h1-h3 sizes) is multiplied by a
+  single `slide.scale` factor (closed schema key, theme value, e.g.
+  1.6) so a book-body 11pt reads as slide-body ~18pt. The document's
+  own `body.font.size` etc. still apply as the base; slide rendering
+  only scales. `slide.title.size` / `slide.body.size` may override the
+  scaled h1 / body for a given theme, but defaults are derived from
+  the ramp x scale, never absolute literals.
+- **Per-block slide rules** (theme decisions, applied only while slide
+  rendering is on): bullets render as slide bullets (larger markers,
+  looser leading); a blockquote is a pull-quote; an image block alone
+  on a slide renders full-bleed (`slide.image: full-bleed | contained`,
+  default full-bleed when alone) - an image-only slide is a
+  divider/background slide; an image alongside other content is
+  contained at `slide.image.width`; tables and charts render at slide
+  scale (figure max-width = slide width minus padding), captions stay
+  with their figure; code/math blocks render at body scale, not scaled
+  up. Values live in themes, never in the document.
 - **Backgrounds**: whole-deck background comes from the theme
   (`slide.background`, e.g. dark deck themes; dark mode already
   re-dresses per theme). Per-slide background COLOR is not
   expressible - it would be inline styling. A per-slide photographic
   background is the image-only-slide rule above.
 - **Overflow policy**: a slide does not flow to a second page on
-  screen; the theme sets type scale and the view clips/warns. The
+  screen; `slide.scale` plus the slide rules above set the type scale
+  and the view clips/warns. The
   component measures overflow (slide scrollHeight vs slide height) and
   reports it to the host as an attribute (e.g. `slides="overflow"`,
   alongside the existing `mode` attribute read at src/component.ts);

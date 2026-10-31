@@ -30,10 +30,14 @@ Markdown document rather than a layout engine or a second file type.
   as today) but never windows - removing off-screen slides from the
   DOM would break the DOM-is-source-of-truth editing model
   (docs/specs/section-windowing.md).
-- Slide aesthetics are new closed theme keys (e.g.
-  `slide.background`, `slide.title.size`, `slide.image:
-  full-bleed | contained`), applied only while slide rendering is
-  on; an image-only slide renders full-bleed as the deck's
+- Slide aesthetics are new closed theme keys, applied only while slide
+  rendering is on: `slide.scale` multiplies the theme's normal type
+  ramp (so book-body text reads as slide-body text - one factor, not
+  new absolute sizes), plus `slide.background`, `slide.title.size` /
+  `slide.body.size` overrides, and `slide.image: full-bleed |
+  contained` with per-block rules (bullets as slide bullets, blockquote
+  as pull-quote, tables/charts at slide width, code/math at body
+  scale). An image-only slide renders full-bleed as the deck's
   divider/background mechanism. Per-slide background color stays
   inexpressible (no inline styling, ADR-0002).
 - Paper size becomes a closed style key `page.size` (default `a4`;
