@@ -80,14 +80,22 @@ cross-references semantics identical in every view.
   the ramp x scale, never absolute literals.
 - **Per-block slide rules** (theme decisions, applied only while slide
   rendering is on): bullets render as slide bullets (larger markers,
-  looser leading); a blockquote is a pull-quote; an image block alone
-  on a slide renders full-bleed (`slide.image: full-bleed | contained`,
-  default full-bleed when alone) - an image-only slide is a
-  divider/background slide; an image alongside other content is
-  contained at `slide.image.width`; tables and charts render at slide
-  scale (figure max-width = slide width minus padding), captions stay
-  with their figure; code/math blocks render at body scale, not scaled
-  up. Values live in themes, never in the document.
+  looser leading); a blockquote is a pull-quote; tables and charts
+  render at slide scale (figure max-width = slide width minus
+  padding), captions stay with their figure; code/math blocks render
+  at body scale, not scaled up. Values live in themes, never in the
+  document.
+- **Images on slides** (`slide.image.placement`, theme key, default
+  `above`): an image block **alone** on a slide always renders
+  full-bleed - the divider/background slide. An image **with other
+  content** on the slide either stacks above the text, contained at
+  `slide.image.width` (`above`), or fills the slide as a background
+  with the content overlaid (`background`, `object-fit: cover`) -
+  the common PowerPoint look. `background` applies a legibility scrim
+  from the theme (`slide.scrim`, a color + opacity per mode, default
+  a soft dark scrim in light mode / light scrim in dark) under the
+  text. Which placement a deck uses is a theme decision; the document
+  only supplies blocks.
 - **Slide composition (theme-driven, per-deck not per-slide)**:
   - `slide.valign: start | center` (default `start`) - vertical
     placement of the slide body. A slide whose body is a single
@@ -97,17 +105,21 @@ cross-references semantics identical in every view.
   - `slide.title: corner | centered` (default `corner`) - a pure
     title slide (H1 + at most one short paragraph) centers the H1 as
     a title-slide title in `centered` themes.
-  - Slides are single-column: an image alongside text stacks above
-    the text at `slide.image.width`. Multi-region layouts (image
-    left, text right) remain out of scope (below).
+  - Slides are single-column: content never splits into regions
+    (image left, text right is out of scope, below). The one
+    exception is `slide.image.placement: background`, where the image
+    is behind the single column of content, not beside it.
   - All composition keys live in the theme; the document only ever
     supplies blocks, so two decks on the same theme look consistent
     and a deck never carries layout literals (ADR-0002).
 - **Backgrounds**: whole-deck background comes from the theme
-  (`slide.background`, e.g. dark deck themes; dark mode already
-  re-dresses per theme). Per-slide background COLOR is not
-  expressible - it would be inline styling. A per-slide photographic
-  background is the image-only-slide rule above.
+  (`slide.background`, a solid color per mode - dark deck themes
+  included; dark mode already re-dresses per theme). Per-slide
+  background COLOR is not expressible - it would be inline styling
+  (ADR-0002). A per-slide photographic background is the image rules
+  above: image-only slide (full-bleed) or `slide.image.placement:
+  background` (cover + scrim). Gradients/patterns are not in the
+  closed schema.
 - **Overflow policy**: a slide does not flow to a second page on
   screen; `slide.scale` plus the slide rules above set the type scale
   and the view clips/warns. The

@@ -40,9 +40,12 @@ Markdown document rather than a layout engine or a second file type.
   scale). Composition keys (`slide.valign`, `slide.title`) center
   sparse slides (lone sentence, quote, pure title slide); slides are
   single-column, so an image beside text stacks above it. An
-  image-only slide renders full-bleed as the deck's
-  divider/background mechanism. Per-slide background color stays
-  inexpressible (no inline styling, ADR-0002).
+  image-only slide renders full-bleed as the deck's divider; with
+  `slide.image.placement: background` an image plus content renders
+  cover-fit behind the text with a theme scrim (`slide.scrim`) for
+  legibility. Deck-level background is `slide.background` (solid
+  color per mode). Per-slide background color stays inexpressible
+  (no inline styling, ADR-0002).
 - Paper size becomes a closed style key `page.size` (default `a4`;
   typed values `a4` | `letter` | `a5` | `16:9` | `4:3` | ...), read by
   all three places that currently hard-code A4: the print stylesheet's
