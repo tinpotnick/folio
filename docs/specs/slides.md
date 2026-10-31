@@ -25,9 +25,15 @@ cross-references semantics identical in every view.
   emit `break-before: page` in paged media today. A slide is the same
   H1 boundary made visible on screen while slide rendering is on.
 - All aesthetics live in themes (ADR-0002, docs/specs/themes.md):
-  deck looks are theme presets, and the new `slide.*` keys apply only
-  while slide rendering is on. Documents stay semantic; no inline
-  styling, non-negotiable #1 intact - and no new frontmatter keys.
+  the new `slide.*` keys apply on top of ANY theme while slide
+  rendering is on, so every existing theme can present. Dedicated
+  deck themes are new presets in `THEME_PRESETS`
+  (src/render/theme.ts) - e.g. a dark `deck` theme (dark paper via
+  `slide.background`, light scrim, vivid palette) and a light
+  `deck-clean` - picked with the same theme picker as reports. A deck
+  theme is a whole look; the `slide.*` keys just make slide rendering
+  legible on any look. Documents stay semantic; no inline styling,
+  non-negotiable #1 intact - and no new frontmatter keys.
 - Data flows into slides unchanged: tables are typed datasets and
   charts are queries over them (ADR-0003, ADR-0004), rendered as
   vector SVG that prints crisp; compute blocks (ADR-0030) cover the
