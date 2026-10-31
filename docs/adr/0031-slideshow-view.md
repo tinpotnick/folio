@@ -37,7 +37,10 @@ Markdown document rather than a layout engine or a second file type.
   `slide.body.size` overrides, and `slide.image: full-bleed |
   contained` with per-block rules (bullets as slide bullets, blockquote
   as pull-quote, tables/charts at slide width, code/math at body
-  scale). An image-only slide renders full-bleed as the deck's
+  scale). Composition keys (`slide.valign`, `slide.title`) center
+  sparse slides (lone sentence, quote, pure title slide); slides are
+  single-column, so an image beside text stacks above it. An
+  image-only slide renders full-bleed as the deck's
   divider/background mechanism. Per-slide background color stays
   inexpressible (no inline styling, ADR-0002).
 - Paper size becomes a closed style key `page.size` (default `a4`;

@@ -88,6 +88,21 @@ cross-references semantics identical in every view.
   scale (figure max-width = slide width minus padding), captions stay
   with their figure; code/math blocks render at body scale, not scaled
   up. Values live in themes, never in the document.
+- **Slide composition (theme-driven, per-deck not per-slide)**:
+  - `slide.valign: start | center` (default `start`) - vertical
+    placement of the slide body. A slide whose body is a single
+    sentence, a single blockquote (pull-quote), or empty (a pure
+    title slide) centers automatically regardless of the key;
+    `center` centers all slides in the deck.
+  - `slide.title: corner | centered` (default `corner`) - a pure
+    title slide (H1 + at most one short paragraph) centers the H1 as
+    a title-slide title in `centered` themes.
+  - Slides are single-column: an image alongside text stacks above
+    the text at `slide.image.width`. Multi-region layouts (image
+    left, text right) remain out of scope (below).
+  - All composition keys live in the theme; the document only ever
+    supplies blocks, so two decks on the same theme look consistent
+    and a deck never carries layout literals (ADR-0002).
 - **Backgrounds**: whole-deck background comes from the theme
   (`slide.background`, e.g. dark deck themes; dark mode already
   re-dresses per theme). Per-slide background COLOR is not
