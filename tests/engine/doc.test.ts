@@ -591,3 +591,11 @@ describe("table of contents markers (spec: docs/specs/contents.md)", () => {
     expect(doc.blocks.map((b) => b.kind)).toEqual(["prose", "toc"]);
   });
 });
+
+describe("slides golden-style invariant", () => {
+  it("a deck document serializes byte-identically (play never touches the model)", () => {
+    const deck =
+      "# Deck title\n\nPreamble.\n\n## Slide one\n\n- a\n- b\n\n## Slide two\n\nJust a sentence.\n";
+    expect(serializeDoc(parseDoc(deck))).toBe(deck);
+  });
+});

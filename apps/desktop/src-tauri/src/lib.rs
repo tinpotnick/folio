@@ -275,6 +275,41 @@ fn is_external_url(url: &str) -> bool {
 
 /// Open a link in the user's own browser (or mail app): the app's
 /// webview never navigates away from the document (ADR-0024).
+/// Open the presenter view (docs/specs/slides.md) as a second app
+/// window running the same front-end with `?presenter=1`. The two
+/// windows sync over a BroadcastChannel (mirrored through
+/// localStorage, which WebKitGTK delivers reliably across webviews).
+#[tauri::command]
+async fn open_presenter_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if let Some(existing) = app.get_webview_window("presenter") {
+        let _ = existing.unminimize();
+        let _ = existing.set_focus();
+        return Ok(());
+    }
+    let main = app.get_webview_window("main").ok_or("no main window")?;
+    let url = main.url().map_err(|e| e.to_string())?;
+    // Bundled app (tauri://localhost / http://tauri.localhost):
+    // address the asset path - NO query string, it is unreliable in
+    // the App variant; the front-end detects this window by its label
+    // "presenter" instead. Dev server: reuse its URL as-is.
+    let is_app_protocol = matches!(url.scheme(), "tauri" | "app")
+        || url.host_str() == Some("tauri.localhost");
+    let target = if is_app_protocol {
+        let path = url.path().trim_start_matches('/');
+        let path = if path.is_empty() { "index.html" } else { path };
+        WebviewUrl::App(path.into())
+    } else {
+        WebviewUrl::External(url)
+    };
+    WebviewWindowBuilder::new(&app, "presenter", target)
+        .title("folio — presenter view")
+        .inner_size(960.0, 720.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
@@ -288,7 +323,8 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
 
 /// Export the document as a PDF (ADR-0025): a save dialog, then the
 /// webview prints itself straight to that file with the print
-/// stylesheet (A4, 18 x 16 mm margins, as `@page` says) - no print
+/// stylesheet (the document's `page.size`, 18 x 16 mm margins, as
+/// `@page` says; the furniture payload carries the size) - no print
 /// dialog, the same pages Print makes.
 #[tauri::command]
 async fn export_pdf(
@@ -311,7 +347,8 @@ async fn export_pdf(
         .into_path()
         .map_err(|e| e.to_string())?;
     remember_dir(&app, &path);
-    print_to_pdf(&window, &path).await?;
+    let page_size = furniture.as_ref().map(|f| f.page_size.clone());
+    print_to_pdf(&window, &path, page_size.as_deref()).await?;
     // The running header and page numbers: WebKitGTK ignores the print
     // stylesheet's page-margin boxes, so they are stamped on after.
     if let Some(f) = furniture {
@@ -321,9 +358,15 @@ async fn export_pdf(
 }
 
 #[cfg(target_os = "linux")]
-async fn print_to_pdf(window: &tauri::WebviewWindow, path: &Path) -> Result<(), String> {
+async fn print_to_pdf(
+    window: &tauri::WebviewWindow,
+    path: &Path,
+    page_size: Option<&str>,
+) -> Result<(), String> {
     use webkit2gtk::PrintOperationExt;
     let uri = gtk::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
+    // The webview closure is 'static: own the page-size key.
+    let page_size = page_size.map(str::to_string);
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     window
         .with_webview(move |wv| {
@@ -334,7 +377,28 @@ async fn print_to_pdf(window: &tauri::WebviewWindow, path: &Path) -> Result<(), 
             settings.set("output-uri", Some(uri.as_str()));
             op.set_print_settings(&settings);
             let page = gtk::PageSetup::new();
-            page.set_paper_size(&gtk::PaperSize::new(Some("iso_a4")));
+            // The document's `page.size` key (docs/specs/slides.md);
+            // A4 is the default for a raw Markdown file.
+            let paper = match page_size.as_deref().unwrap_or("a4") {
+                "a5" => gtk::PaperSize::new(Some("iso_a5")),
+                "letter" => gtk::PaperSize::new(Some("na_letter")),
+                "16:9" => gtk::PaperSize::new_custom(
+                    "folio-16x9",
+                    "Slide 16:9",
+                    16.0 * 25.4,
+                    9.0 * 25.4,
+                    gtk::Unit::Mm,
+                ),
+                "4:3" => gtk::PaperSize::new_custom(
+                    "folio-4x3",
+                    "Slide 4:3",
+                    (32.0 / 3.0) * 25.4,
+                    8.0 * 25.4,
+                    gtk::Unit::Mm,
+                ),
+                _ => gtk::PaperSize::new(Some("iso_a4")),
+            };
+            page.set_paper_size(&paper);
             page.set_top_margin(18.0, gtk::Unit::Mm);
             page.set_bottom_margin(18.0, gtk::Unit::Mm);
             page.set_left_margin(16.0, gtk::Unit::Mm);
@@ -415,6 +479,7 @@ pub fn run() {
             save_document,
             save_text_file,
             open_external,
+            open_presenter_window,
             export_pdf,
             launch_document,
             fetch_url
@@ -453,6 +518,7 @@ mod tests {
             &super::pdf_furniture::Furniture {
                 header: Some("Q3 Sales Review — £ test".into()),
                 numbers: true,
+                page_size: "a4".into(),
             },
         )
         .unwrap();

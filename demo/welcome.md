@@ -130,6 +130,9 @@ later from the palette: Ctrl+K, then "example".
   on an amen break, with online samples you choose to download.
 - [A pure-prose poem](demo/examples/poem.md) — typography only, no
   data at all.
+- [Quarterly review deck](demo/examples/deck.md) — a document you
+  present as slides: press play and each H2 becomes one full-screen
+  slide.
 
 ## Getting around
 

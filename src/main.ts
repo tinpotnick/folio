@@ -8,6 +8,7 @@ import {
   furnitureCss,
   furnitureFont,
   furnitureFor,
+  pageSizeFor,
 } from "./render/page-furniture";
 import "./component.js";
 import type { FolioDoc } from "./component.js";
@@ -35,8 +36,11 @@ import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
 import {
   PALETTES,
+  PAGE_SIZES,
   TABLE_STYLES,
+  pageSizeCss,
   presetTheme,
+  themeFromDoc,
   themeInfo,
   themeNames,
 } from "./render/theme.js";
@@ -49,6 +53,8 @@ import {
   onFileOpened,
   openDocument,
   openExternal,
+  isPresenterWindow,
+  openPresenterWindow,
   saveDocument,
   saveTextFile,
 } from "./desktop.js";
@@ -70,6 +76,9 @@ const el = requireEl<FolioDoc>("#the-doc");
 const editor = requireEl<HTMLTextAreaElement>("#editor");
 const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
+const btnPlay = requireEl<HTMLButtonElement>("#btn-play");
+const playMenu = requireEl<HTMLElement>("#play-menu");
+const miPlayLabel = playMenu.querySelector<HTMLElement>("#mi-play .mi-label");
 const status = requireEl<HTMLElement>("#status");
 const sidebar = requireEl<HTMLElement>("#sidebar");
 const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
@@ -121,6 +130,12 @@ async function boot(): Promise<void> {
     return;
   }
   let path = bootPath();
+  if (path === null && PRESENTER) {
+    // The presenter window gets its document over the channel, not
+    // from the welcome page.
+    await openShipped(null, { history: "replace", unguarded: true });
+    return;
+  }
   if (path === null) {
     let guided = true;
     try {
@@ -269,6 +284,9 @@ function renderHighlight(): void {
 }
 
 btnView.addEventListener("click", () => {
+  // Document view while presenting stops the show (play = slides,
+  // doc = plain document; the markdown button below does the same).
+  if (playing) setPlaying(false);
   if (!editor.hidden) {
     try {
       const doc = parseDoc(editor.value);
@@ -289,6 +307,9 @@ btnView.addEventListener("click", () => {
 });
 
 btnMd.addEventListener("click", () => {
+  // Leaving for the source view stops the slideshow (spec:
+  // docs/specs/slides.md): play is a flag on the document view.
+  if (playing) setPlaying(false);
   // The Markdown view shows first: hiding the document may commit an
   // open editor (an equation's), and that change must land here.
   editor.hidden = false;
@@ -299,6 +320,341 @@ btnMd.addEventListener("click", () => {
   renderHighlight();
   btnMd.classList.add("active");
   btnView.classList.remove("active");
+});
+
+/* --- Slideshow (spec: docs/specs/slides.md) --- */
+
+/** Presenter window flag: `?presenter=1` on the web popup, or the
+ *  window label "presenter" on desktop (query strings in the bundled
+ *  app's asset path are unreliable, so the label is authoritative
+ *  there). Plus the channel syncing slide index + document between
+ *  the main and presenter windows. */
+const PRESENTER =
+  new URLSearchParams(window.location.search).get("presenter") === "1" ||
+  isPresenterWindow();
+const slidesChannel = new BroadcastChannel("folio-slides");
+/** The presenter window, if open (its opening exits fullscreen). */
+let presenterWin: Window | null = null;
+
+/* Slides messaging between the main and presenter windows:
+ * BroadcastChannel plus a localStorage mirror (WebKitGTK delivers
+ * storage events reliably across webviews; BroadcastChannel alone
+ * is flaky there). Deduped by (from, seq) since a peer may receive
+ * a message over both transports. */
+const slideMsgId = Math.random().toString(36).slice(2);
+let slideMsgSeq = 0;
+const seenSlideMsgs = new Set<string>();
+type SlideMsg = { t?: string; md?: string; slide?: number; d?: number };
+function postSlideMsg(msg: SlideMsg): void {
+  const full = { ...msg, from: slideMsgId, seq: slideMsgSeq++ };
+  slidesChannel.postMessage(full);
+  try {
+    localStorage.setItem("folio-slides-msg", JSON.stringify(full));
+  } catch {
+    // private mode: the channel alone still works in-browser
+  }
+}
+function onSlideMsg(fn: (msg: SlideMsg) => void): void {
+  const handle = (raw: unknown): void => {
+    const m = raw as SlideMsg & { from?: string; seq?: number };
+    const key = `${m.from ?? "?"}:${String(m.seq ?? "?")}`;
+    if (seenSlideMsgs.has(key)) return;
+    seenSlideMsgs.add(key);
+    if (seenSlideMsgs.size > 500) seenSlideMsgs.clear();
+    fn(m);
+  };
+  slidesChannel.addEventListener("message", (ev) => handle(ev.data));
+  window.addEventListener("storage", (ev) => {
+    if (ev.key !== "folio-slides-msg" || ev.newValue === null) return;
+    try {
+      handle(JSON.parse(ev.newValue));
+    } catch {
+      // ignore malformed
+    }
+  });
+}
+
+/**
+ * Play is a session flag, never written to the document: it sets the
+ * component's `slides` attribute (the H1 is the deck title, one slide
+ * per H2, full DOM) and fullscreen. Arrow keys / click advance while
+ * playing; Esc exits both. The saved file is byte-identical before
+ * and after.
+ */
+let playing = false;
+let currentSlide = 0;
+
+function slideHeads(): HTMLElement[] {
+  const root = el.shadowRoot;
+  if (!root) return [];
+  // Slides are the .folio-slide wrappers around each H2 (v2).
+  return Array.from(
+    root.querySelectorAll<HTMLElement>("article.folio-doc > .folio-slide"),
+  );
+}
+
+function reflectPlay(): void {
+  btnPlay.classList.toggle("active", playing);
+  btnPlay.title = playing ? "Stop slideshow" : "Play slideshow";
+  btnPlay.setAttribute("aria-label", btnPlay.title);
+  // While presenting, the play control - not the view toggle - is
+  // the active one (play always shows the document view).
+  btnView.classList.toggle("active", !playing);
+  if (miPlayLabel)
+    miPlayLabel.textContent = playing ? "Stop slideshow" : "Play slideshow";
+  const heads = slideHeads();
+  const n = heads.length;
+  if (playing && n > 0) {
+    currentSlide = Math.min(currentSlide, n - 1);
+    status.textContent = `Slide ${String(currentSlide + 1)} of ${String(n)}`;
+    status.classList.add("show");
+  } else if (playing) {
+    status.textContent = "No slides - add an H2 heading";
+    status.classList.add("show");
+  }
+  // An overflowing slide is marked by the component on `slides`.
+  if (playing && el.getAttribute("slides") === "overflow") {
+    status.textContent += " - a slide overflows";
+  }
+  // Keep any presenter window on the same slide.
+  if (playing) postSlideMsg({ t: "slide", slide: currentSlide });
+}
+
+function setPlaying(on: boolean): void {
+  if (on === playing) return;
+  playing = on;
+  currentSlide = 0;
+  if (on) {
+    if (mdWrap.hidden === false) btnView.click();
+    el.setAttribute("slides", "");
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  } else {
+    el.removeAttribute("slides");
+    if (document.fullscreenElement) void document.exitFullscreen();
+  }
+  reflectPlay();
+}
+
+function advanceSlide(delta: number): void {
+  const heads = slideHeads();
+  if (heads.length === 0) return;
+  // Clamp at the last slide (spec: edge cases).
+  currentSlide = Math.max(0, Math.min(heads.length - 1, currentSlide + delta));
+  heads[currentSlide]?.scrollIntoView({ block: "start" });
+  reflectPlay();
+}
+
+// The play button opens its dropdown exactly like Export's menu
+// (wired with toolbarMenu below); the menu items act, the button
+// itself no longer toggles - picks are "Play slideshow"/"Stop
+// slideshow" (label flips in reflectPlay) and "Open presenter view".
+
+document.addEventListener("fullscreenchange", () => {
+  // Esc out of fullscreen ends the show too - but opening the
+  // presenter window also exits fullscreen, and that must not stop
+  // the show.
+  if (
+    playing &&
+    !document.fullscreenElement &&
+    (!presenterWin || presenterWin.closed)
+  )
+    setPlaying(false);
+});
+
+document.addEventListener("keydown", (ev) => {
+  if (!playing) return;
+  if (ev.key === "Escape") {
+    // A dialog's own Escape (closing the palette, settings, ...) must
+    // not also end the show.
+    if (
+      paletteModal.open ||
+      settingsModal.open ||
+      importModal.open ||
+      unsavedModal.open
+    )
+      return;
+    setPlaying(false);
+    return;
+  }
+  // While the caret is in the document's text, keys edit text as in
+  // document view (play is a display flag, not a lock); otherwise
+  // they drive the show.
+  const host = el.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
+  const anchor = host ? docSelectionAnchor(host) : null;
+  const inText = anchor !== null && anchor.nodeType === Node.TEXT_NODE;
+  if (
+    inText &&
+    (ev.key.startsWith("Arrow") ||
+      ev.key === " " ||
+      ev.key === "PageDown" ||
+      ev.key === "PageUp" ||
+      ev.key === "n" ||
+      ev.key === "N")
+  )
+    return;
+  if (ev.key === "ArrowRight" || ev.key === "PageDown" || ev.key === " ") {
+    ev.preventDefault();
+    advanceSlide(1);
+  } else if (ev.key === "ArrowLeft" || ev.key === "PageUp") {
+    ev.preventDefault();
+    advanceSlide(-1);
+  } else if (ev.key === "n" || ev.key === "N") {
+    ev.preventDefault();
+    toggleNotes();
+  }
+});
+
+/**
+ * Speaker notes (trailing slide blockquotes): OFF on the main
+ * display while playing; N or the palette toggles them on for the
+ * presenter. They never print.
+ */
+function toggleNotes(): void {
+  if (!playing) {
+    flash("Start the slideshow first (the play button)");
+    return;
+  }
+  // The attribute is the source of truth; the component reflects it
+  // onto the article (and re-applies after re-renders). The class on
+  // the host is kept for tests/inspection.
+  const on = !el.hasAttribute("slides-notes");
+  el.toggleAttribute("slides-notes", on);
+  el.classList.toggle("slides-notes", on);
+}
+
+/* --- Presenter view (docs/specs/slides.md): a second window that
+ * shows the current slide's notes, synced with the main window over
+ * a BroadcastChannel. The main display never shows notes; the
+ * presenter window always does. --- */
+let presenterSlide = 0;
+
+function presenterSlides(): HTMLElement[] {
+  const art = el.shadowRoot?.querySelector("article.folio-doc");
+  return Array.from(art?.querySelectorAll(":scope > .folio-slide") ?? []);
+}
+
+function presenterShow(i: number): void {
+  presenterSlide = i;
+  const slides = presenterSlides();
+  slides.forEach((s, k) => s.classList.toggle("current", k === i));
+  slides[i]?.scrollIntoView({ block: "start" });
+  const bar = document.querySelector("#presenter-bar");
+  if (bar) {
+    const now = slides[i]?.querySelector("h2")?.textContent ?? "";
+    const next = slides[i + 1]?.querySelector("h2")?.textContent ?? "";
+    bar.textContent =
+      `Slide ${String(i + 1)} of ${String(slides.length)}` +
+      (now ? ` — now: ${now}` : "") +
+      (next ? ` · next: ${next}` : " · last slide");
+  }
+}
+
+/** Main window: open (or focus) the presenter window. On desktop
+ *  (Tauri) that's a second app window via a native command; on the
+ *  web it's a popup. */
+async function openPresenter(): Promise<void> {
+  if (!playing) setPlaying(true);
+  if (isDesktop()) {
+    const err = await openPresenterWindow();
+    if (err === null) {
+      flash("Presenter view opened in a new window");
+      return;
+    }
+    // e.g. a stale binary without the command - say so, and do NOT
+    // fall through to window.open (wrong target in a webview).
+    flash(`Presenter view unavailable: ${err}`);
+    return;
+  }
+  const win = window.open(
+    `${window.location.pathname}?presenter=1`,
+    "folio-presenter",
+    "width=960,height=720",
+  );
+  if (win) {
+    presenterWin = win;
+    flash("Presenter view opened — move it to your own screen");
+    // Opening a popup exits fullscreen on the main window; take it
+    // back so the projector keeps the full-screen deck.
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  } else {
+    flash("Allow popups to open the presenter view");
+  }
+}
+
+if (PRESENTER) {
+  // The presenter window: chrome hidden, one bar on top, the deck in
+  // slide rendering with notes ALWAYS on, no fullscreen.
+  document.body.classList.add("presenter");
+  const bar = document.createElement("div");
+  bar.id = "presenter-bar";
+  bar.textContent = "Presenter view — waiting for the main window…";
+  document.body.prepend(bar);
+  onSlideMsg((msg) => {
+    if (msg.t === "doc" && typeof msg.md === "string") {
+      void el.load(msg.md, { keepHistory: false }).then(() => {
+        // Slide rendering + notes ALWAYS on in the presenter window;
+        // host attributes survive re-renders (the component reflects
+        // them onto the article).
+        el.setAttribute("slides", "");
+        el.setAttribute("slides-notes", "");
+        el.classList.add("slides-notes");
+        presenterShow(Math.min(presenterSlide, Math.max(0, msg.slide ?? 0)));
+      });
+    } else if (msg.t === "slide" && typeof msg.slide === "number") {
+      presenterShow(msg.slide);
+    } else if (msg.t === "bye") {
+      bar.textContent = "Presenter view — the main window closed";
+    }
+  });
+  postSlideMsg({ t: "hello" });
+  // The presenter window drives the show too: arrows navigate the
+  // MAIN window (which owns the slide index and broadcasts it back).
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowRight" || ev.key === " " || ev.key === "PageDown") {
+      ev.preventDefault();
+      postSlideMsg({ t: "nav", d: 1 });
+    } else if (ev.key === "ArrowLeft" || ev.key === "PageUp") {
+      ev.preventDefault();
+      postSlideMsg({ t: "nav", d: -1 });
+    } else if (ev.key === "Escape") {
+      window.close();
+    }
+  });
+} else {
+  onSlideMsg((msg) => {
+    if (msg.t === "hello") {
+      postSlideMsg({
+        t: "doc",
+        md: el.getMarkdown() ?? "",
+        slide: currentSlide,
+      });
+    } else if (msg.t === "nav" && typeof msg.d === "number" && playing) {
+      advanceSlide(msg.d);
+    }
+  });
+  // Doc edits flow to the presenter window (debounced).
+  let docTimer: number | undefined;
+  el.onChange(() => {
+    window.clearTimeout(docTimer);
+    docTimer = window.setTimeout(() => {
+      postSlideMsg({
+        t: "doc",
+        md: el.getMarkdown() ?? "",
+        slide: currentSlide,
+      });
+    }, 400);
+  });
+  window.addEventListener("beforeunload", () => postSlideMsg({ t: "bye" }));
+}
+
+// Click advances while playing (unless it landed in editable text).
+document.addEventListener("click", (ev) => {
+  if (!playing) return;
+  const t = ev.target instanceof HTMLElement ? ev.target : null;
+  if (t && t.closest("folio-doc")) {
+    const inText = t.closest("p, li, h2, h3, h4, h5, h6, blockquote, td, th");
+    if (!inText) advanceSlide(1);
+  }
 });
 
 function currentEditable(): HTMLElement | null {
@@ -2425,6 +2781,12 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb: "pure prose and poetry",
   },
   {
+    id: "deck",
+    title: "Quarterly review deck",
+    file: "demo/examples/deck.md",
+    blurb: "slideshow presentation play slides h2 deck notes chart",
+  },
+  {
     id: "accounts",
     title: "Management accounts",
     file: "demo/examples/accounts.md",
@@ -2541,6 +2903,28 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords: "view switch toggle markdown source document",
     action: () => (inMd ? btnView : btnMd).click(),
+  });
+  entries.push({
+    title: playing ? "Stop slideshow" : "Play slideshow",
+    group: "Command",
+    keywords: playing
+      ? "stop exit end slideshow presentation play present fullscreen quit"
+      : "play slideshow present presentation fullscreen slides deck h2",
+    // The toolbar button opens a menu now - act directly.
+    action: () => setPlaying(!playing),
+  });
+  entries.push({
+    title: "Toggle speaker notes",
+    group: "Command",
+    keywords: "speaker notes presenter n toggle slides playing show hide",
+    action: () => toggleNotes(),
+  });
+  entries.push({
+    title: "Open presenter view",
+    group: "Command",
+    keywords:
+      "presenter view notes window console second screen slides playing projector",
+    action: () => void openPresenter(),
   });
   entries.push({
     title: "Insert a table",
@@ -3330,6 +3714,7 @@ const setPbH1 = requireEl<HTMLSelectElement>("#set-pb-h1");
 const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
 const setPageNumbers = requireEl<HTMLSelectElement>("#set-page-numbers");
 const setPageHeader = requireEl<HTMLSelectElement>("#set-page-header");
+const setPageSize = requireEl<HTMLSelectElement>("#set-page-size");
 const overrideNote = requireEl<HTMLElement>("#settings-override-note");
 const btnSettingsReset = requireEl<HTMLButtonElement>("#btn-settings-reset");
 
@@ -3438,7 +3823,17 @@ function reflectThemeDefaults(): void {
   setH1Size.placeholder = look.h1Size;
   setH2Size.placeholder = look.h2Size;
   setH3Size.placeholder = look.h3Size;
+  namedPageSizeDefault();
   reflectOverrides();
+}
+
+/** The paper-size dropdown's default names the theme's value. */
+function namedPageSizeDefault(): void {
+  const def = setPageSize.querySelector<HTMLOptionElement>(
+    'option[value="default"]',
+  );
+  if (def)
+    def.textContent = `Theme default (${presetTheme(selectedTheme()).pageSize})`;
 }
 
 const overrideFields = (): (HTMLSelectElement | HTMLInputElement)[] => [
@@ -3451,6 +3846,7 @@ const overrideFields = (): (HTMLSelectElement | HTMLInputElement)[] => [
   setTableStyle,
   setPalette,
   setCitationStyle,
+  setPageSize,
 ];
 
 /** Say how many fields override the theme - they would mask it. */
@@ -3498,6 +3894,8 @@ function fillSettings(): void {
   setPageNumbers.value =
     style.get("page.numbers") === "off" ? "off" : "default";
   setPageHeader.value = style.get("page.header") === "off" ? "off" : "default";
+  fillOptions(setPageSize, PAGE_SIZES, style.get("page.size"));
+  namedPageSizeDefault();
   reflectThemeDefaults();
 }
 
@@ -3543,6 +3941,7 @@ settingsForm.addEventListener("submit", (ev) => {
       "pagebreak.h2": setPbH2.value,
       "page.numbers": setPageNumbers.value,
       "page.header": setPageHeader.value,
+      "page.size": setPageSize.value,
     };
     // The theme name rides the `theme:` frontmatter line;
     // "default" removes it so the fallback look applies.
@@ -3599,17 +3998,37 @@ function preparePrint(): void {
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
   if (!mdWrap.hidden) btnView.click();
+  // Fullscreen ends before the print dialog (spec: slides.md).
+  if (document.fullscreenElement) void document.exitFullscreen();
   // Paper is light whatever the app's mode: a dark rendition's charts
   // and diagrams would print pale-on-white. Restored after printing.
   for (const doc of Array.from(document.querySelectorAll("folio-doc"))) {
     doc.setAttribute("mode", "light");
   }
-  // The running header and page numbers, as @page margin boxes - they
-  // only apply from the document's own stylesheet.
-  printFurnitureStyle.textContent = furnitureCss(
-    furnitureFor(el.getDoc()),
-    furnitureFont(el.getDoc()),
+  // Paper size follows the document's `page.size` key - the slide
+  // aspect while slide rendering is on (spec: docs/specs/slides.md).
+  const doc = el.getDoc();
+  const size =
+    playing || el.hasAttribute("slides")
+      ? doc
+        ? themeFromDoc(doc).slide.aspect === "4/3"
+          ? "4:3"
+          : "16:9"
+        : "16:9"
+      : pageSizeFor(doc);
+  document.documentElement.style.setProperty(
+    "--folio-page-size",
+    pageSizeCss(size),
   );
+  // The running header and page numbers, as @page margin boxes - they
+  // only apply from the document's own stylesheet. Suppressed on
+  // slides (one slide per page needs no furniture).
+  const furniture = furnitureFor(doc);
+  if (playing || el.hasAttribute("slides")) {
+    furniture.header = null;
+    furniture.numbers = false;
+  }
+  printFurnitureStyle.textContent = furnitureCss(furniture, furnitureFont(doc));
 }
 const printFurnitureStyle = document.head.appendChild(
   document.createElement("style"),
@@ -3821,6 +4240,17 @@ toolbarMenu(
   requireEl<HTMLButtonElement>("#btn-overflow"),
   requireEl<HTMLElement>("#overflow-menu"),
 );
+
+// The play button's dropdown, exactly like the other toolbar menus:
+// the two presentation options - play on this screen (or stop, while
+// playing), or play + open the presenter view.
+toolbarMenu(btnPlay, playMenu);
+playMenu.addEventListener("click", (ev) => {
+  const btn = (ev.target as HTMLElement).closest("button");
+  if (!btn) return;
+  if (btn.id === "mi-presenter") void openPresenter();
+  else setPlaying(!playing);
+});
 
 // Citation: the palette, opened on the bibliography's references - or,
 // with none yet, a word on where they come from.

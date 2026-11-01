@@ -151,14 +151,15 @@ test.describe("themes", () => {
   const card = (page: Page, name: string) =>
     page.locator(`#set-theme .theme-card[data-theme="${name}"]`);
 
-  test("the picker shows the ten themes as cards; picking one re-renders", async ({
+  test("the picker shows the themes (incl. the two deck presets) as cards; picking one re-renders", async ({
     page,
   }) => {
     await waitForDocument(page);
     // The sample declares theme: corporate-report - the picker
     // honors the document's own frontmatter.
     await openSettings(page);
-    await expect(page.locator("#set-theme .theme-card")).toHaveCount(10);
+    // 10 report themes + the deck and deck-clean slide presets.
+    await expect(page.locator("#set-theme .theme-card")).toHaveCount(12);
     await expect(card(page, "corporate-report").locator("input")).toBeChecked();
     // Each card previews its theme: the sample wears its face.
     const sampleFont = await card(page, "editorial")

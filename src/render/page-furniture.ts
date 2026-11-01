@@ -6,12 +6,14 @@
  * style keys, never in the text (AGENTS.md #1).
  */
 import type { Doc } from "../engine/doc";
-import { themeFromDoc } from "./theme";
+import { PAGE_SIZES, themeFromDoc, type PageSize } from "./theme";
 
 export interface Furniture {
   /** The running header, or null for none. */
   header: string | null;
   numbers: boolean;
+  /** Paper size name ("a4", "16:9", ...) for the desktop PDF export. */
+  page_size: string;
 }
 
 /** The document's body font stack, for the margin boxes. */
@@ -35,7 +37,17 @@ export function furnitureFor(doc: Doc | null): Furniture {
   return {
     header: style.get("page.header") === "off" || !title ? null : title,
     numbers: style.get("page.numbers") !== "off",
+    page_size: pageSizeFor(doc),
   };
+}
+
+/** The typed `page.size` style key (docs/specs/slides.md); with no
+ *  key, the THEME's default (a4 for report themes, 16:9 for decks). */
+export function pageSizeFor(doc: Doc | null): PageSize {
+  const style = new Map(doc?.frontmatter.style ?? []);
+  const raw = style.get("page.size") ?? "";
+  if ((PAGE_SIZES as readonly string[]).includes(raw)) return raw as PageSize;
+  return doc ? themeFromDoc(doc).pageSize : "a4";
 }
 
 /** A CSS string literal. */

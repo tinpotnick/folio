@@ -14,6 +14,15 @@ pub struct Furniture {
     pub header: Option<String>,
     /// "Page n of N", bottom right.
     pub numbers: bool,
+    /// The document's `page.size` style key ("a4", "16:9", ...); the
+    /// export's paper size. Suppressed furniture on slides comes
+    /// through header=None, numbers=false.
+    #[serde(default = "default_page_size")]
+    pub page_size: String,
+}
+
+fn default_page_size() -> String {
+    "a4".to_string()
 }
 
 const FONT_NAME: &[u8] = b"FolioFurniture";

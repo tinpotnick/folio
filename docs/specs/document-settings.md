@@ -58,6 +58,10 @@ hand, never a second representation.
   - `page.numbers`, `page.header` - unset (on) or "off": "Page n of
     N" and the running title on printed and exported pages
     (print.md, ADR-0027).
+  - `page.size` - `a4` (default) | `a5` | `letter` | `16:9` | `4:3`:
+    the paper size of printed and exported pages (docs/specs/
+    slides.md). While the slideshow is playing, the effective size is
+    the slide aspect instead.
 
 ## Acceptance
 

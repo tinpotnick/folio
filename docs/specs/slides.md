@@ -1,22 +1,23 @@
 # Slideshow (present a document as slides)
 
-## Status: proposed (2026-10-31) - spec only, no implementation yet
+## Status: accepted (2026-10-31)
 
 ## Decision
 
 Every folio document is and stays a plain Markdown document. There is
 no slide mode in the file and no separate slides view: **you hit
 play**. Play turns on slide rendering of the current document view -
-one slide per H1 - and fullscreen; Esc (or the play button again)
+one slide per H2 - and fullscreen; Esc (or the play button again)
 turns both off. How the document displays is a property of the
 session, not of the document - the file on disk never changes because
 you presented it.
 
-**H1 means slide, uniformly, while slide rendering is on.** Every H1
-opens a new slide; the first H1 is simply the first slide - there is
-no special "presentation title" H1. One meaning for H1 keeps the
-block schema untouched and the section browser, contents list and
-cross-references semantics identical in every view.
+**H1 is the document title - invisible to the slideshow; every H2 is
+a slide.** The H1 and anything under it before the first H2 are the
+deck's front matter: presenter instructions, deck-level notes, shown
+in document view and hidden while playing. This matches the rest of
+folio (a lone H1 is the title in the contents list and names the
+file), so nothing is special-cased: slides are H2 sections.
 
 ## Why this fits folio
 
@@ -50,16 +51,19 @@ cross-references semantics identical in every view.
   round-trip tests (tests/golden/) are untouched by construction.
   Whether a document is being shown as a deck is decided at play
   time, by the user pressing play - never stored in the file.
-- **Slide structure (slide rendering on)**: each H1 starts a slide; the
-  H1 text is the slide title; everything until the next H1 is the
-  slide body. H2-H6 are in-slide headings, never slides. While slide
-  rendering is on, the contents list shows every H1 as a top-level
-  entry (overriding its one-H1-is-the-title convention,
-  docs/specs/contents.md); in the normal document view the TOC is
-  unchanged.
+- **Slide structure (slide rendering on)**: each H2 starts a slide
+  (wrapped in a presentational `.folio-slide` div - `display:
+  contents` otherwise, and `syncFromDom` reads through it, so the
+  model and the Markdown are untouched); the H2 text is the slide
+  title; everything until the next H2 is the slide body. H3-H6 are
+  in-slide headings. The H1 and its preamble are the deck's front
+  matter, hidden while playing. The contents list is unchanged (a
+  lone H1 is the title in every view).
 - **Views**: two views as today - Markdown source and document
   (src/main.ts `btnView`/`btnMd`) - plus a **slide-rendering flag** on
-  the document view that play toggles. The flag only changes styling:
+  the document view that play toggles. Clicking either view button
+  while presenting stops the show (play = slides, doc = plain
+  document, md = source). The flag only changes styling:
   every slide stays in the article's DOM at once, so WYSIWYG editing
   works exactly as in document view - `syncFromDom` (src/component.ts)
   rebuilds the model from the whole article either way. The one hard
@@ -67,11 +71,14 @@ cross-references semantics identical in every view.
   being off-screen. That is the fatal complication
   docs/specs/section-windowing.md identifies - a partial DOM would
   make structural sync silently delete unrendered blocks.
-- **Entry points**: a play button in the toolbar and palette commands
-  "Play slideshow" (slide rendering + fullscreen; arrow keys / click
-  advance, Esc exits both) and "Stop slideshow". Like the
-  source/document toggle, this is session state and is never written
-  to the file.
+- **Entry points**: one play button in the toolbar's View group -
+  its body toggles play/stop, its chevron opens a dropdown with the
+  two options, "Play slideshow" (slide rendering + fullscreen;
+  arrow keys / click advance, Esc exits both) and "Open presenter
+  view" - plus the palette commands of the same names. The presenter
+  window is NOT auto-opened on play - a second window is a deliberate
+  choice, never a surprise. Like the source/document toggle, all of
+  it is session state, never written to the file.
 - **Slide rendering (theme-driven)**: a slide is a full-viewport page
   (`aspect-ratio` from the theme's `slide.aspect`, default `16/9`;
   `4/3` is a valid theme value), scaled to fit, with the H1 as its title and
@@ -91,6 +98,16 @@ cross-references semantics identical in every view.
   padding), captions stay with their figure; code/math blocks render
   at body scale, not scaled up. Values live in themes, never in the
   document.
+- **Speaker notes** (v2): a trailing blockquote on a slide is its
+  speaker note. The main display NEVER shows it while playing (the
+  PowerPoint presenter rule - notes are for the presenter, not the
+  projector); N or the palette's "Toggle speaker notes" shows them.
+  Notes are `display: none` in print media always. A `>`-led prose
+  block renders as `<blockquote>` (and syncs back with the marker, so
+  the source round-trips). Visibility is a host attribute
+  `slides-notes` on the component, reflected onto the article and
+  re-applied after every render, so the presenter window keeps notes
+  on across document syncs.
 - **Images on slides** (`slide.image.placement`, theme key, default
   `above`): an image block **alone** on a slide always renders
   full-bleed - the divider/background slide. An image **with other
@@ -141,6 +158,27 @@ cross-references semantics identical in every view.
   H1 mid-play moves to the slide now at that position; a 10k-H1
   document gets no per-slide rendering work beyond the CSS already
   applied to every block.
+- **Presenter view** (web host popup; desktop: a second
+  `WebviewWindow`): the toolbar presenter button or "Open presenter
+  view" (palette; starts the show if it isn't running) opens a
+  second window (`?presenter=1` on the web, label "presenter" on
+  desktop) with the same document in slide
+  rendering and speaker notes ALWAYS visible - a top bar shows
+  "Slide n of N", the current slide's title and the next one. The
+  slide index syncs both ways over a `BroadcastChannel`
+  ("folio-slides"); document edits flow to the presenter window
+  (debounced). The main display never shows notes; N still toggles
+  them there for single-screen use. Opening the popup exits
+  fullscreen on the main window, which re-requests it - and must
+  NOT stop the show (the fullscreenchange handler ignores it while
+  the presenter window is open). The file on disk is unchanged.
+  Desktop (Tauri): "Open presenter view" invokes the
+  `open_presenter_window` command, which builds a second
+  `WebviewWindow` (label "presenter", same front-end with
+  `?presenter=1`, capability added) instead of a browser popup.
+  Cross-window messaging is BroadcastChannel mirrored through
+  localStorage (`storage` events), deduped by (from, seq) - WebKitGTK
+  delivers storage events reliably across webviews.
 - **Play vs. edit**: while playing, the document view is still
   contenteditable, but arrow keys / click advance slides instead of
   moving the caret; clicking into text places the caret and typing
@@ -153,7 +191,9 @@ cross-references semantics identical in every view.
   eval must complete "present this document" with no instructions.
 - **Paper size is a style key, not a constant**: new closed style key
   `page.size` (ADR-0002 schema change, typed values such as `a4` |
-  `letter` | `a5` | `16:9` | `4:3`, default `a4`), with a typed dropdown
+  `letter` | `a5` | `16:9` | `4:3`; no key means the theme's
+  `pageSize` - `a4` for report themes, `16:9` for the deck themes),
+  with a typed dropdown
   in the settings dialog alongside the existing `pagebreak.h1` /
   `page.numbers` controls (fillSettings, src/main.ts:3483). Today
   the size is
@@ -164,7 +204,10 @@ cross-references semantics identical in every view.
   three read the key instead: the stylesheet emits
   `@page { size: <value> }`, and the desktop export passes the value
   through the same `furniture` payload it already takes. A raw
-  Markdown file with no key assumes `a4` - that default is fine.
+  Markdown file with no key assumes the THEME's default paper
+  (`a4` for report themes; the `deck`/`deck-clean` slide themes
+  default to `16:9`, so a deck prints/exports as slides even without
+  playing).
 - **Print / export**: while slide rendering is on (or while playing),
   the effective `page.size` is the slide aspect (`16:9` unless the
   theme's `slide.aspect` says otherwise) - play sets it for the
@@ -212,7 +255,9 @@ cross-references semantics identical in every view.
   on and off serializes byte-identically - the load-bearing invariant
   that play never touches the model.
 - e2e: `tests/e2e/slides.spec.ts` (play toggles slide rendering and
-  fullscreen; one slide per H1; H2 never splits; navigation and
+  fullscreen; one slide per H2; the H1/preamble hide while playing;
+  notes toggle and never print; editing inside a slide keeps the
+  model intact; the shipped deck example plays; navigation and
   counter; print media while playing uses 16:9 pages; print with
   slide rendering off stays A4; export produces the deck PDF; the
   saved file is byte-identical before and after playing).
