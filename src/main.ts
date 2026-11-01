@@ -77,6 +77,7 @@ const editor = requireEl<HTMLTextAreaElement>("#editor");
 const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
 const btnPlay = requireEl<HTMLButtonElement>("#btn-play");
+const btnPresenter = requireEl<HTMLButtonElement>("#btn-presenter");
 const status = requireEl<HTMLElement>("#status");
 const sidebar = requireEl<HTMLElement>("#sidebar");
 const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
@@ -435,6 +436,7 @@ function advanceSlide(delta: number): void {
 }
 
 btnPlay.addEventListener("click", () => setPlaying(!playing));
+btnPresenter.addEventListener("click", () => void openPresenter());
 
 document.addEventListener("fullscreenchange", () => {
   // Esc out of fullscreen ends the show too - but opening the
@@ -501,11 +503,12 @@ function toggleNotes(): void {
     flash("Start the slideshow first (the play button)");
     return;
   }
-  const on = !el.classList.contains("slides-notes");
+  // The attribute is the source of truth; the component reflects it
+  // onto the article (and re-applies after re-renders). The class on
+  // the host is kept for tests/inspection.
+  const on = !el.hasAttribute("slides-notes");
+  el.toggleAttribute("slides-notes", on);
   el.classList.toggle("slides-notes", on);
-  el.shadowRoot
-    ?.querySelector("article.folio-doc")
-    ?.classList.toggle("slides-notes", on);
 }
 
 /* --- Presenter view (docs/specs/slides.md): a second window that
@@ -578,13 +581,13 @@ if (PRESENTER) {
   onSlideMsg((msg) => {
     if (msg.t === "doc" && typeof msg.md === "string") {
       void el.load(msg.md, { keepHistory: false }).then(() => {
+        // Slide rendering + notes ALWAYS on in the presenter window;
+        // host attributes survive re-renders (the component reflects
+        // them onto the article).
         el.setAttribute("slides", "");
+        el.setAttribute("slides-notes", "");
         el.classList.add("slides-notes");
         presenterShow(Math.min(presenterSlide, Math.max(0, msg.slide ?? 0)));
-        // keep the notes visible even across re-renders
-        el.shadowRoot
-          ?.querySelector("article.folio-doc")
-          ?.classList.add("slides-notes");
       });
     } else if (msg.t === "slide" && typeof msg.slide === "number") {
       presenterShow(msg.slide);

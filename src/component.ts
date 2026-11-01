@@ -553,7 +553,7 @@ const DS_GUTTER = "44px";
 
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ["src", "mode", "slides"];
+    return ["src", "mode", "slides", "slides-notes"];
   }
 
   private doc: Doc | null = null;
@@ -800,6 +800,12 @@ export class FolioDoc extends HTMLElement {
         this.refreshSlideState();
       }
       this.restyle();
+    }
+    if (name === "slides-notes" && old !== value) {
+      // Notes visibility is host-owned (attribute on the component)
+      // but the CSS keys off a class on the ARTICLE - reflect it.
+      const article = this.shadowRoot?.querySelector("article.folio-doc");
+      if (article) article.classList.toggle("slides-notes", value !== null);
     }
   }
 
@@ -6550,7 +6556,12 @@ export class FolioDoc extends HTMLElement {
     // never adds it on its own.
     if (this.hasAttribute("slides"))
       this.setAttribute("slides", overflow ? "overflow" : "");
-    if (host) host.classList.toggle("slides-scrim", this.hasImageBackground());
+    if (host) {
+      host.classList.toggle("slides-scrim", this.hasImageBackground());
+      // Re-apply after every render: the host attributes are the
+      // source of truth, the article classes are derived.
+      host.classList.toggle("slides-notes", this.hasAttribute("slides-notes"));
+    }
   }
 
   /** A slide with a lone sentence, a lone quote, or an empty body centers. */

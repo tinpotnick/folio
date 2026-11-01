@@ -82,6 +82,17 @@ test.describe("slideshow", () => {
         hasText: "Play slideshow",
       }),
     ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("presenter");
+    await expect(
+      page.locator("#palette-modal .palette-item", {
+        hasText: "Open presenter view",
+      }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("play");
     await page.keyboard.press("Enter");
     await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
     await page.keyboard.press("Control+k");
@@ -378,13 +389,11 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
   }) => {
     await loadDeck(page);
     await page.locator("#btn-play").click();
+    // The presenter view is a toolbar button next to play.
+    await expect(page.locator("#btn-presenter")).toBeVisible();
     const [popup] = await Promise.all([
       page.waitForEvent("popup"),
-      (async () => {
-        await page.keyboard.press("Control+k");
-        await page.locator("#palette-input").fill("presenter");
-        await page.keyboard.press("Enter");
-      })(),
+      page.locator("#btn-presenter").click(),
     ]);
     await popup.waitForLoadState("domcontentloaded");
     await expect(popup.locator("#presenter-bar")).toContainText("Slide 1 of 3");

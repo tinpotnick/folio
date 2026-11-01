@@ -69,10 +69,13 @@ file), so nothing is special-cased: slides are H2 sections.
   being off-screen. That is the fatal complication
   docs/specs/section-windowing.md identifies - a partial DOM would
   make structural sync silently delete unrendered blocks.
-- **Entry points**: a play button in the toolbar and palette commands
-  "Play slideshow" (slide rendering + fullscreen; arrow keys / click
-  advance, Esc exits both) and "Stop slideshow". Like the
-  source/document toggle, this is session state and is never written
+- **Entry points**: a play button in the toolbar's View group and
+  palette commands "Play slideshow" (slide rendering + fullscreen;
+  arrow keys / click advance, Esc exits both) and "Stop slideshow".
+  A presenter button next to play (and the palette's "Open presenter
+  view") opens the presenter window; it is NOT auto-opened on play -
+  a second window is a deliberate choice, never a surprise. Like the
+  source/document toggle, all of it is session state, never written
   to the file.
 - **Slide rendering (theme-driven)**: a slide is a full-viewport page
   (`aspect-ratio` from the theme's `slide.aspect`, default `16/9`;
@@ -99,7 +102,10 @@ file), so nothing is special-cased: slides are H2 sections.
   projector); N or the palette's "Toggle speaker notes" shows them.
   Notes are `display: none` in print media always. A `>`-led prose
   block renders as `<blockquote>` (and syncs back with the marker, so
-  the source round-trips).
+  the source round-trips). Visibility is a host attribute
+  `slides-notes` on the component, reflected onto the article and
+  re-applied after every render, so the presenter window keeps notes
+  on across document syncs.
 - **Images on slides** (`slide.image.placement`, theme key, default
   `above`): an image block **alone** on a slide always renders
   full-bleed - the divider/background slide. An image **with other
@@ -150,9 +156,11 @@ file), so nothing is special-cased: slides are H2 sections.
   H1 mid-play moves to the slide now at that position; a 10k-H1
   document gets no per-slide rendering work beyond the CSS already
   applied to every block.
-- **Presenter view** (initial release, web host): "Open presenter
+- **Presenter view** (web host popup; desktop: a second
+  `WebviewWindow`): the toolbar presenter button or "Open presenter
   view" (palette; starts the show if it isn't running) opens a
-  second window (`?presenter=1`) with the same document in slide
+  second window (`?presenter=1` on the web, label "presenter" on
+  desktop) with the same document in slide
   rendering and speaker notes ALWAYS visible - a top bar shows
   "Slide n of N", the current slide's title and the next one. The
   slide index syncs both ways over a `BroadcastChannel`
