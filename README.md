@@ -9,9 +9,12 @@
 
 **The document Word should have been.**
 
-Write reports where the numbers live in the document and calculate as you
-type, the page looks finished from the first word, and the file is plain
-text that anyone can read — today, and in twenty years.
+folio is the complete office suite in one plain-text file: tables and
+embedded datasets, charts, Python, diagrams, equations, drawings, 3D
+models, music, and slides. Write reports where the numbers live in the
+document and calculate as you type, the page looks finished from the
+first word, and the file is plain text that anyone can read — today, and
+in twenty years.
 
 **[Try it in your browser](https://tinpotnick.github.io/folio/)** ·
 **[Install on Linux, Windows or macOS](#install)** ·
@@ -44,24 +47,39 @@ open source under the MIT licence. Documents render fully offline.
 
 ## What you can do
 
-- **Tables two ways** — a plain Markdown table that GitHub shows as is,
-  or a **dataset** with typed columns, units and formulas across rows
-  and tables. One click turns one into the other.
-- **Charts as queries** — bar, line, area, scatter, pie and donut, with
+- **Tables and datasets (embedded spreadsheets)** — a plain Markdown
+  table that GitHub shows as is, or a **dataset** with typed columns,
+  units and formulas across rows and tables. One click turns one into
+  the other.
+- **Beautiful charting** — bar, line, area, scatter, pie and donut, with
   several series, stacked or grouped; filter and sort them with the
   same expressions as formulas. Or write a full
   [Vega-Lite](https://vega.github.io/vega-lite/) chart over your data.
-- **Equations, code and diagrams** — LaTeX maths, highlighted code,
-  Mermaid and Graphviz diagrams, hand-written SVG drawings, and
-  parametric **3D models** (JSCAD) you can export as STL.
-- **Images, audio and sheet music** — embedded in the document itself;
-  record straight from the microphone; write music in ABC notation and
-  hear it played.
-- **Export to PDF**, print, light and dark mode, a section browser, and
-  a command palette (**Ctrl+K**) that finds every action by the words
-  you already use.
+- **Run Python in the document** — a `python` fence with `data=@sales`
+  and `out=fit` reads your datasets and publishes results back as tables,
+  values and chart sources, all offline in a sealed worker. Regressions,
+  statistics, anything Pyodide's standard library gives you — calculations
+  way beyond what charting can express.
+- **Diagrams and equations** — Mermaid and Graphviz diagrams, LaTeX
+  maths, highlighted code.
+- **Drawings and 3D models** — hand-written SVG; parametric **JSCAD**
+  models you can export as STL.
+- **Music and audio** — ABC notation and Strudel live-coding patterns
+  played in the page; audio recorded from the microphone or embedded.
+- **Images** — embedded in the document itself, so the file stands alone.
+- **Simple formatting, zero hand-styling** — ten themes (each with a
+  dark mode) decide fonts, colours, table rules and the chart palette.
+  Print or **export to PDF** and it looks like a report, not a web page.
+- **Present as slides** — one click plays any document as a deck: each
+  H2 is a full-screen slide, with speaker notes on a separate presenter
+  window so the projector stays clean. The file is still plain Markdown.
+- **An open standard underneath** — one plain Markdown file, plus a
+  section browser and a command palette (**Ctrl+K**) that finds every
+  action by the words you already use.
 
 ![The Insert menu, and a design review where a table drives a 3D model](docs/media/features.png)
+
+![The Quarterly Review Deck: change one number in its table and the growth and chart follow; press play and the same document is the slideshow, the new number carried through](docs/media/present.gif)
 
 ## It is just Markdown
 
@@ -88,6 +106,22 @@ type: donut
 :::
 ````
 
+And a compute block, still plain text — Python reads the dataset and
+publishes a fitted trend back into the document:
+
+````markdown
+```python data=@takings out=fit,slope
+xs = takings.col("day")
+ys = takings.col("takings")
+n = len(xs)
+mx = sum(xs) / n
+my = sum(ys) / n
+slope = round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs), 2)
+intercept = my - slope * mx
+fit = [{"day": x, "trend": round(intercept + slope * x, 1)} for x in xs]
+```
+````
+
 Everything else — headings, lists, links, ordinary tables — is the
 Markdown you already know.
 
@@ -101,6 +135,8 @@ Markdown you already know.
 | Plain-text file you can read anywhere | ✓ | — | — | ✓ | ✓ |
 | Works offline, no account | ✓ | partly | — | ✓ | ✓ |
 | No code to run | ✓ | ✓ | ✓ | ✓ | — |
+| Python over the document's own data, offline | ✓ (optional) | — | — | — | ✓ |
+| Present as slides, with speaker notes on your own screen | ✓ | slides mode | — | — | — |
 
 ## Examples
 
@@ -109,6 +145,10 @@ Open any of these in the [web version](https://tinpotnick.github.io/folio/)
 
 - **Q3 Sales Review** — regions, product mix and targets as live charts, a
   heatmap, and the sales pipeline as a diagram.
+- **Quarterly review deck** — the same report as a slideshow: press play
+  and each section becomes a slide, with a presenter view for your notes.
+- **Coffee forecast** — a Python compute block fits a trend to the data
+  and projects it, published back into the document as a table and chart.
 - **Bracket design review** — a variants table driving a 3D model, mass
   against stiffness, a dimensioned drawing and a requirements trace.
 - **A practice journal** — a practice log charted week by week, and

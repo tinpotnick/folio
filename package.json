@@ -1,6 +1,6 @@
 {
   "name": "folio",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Document-first workspace: semantic Markdown docs with typed datasets, query-driven charts, publication-quality output.",
   "type": "module",
   "license": "MIT",
