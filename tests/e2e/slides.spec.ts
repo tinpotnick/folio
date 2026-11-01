@@ -475,3 +475,54 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     expect(await h1Visible(page)).toBe(false);
   });
 });
+
+test.describe("slideshow: what a presenter sees (from recording the README demo)", () => {
+  test("each slide fits under the toolbar: no overflow, no side panels", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/?doc=demo/examples/deck.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    await togglePlay(page);
+    await expect(page.locator("html")).toHaveClass(/playing/);
+    // A slide as tall as the screen used to lose its top to the
+    // toolbar: "a slide overflows".
+    await expect(page.locator("#status")).toHaveText("Slide 1 of 4");
+    const head = await page.locator("header").first().boundingBox();
+    const box = await page
+      .locator("#the-doc .folio-slide")
+      .first()
+      .boundingBox();
+    const under = (head?.y ?? 0) + (head?.height ?? 0);
+    expect(Math.abs((box?.y ?? 0) - under)).toBeLessThan(2);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(721);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("html")).not.toHaveClass(/playing/);
+  });
+
+  test("after editing a table, play starts at slide 1 and the arrows advance", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/?doc=demo/examples/deck.md");
+    const cell = page.locator(
+      '#the-doc figure[data-table-id="deck-regional"] td[data-row-index="1"][data-col-index="2"]',
+    );
+    await cell.scrollIntoViewIfNeeded();
+    await cell.click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("520");
+    await page.keyboard.press("Tab");
+    await togglePlay(page);
+    await expect(page.locator("#status")).toHaveText("Slide 1 of 4");
+    const first = page.locator("#the-doc .folio-slide > h2").first();
+    await expect(first).toHaveText("Revenue by region");
+    await expect(first).toBeInViewport();
+    // The caret left in the table no longer takes the arrows.
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("#status")).toHaveText("Slide 2 of 4");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("#status")).toHaveText("Slide 3 of 4");
+  });
+});

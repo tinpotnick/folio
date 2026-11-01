@@ -79,7 +79,7 @@ open source under the MIT licence. Documents render fully offline.
 
 ![The Insert menu, and a design review where a table drives a 3D model](docs/media/features.png)
 
-![Playing the Quarterly Review Deck: play, then arrow keys advance slide by slide](docs/media/present.gif)
+![The Quarterly Review Deck: change one number in its table and the growth and chart follow; press play and the same document is the slideshow, the new number carried through](docs/media/present.gif)
 
 ## It is just Markdown
 

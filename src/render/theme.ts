@@ -1062,6 +1062,10 @@ export function slideCss(theme: Theme, mode: Mode): string {
        are transparent, so editing is exactly as before. */
     .folio-slide { display: contents; }
     article.folio-doc[slides] {
+      /* A slide's height: the screen less what the host keeps above
+         the slides (its toolbar). Slide padding and figure sizes follow
+         it - they used the whole screen (vh), and overflowed. */
+      --slide-h: calc(100vh - var(--folio-slide-inset, 0px));
       max-width: none;
       margin: 0;
       background: ${bg};
@@ -1085,10 +1089,14 @@ export function slideCss(theme: Theme, mode: Mode): string {
       box-sizing: border-box;
       aspect-ratio: ${aspect};
       width: 100%;
-      max-width: calc(100vh * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"});
-      max-height: 100vh;
+      /* The screen less what the host keeps above the slides (its
+         toolbar: --folio-slide-inset). */
+      max-width: calc(
+        var(--slide-h) * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"}
+      );
+      max-height: var(--slide-h);
       margin: 0 auto;
-      padding: 6vh 7vw;
+      padding: calc(var(--slide-h) * 0.06) 7vw;
       display: flex;
       flex-direction: column;
       justify-content: ${valignCenter ? "center" : "flex-start"};
@@ -1099,6 +1107,10 @@ export function slideCss(theme: Theme, mode: Mode): string {
     article.folio-doc[slides] .folio-slide > h2 {
       font-size: calc(${theme.h2Size} * ${String(s.scale)});
       flex: none;
+      /* The slide's padding is its top margin: the document's heading
+         space above the title (~100px) squeezed every slide's body
+         and tipped a chart slide into overflowing. */
+      margin-top: 0;
     }
     /* Sparse slides center on their own: a lone sentence, a lone
        blockquote (pull-quote), or an empty body (pure title slide). */
@@ -1134,7 +1146,7 @@ export function slideCss(theme: Theme, mode: Mode): string {
     article.folio-doc[slides] .folio-slide figure img,
     article.folio-doc[slides] .folio-slide figure svg {
       max-width: 100%;
-      max-height: 62vh;
+      max-height: calc(var(--slide-h) * 0.62);
       object-fit: contain;
     }
     /* Image-only slide: full-bleed divider/background. */
