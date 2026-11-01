@@ -5,6 +5,7 @@ steps:
   - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review").
   - Press Ctrl+K, type "play", and press Enter. The document renders fullscreen as slides, one per H2 (the H1 title and preamble hide), with a "Slide n of N" counter.
   - Advance with Arrow Right twice, then go back once with Arrow Left.
+  - Press Ctrl+K, type "presenter", and press Enter: a second window opens showing the current slide's speaker note and the next slide's title, moving in step with the main window.
   - Press Esc (or click the play button) to stop.
   - Play again, then print (Ctrl+P): the printout paginates one 16:9 slide per page.
   - Stop the slideshow and print again: continuous A4 paper as before.

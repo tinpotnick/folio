@@ -1075,6 +1075,12 @@ export function slideCss(theme: Theme, mode: Mode): string {
     article.folio-doc[slides] > h1 ~ *:not(.folio-slide) {
       display: none;
     }
+    /* The slide currently being shown (the presenter window marks
+       it; harmless on the main display). */
+    article.folio-doc[slides] .folio-slide.current {
+      outline: 2px solid var(--folio-accent, #1f3fbf);
+      outline-offset: -2px;
+    }
     article.folio-doc[slides] > .folio-slide {
       box-sizing: border-box;
       aspect-ratio: ${aspect};

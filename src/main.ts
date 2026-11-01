@@ -126,6 +126,12 @@ async function boot(): Promise<void> {
     return;
   }
   let path = bootPath();
+  if (path === null && PRESENTER) {
+    // The presenter window gets its document over the channel, not
+    // from the welcome page.
+    await openShipped(null, { history: "replace", unguarded: true });
+    return;
+  }
   if (path === null) {
     let guided = true;
     try {
@@ -311,6 +317,14 @@ btnMd.addEventListener("click", () => {
 
 /* --- Slideshow (spec: docs/specs/slides.md) --- */
 
+/** Presenter window flag (`?presenter=1`) and the channel syncing
+ *  slide index + document between the main and presenter windows. */
+const PRESENTER =
+  new URLSearchParams(window.location.search).get("presenter") === "1";
+const slidesChannel = new BroadcastChannel("folio-slides");
+/** The presenter window, if open (its opening exits fullscreen). */
+let presenterWin: Window | null = null;
+
 /**
  * Play is a session flag, never written to the document: it sets the
  * component's `slides` attribute (the H1 is the deck title, one slide
@@ -348,6 +362,8 @@ function reflectPlay(): void {
   if (playing && el.getAttribute("slides") === "overflow") {
     status.textContent += " - a slide overflows";
   }
+  // Keep any presenter window on the same slide.
+  if (playing) slidesChannel.postMessage({ t: "slide", slide: currentSlide });
 }
 
 function setPlaying(on: boolean): void {
@@ -377,8 +393,15 @@ function advanceSlide(delta: number): void {
 btnPlay.addEventListener("click", () => setPlaying(!playing));
 
 document.addEventListener("fullscreenchange", () => {
-  // Esc out of fullscreen ends the show too.
-  if (playing && !document.fullscreenElement) setPlaying(false);
+  // Esc out of fullscreen ends the show too - but opening the
+  // presenter window also exits fullscreen, and that must not stop
+  // the show.
+  if (
+    playing &&
+    !document.fullscreenElement &&
+    (!presenterWin || presenterWin.closed)
+  )
+    setPlaying(false);
 });
 
 document.addEventListener("keydown", (ev) => {
@@ -439,6 +462,127 @@ function toggleNotes(): void {
   el.shadowRoot
     ?.querySelector("article.folio-doc")
     ?.classList.toggle("slides-notes", on);
+}
+
+/* --- Presenter view (docs/specs/slides.md): a second window that
+ * shows the current slide's notes, synced with the main window over
+ * a BroadcastChannel. The main display never shows notes; the
+ * presenter window always does. --- */
+let presenterSlide = 0;
+
+function presenterSlides(): HTMLElement[] {
+  const art = el.shadowRoot?.querySelector("article.folio-doc");
+  return Array.from(art?.querySelectorAll(":scope > .folio-slide") ?? []);
+}
+
+function presenterShow(i: number): void {
+  presenterSlide = i;
+  const slides = presenterSlides();
+  slides.forEach((s, k) => s.classList.toggle("current", k === i));
+  slides[i]?.scrollIntoView({ block: "start" });
+  const bar = document.querySelector("#presenter-bar");
+  if (bar) {
+    const now = slides[i]?.querySelector("h2")?.textContent ?? "";
+    const next = slides[i + 1]?.querySelector("h2")?.textContent ?? "";
+    bar.textContent =
+      `Slide ${String(i + 1)} of ${String(slides.length)}` +
+      (now ? ` — now: ${now}` : "") +
+      (next ? ` · next: ${next}` : " · last slide");
+  }
+}
+
+/** Main window: open (or focus) the presenter window. */
+function openPresenter(): void {
+  if (!playing) setPlaying(true);
+  const win = window.open(
+    `${window.location.pathname}?presenter=1`,
+    "folio-presenter",
+    "width=960,height=720",
+  );
+  if (win) {
+    presenterWin = win;
+    flash("Presenter view opened — move it to your own screen");
+    // Opening a popup exits fullscreen on the main window; take it
+    // back so the projector keeps the full-screen deck.
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  } else {
+    flash("Allow popups to open the presenter view");
+  }
+}
+
+if (PRESENTER) {
+  // The presenter window: chrome hidden, one bar on top, the deck in
+  // slide rendering with notes ALWAYS on, no fullscreen.
+  document.body.classList.add("presenter");
+  const bar = document.createElement("div");
+  bar.id = "presenter-bar";
+  bar.textContent = "Presenter view — waiting for the main window…";
+  document.body.prepend(bar);
+  slidesChannel.addEventListener("message", (ev) => {
+    const msg = ev.data as {
+      t?: string;
+      md?: string;
+      slide?: number;
+      d?: number;
+    };
+    if (msg.t === "doc" && typeof msg.md === "string") {
+      void el.load(msg.md, { keepHistory: false }).then(() => {
+        el.setAttribute("slides", "");
+        el.classList.add("slides-notes");
+        presenterShow(Math.min(presenterSlide, Math.max(0, msg.slide ?? 0)));
+        // keep the notes visible even across re-renders
+        el.shadowRoot
+          ?.querySelector("article.folio-doc")
+          ?.classList.add("slides-notes");
+      });
+    } else if (msg.t === "slide" && typeof msg.slide === "number") {
+      presenterShow(msg.slide);
+    } else if (msg.t === "bye") {
+      bar.textContent = "Presenter view — the main window closed";
+    }
+  });
+  slidesChannel.postMessage({ t: "hello" });
+  // The presenter window drives the show too: arrows navigate the
+  // MAIN window (which owns the slide index and broadcasts it back).
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowRight" || ev.key === " " || ev.key === "PageDown") {
+      ev.preventDefault();
+      slidesChannel.postMessage({ t: "nav", d: 1 });
+    } else if (ev.key === "ArrowLeft" || ev.key === "PageUp") {
+      ev.preventDefault();
+      slidesChannel.postMessage({ t: "nav", d: -1 });
+    } else if (ev.key === "Escape") {
+      window.close();
+    }
+  });
+} else {
+  slidesChannel.addEventListener("message", (ev) => {
+    const msg = ev.data as { t?: string; d?: number };
+    if (msg.t === "hello") {
+      slidesChannel.postMessage({
+        t: "doc",
+        md: el.getMarkdown(),
+        slide: currentSlide,
+      });
+    } else if (msg.t === "nav" && typeof msg.d === "number" && playing) {
+      advanceSlide(msg.d);
+    }
+  });
+  // Doc edits flow to the presenter window (debounced).
+  let docTimer: number | undefined;
+  el.onChange(() => {
+    window.clearTimeout(docTimer);
+    docTimer = window.setTimeout(() => {
+      slidesChannel.postMessage({
+        t: "doc",
+        md: el.getMarkdown(),
+        slide: currentSlide,
+      });
+    }, 400);
+  });
+  window.addEventListener("beforeunload", () =>
+    slidesChannel.postMessage({ t: "bye" }),
+  );
 }
 
 // Click advances while playing (unless it landed in editable text).
@@ -2711,6 +2855,13 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords: "speaker notes presenter n toggle slides playing show hide",
     action: () => toggleNotes(),
+  });
+  entries.push({
+    title: "Open presenter view",
+    group: "Command",
+    keywords:
+      "presenter view notes window console second screen slides playing projector",
+    action: () => openPresenter(),
   });
   entries.push({
     title: "Insert a table",

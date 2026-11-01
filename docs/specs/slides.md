@@ -150,6 +150,19 @@ file), so nothing is special-cased: slides are H2 sections.
   H1 mid-play moves to the slide now at that position; a 10k-H1
   document gets no per-slide rendering work beyond the CSS already
   applied to every block.
+- **Presenter view** (initial release, web host): "Open presenter
+  view" (palette; starts the show if it isn't running) opens a
+  second window (`?presenter=1`) with the same document in slide
+  rendering and speaker notes ALWAYS visible - a top bar shows
+  "Slide n of N", the current slide's title and the next one. The
+  slide index syncs both ways over a `BroadcastChannel`
+  ("folio-slides"); document edits flow to the presenter window
+  (debounced). The main display never shows notes; N still toggles
+  them there for single-screen use. Opening the popup exits
+  fullscreen on the main window, which re-requests it - and must
+  NOT stop the show (the fullscreenchange handler ignores it while
+  the presenter window is open). The file on disk is unchanged. The
+  desktop app's second-WebviewWindow variant is a follow-up.
 - **Play vs. edit**: while playing, the document view is still
   contenteditable, but arrow keys / click advance slides instead of
   moving the caret; clicking into text places the caret and typing

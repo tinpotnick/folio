@@ -8,7 +8,11 @@ it before the first H2 is front matter (instructions for you), never
 a slide. Arrow keys, Page Down, Space, or a click advance; Esc or the
 play button again stops. Press N (or Ctrl+K, "Toggle speaker notes")
 to show the speaker notes — off by default on the main display, like
-a projector, so "make them laugh" never projects.
+a projector, so "make them laugh" never projects. On a laptop plus
+projector, use Ctrl+K, "Open presenter view": a second window opens
+with the notes always visible, the current and next slide titles, and
+a "Slide n of N" counter, moving in step with the main window in
+either direction — put it on your own screen and present from there.
 
 - Every H2 is a slide; H3-H6 stay headings inside a slide. A slide
   with a lone sentence or nothing but its title centers itself. A

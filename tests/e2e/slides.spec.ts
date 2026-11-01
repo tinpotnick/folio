@@ -373,6 +373,39 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     expect(await slideHeads(page)).toEqual(["Alpha", "Beta", "Gamma"]);
   });
 
+  test("presenter view: a second window shows the notes and syncs both ways", async ({
+    page,
+  }) => {
+    await loadDeck(page);
+    await page.locator("#btn-play").click();
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      (async () => {
+        await page.keyboard.press("Control+k");
+        await page.locator("#palette-input").fill("presenter");
+        await page.keyboard.press("Enter");
+      })(),
+    ]);
+    await popup.waitForLoadState("domcontentloaded");
+    await expect(popup.locator("#presenter-bar")).toContainText("Slide 1 of 3");
+    await expect(popup.locator("#presenter-bar")).toContainText("now: Alpha");
+    // Notes on the presenter window, never on the main display.
+    await expect(
+      popup.locator("#the-doc .folio-slide blockquote"),
+    ).toBeVisible();
+    await expect(
+      page.locator("#the-doc .folio-slide > blockquote:last-child"),
+    ).toBeHidden();
+    // Main window drives -> presenter follows.
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("#status")).toContainText("Slide 2 of 3");
+    await expect(popup.locator("#presenter-bar")).toContainText("Slide 2 of 3");
+    // Presenter window drives -> main follows.
+    await popup.keyboard.press("ArrowRight");
+    await expect(popup.locator("#presenter-bar")).toContainText("Slide 3 of 3");
+    await expect(page.locator("#status")).toContainText("Slide 3 of 3");
+  });
+
   test("the shipped deck example plays: H2 slides, chart on a slide", async ({
     page,
   }) => {

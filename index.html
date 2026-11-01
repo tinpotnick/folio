@@ -642,6 +642,33 @@
         flex: 1;
         min-width: 0;
       }
+      /* Presenter window (?presenter=1): no app chrome, just the bar
+         and the deck with its notes. */
+      body.presenter > header,
+      body.presenter #sidebar,
+      body.presenter #status {
+        display: none;
+      }
+      body.presenter main {
+        padding-top: 46px;
+      }
+      #presenter-bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        box-sizing: border-box;
+        padding: 10px 18px;
+        background: var(--surface);
+        color: var(--text);
+        border-bottom: 1px solid var(--border);
+        font-size: 13.5px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       /* The document is a page on the desk: the component owns the
          paper, the host sets its margins and lift. */
       #the-doc {
