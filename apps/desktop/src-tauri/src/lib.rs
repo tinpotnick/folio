@@ -290,18 +290,17 @@ async fn open_presenter_window(app: tauri::AppHandle) -> Result<(), String> {
     let main = app.get_webview_window("main").ok_or("no main window")?;
     let url = main.url().map_err(|e| e.to_string())?;
     // Bundled app (tauri://localhost / http://tauri.localhost):
-    // address the asset path; dev server: reuse its URL with a query.
+    // address the asset path - NO query string, it is unreliable in
+    // the App variant; the front-end detects this window by its label
+    // "presenter" instead. Dev server: reuse its URL as-is.
     let is_app_protocol = matches!(url.scheme(), "tauri" | "app")
         || url.host_str() == Some("tauri.localhost");
     let target = if is_app_protocol {
         let path = url.path().trim_start_matches('/');
         let path = if path.is_empty() { "index.html" } else { path };
-        WebviewUrl::App(format!("{path}?presenter=1").into())
+        WebviewUrl::App(path.into())
     } else {
-        let mut dev = url.clone();
-        dev.set_path("/");
-        dev.set_query(Some("presenter=1"));
-        WebviewUrl::External(dev)
+        WebviewUrl::External(url)
     };
     WebviewWindowBuilder::new(&app, "presenter", target)
         .title("folio — presenter view")

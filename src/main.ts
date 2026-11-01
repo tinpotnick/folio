@@ -53,6 +53,7 @@ import {
   onFileOpened,
   openDocument,
   openExternal,
+  isPresenterWindow,
   openPresenterWindow,
   saveDocument,
   saveTextFile,
@@ -318,10 +319,14 @@ btnMd.addEventListener("click", () => {
 
 /* --- Slideshow (spec: docs/specs/slides.md) --- */
 
-/** Presenter window flag (`?presenter=1`) and the channel syncing
- *  slide index + document between the main and presenter windows. */
+/** Presenter window flag: `?presenter=1` on the web popup, or the
+ *  window label "presenter" on desktop (query strings in the bundled
+ *  app's asset path are unreliable, so the label is authoritative
+ *  there). Plus the channel syncing slide index + document between
+ *  the main and presenter windows. */
 const PRESENTER =
-  new URLSearchParams(window.location.search).get("presenter") === "1";
+  new URLSearchParams(window.location.search).get("presenter") === "1" ||
+  isPresenterWindow();
 const slidesChannel = new BroadcastChannel("folio-slides");
 /** The presenter window, if open (its opening exits fullscreen). */
 let presenterWin: Window | null = null;
@@ -536,11 +541,15 @@ function presenterShow(i: number): void {
 async function openPresenter(): Promise<void> {
   if (!playing) setPlaying(true);
   if (isDesktop()) {
-    const ok = await openPresenterWindow();
-    if (ok) {
+    const err = await openPresenterWindow();
+    if (err === null) {
       flash("Presenter view opened in a new window");
       return;
     }
+    // e.g. a stale binary without the command - say so, and do NOT
+    // fall through to window.open (wrong target in a webview).
+    flash(`Presenter view unavailable: ${err}`);
+    return;
   }
   const win = window.open(
     `${window.location.pathname}?presenter=1`,

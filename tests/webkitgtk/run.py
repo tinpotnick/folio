@@ -121,6 +121,29 @@ def run_case(path, done):
         Gdk.Screen.get_default().set_resolution(96.0)
     win = Gtk.Window()
     view = WebKit2.WebView()
+    # Cases may window.open a second folio window (e.g. the slideshow
+    # presenter view): allow script-opened popups and give them a
+    # real window so they render and run.
+    view.get_settings().set_property(
+        "javascript-can-open-windows-automatically", True)
+    popups = []
+
+    def on_create(v, action):
+        pw = Gtk.Window()
+        # related view: same web process/context, so localStorage and
+        # BroadcastChannel are shared with the opener (as in Tauri's
+        # second WebviewWindow).
+        pv = WebKit2.WebView.new_with_related_view(v)
+        pw.add(pv)
+        pw.set_default_size(960, 720)
+        pw.show_all()
+        popups.append(pw)
+        req = action.get_request() if action else None
+        if req:
+            pv.load_uri(req.get_uri())
+        return pv
+
+    view.connect("create", on_create)
     win.add(view)
     win.set_default_size(1280, 900)
     win.show_all()
@@ -133,6 +156,8 @@ def run_case(path, done):
             out = v.call_async_javascript_function_finish(res).to_string()
         except Exception as e:  # noqa: BLE001
             out = f"error: {e}"
+        for pw in popups:
+            pw.destroy()
         if native and not out.startswith("error"):
             view.grab_focus()
             presses = native.split()
@@ -155,6 +180,8 @@ def run_case(path, done):
             out = v.call_async_javascript_function_finish(res).to_string()
         except Exception as e:  # noqa: BLE001
             out = f"error: {e}"
+        for pw in popups:
+            pw.destroy()
         win.destroy()
         done(out)
 

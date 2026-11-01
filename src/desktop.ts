@@ -90,16 +90,32 @@ export async function openExternal(url: string): Promise<boolean> {
   }
 }
 
-/** Open the slideshow's presenter view (docs/specs/slides.md) as a
- *  second app window. Returns false when not on desktop or on error. */
-export async function openPresenterWindow(): Promise<boolean> {
+/** True when THIS window is the slideshow's presenter window (the
+ *  Rust side opens it with label "presenter"; readable synchronously
+ *  from the Tauri internals metadata). */
+export function isPresenterWindow(): boolean {
   if (!isDesktop()) return false;
+  const internals = (
+    window as unknown as {
+      __TAURI_INTERNALS__?: {
+        metadata?: { currentWindow?: { label?: string } };
+      };
+    }
+  ).__TAURI_INTERNALS__;
+  return internals?.metadata?.currentWindow?.label === "presenter";
+}
+
+/** Open the slideshow's presenter view (docs/specs/slides.md) as a
+ *  second app window. Returns null on success, an error message when
+ *  not on desktop or the command failed (e.g. stale binary). */
+export async function openPresenterWindow(): Promise<string | null> {
+  if (!isDesktop()) return "not desktop";
   const { invoke } = await import("@tauri-apps/api/core");
   try {
     await invoke("open_presenter_window");
-    return true;
-  } catch {
-    return false;
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
   }
 }
 
