@@ -423,8 +423,15 @@ async fn print_to_pdf(
 }
 
 /// Not built yet off Linux: the page falls back to the print dialog.
+// Elsewhere the page prints through the system dialog. Same arguments
+// as the Linux one: the slideshow's page size was added there only, and
+// macOS and Windows stopped compiling.
 #[cfg(not(target_os = "linux"))]
-async fn print_to_pdf(_window: &tauri::WebviewWindow, _path: &Path) -> Result<(), String> {
+async fn print_to_pdf(
+    _window: &tauri::WebviewWindow,
+    _path: &Path,
+    _page_size: Option<&str>,
+) -> Result<(), String> {
     Err("unsupported".into())
 }
 
