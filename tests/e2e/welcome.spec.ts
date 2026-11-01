@@ -161,7 +161,7 @@ test.describe("welcome page", () => {
     // The blank page carries the YAML header comment pointing at the
     // app; the typed content follows it.
     expect(md).toContain(
-      "# Best viewed in folio: https://tinpotnick.github.io/folio/",
+      "# Best viewed in folio: https://github.com/tinpotnick/folio",
     );
     expect(md).toContain("# Q4 plan\n\nNotes.\n");
   });
