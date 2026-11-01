@@ -17,6 +17,21 @@ describe("round-trip identity (invariant #2)", () => {
     expect(serializeDoc(parseDoc(text))).toBe(text);
   });
 
+  it("a YAML header comment is modelled and round-trips byte-identically", () => {
+    const text =
+      '---\n# Best viewed in folio: https://example.test/\ntheme: deck\nstyle:\n  page.size: "16:9"\n---\n\n# T\n\nText.\n';
+    const doc = parseDoc(text);
+    expect(doc.frontmatter.comment).toBe(
+      "Best viewed in folio: https://example.test/",
+    );
+    expect(doc.frontmatter.theme).toBe("deck");
+    expect(serializeDoc(doc)).toBe(text);
+    // No comment, no comment on output either.
+    const plain = "---\ntheme: deck\n---\n\n# T\n";
+    expect(parseDoc(plain).frontmatter.comment).toBeUndefined();
+    expect(serializeDoc(parseDoc(plain))).toBe(plain);
+  });
+
   it("sample document: doc has frontmatter, headings, table, chart", () => {
     const doc = parseDoc(loadGolden("sample-document.md"));
     expect(doc.frontmatter.theme).toBe("corporate-report");

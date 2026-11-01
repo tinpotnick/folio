@@ -157,9 +157,13 @@ test.describe("welcome page", () => {
     await page.keyboard.type("Notes.");
     await expect(title).toHaveText("Q4 plan");
     await page.locator("#btn-markdown").click();
-    expect(await page.locator("#editor").inputValue()).toBe(
-      "# Q4 plan\n\nNotes.\n",
+    const md = await page.locator("#editor").inputValue();
+    // The blank page carries the YAML header comment pointing at the
+    // app; the typed content follows it.
+    expect(md).toContain(
+      "# Best viewed in folio: https://tinpotnick.github.io/folio/",
     );
+    expect(md).toContain("# Q4 plan\n\nNotes.\n");
   });
 
   test("New document starts a blank page, asking before it drops edits", async ({

@@ -94,7 +94,13 @@ const mdView = requireEl<HTMLElement>("#md-view");
 const WELCOME = "demo/welcome.md";
 
 /** A new document: an empty title, the caret in it. */
-const BLANK = "# \n";
+/** The web app and the desktop install, advertised in new documents'
+ *  YAML header comment (the engine round-trips the comment). */
+const FOLIO_URL = "https://tinpotnick.github.io/folio/";
+const FOLIO_INSTALL_URL =
+  "https://tinpotnick.github.io/folio/repo/io.github.tinpotnick.folio.flatpakref";
+
+const BLANK = `---\n# Best viewed in folio: ${FOLIO_URL} (desktop install: ${FOLIO_INSTALL_URL})\n---\n\n# \n`;
 
 /** Where people can support folio's development. */
 const SUPPORT_URL = "https://buymeacoffee.com/tinpotnick";

@@ -8,6 +8,10 @@ import type { Audio, Cell, Chart, Image, Table, TableAlign } from "./index.js";
 
 export interface Frontmatter {
   theme?: string;
+  /** A `#` comment line in the YAML header (the first one), preserved
+   *  verbatim so it round-trips - new documents carry a pointer to
+   *  the app. */
+  comment?: string;
   style: [string, string][];
 }
 
@@ -244,6 +248,11 @@ function parseFrontmatter(lines: string[], start: number, doc: Doc): number {
       if (kv[1] === "theme" && kv[2] !== undefined) {
         doc.frontmatter.theme = kv[2];
       }
+      continue;
+    }
+    // A YAML comment line: kept (the first one) so it round-trips.
+    if (line.startsWith("#") && doc.frontmatter.comment === undefined) {
+      doc.frontmatter.comment = line.replace(/^#\s?/, "");
       continue;
     }
     const style = /^ {2}([\w.]+): (.*)$/.exec(line);
@@ -812,6 +821,9 @@ function quoteStyleValue(v: string): string {
 export function serializeDoc(doc: Doc): string {
   const parts: string[] = [];
   const fmLines: string[] = [];
+  if (doc.frontmatter.comment !== undefined) {
+    fmLines.push(`# ${doc.frontmatter.comment}`);
+  }
   if (doc.frontmatter.theme !== undefined) {
     fmLines.push(`theme: ${doc.frontmatter.theme}`);
   }
