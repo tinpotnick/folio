@@ -79,7 +79,7 @@ open source under the MIT licence. Documents render fully offline.
 
 ![The Insert menu, and a design review where a table drives a 3D model](docs/media/features.png)
 
-![Playing the Quarterly Review Deck: one H2 per full-screen slide](docs/media/present.png)
+![Playing the Quarterly Review Deck: play, then arrow keys advance slide by slide](docs/media/present.gif)
 
 ## It is just Markdown
 
