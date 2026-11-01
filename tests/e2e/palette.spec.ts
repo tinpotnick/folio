@@ -251,6 +251,15 @@ test.describe("example documents", () => {
       page.locator("folio-doc h1", { hasText: "Signals and spectra" }),
     ).toBeVisible();
     // Four charts: two time-domain lines, two frequency-domain bars.
+    // They sit below the fold, so lazy figures need drawing first
+    // (the print/export path does exactly this).
+    await page.evaluate(() =>
+      (
+        document.querySelector("#the-doc") as unknown as {
+          drawAllFigures(): Promise<void>;
+        }
+      ).drawAllFigures(),
+    );
     await expect(page.locator("#the-doc .chart-holder svg")).toHaveCount(4);
     // Each figure renders ITS OWN query - the time-domain lines
     // and frequency-domain bars alternate with the sections (a

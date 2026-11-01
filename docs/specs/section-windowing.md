@@ -50,3 +50,18 @@ addresses the actual hot path. Do NOT attempt section windowing
 until a real document measurably needs it; if that day comes,
 the sync redesign is the precondition, not the windowing itself.
 This spec records the analysis so the decision is not relitigated.
+
+## Update (2026-10-30): Stage 2 implemented
+
+Generated figures (charts, Mermaid diagrams, KaTeX math, drawn/JSCAD
+models) are now drawn lazily: renderBlock marks the figure
+`data-pending` and an IntersectionObserver (800px root margin) draws
+it when it nears the viewport (src/component.ts `lazyFigure`). The
+DOM is untouched - only the draw is deferred, so the
+DOM-is-source-of-truth editing model is unaffected. Mode changes
+re-dress only figures already drawn; pending ones stay pending.
+Print/export never shows a blank figure: `preparePrint` and both
+print paths call `drawAllFigures()` (printDocument/exportPdf await
+it), which draws every pending figure and settles `drawn()`.
+e2e: tests/e2e/lazy-figures.spec.ts (pending below the fold, drawn
+on scroll, drawn by drawAllFigures and by beforeprint).

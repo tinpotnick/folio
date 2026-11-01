@@ -1122,6 +1122,10 @@ export class FolioDoc extends HTMLElement {
   private render(): void {
     if (!this.doc || !this.shadowRoot) return;
     this.forgetRecalc();
+    // A full render replaces every figure: drop the old observer's
+    // targets with the DOM.
+    this.figureObserver?.disconnect();
+    this.figureObserver = null;
     // A full render replaces every figure: music stops with it
     // (only once the library was ever loaded - never import it
     // for a document that plays nothing).
@@ -1385,7 +1389,7 @@ export class FolioDoc extends HTMLElement {
         holder.className = "diagram-holder";
         holder.textContent = block.diagram.text;
         figure.appendChild(holder);
-        this.drawDiagram(figure);
+        this.lazyFigure(figure);
         return figure;
       }
       case "math": {
@@ -1397,7 +1401,7 @@ export class FolioDoc extends HTMLElement {
         const holder = document.createElement("div");
         holder.className = "math-holder";
         figure.appendChild(holder);
-        void this.drawMath(figure);
+        this.lazyFigure(figure);
         return figure;
       }
       case "image": {
@@ -1433,7 +1437,7 @@ export class FolioDoc extends HTMLElement {
           note.appendChild(personalMark(false));
           figure.appendChild(note);
         }
-        this.drawChart(figure);
+        this.lazyFigure(figure);
         return figure;
       }
       case "toc": {
@@ -2351,7 +2355,7 @@ export class FolioDoc extends HTMLElement {
     pre.appendChild(code);
     figure.appendChild(pre);
     void this.highlightCode(figure);
-    if (drawn) void this.drawDrawn(figure);
+    if (drawn) this.lazyFigure(figure);
     if (compute) {
       // The block is its code (ADR-0030); one line under it says what
       // the script published, or what went wrong.
@@ -6608,21 +6612,25 @@ export class FolioDoc extends HTMLElement {
     this.refreshSlideState();
     const hostEl = root.querySelector("article.folio-doc");
     if (hostEl) this.renderContents(hostEl);
+    // Mode change re-dresses only figures already drawn; pending
+    // (lazy, off-screen) figures stay pending and draw when scrolled to.
     for (const fig of Array.from(
       root.querySelectorAll<HTMLElement>("[data-chart-source]"),
     )) {
-      this.drawChart(fig);
+      if (!fig.hasAttribute("data-pending")) this.drawChart(fig);
     }
     const pending: Promise<unknown>[] = [];
     for (const fig of Array.from(
       root.querySelectorAll<HTMLElement>("[data-diagram-id]"),
     )) {
-      pending.push(this.drawDiagram(fig));
+      if (!fig.hasAttribute("data-pending"))
+        pending.push(this.drawDiagram(fig));
     }
     // Drawings take the mode's palette too (models only re-project).
     for (const fig of Array.from(
       root.querySelectorAll<HTMLElement>("figure.folio-drawn"),
     )) {
+      if (fig.hasAttribute("data-pending")) continue;
       if (fig.dataset.lang === "jscad") this.paintJscad(fig);
       else pending.push(this.drawDrawn(fig));
     }
@@ -6635,6 +6643,68 @@ export class FolioDoc extends HTMLElement {
    * export waits on it before printing). */
   drawn(): Promise<void> {
     return this.restyled;
+  }
+
+  private figureObserver: IntersectionObserver | null = null;
+
+  /** Draw a generated figure only when it nears the viewport (spec:
+   * docs/specs/section-windowing.md, option 2 - lazy figures). The
+   * figure stays in the DOM (editing model untouched); only the
+   * expensive draw is deferred. */
+  private lazyFigure(figure: HTMLElement): void {
+    if (typeof IntersectionObserver === "undefined") {
+      void Promise.resolve(this.drawFigureNow(figure)).catch(() => undefined);
+      return;
+    }
+    figure.setAttribute("data-pending", "figure");
+    if (!this.figureObserver) {
+      this.figureObserver = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (!e.isIntersecting) continue;
+            const fig = e.target as HTMLElement;
+            this.figureObserver?.unobserve(fig);
+            if (!fig.hasAttribute("data-pending")) continue;
+            fig.removeAttribute("data-pending");
+            void Promise.resolve(this.drawFigureNow(fig)).catch(
+              () => undefined,
+            );
+          }
+        },
+        { rootMargin: "800px 0px" },
+      );
+    }
+    this.figureObserver.observe(figure);
+  }
+
+  /** Draw one figure now, dispatched by its kind. */
+  private drawFigureNow(figure: HTMLElement): void | Promise<void> {
+    if (figure.hasAttribute("data-chart-source")) return this.drawChart(figure);
+    if (figure.hasAttribute("data-diagram-id")) return this.drawDiagram(figure);
+    if (figure.classList.contains("folio-math")) return this.drawMath(figure);
+    if (figure.classList.contains("folio-drawn")) {
+      if (figure.dataset.lang === "jscad") {
+        this.paintJscad(figure);
+        return;
+      }
+      return this.drawDrawn(figure);
+    }
+  }
+
+  /** Draw every still-pending figure (print/export must not catch one
+   * blank) and settle `restyled` so `drawn()` covers them. */
+  async drawAllFigures(): Promise<void> {
+    const pending = Array.from(
+      this.shadowRoot?.querySelectorAll<HTMLElement>("figure[data-pending]") ??
+        [],
+    );
+    const jobs = pending.map((fig) => {
+      this.figureObserver?.unobserve(fig);
+      fig.removeAttribute("data-pending");
+      return Promise.resolve(this.drawFigureNow(fig)).catch(() => undefined);
+    });
+    this.restyled = Promise.all(jobs).then(() => undefined);
+    await this.restyled;
   }
 
   private drawChart(figure: HTMLElement): void {

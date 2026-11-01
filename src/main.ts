@@ -3684,7 +3684,7 @@ document.addEventListener("keydown", (ev) => {
   // app's webview (WebKitGTK) does not.
   if (key === "p") {
     ev.preventDefault();
-    printDocument();
+    void printDocument();
   }
   // Ctrl+S / Ctrl+O: Save and Open, in the browser too (its own
   // Ctrl+S would save the web page, not the document).
@@ -4013,7 +4013,9 @@ settingsForm.addEventListener("submit", (ev) => {
  */
 function preparePrint(): void {
   // A cell still being typed in recalculates first: paper shows
-  // current figures.
+  // current figures. Lazy (off-screen) figures are drawn too - paper
+  // must not show blank figures. printDocument/exportPdf await this.
+  void el.drawAllFigures();
   el.flushEdits();
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
@@ -4062,10 +4064,14 @@ window.addEventListener("afterprint", reflectMode);
  * numbers and the running header - only Export adds them (ADR-0027) -
  * so it says where to find them.
  */
-function printDocument(): void {
+async function printDocument(): Promise<void> {
   if (isDesktop()) {
     flash("For page numbers, use Export as PDF");
   }
+  // Lazy figures (off-screen) must be drawn before paper renders.
+  preparePrint();
+  await el.drawAllFigures();
+  await drawingsSettled();
   const remind = personalUseReminder();
   if (remind) {
     // The print dialog would cover the reminder at once: let it be
@@ -4116,6 +4122,8 @@ function personalUseReminder(): string {
 
 async function exportPdf(): Promise<void> {
   preparePrint();
+  // Lazy figures (off-screen) must be drawn before paper renders.
+  await el.drawAllFigures();
   await el.drawn();
   await drawingsSettled();
   if (isDesktop()) {
@@ -4137,6 +4145,8 @@ async function exportPdf(): Promise<void> {
   flash(
     `Choose "Save as PDF" as the destination${remind ? `. ${remind}` : ""}`,
   );
+  await el.drawAllFigures();
+  await drawingsSettled();
   // With a reminder, let it be read before the dialog covers it.
   if (remind) setTimeout(() => window.print(), 1200);
   else window.print();
