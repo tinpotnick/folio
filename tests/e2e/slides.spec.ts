@@ -71,12 +71,18 @@ test.describe("slideshow", () => {
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
     await togglePlay(page);
     await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
+    // While presenting, the play control is the active one - not the
+    // document icon.
+    await expect(page.locator("#btn-play")).toHaveClass(/active/);
+    await expect(page.locator("#btn-view")).not.toHaveClass(/active/);
     // Full DOM, no windowing: every slide is in the article at once.
     expect(await slideHeads(page)).toEqual(["Alpha", "Beta", "Gamma"]);
     // H1 is the deck title: hidden while playing, present in the DOM.
     expect(await h1Visible(page)).toBe(false);
     await togglePlay(page);
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#btn-play")).not.toHaveClass(/active/);
+    await expect(page.locator("#btn-view")).toHaveClass(/active/);
   });
 
   test("palette offers Play slideshow / Stop slideshow", async ({ page }) => {

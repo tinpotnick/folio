@@ -394,6 +394,9 @@ function reflectPlay(): void {
   btnPlay.classList.toggle("active", playing);
   btnPlay.title = playing ? "Stop slideshow" : "Play slideshow";
   btnPlay.setAttribute("aria-label", btnPlay.title);
+  // While presenting, the play control - not the view toggle - is
+  // the active one (play always shows the document view).
+  btnView.classList.toggle("active", !playing);
   if (miPlayLabel)
     miPlayLabel.textContent = playing ? "Stop slideshow" : "Play slideshow";
   const heads = slideHeads();
