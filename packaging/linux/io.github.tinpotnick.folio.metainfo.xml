@@ -63,6 +63,16 @@
     <control>pointing</control>
   </supports>
   <releases>
+    <release version="0.2.0" date="2026-10-30">
+      <description>
+        <p>Present any document as slides, and write book-scale documents.</p>
+        <ul>
+          <li>Slideshow: play plays any document as one full-screen slide per H2; deck themes; a presenter window shows your speaker notes on your own screen while the projector stays clean</li>
+          <li>New documents carry a header comment pointing at the app; saving writes the canonical Markdown form</li>
+          <li>Lazy figures: charts, diagrams and models draw as you scroll, so large documents open fast</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-10-26">
       <description>
         <p>A new look, and Linux packages that update themselves.</p>

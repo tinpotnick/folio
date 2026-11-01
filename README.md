@@ -57,11 +57,16 @@ open source under the MIT licence. Documents render fully offline.
 - **Images, audio and sheet music** — embedded in the document itself;
   record straight from the microphone; write music in ABC notation and
   hear it played.
+- **Present as slides** — one click plays any document as a deck: each
+  H2 is a full-screen slide, with speaker notes on a separate presenter
+  window so the projector stays clean. The file is still plain Markdown.
 - **Export to PDF**, print, light and dark mode, a section browser, and
   a command palette (**Ctrl+K**) that finds every action by the words
   you already use.
 
 ![The Insert menu, and a design review where a table drives a 3D model](docs/media/features.png)
+
+![Playing the Quarterly Review Deck: one H2 per full-screen slide](docs/media/present.png)
 
 ## It is just Markdown
 
@@ -101,6 +106,7 @@ Markdown you already know.
 | Plain-text file you can read anywhere | ✓ | — | — | ✓ | ✓ |
 | Works offline, no account | ✓ | partly | — | ✓ | ✓ |
 | No code to run | ✓ | ✓ | ✓ | ✓ | — |
+| Present as slides, with speaker notes on your own screen | ✓ | slides mode | — | — | — |
 
 ## Examples
 
@@ -109,6 +115,8 @@ Open any of these in the [web version](https://tinpotnick.github.io/folio/)
 
 - **Q3 Sales Review** — regions, product mix and targets as live charts, a
   heatmap, and the sales pipeline as a diagram.
+- **Quarterly review deck** — the same report as a slideshow: press play
+  and each section becomes a slide, with a presenter view for your notes.
 - **Bracket design review** — a variants table driving a 3D model, mass
   against stiffness, a dimensioned drawing and a requirements trace.
 - **A practice journal** — a practice log charted week by week, and
