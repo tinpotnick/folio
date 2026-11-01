@@ -2474,6 +2474,10 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     /* The chart readout (docs/specs/chart-readout.md). */
     .chart-holder { position: relative; }
+    /* A chart still waiting to draw (lazy figures) keeps the space it
+       will take - every chart draws in a 640x300 frame - so drawing it
+       never pushes the page (or what you pointed at) down. */
+    figure[data-pending] .chart-holder:empty { aspect-ratio: 640 / 300; }
     .chart-holder:focus { outline: none; }
     .chart-holder:focus-visible { outline: 2px solid var(--folio-focus, #1f3fbf); outline-offset: 4px; border-radius: 4px; }
     .readout-guide { stroke: var(--folio-ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }

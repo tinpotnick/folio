@@ -1420,6 +1420,13 @@ export class FolioDoc extends HTMLElement {
         figure.appendChild(this.buildChartInspector(figure, block));
         const holder = document.createElement("div");
         holder.className = "chart-holder";
+        // A chart whose values can be read is reachable by Tab before it
+        // has drawn (lazy figures draw near the viewport): focusing it
+        // draws it, and the readout follows (attachReadout).
+        if (["bar", "line", "area"].includes(block.chart.type)) {
+          holder.dataset.readable = "1";
+          holder.tabIndex = 0;
+        }
         figure.appendChild(holder);
         if (block.chart.caption) {
           const cap = document.createElement("figcaption");
@@ -6657,18 +6664,18 @@ export class FolioDoc extends HTMLElement {
       return;
     }
     figure.setAttribute("data-pending", "figure");
+    // Reaching for a figure draws it at once - pointing at it, pressing
+    // it, focusing into it - not only scrolling near it: a chart's
+    // readout, its keyboard reading and its inspector need it drawn.
+    for (const type of ["pointerenter", "mousedown", "focusin"]) {
+      figure.addEventListener(type, () => void this.drawPending(figure));
+    }
     if (!this.figureObserver) {
       this.figureObserver = new IntersectionObserver(
         (entries) => {
           for (const e of entries) {
-            if (!e.isIntersecting) continue;
-            const fig = e.target as HTMLElement;
-            this.figureObserver?.unobserve(fig);
-            if (!fig.hasAttribute("data-pending")) continue;
-            fig.removeAttribute("data-pending");
-            void Promise.resolve(this.drawFigureNow(fig)).catch(
-              () => undefined,
-            );
+            if (e.isIntersecting)
+              void this.drawPending(e.target as HTMLElement);
           }
         },
         { rootMargin: "800px 0px" },
@@ -6677,18 +6684,24 @@ export class FolioDoc extends HTMLElement {
     this.figureObserver.observe(figure);
   }
 
+  /** Draw a figure that is still waiting (lazy), once; a drawn one is
+   * left alone. */
+  private drawPending(figure: HTMLElement): Promise<void> {
+    if (!figure.hasAttribute("data-pending")) return Promise.resolve();
+    this.figureObserver?.unobserve(figure);
+    figure.removeAttribute("data-pending");
+    return Promise.resolve(this.drawFigureNow(figure)).catch(() => undefined);
+  }
+
   /** Draw one figure now, dispatched by its kind. */
   private drawFigureNow(figure: HTMLElement): void | Promise<void> {
     if (figure.hasAttribute("data-chart-source")) return this.drawChart(figure);
     if (figure.hasAttribute("data-diagram-id")) return this.drawDiagram(figure);
     if (figure.classList.contains("folio-math")) return this.drawMath(figure);
-    if (figure.classList.contains("folio-drawn")) {
-      if (figure.dataset.lang === "jscad") {
-        this.paintJscad(figure);
-        return;
-      }
-      return this.drawDrawn(figure);
-    }
+    // A drawn block builds its picture (a 3D model too: paintJscad only
+    // repaints a model already built - none was, and every model stayed
+    // "Drawing…").
+    if (figure.classList.contains("folio-drawn")) return this.drawDrawn(figure);
   }
 
   /** Draw every still-pending figure (print/export must not catch one
@@ -6698,11 +6711,7 @@ export class FolioDoc extends HTMLElement {
       this.shadowRoot?.querySelectorAll<HTMLElement>("figure[data-pending]") ??
         [],
     );
-    const jobs = pending.map((fig) => {
-      this.figureObserver?.unobserve(fig);
-      fig.removeAttribute("data-pending");
-      return Promise.resolve(this.drawFigureNow(fig)).catch(() => undefined);
-    });
+    const jobs = pending.map((fig) => this.drawPending(fig));
     this.restyled = Promise.all(jobs).then(() => undefined);
     await this.restyled;
   }
@@ -6951,6 +6960,16 @@ export class FolioDoc extends HTMLElement {
       band,
       at: Math.min(before?.at ?? -1, r.xs.length - 1),
     });
+    // Focused before it had drawn (Tab, or the palette's "Read a
+    // chart's values" on a lazy chart): the readout shows now.
+    if (this.shadowRoot?.activeElement === holder) {
+      queueMicrotask(() => {
+        const st = this.readouts.get(holder);
+        if (st && this.shadowRoot?.activeElement === holder) {
+          this.showReadout(holder, st.at >= 0 ? st.at : st.r.xs.length - 1);
+        }
+      });
+    }
     if (holder.dataset.readout) return;
     // The listeners outlive redraws: bound once, they read the current
     // readout.
@@ -7035,9 +7054,11 @@ export class FolioDoc extends HTMLElement {
    * not, or null.
    */
   focusChartReadout(): string | null {
+    // Every chart that can be read - drawn or still waiting (focusing a
+    // waiting one draws it, and the readout follows).
     const holders = Array.from(
       this.shadowRoot?.querySelectorAll<HTMLElement>(
-        ".chart-holder[data-readout]",
+        ".chart-holder[data-readable]",
       ) ?? [],
     );
     if (!holders.length)

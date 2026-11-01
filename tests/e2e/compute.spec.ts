@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readThrough } from "./reader";
 
 /**
  * Compute blocks (spec: docs/specs/compute-blocks.md, ADR-0030): a
@@ -62,6 +63,7 @@ test.describe("Compute blocks", () => {
     await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
     await page.goto("/?doc=demo/examples/compute.md");
     await expect(block(page)).toHaveCount(2);
+    await readThrough(page);
     await expect(status(page).nth(0)).toHaveText(
       /^→ @fit \(14 rows\) · @slope = [\d.]+$/,
       T,
@@ -266,6 +268,8 @@ test.describe("Compute blocks", () => {
     await page.route("**/pyodide/**", (route) => route.abort());
     await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
     await page.goto("/?doc=demo/examples/compute.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    await readThrough(page);
     await expect(
       page.locator('#the-doc figure[data-chart-source="fit"] svg'),
     ).toBeVisible();
