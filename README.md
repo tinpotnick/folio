@@ -60,6 +60,11 @@ open source under the MIT licence. Documents render fully offline.
 - **Present as slides** — one click plays any document as a deck: each
   H2 is a full-screen slide, with speaker notes on a separate presenter
   window so the projector stays clean. The file is still plain Markdown.
+- **Run Python in the document** — a `python` fence with `data=@sales`
+  and `out=fit` reads your datasets and publishes results back as tables,
+  values and chart sources, all offline in a sealed worker. Regressions,
+  statistics, anything Pyodide's standard library gives you — calculations
+  way beyond what charting can express.
 - **Export to PDF**, print, light and dark mode, a section browser, and
   a command palette (**Ctrl+K**) that finds every action by the words
   you already use.
@@ -93,6 +98,22 @@ type: donut
 :::
 ````
 
+And a compute block, still plain text — Python reads the dataset and
+publishes a fitted trend back into the document:
+
+````markdown
+```python data=@takings out=fit,slope
+xs = takings.col("day")
+ys = takings.col("takings")
+n = len(xs)
+mx = sum(xs) / n
+my = sum(ys) / n
+slope = round(sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs), 2)
+intercept = my - slope * mx
+fit = [{"day": x, "trend": round(intercept + slope * x, 1)} for x in xs]
+```
+````
+
 Everything else — headings, lists, links, ordinary tables — is the
 Markdown you already know.
 
@@ -106,6 +127,7 @@ Markdown you already know.
 | Plain-text file you can read anywhere | ✓ | — | — | ✓ | ✓ |
 | Works offline, no account | ✓ | partly | — | ✓ | ✓ |
 | No code to run | ✓ | ✓ | ✓ | ✓ | — |
+| Python over the document's own data, offline | ✓ (optional) | — | — | — | ✓ |
 | Present as slides, with speaker notes on your own screen | ✓ | slides mode | — | — | — |
 
 ## Examples
@@ -117,6 +139,8 @@ Open any of these in the [web version](https://tinpotnick.github.io/folio/)
   heatmap, and the sales pipeline as a diagram.
 - **Quarterly review deck** — the same report as a slideshow: press play
   and each section becomes a slide, with a presenter view for your notes.
+- **Coffee forecast** — a Python compute block fits a trend to the data
+  and projects it, published back into the document as a table and chart.
 - **Bracket design review** — a variants table driving a 3D model, mass
   against stiffness, a dimensioned drawing and a requirements trace.
 - **A practice journal** — a practice log charted week by week, and
