@@ -12,7 +12,9 @@ ed.value = "# T\n\n## A\n\nx\n\n## B\n\ny\n\n> note b\n\n## C\n\nz\n";
 ed.dispatchEvent(new Event("input", { bubbles: true }));
 q("#btn-view").click();
 for (let i = 0; i < 40 && !q("#the-doc h2"); i++) await wait(50);
+// The play button opens a dropdown: pick "Play slideshow".
 q("#btn-play").click();
+q("#mi-play").click();
 await wait(400);
 
 const popup = window.open(

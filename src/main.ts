@@ -438,11 +438,10 @@ function advanceSlide(delta: number): void {
   reflectPlay();
 }
 
-btnPlay.addEventListener("click", (ev) => {
-  // The chevron opens the dropdown; the button body toggles play/stop.
-  if ((ev.target as HTMLElement).closest(".chev")) return;
-  setPlaying(!playing);
-});
+// The play button opens its dropdown exactly like Export's menu
+// (wired with toolbarMenu below); the menu items act, the button
+// itself no longer toggles - picks are "Play slideshow"/"Stop
+// slideshow" (label flips in reflectPlay) and "Open presenter view".
 
 document.addEventListener("fullscreenchange", () => {
   // Esc out of fullscreen ends the show too - but opening the
@@ -2905,7 +2904,8 @@ function paletteEntries(): PaletteEntry[] {
     keywords: playing
       ? "stop exit end slideshow presentation play present fullscreen quit"
       : "play slideshow present presentation fullscreen slides deck h2",
-    action: () => btnPlay.click(),
+    // The toolbar button opens a menu now - act directly.
+    action: () => setPlaying(!playing),
   });
   entries.push({
     title: "Toggle speaker notes",
@@ -4235,35 +4235,16 @@ toolbarMenu(
   requireEl<HTMLElement>("#overflow-menu"),
 );
 
-// The play button's dropdown (its chevron): the two presentation
-// options - play on this screen, or play + open the presenter view.
-// The button body itself toggles play/stop (wired with btnPlay above).
-(() => {
-  const close = (): void => {
-    playMenu.hidden = true;
-    btnPlay.setAttribute("aria-expanded", "false");
-  };
-  btnPlay.addEventListener("mousedown", (ev) => {
-    if (!(ev.target as HTMLElement).closest(".chev")) return;
-    ev.preventDefault();
-    const open = playMenu.hidden;
-    closeMenus();
-    playMenu.hidden = !open;
-    btnPlay.setAttribute("aria-expanded", String(open));
-    if (open) placeMenu(btnPlay, playMenu);
-  });
-  playMenu.addEventListener("mousedown", (ev) => {
-    if ((ev.target as HTMLElement).closest("button")) ev.preventDefault();
-  });
-  playMenu.addEventListener("click", (ev) => {
-    const btn = (ev.target as HTMLElement).closest("button");
-    if (!btn) return;
-    if (btn.id === "mi-presenter") void openPresenter();
-    else setPlaying(!playing);
-    close();
-  });
-  menus.push({ menu: playMenu, close });
-})();
+// The play button's dropdown, exactly like the other toolbar menus:
+// the two presentation options - play on this screen (or stop, while
+// playing), or play + open the presenter view.
+toolbarMenu(btnPlay, playMenu);
+playMenu.addEventListener("click", (ev) => {
+  const btn = (ev.target as HTMLElement).closest("button");
+  if (!btn) return;
+  if (btn.id === "mi-presenter") void openPresenter();
+  else setPlaying(!playing);
+});
 
 // Citation: the palette, opened on the bibliography's references - or,
 // with none yet, a word on where they come from.

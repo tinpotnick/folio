@@ -40,6 +40,12 @@ async function loadDeck(page: Page): Promise<void> {
   await expect(page.locator("#the-doc h2", { hasText: "Alpha" })).toBeVisible();
 }
 
+/** Toggle play via the play button's dropdown (Export-style menu). */
+async function togglePlay(page: Page): Promise<void> {
+  await page.locator("#btn-play").click();
+  await page.locator("#mi-play").click();
+}
+
 async function slideHeads(page: Page) {
   return page.evaluate(() => {
     const root = document.querySelector("#the-doc")?.shadowRoot;
@@ -63,13 +69,13 @@ test.describe("slideshow", () => {
   }) => {
     await loadDeck(page);
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
     // Full DOM, no windowing: every slide is in the article at once.
     expect(await slideHeads(page)).toEqual(["Alpha", "Beta", "Gamma"]);
     // H1 is the deck title: hidden while playing, present in the DOM.
     expect(await h1Visible(page)).toBe(false);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
   });
 
@@ -108,7 +114,7 @@ test.describe("slideshow", () => {
 
   test("one slide per H2; counter reads n of N", async ({ page }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await expect(page.locator("#status")).toContainText("Slide 1 of 3");
     const heads = await slideHeads(page);
     expect(heads).toHaveLength(3);
@@ -120,7 +126,7 @@ test.describe("slideshow", () => {
     page,
   }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await page.keyboard.press("ArrowRight");
     await expect(page.locator("#status")).toContainText("Slide 2 of 3");
     await page.keyboard.press("ArrowRight");
@@ -149,7 +155,7 @@ test.describe("slideshow", () => {
     });
     expect(before.wrappers).toBe(0);
     expect(before.attr).toBe(false);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     const during = await page.evaluate(() => {
       const root = document.querySelector("#the-doc")?.shadowRoot;
       const slide = root?.querySelector("article.folio-doc .folio-slide");
@@ -162,7 +168,7 @@ test.describe("slideshow", () => {
     page,
   }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await page.emulateMedia({ media: "print" });
     const size = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue(
@@ -207,7 +213,7 @@ test.describe("slideshow", () => {
     expect(off).toContain("@top-left");
     expect(off).toContain("counter(page)");
     // Playing: one slide per page needs no furniture.
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
     const on = await page.evaluate(
       () => document.querySelector("#print-furniture")?.textContent ?? "",
@@ -227,7 +233,7 @@ test.describe("slideshow", () => {
           }
         ).getMarkdown(),
     );
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Escape");
     const after = await page.evaluate(() =>
@@ -242,7 +248,7 @@ test.describe("slideshow", () => {
 
   test("switching to Markdown view stops the slideshow", async ({ page }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
     await page.locator("#btn-markdown").click();
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
@@ -317,7 +323,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     page,
   }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     const note = page.locator("#the-doc .folio-slide > blockquote:last-child");
     await expect(note).toHaveCount(1);
     // The PowerPoint presenter rule: the main display never shows notes.
@@ -358,7 +364,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     page,
   }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     const before = await page.evaluate(() =>
       (
         document.querySelector("#the-doc") as unknown as {
@@ -388,10 +394,10 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     page,
   }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     // The presenter view is the play button's dropdown (chevron),
     // which offers the two presentation options.
-    await page.locator("#btn-play .chev").click();
+    await page.locator("#btn-play").click();
     await expect(page.locator("#mi-play")).toBeVisible();
     await expect(page.locator("#mi-presenter")).toBeVisible();
     const [popup] = await Promise.all([
@@ -435,7 +441,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     );
     expect(size.trim()).toBe("16in 9in");
     await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
-    await page.locator("#btn-play").click();
+    await togglePlay(page);
     expect(await slideHeads(page)).toEqual([
       "Revenue by region",
       "Regional detail",

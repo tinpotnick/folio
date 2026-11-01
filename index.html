@@ -407,7 +407,11 @@
         padding: 3px;
         background: var(--surface);
       }
-      .seg button {
+      /* Scoped to the seg's OWN buttons: a .menu inside the seg (the
+         play dropdown) must not inherit these - the menu has its own
+         item styles (which these would otherwise override). */
+      .seg > button,
+      .seg > .menu-wrap > button {
         border: none;
         background: transparent;
         border-radius: 6px;
@@ -418,7 +422,8 @@
         cursor: pointer;
         color: var(--text-muted);
       }
-      .seg button:hover {
+      .seg > button:hover,
+      .seg > .menu-wrap > button:hover {
         background: var(--surface-2);
       }
       /* The play button carries its dropdown chevron: wider than the
@@ -427,9 +432,6 @@
         width: 48px;
         grid-auto-flow: column;
         gap: 0;
-      }
-      .seg .play-split .chev {
-        width: 8px;
       }
       /* Recording: the mic button pulses while capture runs. */
       #btn-record.rec {
@@ -446,16 +448,22 @@
           box-shadow: 0 0 0 4px rgba(180, 35, 24, 0.12);
         }
       }
-      .seg button.active {
+      .seg > button.active,
+      .seg > .menu-wrap > button.active {
         background: var(--active-bg);
         color: var(--active-fg);
       }
-      .seg svg,
+      .seg > button svg,
+      .seg > .menu-wrap > button > svg,
       #block-bar svg {
         width: 16px;
         height: 16px;
         display: block;
         margin: 0 auto;
+      }
+      .seg .play-split .chev {
+        width: 8px;
+        margin: 0;
       }
       .fmt {
         display: flex;
@@ -2281,7 +2289,7 @@
           <div class="menu-wrap">
             <button
               id="btn-play"
-              class="play-split"
+              class="menu-trigger play-split"
               title="Play slideshow"
               aria-label="Play slideshow"
               aria-haspopup="menu"
