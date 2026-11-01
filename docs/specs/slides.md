@@ -183,6 +183,23 @@ file), so nothing is special-cased: slides are H2 sections.
   contenteditable, but arrow keys / click advance slides instead of
   moving the caret; clicking into text places the caret and typing
   works as in document view. Play is a display flag, not a lock.
+  Arrows and Page Up/Down always drive the show; Space and N type when
+  the caret is in text. Play drops any caret left from editing and
+  starts at slide 1 (2026-11-01: a caret left in a table cell took the
+  arrows, and the show opened wherever the document was scrolled,
+  "Slide 1 of 4" over slide 2).
+- **The screen while playing** (2026-11-01): the toolbar stays (its
+  view buttons stop the show); the section browser and help panel
+  hide, and the page is black around the slides. A slide fills the
+  space under the toolbar: the host sets `--folio-slide-inset` (the
+  toolbar's height) and the component sizes the slide, its padding
+  and its figures from `--slide-h` (the screen less the inset). A
+  slide title has no top margin - the slide's padding is it. Sized to
+  the whole screen, each slide lost its top under the toolbar and
+  overflowed.
+- **Recording the README demo**: `scripts/record-present-gif.mjs`
+  (needs the dev server and ffmpeg) re-records `docs/media/present.gif`
+  at 1280x720 - re-run it after changing how slides look.
 - **Discoverability (ADR-0009 layer 1)**: the play button sits in the
   toolbar next to the view toggle, with palette commands "Play
   slideshow" / "Stop slideshow" and matching in-app-help entries in

@@ -430,9 +430,19 @@ function setPlaying(on: boolean): void {
   if (on === playing) return;
   playing = on;
   currentSlide = 0;
+  // Slides fill the space under the toolbar, nothing else around them
+  // (docs/specs/slides.md; sized to the whole screen, each slide lost
+  // its top under the toolbar and overflowed).
+  document.documentElement.classList.toggle("playing", on);
   if (on) {
     if (mdWrap.hidden === false) btnView.click();
+    // The show starts at its first slide, with no editing caret left
+    // over from the document (it held the keys, and the view stayed
+    // wherever the document was scrolled - "Slide 1 of 4" over slide 2).
+    window.getSelection()?.removeAllRanges();
+    (document.activeElement as HTMLElement | null)?.blur();
     el.setAttribute("slides", "");
+    requestAnimationFrame(() => advanceSlide(0));
     void document.documentElement.requestFullscreen?.().catch(() => undefined);
   } else {
     el.removeAttribute("slides");
@@ -482,22 +492,15 @@ document.addEventListener("keydown", (ev) => {
     setPlaying(false);
     return;
   }
-  // While the caret is in the document's text, keys edit text as in
-  // document view (play is a display flag, not a lock); otherwise
-  // they drive the show.
+  // Arrows and Page Up/Down always drive the show (docs/specs/
+  // slides.md, "Play vs. edit": they advance slides instead of moving
+  // the caret - a caret left in a table cell from editing swallowed
+  // them). Space and N are characters: in text they type, as in
+  // document view (play is a display flag, not a lock).
   const host = el.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
   const anchor = host ? docSelectionAnchor(host) : null;
   const inText = anchor !== null && anchor.nodeType === Node.TEXT_NODE;
-  if (
-    inText &&
-    (ev.key.startsWith("Arrow") ||
-      ev.key === " " ||
-      ev.key === "PageDown" ||
-      ev.key === "PageUp" ||
-      ev.key === "n" ||
-      ev.key === "N")
-  )
-    return;
+  if (inText && (ev.key === " " || ev.key === "n" || ev.key === "N")) return;
   if (ev.key === "ArrowRight" || ev.key === "PageDown" || ev.key === " ") {
     ev.preventDefault();
     advanceSlide(1);
