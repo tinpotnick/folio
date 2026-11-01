@@ -787,7 +787,20 @@ export class FolioDoc extends HTMLElement {
       this.load(value);
     }
     if (name === "mode" && old !== value) this.restyle();
-    if (name === "slides" && old !== value) this.restyle();
+    if (name === "slides" && old !== value) {
+      // The host sets `slides` on the COMPONENT to mean "playing"; the
+      // slide CSS keys off it on the ARTICLE, so reflect it there and
+      // wrap/unwrap the slides to match.
+      const article =
+        this.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
+      if (article) {
+        if (value === null) article.removeAttribute("slides");
+        else article.setAttribute("slides", value);
+        this.wrapSlides(article);
+        this.refreshSlideState();
+      }
+      this.restyle();
+    }
   }
 
   /**
@@ -1249,13 +1262,39 @@ export class FolioDoc extends HTMLElement {
    * them, so the model is untouched either way.
    */
   private wrapSlides(host: HTMLElement): void {
-    for (const w of Array.from(
-      host.querySelectorAll(":scope > .folio-slide"),
-    )) {
-      while (w.firstChild) host.insertBefore(w.firstChild, w);
-      w.remove();
+    const unwrap = (): void => {
+      for (const w of Array.from(
+        host.querySelectorAll(":scope > .folio-slide"),
+      )) {
+        while (w.firstChild) host.insertBefore(w.firstChild, w);
+        w.remove();
+      }
+    };
+    // Wrappers exist ONLY while slide rendering is on: in document
+    // view the article's children are exactly the blocks, so every
+    // positional reader (caret tracking, revealBlock, e2e selectors)
+    // stays aligned.
+    if (!this.slides) {
+      unwrap();
+      return;
     }
-    if (!this.slides) return;
+    // Idempotent: if every H2 already opens a wrapper (and no wrapper
+    // holds an H1), the DOM is correctly wrapped - re-wrapping would
+    // re-parent the caret's element on every keystroke.
+    const kids = Array.from(host.children).filter(
+      (c) => !(c as HTMLElement).classList.contains("folio-notes"),
+    );
+    const alreadyWrapped = kids.every((c) => {
+      const el = c as HTMLElement;
+      if (el.classList.contains("folio-slide"))
+        return (
+          el.firstElementChild?.tagName === "H2" &&
+          el.querySelector("h1") === null
+        );
+      return el.tagName !== "H2";
+    });
+    if (alreadyWrapped) return;
+    unwrap();
     let wrap: HTMLElement | null = null;
     for (const child of Array.from(host.children)) {
       const el = child as HTMLElement;
@@ -1283,9 +1322,17 @@ export class FolioDoc extends HTMLElement {
         return el;
       }
       case "prose": {
-        const el = document.createElement("p");
+        // A paragraph starting with ">" is a blockquote (CommonMark):
+        // rendered as <blockquote>, and on a slide's tail it is the
+        // speaker note (docs/specs/slides.md). The model keeps the
+        // ">" prefix, so the source round-trips unchanged.
+        const quote = /^>\s?/.exec(block.text);
+        const el = document.createElement(quote ? "blockquote" : "p");
         el.dataset.blockIndex = String(idx);
-        el.innerHTML = inlineMarkdownToHtml(block.text, this.inlineOpts());
+        el.innerHTML = inlineMarkdownToHtml(
+          quote ? block.text.replace(/^>\s?/, "") : block.text,
+          this.inlineOpts(),
+        );
         return el;
       }
       case "list": {
@@ -6498,7 +6545,11 @@ export class FolioDoc extends HTMLElement {
       if (this.slides && slide.scrollHeight > slide.clientHeight + 1)
         overflow = true;
     }
-    this.setAttribute("slides", overflow ? "overflow" : "");
+    // The host owns the `slides` attribute (presence = playing); the
+    // component only annotates it ("overflow") while playing, and
+    // never adds it on its own.
+    if (this.hasAttribute("slides"))
+      this.setAttribute("slides", overflow ? "overflow" : "");
     if (host) host.classList.toggle("slides-scrim", this.hasImageBackground());
   }
 
@@ -7134,21 +7185,22 @@ export class FolioDoc extends HTMLElement {
     );
     let gi = 0;
     const next: DocBlock[] = [];
-    const blockEls = Array.from(host.children).filter(
-      (c) => !c.classList.contains("folio-notes"),
-    );
-    for (const child of blockEls) {
+    // Slide wrappers (.folio-slide) are presentational only: flatten
+    // them so their children are the blocks, in order.
+    const blockEls: HTMLElement[] = [];
+    for (const child of Array.from(host.children)) {
       const el = child as HTMLElement;
       if (el.classList.contains("folio-notes")) continue;
-      // Slide wrappers (slide rendering on) are presentational only:
-      // sync through them so their children stay the blocks.
       if (el.classList.contains("folio-slide")) {
         for (const inner of Array.from(el.children)) {
-          blockEls.splice(blockEls.indexOf(el) + 1, 0, inner);
+          const ie = inner as HTMLElement;
+          if (!ie.classList.contains("folio-notes")) blockEls.push(ie);
         }
-        blockEls.splice(blockEls.indexOf(el), 1);
-        continue;
+      } else {
+        blockEls.push(el);
       }
+    }
+    for (const el of blockEls) {
       if (
         (el.tagName === "ASIDE" && el.classList.contains("folio-fndefs")) ||
         (el.tagName === "NAV" && el.classList.contains("folio-toc"))
@@ -7198,6 +7250,13 @@ export class FolioDoc extends HTMLElement {
       }
       if (el.tagName === "UL" || el.tagName === "OL") {
         next.push({ kind: "list", ...readListBody(el) });
+        continue;
+      }
+      if (el.tagName === "BLOCKQUOTE") {
+        // Rendered from a prose block starting with ">" - put the
+        // marker back so the model round-trips byte-identically.
+        const md = htmlToInlineMarkdown(el.innerHTML).replace(/\n+$/, "");
+        next.push({ kind: "prose", text: `> ${md}` });
         continue;
       }
       const md = htmlToInlineMarkdown(el.innerHTML).replace(/\n+$/, "");

@@ -36,9 +36,8 @@ data:
 
 ::: chart {#deck-growth}
 source: @deck-regional
+query: {select: [region, growth], sort: {by: growth, order: desc}}
 type: bar
-x: region
-y: growth
 caption: "Quarter-on-quarter growth by region"
 :::
 

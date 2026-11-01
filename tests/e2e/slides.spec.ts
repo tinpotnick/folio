@@ -2,8 +2,9 @@ import { expect, test, type Page } from "@playwright/test";
 
 /**
  * Slideshow (docs/specs/slides.md): play toggles a slide-rendering
- * flag on the document view (one slide per H1, full DOM) plus
- * fullscreen. The file is never changed by presenting.
+ * flag on the document view (the H1 is the deck title, one slide per
+ * H2, full DOM) plus fullscreen. The file is never changed by
+ * presenting.
  */
 
 const DECK = [
@@ -31,19 +32,17 @@ const DECK = [
 async function loadDeck(page: Page): Promise<void> {
   await page.goto("/?doc=demo/examples/field-operations.md");
   await expect(
-    page.locator("folio-doc h1", { hasText: "Q3 Field Operations Review" }),
+    page.locator("#the-doc h1", { hasText: "Q3 Field Operations Review" }),
   ).toBeVisible();
   await page.locator("#btn-markdown").click();
   await page.locator("#editor").fill(DECK);
   await page.locator("#btn-view").click();
-  await expect(
-    page.locator("folio-doc h1", { hasText: "Alpha" }),
-  ).toBeVisible();
+  await expect(page.locator("#the-doc h2", { hasText: "Alpha" })).toBeVisible();
 }
 
 async function slideHeads(page: Page) {
   return page.evaluate(() => {
-    const root = document.querySelector("folio-doc")?.shadowRoot;
+    const root = document.querySelector("#the-doc")?.shadowRoot;
     return Array.from(
       root?.querySelectorAll("article.folio-doc .folio-slide > h2") ?? [],
     ).map((h) => (h as HTMLElement).textContent);
@@ -52,7 +51,7 @@ async function slideHeads(page: Page) {
 
 async function h1Visible(page: Page): Promise<boolean> {
   return page.evaluate(() => {
-    const root = document.querySelector("folio-doc")?.shadowRoot;
+    const root = document.querySelector("#the-doc")?.shadowRoot;
     const h1 = root?.querySelector("article.folio-doc > h1");
     return h1 ? getComputedStyle(h1 as HTMLElement).display !== "none" : false;
   });
@@ -63,15 +62,15 @@ test.describe("slideshow", () => {
     page,
   }) => {
     await loadDeck(page);
-    await expect(page.locator("folio-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
     await page.locator("#btn-play").click();
-    await expect(page.locator("folio-doc")).toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
     // Full DOM, no windowing: every slide is in the article at once.
     expect(await slideHeads(page)).toEqual(["Alpha", "Beta", "Gamma"]);
     // H1 is the deck title: hidden while playing, present in the DOM.
     expect(await h1Visible(page)).toBe(false);
     await page.locator("#btn-play").click();
-    await expect(page.locator("folio-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
   });
 
   test("palette offers Play slideshow / Stop slideshow", async ({ page }) => {
@@ -84,7 +83,7 @@ test.describe("slideshow", () => {
       }),
     ).toBeVisible();
     await page.keyboard.press("Enter");
-    await expect(page.locator("folio-doc")).toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
     await page.keyboard.press("Control+k");
     await page.locator("#palette-input").fill("stop");
     await expect(
@@ -93,19 +92,17 @@ test.describe("slideshow", () => {
       }),
     ).toBeVisible();
     await page.keyboard.press("Enter");
-    await expect(page.locator("folio-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
   });
 
-  test("one slide per H1; H2 never splits; counter reads n of N", async ({
-    page,
-  }) => {
+  test("one slide per H2; counter reads n of N", async ({ page }) => {
     await loadDeck(page);
     await page.locator("#btn-play").click();
     await expect(page.locator("#status")).toContainText("Slide 1 of 3");
     const heads = await slideHeads(page);
     expect(heads).toHaveLength(3);
     // The H1 is the title, not a slide; the preamble is not a slide.
-    await expect(page.locator("folio-doc h1")).toHaveCount(1);
+    await expect(page.locator("#the-doc h1")).toHaveCount(1);
   });
 
   test("arrow keys advance and clamp at the last slide; Esc stops", async ({
@@ -122,29 +119,35 @@ test.describe("slideshow", () => {
     await page.keyboard.press("ArrowLeft");
     await expect(page.locator("#status")).toContainText("Slide 2 of 3");
     await page.keyboard.press("Escape");
-    await expect(page.locator("folio-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
   });
 
   test("slide CSS applies only with the flag: aspect and scale", async ({
     page,
   }) => {
     await loadDeck(page);
+    // Document view: no slide wrappers, no flag - the article's
+    // children are exactly the blocks.
     const before = await page.evaluate(() => {
-      const root = document.querySelector("folio-doc")?.shadowRoot;
-      const slide = root?.querySelector("article.folio-doc .folio-slide");
-      return slide ? getComputedStyle(slide as HTMLElement).aspectRatio : "";
+      const root = document.querySelector("#the-doc")?.shadowRoot;
+      const art = root?.querySelector("article.folio-doc");
+      return {
+        wrappers: art?.querySelectorAll(":scope > .folio-slide").length ?? -1,
+        attr: art?.hasAttribute("slides") ?? true,
+      };
     });
-    expect(before).toBe("auto");
+    expect(before.wrappers).toBe(0);
+    expect(before.attr).toBe(false);
     await page.locator("#btn-play").click();
     const during = await page.evaluate(() => {
-      const root = document.querySelector("folio-doc")?.shadowRoot;
+      const root = document.querySelector("#the-doc")?.shadowRoot;
       const slide = root?.querySelector("article.folio-doc .folio-slide");
       return slide ? getComputedStyle(slide as HTMLElement).aspectRatio : "";
     });
     expect(during).toBe("16 / 9");
   });
 
-  test("print media while playing uses 16:9 pages and breaks H1s", async ({
+  test("print media while playing uses 16:9 pages, one slide per page", async ({
     page,
   }) => {
     await loadDeck(page);
@@ -165,7 +168,7 @@ test.describe("slideshow", () => {
     expect(sizeAfter.trim()).toBe("16in 9in");
     expect(size).not.toBe("16in 9in");
     const css = await page.evaluate(() => {
-      const root = document.querySelector("folio-doc")?.shadowRoot;
+      const root = document.querySelector("#the-doc")?.shadowRoot;
       return root?.querySelector("style")?.textContent ?? "";
     });
     expect(css).toContain("article.folio-doc[slides] .folio-slide");
@@ -185,26 +188,30 @@ test.describe("slideshow", () => {
 
   test("page furniture is suppressed while playing", async ({ page }) => {
     await loadDeck(page);
-    await page.locator("#btn-play").click();
-    const css = await page.evaluate(
-      () => document.querySelector("#print-furniture")?.textContent ?? "",
-    );
+    // Play off: beforeprint stamps the running header and page numbers.
     await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
-    const cssAfter = await page.evaluate(
+    const off = await page.evaluate(
       () => document.querySelector("#print-furniture")?.textContent ?? "",
     );
-    expect(css).not.toBe(cssAfter);
-    expect(cssAfter).not.toContain("@top-left");
-    expect(cssAfter).not.toContain("counter(page)");
+    expect(off).toContain("@top-left");
+    expect(off).toContain("counter(page)");
+    // Playing: one slide per page needs no furniture.
+    await page.locator("#btn-play").click();
+    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+    const on = await page.evaluate(
+      () => document.querySelector("#print-furniture")?.textContent ?? "",
+    );
+    expect(on).not.toContain("@top-left");
+    expect(on).not.toContain("counter(page)");
   });
 
   test("the document model is unchanged by playing", async ({ page }) => {
     await loadDeck(page);
     const before = await page.evaluate(
       () =>
-        document.querySelector("folio-doc")?.getAttribute("src") ??
+        document.querySelector("#the-doc")?.getAttribute("src") ??
         (
-          document.querySelector("folio-doc") as unknown as {
+          document.querySelector("#the-doc") as unknown as {
             getMarkdown(): string;
           }
         ).getMarkdown(),
@@ -214,7 +221,7 @@ test.describe("slideshow", () => {
     await page.keyboard.press("Escape");
     const after = await page.evaluate(() =>
       (
-        document.querySelector("folio-doc") as unknown as {
+        document.querySelector("#the-doc") as unknown as {
           getMarkdown(): string;
         }
       ).getMarkdown(),
@@ -225,12 +232,12 @@ test.describe("slideshow", () => {
   test("switching to Markdown view stops the slideshow", async ({ page }) => {
     await loadDeck(page);
     await page.locator("#btn-play").click();
-    await expect(page.locator("folio-doc")).toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
     await page.locator("#btn-markdown").click();
-    await expect(page.locator("folio-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
   });
 
-  test("TOC lists every H1 while playing, lone-H1 rule off otherwise", async ({
+  test("TOC lists the H2 slides; a lone H1 stays the title in both views", async ({
     page,
   }) => {
     await loadDeck(page);
@@ -242,10 +249,10 @@ test.describe("slideshow", () => {
       .fill("# Only\n\n[[_TOC_]]\n\nText.\n\n## A slide\n\nBody.\n");
     await page.locator("#btn-view").click();
     // A lone H1 is the title in BOTH views now (H2s are the slides).
-    await expect(page.locator("folio-doc nav.folio-toc")).toContainText(
+    await expect(page.locator("#the-doc nav.folio-toc")).toContainText(
       "A slide",
     );
-    await expect(page.locator("folio-doc nav.folio-toc")).not.toContainText(
+    await expect(page.locator("#the-doc nav.folio-toc")).not.toContainText(
       "Only",
     );
   });
@@ -257,9 +264,28 @@ test.describe("slideshow", () => {
     await page.locator("#btn-settings").click();
     await page.locator("#set-page-size").selectOption("16:9");
     await page.locator("#settings-form button[type=submit]").click();
-    await expect(page.locator("#btn-settings")).toBeVisible();
+    await expect(page.locator("#status")).toContainText("Settings applied");
+    // The serializer quotes the value (it contains a colon); the
+    // document's Markdown carries the key through the YAML pipeline.
+    const md = await page.evaluate(() =>
+      (
+        document.querySelector("#the-doc") as unknown as {
+          getMarkdown(): string;
+        }
+      ).getMarkdown(),
+    );
+    expect(md).toContain('page.size: "16:9"');
+    // And it round-trips back out of the Markdown view.
     await page.locator("#btn-markdown").click();
-    await expect(page.locator("#editor")).toContainText("page.size: 16:9");
+    await page.locator("#btn-view").click();
+    const md2 = await page.evaluate(() =>
+      (
+        document.querySelector("#the-doc") as unknown as {
+          getMarkdown(): string;
+        }
+      ).getMarkdown(),
+    );
+    expect(md2).toContain('page.size: "16:9"');
   });
 
   test("deck themes appear in the theme picker", async ({ page }) => {
@@ -279,21 +305,21 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
   test("speaker notes toggle with N and never print", async ({ page }) => {
     await loadDeck(page);
     await page.locator("#btn-play").click();
-    await expect(page.locator("folio-doc blockquote")).toBeVisible();
+    await expect(page.locator("#the-doc blockquote")).toBeVisible();
     await page.keyboard.press("n");
     const styled = await page.evaluate(() =>
-      document.querySelector("folio-doc")?.classList.contains("slides-notes"),
+      document.querySelector("#the-doc")?.classList.contains("slides-notes"),
     );
     expect(styled).toBe(true);
     await page.keyboard.press("n");
     const unstyled = await page.evaluate(() =>
-      document.querySelector("folio-doc")?.classList.contains("slides-notes"),
+      document.querySelector("#the-doc")?.classList.contains("slides-notes"),
     );
     expect(unstyled).toBe(false);
     // Notes are display:none in print media.
     await page.emulateMedia({ media: "print" });
     const printDisplay = await page.evaluate(() => {
-      const root = document.querySelector("folio-doc")?.shadowRoot;
+      const root = document.querySelector("#the-doc")?.shadowRoot;
       const q = root?.querySelector(".folio-slide > blockquote:last-child");
       return q ? getComputedStyle(q as HTMLElement).display : "";
     });
@@ -308,7 +334,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     await page.locator("#btn-play").click();
     const before = await page.evaluate(() =>
       (
-        document.querySelector("folio-doc") as unknown as {
+        document.querySelector("#the-doc") as unknown as {
           getMarkdown(): string;
         }
       ).getMarkdown(),
@@ -319,7 +345,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     await page.keyboard.type(" More.");
     const after = await page.evaluate(() =>
       (
-        document.querySelector("folio-doc") as unknown as {
+        document.querySelector("#the-doc") as unknown as {
           getMarkdown(): string;
         }
       ).getMarkdown(),
@@ -336,7 +362,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
   }) => {
     await page.goto("/?doc=demo/examples/deck.md");
     await expect(
-      page.locator("folio-doc h1", { hasText: "Quarterly Review Deck" }),
+      page.locator("#the-doc h1", { hasText: "Quarterly Review Deck" }),
     ).toBeVisible();
     await page.locator("#btn-play").click();
     expect(await slideHeads(page)).toEqual([
@@ -349,7 +375,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
     await expect(page.locator("#status")).toContainText("Slide 3 of 4");
-    await expect(page.locator("folio-doc [data-chart-source]")).toBeVisible();
+    await expect(page.locator("#the-doc [data-chart-source]")).toBeVisible();
     // Preamble hidden while playing.
     expect(await h1Visible(page)).toBe(false);
   });

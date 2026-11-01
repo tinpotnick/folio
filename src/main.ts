@@ -313,9 +313,10 @@ btnMd.addEventListener("click", () => {
 
 /**
  * Play is a session flag, never written to the document: it sets the
- * component's `slides` attribute (one slide per H1, full DOM) and
- * fullscreen. Arrow keys / click advance while playing; Esc exits
- * both. The saved file is byte-identical before and after.
+ * component's `slides` attribute (the H1 is the deck title, one slide
+ * per H2, full DOM) and fullscreen. Arrow keys / click advance while
+ * playing; Esc exits both. The saved file is byte-identical before
+ * and after.
  */
 let playing = false;
 let currentSlide = 0;
@@ -323,8 +324,9 @@ let currentSlide = 0;
 function slideHeads(): HTMLElement[] {
   const root = el.shadowRoot;
   if (!root) return [];
+  // Slides are the .folio-slide wrappers around each H2 (v2).
   return Array.from(
-    root.querySelectorAll<HTMLElement>("article.folio-doc > h1"),
+    root.querySelectorAll<HTMLElement>("article.folio-doc > .folio-slide"),
   );
 }
 
@@ -339,7 +341,7 @@ function reflectPlay(): void {
     status.textContent = `Slide ${String(currentSlide + 1)} of ${String(n)}`;
     status.classList.add("show");
   } else if (playing) {
-    status.textContent = "No slides - add an H1 heading";
+    status.textContent = "No slides - add an H2 heading";
     status.classList.add("show");
   }
   // An overflowing slide is marked by the component on `slides`.
@@ -385,21 +387,36 @@ document.addEventListener("keydown", (ev) => {
     setPlaying(false);
     return;
   }
-  // While the caret is in the document's text, arrows move the caret
-  // (play is a display flag, not a lock); otherwise they advance.
-  const sel = window.getSelection();
-  const anchor = sel?.anchorNode;
-  const inText =
-    anchor instanceof Node &&
-    anchor.nodeType === Node.TEXT_NODE &&
-    el.shadowRoot?.contains(anchor) === true;
-  if (inText && ev.key.startsWith("Arrow")) return;
+  // While the caret is in the document's text, keys edit text as in
+  // document view (play is a display flag, not a lock); otherwise
+  // they drive the show.
+  const host = el.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
+  const anchor = host ? docSelectionAnchor(host) : null;
+  const inText = anchor !== null && anchor.nodeType === Node.TEXT_NODE;
+  if (
+    inText &&
+    (ev.key.startsWith("Arrow") ||
+      ev.key === " " ||
+      ev.key === "PageDown" ||
+      ev.key === "PageUp" ||
+      ev.key === "n" ||
+      ev.key === "N")
+  )
+    return;
   if (ev.key === "ArrowRight" || ev.key === "PageDown" || ev.key === " ") {
     ev.preventDefault();
     advanceSlide(1);
   } else if (ev.key === "ArrowLeft" || ev.key === "PageUp") {
     ev.preventDefault();
     advanceSlide(-1);
+  } else if (ev.key === "n" || ev.key === "N") {
+    // Speaker notes (trailing slide blockquotes) on/off.
+    ev.preventDefault();
+    const on = !el.classList.contains("slides-notes");
+    el.classList.toggle("slides-notes", on);
+    el.shadowRoot
+      ?.querySelector("article.folio-doc")
+      ?.classList.toggle("slides-notes", on);
   }
 });
 
@@ -2665,7 +2682,7 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords: playing
       ? "stop exit end slideshow presentation play present fullscreen quit"
-      : "play slideshow present presentation fullscreen slides deck h1",
+      : "play slideshow present presentation fullscreen slides deck h2",
     action: () => btnPlay.click(),
   });
   entries.push({

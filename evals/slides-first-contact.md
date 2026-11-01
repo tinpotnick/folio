@@ -11,7 +11,7 @@ steps:
   - Save the document and confirm the saved file has no slide markup - it is byte-identical to before playing.
 expected:
   - Play is findable from the toolbar play button or the palette with no instructions.
-  - Each H1 starts a slide; H2s never split; the counter reads "Slide n of N" and advancing past the last slide stays on it.
+  - Each H2 starts a slide (the H1 is the deck title); the counter reads "Slide n of N" and advancing past the last slide stays on it.
   - Esc exits fullscreen and slide rendering together.
   - While playing, print/export uses 16:9 pages with one slide per page and no page furniture; with play off, A4 continuous.
   - The document on disk is unchanged by presenting.

@@ -330,6 +330,8 @@ async fn print_to_pdf(
 ) -> Result<(), String> {
     use webkit2gtk::PrintOperationExt;
     let uri = gtk::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
+    // The webview closure is 'static: own the page-size key.
+    let page_size = page_size.map(str::to_string);
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     window
         .with_webview(move |wv| {
@@ -342,17 +344,19 @@ async fn print_to_pdf(
             let page = gtk::PageSetup::new();
             // The document's `page.size` key (docs/specs/slides.md);
             // A4 is the default for a raw Markdown file.
-            let paper = match page_size.unwrap_or("a4") {
+            let paper = match page_size.as_deref().unwrap_or("a4") {
                 "a5" => gtk::PaperSize::new(Some("iso_a5")),
                 "letter" => gtk::PaperSize::new(Some("na_letter")),
                 "16:9" => gtk::PaperSize::new_custom(
                     "folio-16x9",
+                    "Slide 16:9",
                     16.0 * 25.4,
                     9.0 * 25.4,
                     gtk::Unit::Mm,
                 ),
                 "4:3" => gtk::PaperSize::new_custom(
                     "folio-4x3",
+                    "Slide 4:3",
                     (32.0 / 3.0) * 25.4,
                     8.0 * 25.4,
                     gtk::Unit::Mm,
