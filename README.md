@@ -9,9 +9,12 @@
 
 **The document Word should have been.**
 
-Write reports where the numbers live in the document and calculate as you
-type, the page looks finished from the first word, and the file is plain
-text that anyone can read — today, and in twenty years.
+folio is the complete office suite in one plain-text file: tables and
+embedded datasets, charts, Python, diagrams, equations, drawings, 3D
+models, music, and slides. Write reports where the numbers live in the
+document and calculate as you type, the page looks finished from the
+first word, and the file is plain text that anyone can read — today, and
+in twenty years.
 
 **[Try it in your browser](https://tinpotnick.github.io/folio/)** ·
 **[Install on Linux, Windows or macOS](#install)** ·
@@ -44,30 +47,35 @@ open source under the MIT licence. Documents render fully offline.
 
 ## What you can do
 
-- **Tables two ways** — a plain Markdown table that GitHub shows as is,
-  or a **dataset** with typed columns, units and formulas across rows
-  and tables. One click turns one into the other.
-- **Charts as queries** — bar, line, area, scatter, pie and donut, with
+- **Tables and datasets (embedded spreadsheets)** — a plain Markdown
+  table that GitHub shows as is, or a **dataset** with typed columns,
+  units and formulas across rows and tables. One click turns one into
+  the other.
+- **Beautiful charting** — bar, line, area, scatter, pie and donut, with
   several series, stacked or grouped; filter and sort them with the
   same expressions as formulas. Or write a full
   [Vega-Lite](https://vega.github.io/vega-lite/) chart over your data.
-- **Equations, code and diagrams** — LaTeX maths, highlighted code,
-  Mermaid and Graphviz diagrams, hand-written SVG drawings, and
-  parametric **3D models** (JSCAD) you can export as STL.
-- **Images, audio and sheet music** — embedded in the document itself;
-  record straight from the microphone; write music in ABC notation and
-  hear it played.
-- **Present as slides** — one click plays any document as a deck: each
-  H2 is a full-screen slide, with speaker notes on a separate presenter
-  window so the projector stays clean. The file is still plain Markdown.
 - **Run Python in the document** — a `python` fence with `data=@sales`
   and `out=fit` reads your datasets and publishes results back as tables,
   values and chart sources, all offline in a sealed worker. Regressions,
   statistics, anything Pyodide's standard library gives you — calculations
   way beyond what charting can express.
-- **Export to PDF**, print, light and dark mode, a section browser, and
-  a command palette (**Ctrl+K**) that finds every action by the words
-  you already use.
+- **Diagrams and equations** — Mermaid and Graphviz diagrams, LaTeX
+  maths, highlighted code.
+- **Drawings and 3D models** — hand-written SVG; parametric **JSCAD**
+  models you can export as STL.
+- **Music and audio** — ABC notation and Strudel live-coding patterns
+  played in the page; audio recorded from the microphone or embedded.
+- **Images** — embedded in the document itself, so the file stands alone.
+- **Simple formatting, zero hand-styling** — ten themes (each with a
+  dark mode) decide fonts, colours, table rules and the chart palette.
+  Print or **export to PDF** and it looks like a report, not a web page.
+- **Present as slides** — one click plays any document as a deck: each
+  H2 is a full-screen slide, with speaker notes on a separate presenter
+  window so the projector stays clean. The file is still plain Markdown.
+- **An open standard underneath** — one plain Markdown file, plus a
+  section browser and a command palette (**Ctrl+K**) that finds every
+  action by the words you already use.
 
 ![The Insert menu, and a design review where a table drives a 3D model](docs/media/features.png)
 
