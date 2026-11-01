@@ -23,6 +23,12 @@ later, host-level addition; documents never depend on it to render.
   <name>"); the Save button's tooltip says it downloads.
 - **Suggested name**: the open file's, else the first H1, else
   "Untitled" (shared with Export as PDF).
+- **Prettify on save**: what is written is the canonical serialization
+  (`canonicalMarkdown` = parse + serialize, src/engine/doc.ts), from
+  either view - folio owns the file format, and the round-trip
+  invariant already demands the canonical form. A document that does
+  not parse (mid-edit in the Markdown view) saves its raw text -
+  saving is never blocked by a parse error.
 - **The unsaved-changes dialog** offers Save on the web too.
 - **The draft** (`src/drafts.ts`, IndexedDB `folio-drafts` - not
   localStorage, documents carry images): whenever the document is

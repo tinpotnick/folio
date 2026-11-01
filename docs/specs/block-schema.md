@@ -8,8 +8,16 @@ view or transformation of this structure.
 ```yaml
 Document:
   version: 1
-  frontmatter:          # theme ref + closed-schema style overrides
+  frontmatter:          # optional comment + theme ref + style overrides
   blocks: [Block, ...]  # ordered, addressable by anchor id
+
+Frontmatter:
+  comment?: string      # first `#` line of the YAML header, preserved
+                        # verbatim; new documents carry a pointer to the
+                        # app ("Best viewed in folio: …"), existing files
+                        # are never retrofitted
+  theme?: string
+  style: [key, value][]
 
 Block:
   kind: prose | heading | table | chart | diagram | callout

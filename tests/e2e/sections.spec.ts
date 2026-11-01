@@ -133,10 +133,11 @@ test.describe("section browser", () => {
       };
     });
     await page.keyboard.press("Control+p");
-    expect(
-      await page.evaluate(
-        () => (window as unknown as { printed: number }).printed,
-      ),
-    ).toBe(1);
+    // printDocument is async (it draws lazy figures before printing).
+    await expect
+      .poll(() =>
+        page.evaluate(() => (window as unknown as { printed: number }).printed),
+      )
+      .toBe(1);
   });
 });

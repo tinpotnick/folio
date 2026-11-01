@@ -12,7 +12,7 @@ import {
 } from "./render/page-furniture";
 import "./component.js";
 import type { FolioDoc } from "./component.js";
-import { parseDoc, serializeDoc } from "./engine/doc.js";
+import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
   importedTable,
   parseImport,
@@ -94,7 +94,13 @@ const mdView = requireEl<HTMLElement>("#md-view");
 const WELCOME = "demo/welcome.md";
 
 /** A new document: an empty title, the caret in it. */
-const BLANK = "# \n";
+/** The project page, advertised in new documents' YAML header
+ *  comment (the engine round-trips the comment). One link - the repo
+ *  page lists the web app and every platform's install; a direct
+ *  flatpakref link would be platform-specific. */
+const FOLIO_URL = "https://github.com/tinpotnick/folio";
+
+const BLANK = `---\n# Best viewed in folio: ${FOLIO_URL}\n---\n\n# \n`;
 
 /** Where people can support folio's development. */
 const SUPPORT_URL = "https://buymeacoffee.com/tinpotnick";
@@ -2437,8 +2443,17 @@ function suggestedName(ext: string): string {
  * was written.
  */
 async function saveCurrent(): Promise<boolean> {
-  const md = currentMarkdown();
-  if (md === null) return false;
+  const raw = currentMarkdown();
+  if (raw === null) return false;
+  // Prettify on save: write the canonical serialization (folio owns
+  // the file format). A document that does not parse - mid-edit in
+  // the Markdown view - saves raw; saving is never blocked by one.
+  let md = raw;
+  try {
+    md = canonicalMarkdown(raw);
+  } catch {
+    // keep the raw text
+  }
   if (isDesktop()) {
     const path = await saveDocument(md, currentDocPath ?? undefined);
     if (path === null) return false;
@@ -2461,6 +2476,11 @@ async function saveCurrent(): Promise<boolean> {
   }
   cleanMarkdown = md;
   void clearDraft();
+  // Show the canonical form in the Markdown view too.
+  if (!mdWrap.hidden && md !== raw) {
+    editor.value = md;
+    renderHighlight();
+  }
   return true;
 }
 
@@ -3664,7 +3684,7 @@ document.addEventListener("keydown", (ev) => {
   // app's webview (WebKitGTK) does not.
   if (key === "p") {
     ev.preventDefault();
-    printDocument();
+    void printDocument();
   }
   // Ctrl+S / Ctrl+O: Save and Open, in the browser too (its own
   // Ctrl+S would save the web page, not the document).
@@ -3993,7 +4013,9 @@ settingsForm.addEventListener("submit", (ev) => {
  */
 function preparePrint(): void {
   // A cell still being typed in recalculates first: paper shows
-  // current figures.
+  // current figures. Lazy (off-screen) figures are drawn too - paper
+  // must not show blank figures. printDocument/exportPdf await this.
+  void el.drawAllFigures();
   el.flushEdits();
   if (paletteModal.open) paletteModal.close();
   if (settingsModal.open) settingsModal.close();
@@ -4042,10 +4064,14 @@ window.addEventListener("afterprint", reflectMode);
  * numbers and the running header - only Export adds them (ADR-0027) -
  * so it says where to find them.
  */
-function printDocument(): void {
+async function printDocument(): Promise<void> {
   if (isDesktop()) {
     flash("For page numbers, use Export as PDF");
   }
+  // Lazy figures (off-screen) must be drawn before paper renders.
+  preparePrint();
+  await el.drawAllFigures();
+  await drawingsSettled();
   const remind = personalUseReminder();
   if (remind) {
     // The print dialog would cover the reminder at once: let it be
@@ -4096,6 +4122,8 @@ function personalUseReminder(): string {
 
 async function exportPdf(): Promise<void> {
   preparePrint();
+  // Lazy figures (off-screen) must be drawn before paper renders.
+  await el.drawAllFigures();
   await el.drawn();
   await drawingsSettled();
   if (isDesktop()) {
@@ -4117,6 +4145,8 @@ async function exportPdf(): Promise<void> {
   flash(
     `Choose "Save as PDF" as the destination${remind ? `. ${remind}` : ""}`,
   );
+  await el.drawAllFigures();
+  await drawingsSettled();
   // With a reminder, let it be read before the dialog covers it.
   if (remind) setTimeout(() => window.print(), 1200);
   else window.print();
