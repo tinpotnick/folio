@@ -85,3 +85,50 @@ test("beforeprint draws pending figures (paper never shows a blank figure)", asy
   await expect(fig.locator(".chart-holder svg")).toHaveCount(1);
   await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
 });
+
+test("a waiting chart keeps the space it will take: drawing never pushes the page", async ({
+  page,
+}) => {
+  await loadDoc(page);
+  const holder = page.locator('figure[data-chart-source="d"] .chart-holder');
+  await expect(holder.locator("svg")).toHaveCount(0);
+  const before = await holder.boundingBox();
+  // Every chart draws in a 640x300 frame.
+  expect(before?.height ?? 0).toBeCloseTo(
+    ((before?.width ?? 0) * 300) / 640,
+    0,
+  );
+  await holder.scrollIntoViewIfNeeded();
+  await expect(holder.locator("svg")).toHaveCount(1);
+  const after = await holder.boundingBox();
+  expect(Math.abs((after?.height ?? 0) - (before?.height ?? 0))).toBeLessThan(
+    2,
+  );
+});
+
+test("reaching for a waiting figure draws it at once: focus, and the readout follows", async ({
+  page,
+}) => {
+  await loadDoc(page);
+  const fig = page.locator('figure[data-chart-source="d"]');
+  await expect(fig).toHaveAttribute("data-pending", "figure");
+  // A readable chart is in the Tab order before it has drawn.
+  const holder = fig.locator(".chart-holder");
+  await expect(holder).toHaveAttribute("tabindex", "0");
+  await holder.focus();
+  await expect(fig).not.toHaveAttribute("data-pending", /.*/);
+  await expect(
+    fig.locator(".chart-readout .readout-row").first(),
+  ).toBeVisible();
+});
+
+test("a 3D model draws lazily too (it stayed on 'Drawing…')", async ({
+  page,
+}) => {
+  await page.goto("/?doc=demo/examples/3d-models.md");
+  const model = page.locator("#the-doc figure.folio-jscad").first();
+  await model.scrollIntoViewIfNeeded();
+  await expect(model.locator(".jscad-view svg")).toBeVisible({
+    timeout: 15_000,
+  });
+});

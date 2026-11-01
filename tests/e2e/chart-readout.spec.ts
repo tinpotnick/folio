@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /**
  * The chart readout (docs/specs/chart-readout.md): point at a chart, tap
@@ -12,6 +12,15 @@ async function open(page: Page, doc: string): Promise<void> {
   await page.locator("#the-doc h1").first().waitFor();
 }
 
+/** Scroll a chart into view and wait until it has drawn, as a reader
+ * sees it before pointing at it (figures draw lazily, near the
+ * viewport). */
+async function seen(chart: Locator): Promise<void> {
+  await chart.scrollIntoViewIfNeeded();
+  await expect(chart.locator(".chart-holder svg")).toBeVisible();
+  await chart.locator(".chart-holder svg").scrollIntoViewIfNeeded();
+}
+
 const holdChart = (page: Page) =>
   page.locator('#the-doc figure[data-chart-source="plan"]').nth(1);
 
@@ -21,7 +30,7 @@ test.describe("chart readout", () => {
   }) => {
     await open(page, "demo/examples/repay-or-invest.md");
     const chart = holdChart(page);
-    await chart.scrollIntoViewIfNeeded();
+    await seen(chart);
     const panel = chart.locator(".chart-readout");
     await expect(panel).toBeHidden();
     const box = await chart.locator(".chart-holder svg").boundingBox();
@@ -70,7 +79,7 @@ test.describe("chart readout", () => {
   }) => {
     await open(page, "demo/examples/repay-or-invest.md");
     const chart = holdChart(page);
-    await chart.scrollIntoViewIfNeeded();
+    await seen(chart);
     const box = await chart.locator(".chart-holder svg").boundingBox();
     if (!box) throw new Error("no chart");
     await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
@@ -88,9 +97,10 @@ test.describe("chart readout", () => {
     let read = 0;
     for (let i = 0; i < count; i++) {
       const chart = charts.nth(i);
-      if ((await chart.locator(".chart-holder svg").count()) === 0) continue;
       const holder = chart.locator(".chart-holder");
-      if ((await holder.getAttribute("data-readout")) !== "1") continue;
+      // Readable (line, bar, area) whether drawn yet or not: focusing it
+      // draws it, and the readout follows.
+      if ((await holder.getAttribute("data-readable")) !== "1") continue;
       await holder.focus();
       await expect(
         chart.locator(".chart-readout .readout-row").first(),
@@ -108,7 +118,7 @@ test.describe("chart readout: from the first-contact eval", () => {
     await open(page, "demo/examples/repay-or-invest.md");
     await page.locator("#the-doc h2").first().click();
     const chart = holdChart(page);
-    await chart.scrollIntoViewIfNeeded();
+    await seen(chart);
     const box = await chart.locator(".chart-holder svg").boundingBox();
     if (!box) throw new Error("no chart");
     await page.mouse.move(box.x + box.width * 0.4, box.y + box.height / 2);
@@ -176,7 +186,7 @@ test.describe("chart readout on touch", () => {
   test("a tap shows the readout", async ({ page }) => {
     await open(page, "demo/examples/repay-or-invest.md");
     const chart = holdChart(page);
-    await chart.scrollIntoViewIfNeeded();
+    await seen(chart);
     const box = await chart.locator(".chart-holder svg").boundingBox();
     if (!box) throw new Error("no chart");
     await page.touchscreen.tap(box.x + box.width * 0.3, box.y + box.height / 2);

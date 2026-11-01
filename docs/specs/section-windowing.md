@@ -63,5 +63,20 @@ re-dress only figures already drawn; pending ones stay pending.
 Print/export never shows a blank figure: `preparePrint` and both
 print paths call `drawAllFigures()` (printDocument/exportPdf await
 it), which draws every pending figure and settles `drawn()`.
+Reaching for a waiting figure draws it at once, not only scrolling
+near it (2026-11-01): pointing at it, pressing it, or focusing into it
+(`drawPending`, the one path the observer and `drawAllFigures` use
+too). A readable chart (line, bar, area) is focusable and marked
+`data-readable` from the start, so Tab and the palette's "Read a
+chart's values" reach it before it has drawn; focused while drawing,
+it shows its readout as soon as it is drawn. A waiting chart keeps the
+space it will take (`aspect-ratio: 640 / 300`, the frame every chart
+draws in), so drawing never pushes the page down under the reader. A
+drawn block (JSCAD included) draws through `drawDrawn` - the lazy
+path once called `paintJscad`, which only repaints a built model, and
+no model drew.
+Tests check a figure the way a reader does: they scroll to it first
+(tests/e2e/reader.ts: `readThrough`, `scrollToFigure`).
 e2e: tests/e2e/lazy-figures.spec.ts (pending below the fold, drawn
-on scroll, drawn by drawAllFigures and by beforeprint).
+on scroll, drawn by drawAllFigures and by beforeprint; reserved
+space; drawn on focus with the readout; a lazy 3D model).

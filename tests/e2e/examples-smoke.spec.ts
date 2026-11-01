@@ -1,5 +1,6 @@
 import { readdirSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import { readThrough } from "./reader";
 
 /**
  * Every shipped example opens and draws without a single error: no
@@ -14,6 +15,8 @@ for (const file of examples) {
     page.on("pageerror", (e) => pageErrors.push(e.message));
     await page.goto(`/?doc=demo/examples/${file}`);
     await page.locator("#the-doc h1").first().waitFor();
+    // Read it through, so every (lazy) figure draws.
+    await readThrough(page);
     // Drawn figures load lazily: wait until none is still "Drawing…"
     // (or "Computing…": a Python block waits for its runtime).
     await expect

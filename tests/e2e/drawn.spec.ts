@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readThrough, scrollToFigure } from "./reader";
 
 /** Drawn code blocks (spec: docs/specs/drawn-blocks.md). */
 
@@ -79,6 +80,8 @@ test.describe("Vega-Lite", () => {
     page,
   }) => {
     await page.goto("/?doc=demo/examples/drawings.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    await readThrough(page);
     const views = page.locator(
       "#the-doc figure.folio-vega-lite .code-view svg",
     );
@@ -135,6 +138,7 @@ test.describe("Vega-Lite", () => {
 test.describe("SVG drawings", () => {
   test("the sample draws, following the theme's ink", async ({ page }) => {
     await page.goto("/?doc=demo/examples/drawings.md");
+    await scrollToFigure(page.locator("#the-doc figure.folio-svg"));
     const svg = page.locator("#the-doc figure.folio-svg .code-view svg");
     await expect(svg).toBeVisible({ timeout: 10_000 });
     const ink = await svg
@@ -190,6 +194,7 @@ test.describe("SVG drawings", () => {
 test.describe("ABC sheet music", () => {
   test("the sample engraves a score in the theme's ink", async ({ page }) => {
     await page.goto("/?doc=demo/examples/drawings.md");
+    await scrollToFigure(page.locator("#the-doc figure.folio-abc"));
     const score = page.locator("#the-doc figure.folio-abc .abc-score svg");
     await expect(score).toBeVisible({ timeout: 15_000 });
     expect(await score.locator(".abcjs-note").count()).toBeGreaterThan(20);
@@ -205,6 +210,7 @@ test.describe("ABC sheet music", () => {
     });
     await page.goto("/?doc=demo/examples/drawings.md");
     const fig = page.locator("#the-doc figure.folio-abc");
+    await scrollToFigure(fig);
     await expect(fig.locator(".abc-score svg")).toBeVisible({
       timeout: 15_000,
     });
