@@ -24,7 +24,9 @@
     "format": "prettier --write src tests",
     "build": "tsc --noEmit && vite build",
     "ci": "npm run lint && npm test && npm run build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "clean": "rm -rf dist test-results && cargo clean --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "clean:app": "cargo clean -p folio-desktop --manifest-path apps/desktop/src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@fontsource-variable/eb-garamond": "^5.3.0",
