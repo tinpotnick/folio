@@ -818,6 +818,13 @@ function quoteStyleValue(v: string): string {
   return `"${v}"`;
 }
 
+/** The canonical file form: parse, then serialize. Idempotent for
+ *  folio-written files; hand-written oddities (blank-line runs and
+ *  the like) normalize down. Throws ParseError on invalid Markdown. */
+export function canonicalMarkdown(text: string): string {
+  return serializeDoc(parseDoc(text));
+}
+
 export function serializeDoc(doc: Doc): string {
   const parts: string[] = [];
   const fmLines: string[] = [];

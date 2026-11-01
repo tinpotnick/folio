@@ -12,7 +12,7 @@ import {
 } from "./render/page-furniture";
 import "./component.js";
 import type { FolioDoc } from "./component.js";
-import { parseDoc, serializeDoc } from "./engine/doc.js";
+import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
   importedTable,
   parseImport,
@@ -2443,8 +2443,17 @@ function suggestedName(ext: string): string {
  * was written.
  */
 async function saveCurrent(): Promise<boolean> {
-  const md = currentMarkdown();
-  if (md === null) return false;
+  const raw = currentMarkdown();
+  if (raw === null) return false;
+  // Prettify on save: write the canonical serialization (folio owns
+  // the file format). A document that does not parse - mid-edit in
+  // the Markdown view - saves raw; saving is never blocked by one.
+  let md = raw;
+  try {
+    md = canonicalMarkdown(raw);
+  } catch {
+    // keep the raw text
+  }
   if (isDesktop()) {
     const path = await saveDocument(md, currentDocPath ?? undefined);
     if (path === null) return false;
@@ -2467,6 +2476,11 @@ async function saveCurrent(): Promise<boolean> {
   }
   cleanMarkdown = md;
   void clearDraft();
+  // Show the canonical form in the Markdown view too.
+  if (!mdWrap.hidden && md !== raw) {
+    editor.value = md;
+    renderHighlight();
+  }
   return true;
 }
 

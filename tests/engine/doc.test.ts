@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseDoc, ParseError, serializeDoc } from "@folio/engine/doc";
+import {
+  canonicalMarkdown,
+  parseDoc,
+  ParseError,
+  serializeDoc,
+} from "@folio/engine/doc";
 import { recalcTable } from "@folio/engine/recalc";
 
 const goldenDir = join(dirname(fileURLToPath(import.meta.url)), "..", "golden");
@@ -15,6 +20,18 @@ describe("round-trip identity (invariant #2)", () => {
   it("sample document: serialize(parse(text)) is byte-identical", () => {
     const text = loadGolden("sample-document.md");
     expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  it("canonicalMarkdown normalizes and is idempotent", () => {
+    // Hand-typed trailing whitespace on a heading canonicalizes away.
+    const messy = "# T   \n\nText.\n";
+    const once = canonicalMarkdown(messy);
+    expect(once).toBe("# T\n\nText.\n");
+    expect(canonicalMarkdown(once)).toBe(once);
+    // Already-canonical text is untouched.
+    expect(canonicalMarkdown(once)).toBe(once);
+    // Invalid Markdown throws (the host falls back to saving raw).
+    expect(() => canonicalMarkdown("---\nunterminated\n")).toThrow();
   });
 
   it("a YAML header comment is modelled and round-trips byte-identically", () => {
