@@ -42,8 +42,7 @@ describe("theme style keys", () => {
     const css = themeOf("");
     // Slide rules are scoped to [slides] and print; the plain
     // document emits no break rules.
-    expect(css).not.toContain("article.folio-doc > h1:not(:first-child)");
-    expect(css).not.toContain("article.folio-doc:not([slides])");
+    expect(css).not.toContain("article.folio-doc:not([slides]) > .folio-slide");
     expect(docTheme("").tableStyle).toBe("booktabs");
   });
 
@@ -216,8 +215,10 @@ describe("slides (docs/specs/slides.md)", () => {
 
   it("slide rendering breaks every H1 onto its own printed page", () => {
     const css = themeOf("");
-    expect(css).toContain("article.folio-doc[slides] > h1:not(:first-child)");
+    expect(css).toContain("article.folio-doc[slides] .folio-slide");
     expect(css).toContain("break-before: page");
+    // The H1 is the deck title, hidden while playing.
+    expect(css).toContain("article.folio-doc[slides] > h1");
   });
 
   it("page.size is a typed style key, default a4, 16:9 maps to 16in 9in", () => {

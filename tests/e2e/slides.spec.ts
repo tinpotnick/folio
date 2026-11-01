@@ -7,20 +7,22 @@ import { expect, test, type Page } from "@playwright/test";
  */
 
 const DECK = [
-  "# Alpha",
+  "# The deck title",
+  "",
+  "Preamble instructions under the H1 - front matter, never a slide.",
+  "",
+  "## Alpha",
   "",
   "- one",
   "- two",
   "",
-  "# Beta",
+  "## Beta",
   "",
   "Just a sentence.",
   "",
-  "## A sub heading",
+  "> A speaker note for this slide.",
   "",
-  "More prose under an H2 - same slide.",
-  "",
-  "# Gamma",
+  "## Gamma",
   "",
   "![pic](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==)",
   "",
@@ -43,8 +45,16 @@ async function slideHeads(page: Page) {
   return page.evaluate(() => {
     const root = document.querySelector("folio-doc")?.shadowRoot;
     return Array.from(
-      root?.querySelectorAll("article.folio-doc > h1") ?? [],
+      root?.querySelectorAll("article.folio-doc .folio-slide > h2") ?? [],
     ).map((h) => (h as HTMLElement).textContent);
+  });
+}
+
+async function h1Visible(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    const root = document.querySelector("folio-doc")?.shadowRoot;
+    const h1 = root?.querySelector("article.folio-doc > h1");
+    return h1 ? getComputedStyle(h1 as HTMLElement).display !== "none" : false;
   });
 }
 
@@ -56,8 +66,10 @@ test.describe("slideshow", () => {
     await expect(page.locator("folio-doc")).not.toHaveAttribute("slides", /.*/);
     await page.locator("#btn-play").click();
     await expect(page.locator("folio-doc")).toHaveAttribute("slides", /.*/);
-    // Full DOM, no windowing: every H1 is in the article at once.
+    // Full DOM, no windowing: every slide is in the article at once.
     expect(await slideHeads(page)).toEqual(["Alpha", "Beta", "Gamma"]);
+    // H1 is the deck title: hidden while playing, present in the DOM.
+    expect(await h1Visible(page)).toBe(false);
     await page.locator("#btn-play").click();
     await expect(page.locator("folio-doc")).not.toHaveAttribute("slides", /.*/);
   });
@@ -92,10 +104,8 @@ test.describe("slideshow", () => {
     await expect(page.locator("#status")).toContainText("Slide 1 of 3");
     const heads = await slideHeads(page);
     expect(heads).toHaveLength(3);
-    // H2 stays inside slide Beta.
-    await expect(
-      page.locator("folio-doc h2", { hasText: "A sub heading" }),
-    ).toBeVisible();
+    // The H1 is the title, not a slide; the preamble is not a slide.
+    await expect(page.locator("folio-doc h1")).toHaveCount(1);
   });
 
   test("arrow keys advance and clamp at the last slide; Esc stops", async ({
@@ -121,15 +131,15 @@ test.describe("slideshow", () => {
     await loadDeck(page);
     const before = await page.evaluate(() => {
       const root = document.querySelector("folio-doc")?.shadowRoot;
-      const h1 = root?.querySelector("article.folio-doc > h1");
-      return h1 ? getComputedStyle(h1 as HTMLElement).aspectRatio : "";
+      const slide = root?.querySelector("article.folio-doc .folio-slide");
+      return slide ? getComputedStyle(slide as HTMLElement).aspectRatio : "";
     });
     expect(before).toBe("auto");
     await page.locator("#btn-play").click();
     const during = await page.evaluate(() => {
       const root = document.querySelector("folio-doc")?.shadowRoot;
-      const h1 = root?.querySelector("article.folio-doc > h1");
-      return h1 ? getComputedStyle(h1 as HTMLElement).aspectRatio : "";
+      const slide = root?.querySelector("article.folio-doc .folio-slide");
+      return slide ? getComputedStyle(slide as HTMLElement).aspectRatio : "";
     });
     expect(during).toBe("16 / 9");
   });
@@ -158,7 +168,7 @@ test.describe("slideshow", () => {
       const root = document.querySelector("folio-doc")?.shadowRoot;
       return root?.querySelector("style")?.textContent ?? "";
     });
-    expect(css).toContain("article.folio-doc[slides] > h1:not(:first-child)");
+    expect(css).toContain("article.folio-doc[slides] .folio-slide");
     await page.emulateMedia({ media: "screen" });
   });
 
@@ -227,13 +237,17 @@ test.describe("slideshow", () => {
     // The deck has 3 H1s, so both modes list them; use a lone-H1 doc
     // to see the difference.
     await page.locator("#btn-markdown").click();
-    await page.locator("#editor").fill("# Only\n\n[[_TOC_]]\n\nText.\n");
+    await page
+      .locator("#editor")
+      .fill("# Only\n\n[[_TOC_]]\n\nText.\n\n## A slide\n\nBody.\n");
     await page.locator("#btn-view").click();
+    // A lone H1 is the title in BOTH views now (H2s are the slides).
     await expect(page.locator("folio-doc nav.folio-toc")).toContainText(
-      "Headings will be listed here",
+      "A slide",
     );
-    await page.locator("#btn-play").click();
-    await expect(page.locator("folio-doc nav.folio-toc")).toContainText("Only");
+    await expect(page.locator("folio-doc nav.folio-toc")).not.toContainText(
+      "Only",
+    );
   });
 
   test("settings dialog writes page.size through the YAML pipeline", async ({
@@ -258,5 +272,85 @@ test.describe("slideshow", () => {
       page.locator(".theme-card", { hasText: "Deck (light)" }),
     ).toBeVisible();
     await page.locator("#btn-settings-cancel").click();
+  });
+});
+
+test.describe("slideshow v2: H2 slides, notes, example deck", () => {
+  test("speaker notes toggle with N and never print", async ({ page }) => {
+    await loadDeck(page);
+    await page.locator("#btn-play").click();
+    await expect(page.locator("folio-doc blockquote")).toBeVisible();
+    await page.keyboard.press("n");
+    const styled = await page.evaluate(() =>
+      document.querySelector("folio-doc")?.classList.contains("slides-notes"),
+    );
+    expect(styled).toBe(true);
+    await page.keyboard.press("n");
+    const unstyled = await page.evaluate(() =>
+      document.querySelector("folio-doc")?.classList.contains("slides-notes"),
+    );
+    expect(unstyled).toBe(false);
+    // Notes are display:none in print media.
+    await page.emulateMedia({ media: "print" });
+    const printDisplay = await page.evaluate(() => {
+      const root = document.querySelector("folio-doc")?.shadowRoot;
+      const q = root?.querySelector(".folio-slide > blockquote:last-child");
+      return q ? getComputedStyle(q as HTMLElement).display : "";
+    });
+    expect(printDisplay).toBe("none");
+    await page.emulateMedia({ media: "screen" });
+  });
+
+  test("editing inside a slide keeps the model intact (wrappers are transparent)", async ({
+    page,
+  }) => {
+    await loadDeck(page);
+    await page.locator("#btn-play").click();
+    const before = await page.evaluate(() =>
+      (
+        document.querySelector("folio-doc") as unknown as {
+          getMarkdown(): string;
+        }
+      ).getMarkdown(),
+    );
+    await page
+      .locator("folio-doc .folio-slide p", { hasText: "Just a sentence." })
+      .click();
+    await page.keyboard.type(" More.");
+    const after = await page.evaluate(() =>
+      (
+        document.querySelector("folio-doc") as unknown as {
+          getMarkdown(): string;
+        }
+      ).getMarkdown(),
+    );
+    expect(after).toBe(
+      before.replace("Just a sentence.", "Just a sentence. More."),
+    );
+    // The slide wrappers survive the sync (still 3 slides).
+    expect(await slideHeads(page)).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
+  test("the shipped deck example plays: H2 slides, chart on a slide", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/deck.md");
+    await expect(
+      page.locator("folio-doc h1", { hasText: "Quarterly Review Deck" }),
+    ).toBeVisible();
+    await page.locator("#btn-play").click();
+    expect(await slideHeads(page)).toEqual([
+      "Revenue by region",
+      "Regional detail",
+      "Growth chart",
+      "Closing",
+    ]);
+    await expect(page.locator("#status")).toContainText("Slide 1 of 4");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("#status")).toContainText("Slide 3 of 4");
+    await expect(page.locator("folio-doc [data-chart-source]")).toBeVisible();
+    // Preamble hidden while playing.
+    expect(await h1Visible(page)).toBe(false);
   });
 });

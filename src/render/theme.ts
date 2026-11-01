@@ -1052,6 +1052,9 @@ export function slideCss(theme: Theme, mode: Mode): string {
   const titleCentered = s.title === "centered";
   const valignCenter = s.valign === "center";
   return `
+    /* Slide wrappers are presentational: in the document view they
+       are transparent, so editing is exactly as before. */
+    .folio-slide { display: contents; }
     article.folio-doc[slides] {
       max-width: none;
       margin: 0;
@@ -1060,11 +1063,17 @@ export function slideCss(theme: Theme, mode: Mode): string {
       overflow: hidden;
       font-size: calc(${theme.bodySize} * ${String(s.scale)});
     }
-    article.folio-doc[slides] > * {
+    /* The H1 and its preamble are the deck's front matter - never a
+       slide: hidden while playing, shown in document view. */
+    article.folio-doc[slides] > h1,
+    article.folio-doc[slides] > h1 ~ *:not(.folio-slide) {
+      display: none;
+    }
+    article.folio-doc[slides] > .folio-slide {
       box-sizing: border-box;
       aspect-ratio: ${aspect};
       width: 100%;
-      max-width: calc((100vh - 0px) * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"});
+      max-width: calc(100vh * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"});
       max-height: 100vh;
       margin: 0 auto;
       padding: 6vh 7vw;
@@ -1072,91 +1081,97 @@ export function slideCss(theme: Theme, mode: Mode): string {
       flex-direction: column;
       justify-content: ${valignCenter ? "center" : "flex-start"};
       overflow: hidden;
+      position: relative;
       background: ${bg};
     }
-    article.folio-doc[slides] > h1 {
-      font-size: calc(${theme.h1Size} * ${String(s.scale)});
+    article.folio-doc[slides] .folio-slide > h2 {
+      font-size: calc(${theme.h2Size} * ${String(s.scale)});
       flex: none;
     }
     /* Sparse slides center on their own: a lone sentence, a lone
        blockquote (pull-quote), or an empty body (pure title slide). */
-    article.folio-doc[slides] > h1.slides-solo,
-    article.folio-doc[slides] > h1:has(+ :last-child) {
-      margin-top: ${titleCentered ? "auto" : "0"};
-      margin-bottom: ${titleCentered ? "auto" : "0.4em"};
-      ${titleCentered ? "text-align: center;" : ""}
+    article.folio-doc[slides] .folio-slide.slides-solo {
+      justify-content: center;
     }
-    article.folio-doc[slides] > h1:only-child {
-      margin: auto;
-      ${titleCentered ? "text-align: center;" : ""}
+    article.folio-doc[slides] .folio-slide.slides-solo > h2 {
+      ${titleCentered ? "text-align: center; margin: auto;" : "margin: auto 0;"}
     }
-    article.folio-doc[slides] > h2 { font-size: calc(${theme.h2Size} * ${String(s.scale)}); }
-    article.folio-doc[slides] > h3 { font-size: calc(${theme.h3Size} * ${String(s.scale)}); }
-    article.folio-doc[slides] li { margin: 0.35em 0; }
-    article.folio-doc[slides] blockquote {
-      font-size: 1.25em;
+    article.folio-doc[slides] .folio-slide > h3 { font-size: calc(${theme.h3Size} * ${String(s.scale)}); }
+    article.folio-doc[slides] .folio-slide li { margin: 0.35em 0; }
+    /* A trailing blockquote on a slide is its speaker note: shown
+       only when notes are toggled on while playing, never printed. */
+    article.folio-doc[slides] .folio-slide > blockquote:last-child {
+      font-size: 0.62em;
       font-style: italic;
-      border-left: 0.12em solid var(--folio-accent, currentColor);
+      color: var(--folio-ink-muted, #57606a);
+      border-left: 0.12em solid var(--folio-hairline, currentColor);
       padding-left: 0.8em;
-      margin: 0.8em 0;
+      margin: auto 0 0;
     }
-    article.folio-doc[slides] figure {
+    article.folio-doc[slides].slides-notes .folio-slide > blockquote:last-child {
+      border-left-color: var(--folio-accent, currentColor);
+    }
+    article.folio-doc[slides] .folio-slide figure {
       margin: 0.6em 0;
       max-width: 100%;
     }
-    article.folio-doc[slides] figure img,
-    article.folio-doc[slides] figure svg {
+    article.folio-doc[slides] .folio-slide figure img,
+    article.folio-doc[slides] .folio-slide figure svg {
       max-width: 100%;
       max-height: 62vh;
       object-fit: contain;
     }
     /* Image-only slide: full-bleed divider/background. */
-    article.folio-doc[slides] > figure:only-of-type {
-      aspect-ratio: ${aspect};
+    article.folio-doc[slides] .folio-slide > figure:only-child {
+      position: absolute;
+      inset: 0;
+      margin: 0;
       padding: 0;
-      margin: 0 auto;
-      width: 100%;
-      max-width: calc(100vh * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"});
     }
-    article.folio-doc[slides] > figure:only-of-type img,
-    article.folio-doc[slides] > figure:only-of-type > img {
+    article.folio-doc[slides] .folio-slide > figure:only-child img {
       width: 100%;
       height: 100%;
       max-height: none;
       object-fit: cover;
     }
-    article.folio-doc[slides] > figure:only-of-type figcaption {
+    article.folio-doc[slides] .folio-slide > figure:only-child figcaption {
       position: absolute;
     }
     /* Image with content: stacks above it, or fills the slide as a
        background with a scrim under the text. */
-    article.folio-doc[slides] > figure:not(:only-of-type) {
+    article.folio-doc[slides] .folio-slide > figure:not(:only-child) {
       width: ${s.imagePlacement === "background" ? "100%" : s.imageWidth};
-      ${s.imagePlacement === "background" ? `position: absolute; inset: 0; margin: 0; padding: 0; z-index: -1;` : ""}
+      ${s.imagePlacement === "background" ? "position: absolute; inset: 0; margin: 0; padding: 0; z-index: -1;" : ""}
     }
-    article.folio-doc[slides] > figure:not(:only-of-type) img {
+    article.folio-doc[slides] .folio-slide > figure:not(:only-child) img {
       ${s.imagePlacement === "background" ? "width: 100%; height: 100%; max-height: none; object-fit: cover;" : ""}
     }
-    article.folio-doc[slides].slides-scrim::before {
+    article.folio-doc[slides].slides-scrim .folio-slide::before {
       content: "";
       position: absolute;
       inset: 0;
       background: ${scrim};
       z-index: -1;
     }
-    article.folio-doc[slides] > pre,
-    article.folio-doc[slides] figure.folio-codeblock {
+    article.folio-doc[slides] .folio-slide > pre,
+    article.folio-doc[slides] .folio-slide figure.folio-codeblock {
       font-size: ${theme.bodySize};
     }
     @media print {
-      article.folio-doc[slides] > h1:not(:first-child) {
+      article.folio-doc[slides] .folio-slide {
         break-before: page;
         page-break-before: always;
-      }
-      article.folio-doc[slides] > * {
         aspect-ratio: ${aspect};
         max-height: none;
         break-inside: avoid;
+      }
+      article.folio-doc[slides] .folio-slide:first-of-type {
+        break-before: auto;
+        page-break-before: auto;
+      }
+      /* Speaker notes never print. */
+      article.folio-doc[slides] .folio-slide > blockquote:last-child {
+        display: none;
       }
     }
   `;

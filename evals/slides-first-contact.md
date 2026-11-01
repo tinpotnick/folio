@@ -3,7 +3,7 @@ name: slides-first-contact
 feature: slideshow
 steps:
   - Start the demo host and open the Field operations example (palette: "Open example: Q3 Field Operations Review").
-  - Press Ctrl+K, type "play", and press Enter. The document renders fullscreen as slides, one per H1, with a "Slide n of N" counter.
+  - Press Ctrl+K, type "play", and press Enter. The document renders fullscreen as slides, one per H2 (the H1 title and preamble hide), with a "Slide n of N" counter.
   - Advance with Arrow Right twice, then go back once with Arrow Left.
   - Press Esc (or click the play button) to stop.
   - Play again, then print (Ctrl+P): the printout paginates one 16:9 slide per page.

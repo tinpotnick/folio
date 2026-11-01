@@ -2537,6 +2537,12 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb: "pure prose and poetry",
   },
   {
+    id: "deck",
+    title: "Quarterly review deck",
+    file: "demo/examples/deck.md",
+    blurb: "slideshow presentation play slides h2 deck notes chart",
+  },
+  {
     id: "accounts",
     title: "Management accounts",
     file: "demo/examples/accounts.md",

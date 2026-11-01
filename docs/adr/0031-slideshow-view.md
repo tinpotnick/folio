@@ -19,12 +19,15 @@ Markdown document rather than a layout engine or a second file type.
 - **No `mode:` frontmatter, no separate Slides view, no
   document-level marker of any kind.** The file is always plain
   Markdown. You hit play: a toolbar/palette command toggles a
-  **slide-rendering flag** on the document view (one slide per H1)
+  **slide-rendering flag** on the document view (one slide per H2)
   together with fullscreen; Esc or the button toggles both off. View
   and display state are session state, never written to the file.
-- **One slide per H1, uniformly - no special first-H1 presentation
-  title.** The first H1 is the first slide. H2-H6 stay in-slide
-  headings. While slide rendering is on, the TOC lists every H1.
+- **H1 is the document title - invisible to the slideshow; every H2
+  is a slide.** The H1 preamble is the deck's front matter
+  (instructions, deck-level notes). This matches the TOC's
+  lone-H1-is-the-title rule and file naming, so no view special-cases
+  anything. (First draft had one-slide-per-H1; revised after review:
+  the H1 preamble is exactly where "press play" instructions belong.)
 - The document view keeps every slide in the DOM whether or not slide
   rendering is on (WYSIWYG editing works via the same `syncFromDom`
   as today) but never windows - removing off-screen slides from the

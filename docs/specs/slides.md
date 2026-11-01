@@ -7,16 +7,17 @@
 Every folio document is and stays a plain Markdown document. There is
 no slide mode in the file and no separate slides view: **you hit
 play**. Play turns on slide rendering of the current document view -
-one slide per H1 - and fullscreen; Esc (or the play button again)
+one slide per H2 - and fullscreen; Esc (or the play button again)
 turns both off. How the document displays is a property of the
 session, not of the document - the file on disk never changes because
 you presented it.
 
-**H1 means slide, uniformly, while slide rendering is on.** Every H1
-opens a new slide; the first H1 is simply the first slide - there is
-no special "presentation title" H1. One meaning for H1 keeps the
-block schema untouched and the section browser, contents list and
-cross-references semantics identical in every view.
+**H1 is the document title - invisible to the slideshow; every H2 is
+a slide.** The H1 and anything under it before the first H2 are the
+deck's front matter: presenter instructions, deck-level notes, shown
+in document view and hidden while playing. This matches the rest of
+folio (a lone H1 is the title in the contents list and names the
+file), so nothing is special-cased: slides are H2 sections.
 
 ## Why this fits folio
 
@@ -50,13 +51,14 @@ cross-references semantics identical in every view.
   round-trip tests (tests/golden/) are untouched by construction.
   Whether a document is being shown as a deck is decided at play
   time, by the user pressing play - never stored in the file.
-- **Slide structure (slide rendering on)**: each H1 starts a slide; the
-  H1 text is the slide title; everything until the next H1 is the
-  slide body. H2-H6 are in-slide headings, never slides. While slide
-  rendering is on, the contents list shows every H1 as a top-level
-  entry (overriding its one-H1-is-the-title convention,
-  docs/specs/contents.md); in the normal document view the TOC is
-  unchanged.
+- **Slide structure (slide rendering on)**: each H2 starts a slide
+  (wrapped in a presentational `.folio-slide` div - `display:
+  contents` otherwise, and `syncFromDom` reads through it, so the
+  model and the Markdown are untouched); the H2 text is the slide
+  title; everything until the next H2 is the slide body. H3-H6 are
+  in-slide headings. The H1 and its preamble are the deck's front
+  matter, hidden while playing. The contents list is unchanged (a
+  lone H1 is the title in every view).
 - **Views**: two views as today - Markdown source and document
   (src/main.ts `btnView`/`btnMd`) - plus a **slide-rendering flag** on
   the document view that play toggles. The flag only changes styling:
@@ -212,7 +214,9 @@ cross-references semantics identical in every view.
   on and off serializes byte-identically - the load-bearing invariant
   that play never touches the model.
 - e2e: `tests/e2e/slides.spec.ts` (play toggles slide rendering and
-  fullscreen; one slide per H1; H2 never splits; navigation and
+  fullscreen; one slide per H2; the H1/preamble hide while playing;
+  notes toggle and never print; editing inside a slide keeps the
+  model intact; the shipped deck example plays; navigation and
   counter; print media while playing uses 16:9 pages; print with
   slide rendering off stays A4; export produces the deck PDF; the
   saved file is byte-identical before and after playing).
