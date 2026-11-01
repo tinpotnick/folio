@@ -69,14 +69,14 @@ file), so nothing is special-cased: slides are H2 sections.
   being off-screen. That is the fatal complication
   docs/specs/section-windowing.md identifies - a partial DOM would
   make structural sync silently delete unrendered blocks.
-- **Entry points**: a play button in the toolbar's View group and
-  palette commands "Play slideshow" (slide rendering + fullscreen;
-  arrow keys / click advance, Esc exits both) and "Stop slideshow".
-  A presenter button next to play (and the palette's "Open presenter
-  view") opens the presenter window; it is NOT auto-opened on play -
-  a second window is a deliberate choice, never a surprise. Like the
-  source/document toggle, all of it is session state, never written
-  to the file.
+- **Entry points**: one play button in the toolbar's View group -
+  its body toggles play/stop, its chevron opens a dropdown with the
+  two options, "Play slideshow" (slide rendering + fullscreen;
+  arrow keys / click advance, Esc exits both) and "Open presenter
+  view" - plus the palette commands of the same names. The presenter
+  window is NOT auto-opened on play - a second window is a deliberate
+  choice, never a surprise. Like the source/document toggle, all of
+  it is session state, never written to the file.
 - **Slide rendering (theme-driven)**: a slide is a full-viewport page
   (`aspect-ratio` from the theme's `slide.aspect`, default `16/9`;
   `4/3` is a valid theme value), scaled to fit, with the H1 as its title and

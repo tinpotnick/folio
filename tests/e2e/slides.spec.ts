@@ -389,11 +389,14 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
   }) => {
     await loadDeck(page);
     await page.locator("#btn-play").click();
-    // The presenter view is a toolbar button next to play.
-    await expect(page.locator("#btn-presenter")).toBeVisible();
+    // The presenter view is the play button's dropdown (chevron),
+    // which offers the two presentation options.
+    await page.locator("#btn-play .chev").click();
+    await expect(page.locator("#mi-play")).toBeVisible();
+    await expect(page.locator("#mi-presenter")).toBeVisible();
     const [popup] = await Promise.all([
       page.waitForEvent("popup"),
-      page.locator("#btn-presenter").click(),
+      page.locator("#mi-presenter").click(),
     ]);
     await popup.waitForLoadState("domcontentloaded");
     await expect(popup.locator("#presenter-bar")).toContainText("Slide 1 of 3");

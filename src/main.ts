@@ -77,7 +77,8 @@ const editor = requireEl<HTMLTextAreaElement>("#editor");
 const btnView = requireEl<HTMLButtonElement>("#btn-view");
 const btnMd = requireEl<HTMLButtonElement>("#btn-markdown");
 const btnPlay = requireEl<HTMLButtonElement>("#btn-play");
-const btnPresenter = requireEl<HTMLButtonElement>("#btn-presenter");
+const playMenu = requireEl<HTMLElement>("#play-menu");
+const miPlayLabel = playMenu.querySelector<HTMLElement>("#mi-play .mi-label");
 const status = requireEl<HTMLElement>("#status");
 const sidebar = requireEl<HTMLElement>("#sidebar");
 const btnSidebar = requireEl<HTMLButtonElement>("#btn-sidebar");
@@ -393,6 +394,8 @@ function reflectPlay(): void {
   btnPlay.classList.toggle("active", playing);
   btnPlay.title = playing ? "Stop slideshow" : "Play slideshow";
   btnPlay.setAttribute("aria-label", btnPlay.title);
+  if (miPlayLabel)
+    miPlayLabel.textContent = playing ? "Stop slideshow" : "Play slideshow";
   const heads = slideHeads();
   const n = heads.length;
   if (playing && n > 0) {
@@ -435,8 +438,11 @@ function advanceSlide(delta: number): void {
   reflectPlay();
 }
 
-btnPlay.addEventListener("click", () => setPlaying(!playing));
-btnPresenter.addEventListener("click", () => void openPresenter());
+btnPlay.addEventListener("click", (ev) => {
+  // The chevron opens the dropdown; the button body toggles play/stop.
+  if ((ev.target as HTMLElement).closest(".chev")) return;
+  setPlaying(!playing);
+});
 
 document.addEventListener("fullscreenchange", () => {
   // Esc out of fullscreen ends the show too - but opening the
@@ -4228,6 +4234,36 @@ toolbarMenu(
   requireEl<HTMLButtonElement>("#btn-overflow"),
   requireEl<HTMLElement>("#overflow-menu"),
 );
+
+// The play button's dropdown (its chevron): the two presentation
+// options - play on this screen, or play + open the presenter view.
+// The button body itself toggles play/stop (wired with btnPlay above).
+(() => {
+  const close = (): void => {
+    playMenu.hidden = true;
+    btnPlay.setAttribute("aria-expanded", "false");
+  };
+  btnPlay.addEventListener("mousedown", (ev) => {
+    if (!(ev.target as HTMLElement).closest(".chev")) return;
+    ev.preventDefault();
+    const open = playMenu.hidden;
+    closeMenus();
+    playMenu.hidden = !open;
+    btnPlay.setAttribute("aria-expanded", String(open));
+    if (open) placeMenu(btnPlay, playMenu);
+  });
+  playMenu.addEventListener("mousedown", (ev) => {
+    if ((ev.target as HTMLElement).closest("button")) ev.preventDefault();
+  });
+  playMenu.addEventListener("click", (ev) => {
+    const btn = (ev.target as HTMLElement).closest("button");
+    if (!btn) return;
+    if (btn.id === "mi-presenter") void openPresenter();
+    else setPlaying(!playing);
+    close();
+  });
+  menus.push({ menu: playMenu, close });
+})();
 
 // Citation: the palette, opened on the bibliography's references - or,
 // with none yet, a word on where they come from.

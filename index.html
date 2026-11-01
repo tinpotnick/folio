@@ -351,14 +351,6 @@
       #style-label-short {
         display: none;
       }
-      /* Laptop width: the wordmark's text goes (the # mark stays) to
-         keep the toolbar - now including the presenter button - on
-         one row at 1280px. */
-      @media (max-width: 1360px) {
-        .brand-word {
-          display: none;
-        }
-      }
       /* Phone width: the essentials only - the style menu shortens to
          its level, Insert to its icon, the wordmark goes (the tab and
          the guide still name folio). */
@@ -428,6 +420,16 @@
       }
       .seg button:hover {
         background: var(--surface-2);
+      }
+      /* The play button carries its dropdown chevron: wider than the
+         icon-only seg buttons. */
+      .seg .play-split {
+        width: 48px;
+        grid-auto-flow: column;
+        gap: 0;
+      }
+      .seg .play-split .chev {
+        width: 8px;
       }
       /* Recording: the mic button pulses while capture runs. */
       #btn-record.rec {
@@ -2257,7 +2259,7 @@
           </button>
           <div class="menu menu-overflow" id="overflow-menu" hidden></div>
         </div>
-        <div class="seg" id="view-switch" data-label="View" data-overflow="4">
+        <div class="seg" id="view-switch" data-label="View" data-overflow="3">
           <button id="btn-view" class="active" title="Document view">
             <svg
               viewBox="0 0 16 16"
@@ -2276,27 +2278,58 @@
               />
             </svg>
           </button>
-          <button id="btn-play" title="Play slideshow">
-            <svg viewBox="0 0 16 16" fill="currentColor">
-              <path d="M4 2.5v11l9-5.5-9-5.5z" />
-            </svg>
-          </button>
-          <button
-            id="btn-presenter"
-            title="Open presenter view (speaker notes in a second window)"
-            aria-label="Open presenter view"
-          >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
+          <div class="menu-wrap">
+            <button
+              id="btn-play"
+              class="play-split"
+              title="Play slideshow"
+              aria-label="Play slideshow"
+              aria-haspopup="menu"
+              aria-expanded="false"
             >
-              <rect x="1.5" y="2.5" width="9" height="6.5" rx="1" />
-              <path d="M4 12h4" stroke-linecap="round" />
-              <rect x="9.5" y="7" width="5" height="6.5" rx="1" />
-            </svg>
-          </button>
+              <svg viewBox="0 0 16 16" fill="currentColor">
+                <path d="M4 2.5v11l9-5.5-9-5.5z" />
+              </svg>
+              <svg
+                class="chev"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+              >
+                <path
+                  d="M2.5 4l2.5 2.5L7.5 4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+            <div class="menu" id="play-menu" role="menu" hidden>
+              <button id="mi-play" role="menuitem" title="Play on this screen">
+                <svg viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M4 2.5v11l9-5.5-9-5.5z" />
+                </svg>
+                <span class="mi-label">Play slideshow</span>
+              </button>
+              <button
+                id="mi-presenter"
+                role="menuitem"
+                title="Play and open the presenter view (speaker notes in a second window)"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <rect x="1.5" y="2.5" width="9" height="6.5" rx="1" />
+                  <path d="M4 12h4" stroke-linecap="round" />
+                  <rect x="9.5" y="7" width="5" height="6.5" rx="1" />
+                </svg>
+                <span class="mi-label">Open presenter view</span>
+              </button>
+            </div>
+          </div>
         </div>
         <button
           id="btn-search"
