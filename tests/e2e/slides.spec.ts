@@ -260,6 +260,18 @@ test.describe("slideshow", () => {
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
   });
 
+  test("clicking document view while presenting stops the show", async ({
+    page,
+  }) => {
+    await loadDeck(page);
+    await togglePlay(page);
+    await expect(page.locator("#btn-play")).toHaveClass(/active/);
+    await page.locator("#btn-view").click();
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("#btn-play")).not.toHaveClass(/active/);
+    await expect(page.locator("#btn-view")).toHaveClass(/active/);
+  });
+
   test("TOC lists the H2 slides; a lone H1 stays the title in both views", async ({
     page,
   }) => {

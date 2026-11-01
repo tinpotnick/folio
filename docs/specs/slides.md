@@ -61,7 +61,9 @@ file), so nothing is special-cased: slides are H2 sections.
   lone H1 is the title in every view).
 - **Views**: two views as today - Markdown source and document
   (src/main.ts `btnView`/`btnMd`) - plus a **slide-rendering flag** on
-  the document view that play toggles. The flag only changes styling:
+  the document view that play toggles. Clicking either view button
+  while presenting stops the show (play = slides, doc = plain
+  document, md = source). The flag only changes styling:
   every slide stays in the article's DOM at once, so WYSIWYG editing
   works exactly as in document view - `syncFromDom` (src/component.ts)
   rebuilds the model from the whole article either way. The one hard

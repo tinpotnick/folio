@@ -284,6 +284,9 @@ function renderHighlight(): void {
 }
 
 btnView.addEventListener("click", () => {
+  // Document view while presenting stops the show (play = slides,
+  // doc = plain document; the markdown button below does the same).
+  if (playing) setPlaying(false);
   if (!editor.hidden) {
     try {
       const doc = parseDoc(editor.value);
