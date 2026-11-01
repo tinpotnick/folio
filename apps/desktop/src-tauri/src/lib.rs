@@ -275,6 +275,42 @@ fn is_external_url(url: &str) -> bool {
 
 /// Open a link in the user's own browser (or mail app): the app's
 /// webview never navigates away from the document (ADR-0024).
+/// Open the presenter view (docs/specs/slides.md) as a second app
+/// window running the same front-end with `?presenter=1`. The two
+/// windows sync over a BroadcastChannel (mirrored through
+/// localStorage, which WebKitGTK delivers reliably across webviews).
+#[tauri::command]
+async fn open_presenter_window(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if let Some(existing) = app.get_webview_window("presenter") {
+        let _ = existing.unminimize();
+        let _ = existing.set_focus();
+        return Ok(());
+    }
+    let main = app.get_webview_window("main").ok_or("no main window")?;
+    let url = main.url().map_err(|e| e.to_string())?;
+    // Bundled app (tauri://localhost / http://tauri.localhost):
+    // address the asset path; dev server: reuse its URL with a query.
+    let is_app_protocol = matches!(url.scheme(), "tauri" | "app")
+        || url.host_str() == Some("tauri.localhost");
+    let target = if is_app_protocol {
+        let path = url.path().trim_start_matches('/');
+        let path = if path.is_empty() { "index.html" } else { path };
+        WebviewUrl::App(format!("{path}?presenter=1").into())
+    } else {
+        let mut dev = url.clone();
+        dev.set_path("/");
+        dev.set_query(Some("presenter=1"));
+        WebviewUrl::External(dev)
+    };
+    WebviewWindowBuilder::new(&app, "presenter", target)
+        .title("folio — presenter view")
+        .inner_size(960.0, 720.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
@@ -444,6 +480,7 @@ pub fn run() {
             save_document,
             save_text_file,
             open_external,
+            open_presenter_window,
             export_pdf,
             launch_document,
             fetch_url

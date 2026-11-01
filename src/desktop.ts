@@ -90,6 +90,19 @@ export async function openExternal(url: string): Promise<boolean> {
   }
 }
 
+/** Open the slideshow's presenter view (docs/specs/slides.md) as a
+ *  second app window. Returns false when not on desktop or on error. */
+export async function openPresenterWindow(): Promise<boolean> {
+  if (!isDesktop()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    await invoke("open_presenter_window");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export type ExportResult =
   { ok: true; path: string } | { ok: false; reason: string };
 

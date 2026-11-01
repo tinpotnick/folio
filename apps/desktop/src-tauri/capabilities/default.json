@@ -3,7 +3,8 @@
   "identifier": "default",
   "description": "Main window capabilities for the folio desktop host",
   "windows": [
-    "main"
+    "main",
+    "presenter"
   ],
   "permissions": [
     "core:default",

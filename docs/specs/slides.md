@@ -161,8 +161,14 @@ file), so nothing is special-cased: slides are H2 sections.
   them there for single-screen use. Opening the popup exits
   fullscreen on the main window, which re-requests it - and must
   NOT stop the show (the fullscreenchange handler ignores it while
-  the presenter window is open). The file on disk is unchanged. The
-  desktop app's second-WebviewWindow variant is a follow-up.
+  the presenter window is open). The file on disk is unchanged.
+  Desktop (Tauri): "Open presenter view" invokes the
+  `open_presenter_window` command, which builds a second
+  `WebviewWindow` (label "presenter", same front-end with
+  `?presenter=1`, capability added) instead of a browser popup.
+  Cross-window messaging is BroadcastChannel mirrored through
+  localStorage (`storage` events), deduped by (from, seq) - WebKitGTK
+  delivers storage events reliably across webviews.
 - **Play vs. edit**: while playing, the document view is still
   contenteditable, but arrow keys / click advance slides instead of
   moving the caret; clicking into text places the caret and typing

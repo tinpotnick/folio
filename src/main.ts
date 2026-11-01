@@ -53,6 +53,7 @@ import {
   onFileOpened,
   openDocument,
   openExternal,
+  openPresenterWindow,
   saveDocument,
   saveTextFile,
 } from "./desktop.js";
@@ -325,6 +326,44 @@ const slidesChannel = new BroadcastChannel("folio-slides");
 /** The presenter window, if open (its opening exits fullscreen). */
 let presenterWin: Window | null = null;
 
+/* Slides messaging between the main and presenter windows:
+ * BroadcastChannel plus a localStorage mirror (WebKitGTK delivers
+ * storage events reliably across webviews; BroadcastChannel alone
+ * is flaky there). Deduped by (from, seq) since a peer may receive
+ * a message over both transports. */
+const slideMsgId = Math.random().toString(36).slice(2);
+let slideMsgSeq = 0;
+const seenSlideMsgs = new Set<string>();
+type SlideMsg = { t?: string; md?: string; slide?: number; d?: number };
+function postSlideMsg(msg: SlideMsg): void {
+  const full = { ...msg, from: slideMsgId, seq: slideMsgSeq++ };
+  slidesChannel.postMessage(full);
+  try {
+    localStorage.setItem("folio-slides-msg", JSON.stringify(full));
+  } catch {
+    // private mode: the channel alone still works in-browser
+  }
+}
+function onSlideMsg(fn: (msg: SlideMsg) => void): void {
+  const handle = (raw: unknown): void => {
+    const m = raw as SlideMsg & { from?: string; seq?: number };
+    const key = `${m.from ?? "?"}:${String(m.seq ?? "?")}`;
+    if (seenSlideMsgs.has(key)) return;
+    seenSlideMsgs.add(key);
+    if (seenSlideMsgs.size > 500) seenSlideMsgs.clear();
+    fn(m);
+  };
+  slidesChannel.addEventListener("message", (ev) => handle(ev.data));
+  window.addEventListener("storage", (ev) => {
+    if (ev.key !== "folio-slides-msg" || ev.newValue === null) return;
+    try {
+      handle(JSON.parse(ev.newValue));
+    } catch {
+      // ignore malformed
+    }
+  });
+}
+
 /**
  * Play is a session flag, never written to the document: it sets the
  * component's `slides` attribute (the H1 is the deck title, one slide
@@ -363,7 +402,7 @@ function reflectPlay(): void {
     status.textContent += " - a slide overflows";
   }
   // Keep any presenter window on the same slide.
-  if (playing) slidesChannel.postMessage({ t: "slide", slide: currentSlide });
+  if (playing) postSlideMsg({ t: "slide", slide: currentSlide });
 }
 
 function setPlaying(on: boolean): void {
@@ -491,9 +530,18 @@ function presenterShow(i: number): void {
   }
 }
 
-/** Main window: open (or focus) the presenter window. */
-function openPresenter(): void {
+/** Main window: open (or focus) the presenter window. On desktop
+ *  (Tauri) that's a second app window via a native command; on the
+ *  web it's a popup. */
+async function openPresenter(): Promise<void> {
   if (!playing) setPlaying(true);
+  if (isDesktop()) {
+    const ok = await openPresenterWindow();
+    if (ok) {
+      flash("Presenter view opened in a new window");
+      return;
+    }
+  }
   const win = window.open(
     `${window.location.pathname}?presenter=1`,
     "folio-presenter",
@@ -518,13 +566,7 @@ if (PRESENTER) {
   bar.id = "presenter-bar";
   bar.textContent = "Presenter view — waiting for the main window…";
   document.body.prepend(bar);
-  slidesChannel.addEventListener("message", (ev) => {
-    const msg = ev.data as {
-      t?: string;
-      md?: string;
-      slide?: number;
-      d?: number;
-    };
+  onSlideMsg((msg) => {
     if (msg.t === "doc" && typeof msg.md === "string") {
       void el.load(msg.md, { keepHistory: false }).then(() => {
         el.setAttribute("slides", "");
@@ -541,27 +583,26 @@ if (PRESENTER) {
       bar.textContent = "Presenter view — the main window closed";
     }
   });
-  slidesChannel.postMessage({ t: "hello" });
+  postSlideMsg({ t: "hello" });
   // The presenter window drives the show too: arrows navigate the
   // MAIN window (which owns the slide index and broadcasts it back).
   document.addEventListener("keydown", (ev) => {
     if (ev.key === "ArrowRight" || ev.key === " " || ev.key === "PageDown") {
       ev.preventDefault();
-      slidesChannel.postMessage({ t: "nav", d: 1 });
+      postSlideMsg({ t: "nav", d: 1 });
     } else if (ev.key === "ArrowLeft" || ev.key === "PageUp") {
       ev.preventDefault();
-      slidesChannel.postMessage({ t: "nav", d: -1 });
+      postSlideMsg({ t: "nav", d: -1 });
     } else if (ev.key === "Escape") {
       window.close();
     }
   });
 } else {
-  slidesChannel.addEventListener("message", (ev) => {
-    const msg = ev.data as { t?: string; d?: number };
+  onSlideMsg((msg) => {
     if (msg.t === "hello") {
-      slidesChannel.postMessage({
+      postSlideMsg({
         t: "doc",
-        md: el.getMarkdown(),
+        md: el.getMarkdown() ?? "",
         slide: currentSlide,
       });
     } else if (msg.t === "nav" && typeof msg.d === "number" && playing) {
@@ -573,16 +614,14 @@ if (PRESENTER) {
   el.onChange(() => {
     window.clearTimeout(docTimer);
     docTimer = window.setTimeout(() => {
-      slidesChannel.postMessage({
+      postSlideMsg({
         t: "doc",
-        md: el.getMarkdown(),
+        md: el.getMarkdown() ?? "",
         slide: currentSlide,
       });
     }, 400);
   });
-  window.addEventListener("beforeunload", () =>
-    slidesChannel.postMessage({ t: "bye" }),
-  );
+  window.addEventListener("beforeunload", () => postSlideMsg({ t: "bye" }));
 }
 
 // Click advances while playing (unless it landed in editable text).
@@ -2861,7 +2900,7 @@ function paletteEntries(): PaletteEntry[] {
     group: "Command",
     keywords:
       "presenter view notes window console second screen slides playing projector",
-    action: () => openPresenter(),
+    action: () => void openPresenter(),
   });
   entries.push({
     title: "Insert a table",
