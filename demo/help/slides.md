@@ -6,13 +6,14 @@ toolbar (or Ctrl+K, "Play slideshow"): each H2 heading becomes one
 slide, shown fullscreen. The H1 is the deck's title; anything under
 it before the first H2 is front matter (instructions for you), never
 a slide. Arrow keys, Page Down, Space, or a click advance; Esc or the
-play button again stops. Press N (or "Show speaker notes") to toggle
-the notes.
+play button again stops. Press N (or Ctrl+K, "Toggle speaker notes")
+to show the speaker notes — off by default on the main display, like
+a projector, so "make them laugh" never projects.
 
 - Every H2 is a slide; H3-H6 stay headings inside a slide. A slide
   with a lone sentence or nothing but its title centers itself. A
-  trailing blockquote on a slide is its speaker note: small and muted,
-  and never printed.
+  trailing blockquote on a slide is its speaker note: shown only when
+  notes are toggled on (N), and never printed.
 - An image alone on a slide fills it (a divider slide); an image with
   text stacks above the text, or fills the slide behind it in the
   deck themes that choose that.

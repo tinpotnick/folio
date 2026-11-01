@@ -41,13 +41,13 @@ export function furnitureFor(doc: Doc | null): Furniture {
   };
 }
 
-/** The typed `page.size` style key (docs/specs/slides.md); default a4. */
+/** The typed `page.size` style key (docs/specs/slides.md); with no
+ *  key, the THEME's default (a4 for report themes, 16:9 for decks). */
 export function pageSizeFor(doc: Doc | null): PageSize {
   const style = new Map(doc?.frontmatter.style ?? []);
   const raw = style.get("page.size") ?? "";
-  return (PAGE_SIZES as readonly string[]).includes(raw)
-    ? (raw as PageSize)
-    : "a4";
+  if ((PAGE_SIZES as readonly string[]).includes(raw)) return raw as PageSize;
+  return doc ? themeFromDoc(doc).pageSize : "a4";
 }
 
 /** A CSS string literal. */

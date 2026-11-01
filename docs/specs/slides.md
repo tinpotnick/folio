@@ -93,6 +93,13 @@ file), so nothing is special-cased: slides are H2 sections.
   padding), captions stay with their figure; code/math blocks render
   at body scale, not scaled up. Values live in themes, never in the
   document.
+- **Speaker notes** (v2): a trailing blockquote on a slide is its
+  speaker note. The main display NEVER shows it while playing (the
+  PowerPoint presenter rule - notes are for the presenter, not the
+  projector); N or the palette's "Toggle speaker notes" shows them.
+  Notes are `display: none` in print media always. A `>`-led prose
+  block renders as `<blockquote>` (and syncs back with the marker, so
+  the source round-trips).
 - **Images on slides** (`slide.image.placement`, theme key, default
   `above`): an image block **alone** on a slide always renders
   full-bleed - the divider/background slide. An image **with other
@@ -155,7 +162,9 @@ file), so nothing is special-cased: slides are H2 sections.
   eval must complete "present this document" with no instructions.
 - **Paper size is a style key, not a constant**: new closed style key
   `page.size` (ADR-0002 schema change, typed values such as `a4` |
-  `letter` | `a5` | `16:9` | `4:3`, default `a4`), with a typed dropdown
+  `letter` | `a5` | `16:9` | `4:3`; no key means the theme's
+  `pageSize` - `a4` for report themes, `16:9` for the deck themes),
+  with a typed dropdown
   in the settings dialog alongside the existing `pagebreak.h1` /
   `page.numbers` controls (fillSettings, src/main.ts:3483). Today
   the size is
@@ -166,7 +175,10 @@ file), so nothing is special-cased: slides are H2 sections.
   three read the key instead: the stylesheet emits
   `@page { size: <value> }`, and the desktop export passes the value
   through the same `furniture` payload it already takes. A raw
-  Markdown file with no key assumes `a4` - that default is fine.
+  Markdown file with no key assumes the THEME's default paper
+  (`a4` for report themes; the `deck`/`deck-clean` slide themes
+  default to `16:9`, so a deck prints/exports as slides even without
+  playing).
 - **Print / export**: while slide rendering is on (or while playing),
   the effective `page.size` is the slide aspect (`16:9` unless the
   theme's `slide.aspect` says otherwise) - play sets it for the

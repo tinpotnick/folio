@@ -237,6 +237,15 @@ describe("slides (docs/specs/slides.md)", () => {
     expect(pageSizeCss("4:3")).toBe("10.67in 8in");
   });
 
+  it("deck themes default their paper to the slide aspect", () => {
+    expect(docTheme("---\ntheme: deck\n---\n\n").pageSize).toBe("16:9");
+    expect(docTheme("---\ntheme: deck-clean\n---\n\n").pageSize).toBe("16:9");
+    // An explicit key still wins over the theme default.
+    expect(
+      docTheme("---\ntheme: deck\nstyle:\n  page.size: a4\n---\n\n").pageSize,
+    ).toBe("a4");
+  });
+
   it("deck themes ship with slide keys and pass the legibility rules", () => {
     for (const name of ["deck", "deck-clean"]) {
       const t = presetTheme(name);

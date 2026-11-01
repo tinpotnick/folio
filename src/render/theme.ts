@@ -658,6 +658,9 @@ export const THEME_PRESETS: Record<
       h1Font: fontStack("Space Grotesk"),
       bodySize: "16px",
       lineHeight: 1.55,
+      // A deck prints as slides even without playing: paper defaults
+      // to the slide aspect.
+      pageSize: "16:9",
       h1Size: "34pt",
       h2Size: "22pt",
       h3Size: "17pt",
@@ -719,6 +722,9 @@ export const THEME_PRESETS: Record<
       h1Font: fontStack("Inter"),
       bodySize: "16px",
       lineHeight: 1.55,
+      // A deck prints as slides even without playing: paper defaults
+      // to the slide aspect.
+      pageSize: "16:9",
       h1Size: "34pt",
       h2Size: "22pt",
       h3Size: "17pt",
@@ -1098,18 +1104,22 @@ export function slideCss(theme: Theme, mode: Mode): string {
     }
     article.folio-doc[slides] .folio-slide > h3 { font-size: calc(${theme.h3Size} * ${String(s.scale)}); }
     article.folio-doc[slides] .folio-slide li { margin: 0.35em 0; }
-    /* A trailing blockquote on a slide is its speaker note: shown
-       only when notes are toggled on while playing, never printed. */
+    /* A trailing blockquote on a slide is its speaker note. The main
+       display never shows it while playing (the PowerPoint presenter
+       rule - "make them laugh" must not project); N or the palette
+       toggles the notes on for the presenter, and print never
+       includes them. */
     article.folio-doc[slides] .folio-slide > blockquote:last-child {
+      display: none;
+    }
+    article.folio-doc[slides].slides-notes .folio-slide > blockquote:last-child {
+      display: block;
       font-size: 0.62em;
       font-style: italic;
       color: var(--folio-ink-muted, #57606a);
-      border-left: 0.12em solid var(--folio-hairline, currentColor);
+      border-left: 0.12em solid var(--folio-accent, currentColor);
       padding-left: 0.8em;
       margin: auto 0 0;
-    }
-    article.folio-doc[slides].slides-notes .folio-slide > blockquote:last-child {
-      border-left-color: var(--folio-accent, currentColor);
     }
     article.folio-doc[slides] .folio-slide figure {
       margin: 0.6em 0;
@@ -1169,8 +1179,13 @@ export function slideCss(theme: Theme, mode: Mode): string {
         break-before: auto;
         page-break-before: auto;
       }
-      /* Speaker notes never print. */
-      article.folio-doc[slides] .folio-slide > blockquote:last-child {
+      /* Speaker notes never print - even when toggled on for the
+         presenter (match the .slides-notes selector's specificity,
+         and win by coming later in the sheet). */
+      article.folio-doc[slides] .folio-slide > blockquote:last-child,
+      article.folio-doc[slides].slides-notes
+        .folio-slide
+        > blockquote:last-child {
         display: none;
       }
     }

@@ -4,6 +4,7 @@ import {
   furnitureCss,
   furnitureFont,
   furnitureFor,
+  pageSizeFor,
 } from "../../src/render/page-furniture";
 
 describe("page furniture (docs/specs/print.md)", () => {
@@ -48,5 +49,20 @@ describe("page furniture (docs/specs/print.md)", () => {
     expect(
       furnitureCss({ header: "T", numbers: true, page_size: "a4" }, font),
     ).toContain(`font: 8.5pt ${font};`);
+  });
+
+  it("pageSizeFor falls back to the theme's default paper", () => {
+    // No key, no theme: a4.
+    expect(pageSizeFor(parseDoc("# T\n"))).toBe("a4");
+    // A deck theme defaults to slide paper; an explicit key wins.
+    expect(pageSizeFor(parseDoc("---\ntheme: deck\n---\n\n# T\n"))).toBe(
+      "16:9",
+    );
+    expect(
+      pageSizeFor(
+        parseDoc("---\ntheme: deck\nstyle:\n  page.size: a5\n---\n\n# T\n"),
+      ),
+    ).toBe("a5");
+    expect(pageSizeFor(null)).toBe("a4");
   });
 });

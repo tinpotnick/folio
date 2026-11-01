@@ -384,6 +384,15 @@ document.addEventListener("fullscreenchange", () => {
 document.addEventListener("keydown", (ev) => {
   if (!playing) return;
   if (ev.key === "Escape") {
+    // A dialog's own Escape (closing the palette, settings, ...) must
+    // not also end the show.
+    if (
+      paletteModal.open ||
+      settingsModal.open ||
+      importModal.open ||
+      unsavedModal.open
+    )
+      return;
     setPlaying(false);
     return;
   }
@@ -410,15 +419,27 @@ document.addEventListener("keydown", (ev) => {
     ev.preventDefault();
     advanceSlide(-1);
   } else if (ev.key === "n" || ev.key === "N") {
-    // Speaker notes (trailing slide blockquotes) on/off.
     ev.preventDefault();
-    const on = !el.classList.contains("slides-notes");
-    el.classList.toggle("slides-notes", on);
-    el.shadowRoot
-      ?.querySelector("article.folio-doc")
-      ?.classList.toggle("slides-notes", on);
+    toggleNotes();
   }
 });
+
+/**
+ * Speaker notes (trailing slide blockquotes): OFF on the main
+ * display while playing; N or the palette toggles them on for the
+ * presenter. They never print.
+ */
+function toggleNotes(): void {
+  if (!playing) {
+    flash("Start the slideshow first (the play button)");
+    return;
+  }
+  const on = !el.classList.contains("slides-notes");
+  el.classList.toggle("slides-notes", on);
+  el.shadowRoot
+    ?.querySelector("article.folio-doc")
+    ?.classList.toggle("slides-notes", on);
+}
 
 // Click advances while playing (unless it landed in editable text).
 document.addEventListener("click", (ev) => {
@@ -2684,6 +2705,12 @@ function paletteEntries(): PaletteEntry[] {
       ? "stop exit end slideshow presentation play present fullscreen quit"
       : "play slideshow present presentation fullscreen slides deck h2",
     action: () => btnPlay.click(),
+  });
+  entries.push({
+    title: "Toggle speaker notes",
+    group: "Command",
+    keywords: "speaker notes presenter n toggle slides playing show hide",
+    action: () => toggleNotes(),
   });
   entries.push({
     title: "Insert a table",

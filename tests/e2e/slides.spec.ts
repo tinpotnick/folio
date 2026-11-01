@@ -302,21 +302,37 @@ test.describe("slideshow", () => {
 });
 
 test.describe("slideshow v2: H2 slides, notes, example deck", () => {
-  test("speaker notes toggle with N and never print", async ({ page }) => {
+  test("speaker notes stay off the main display; N shows them; never print", async ({
+    page,
+  }) => {
     await loadDeck(page);
     await page.locator("#btn-play").click();
-    await expect(page.locator("#the-doc blockquote")).toBeVisible();
+    const note = page.locator("#the-doc .folio-slide > blockquote:last-child");
+    await expect(note).toHaveCount(1);
+    // The PowerPoint presenter rule: the main display never shows notes.
+    await expect(note).toBeHidden();
+    // N toggles them on for the presenter...
     await page.keyboard.press("n");
-    const styled = await page.evaluate(() =>
-      document.querySelector("#the-doc")?.classList.contains("slides-notes"),
-    );
-    expect(styled).toBe(true);
+    await expect(note).toBeVisible();
+    expect(
+      await page.evaluate(() =>
+        document.querySelector("#the-doc")?.classList.contains("slides-notes"),
+      ),
+    ).toBe(true);
+    // ...and the palette offers the same action...
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("notes");
+    await expect(
+      page.locator("#palette-modal .palette-item", {
+        hasText: "Toggle speaker notes",
+      }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    // ...and N again hides them.
     await page.keyboard.press("n");
-    const unstyled = await page.evaluate(() =>
-      document.querySelector("#the-doc")?.classList.contains("slides-notes"),
-    );
-    expect(unstyled).toBe(false);
-    // Notes are display:none in print media.
+    await expect(note).toBeHidden();
+    // Notes are display:none in print media, with or without the toggle.
+    await page.keyboard.press("n");
     await page.emulateMedia({ media: "print" });
     const printDisplay = await page.evaluate(() => {
       const root = document.querySelector("#the-doc")?.shadowRoot;
@@ -364,6 +380,16 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     await expect(
       page.locator("#the-doc h1", { hasText: "Quarterly Review Deck" }),
     ).toBeVisible();
+    // The deck THEME defaults its paper to the slide aspect: printing
+    // without playing already yields 16:9 pages.
+    await page.evaluate(() => window.dispatchEvent(new Event("beforeprint")));
+    const size = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--folio-page-size",
+      ),
+    );
+    expect(size.trim()).toBe("16in 9in");
+    await page.evaluate(() => window.dispatchEvent(new Event("afterprint")));
     await page.locator("#btn-play").click();
     expect(await slideHeads(page)).toEqual([
       "Revenue by region",
