@@ -63,6 +63,16 @@
     <control>pointing</control>
   </supports>
   <releases>
+    <release version="0.2.1" date="2026-11-02">
+      <description>
+        <p>Every platform again, and the fixes since 0.2.0.</p>
+        <ul>
+          <li>Windows and macOS builds are back</li>
+          <li>3D models draw again; charts draw as soon as you point at, click or tab to them, and the page no longer jumps as figures appear</li>
+          <li>Slides fit the screen under the toolbar; playing after an edit starts at the first slide and the arrow keys move between slides</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.0" date="2026-10-30">
       <description>
         <p>Present any document as slides, run Python in the document, write book-scale documents.</p>
