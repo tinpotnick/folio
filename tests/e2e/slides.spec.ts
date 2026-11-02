@@ -79,7 +79,8 @@ test.describe("slideshow", () => {
     expect(await slideHeads(page)).toEqual(["Alpha", "Beta", "Gamma"]);
     // H1 is the deck title: hidden while playing, present in the DOM.
     expect(await h1Visible(page)).toBe(false);
-    await togglePlay(page);
+    // No toolbar while presenting: the show's own control ends it.
+    await page.locator("#show-end").click();
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
     await expect(page.locator("#btn-play")).not.toHaveClass(/active/);
     await expect(page.locator("#btn-view")).toHaveClass(/active/);
@@ -252,24 +253,44 @@ test.describe("slideshow", () => {
     expect(after).toBe(before);
   });
 
-  test("switching to Markdown view stops the slideshow", async ({ page }) => {
-    await loadDeck(page);
-    await togglePlay(page);
-    await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
-    await page.locator("#btn-markdown").click();
-    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
-  });
-
-  test("clicking document view while presenting stops the show", async ({
+  test("presenting hides the toolbar; the show's controls appear, and End show brings it back", async ({
     page,
   }) => {
     await loadDeck(page);
     await togglePlay(page);
-    await expect(page.locator("#btn-play")).toHaveClass(/active/);
-    await page.locator("#btn-view").click();
+    await expect(page.locator("header").first()).toBeHidden();
+    // Shown as the show starts, so the way out is learnt at once...
+    await expect(page.locator("#show-controls")).toHaveClass(/visible/);
+    await expect(page.locator("#show-end")).toContainText("End show");
+    // ...faded once the mouse rests, and back when it moves.
+    await expect(page.locator("#show-controls")).not.toHaveClass(/visible/, {
+      timeout: 8000,
+    });
+    await page.mouse.move(200, 200);
+    await page.mouse.move(240, 260);
+    await expect(page.locator("#show-controls")).toHaveClass(/visible/);
+    // Next and previous, without the click also advancing the show.
+    await page.locator("#show-next").click();
+    await expect(page.locator("#status")).toContainText("Slide 2 of 3");
+    await page.locator("#show-prev").click();
+    await expect(page.locator("#status")).toContainText("Slide 1 of 3");
+    await page.locator("#show-end").click();
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
-    await expect(page.locator("#btn-play")).not.toHaveClass(/active/);
-    await expect(page.locator("#btn-view")).toHaveClass(/active/);
+    await expect(page.locator("header").first()).toBeVisible();
+    await expect(page.locator("#show-controls")).toBeHidden();
+  });
+
+  test("while playing, the play control is a stop square", async ({ page }) => {
+    await loadDeck(page);
+    const icon = (sel: string) => page.locator(sel).first().getAttribute("d");
+    const play = await icon("#btn-play svg:not(.chev) path");
+    await togglePlay(page);
+    expect(await icon("#btn-play svg:not(.chev) path")).not.toBe(play);
+    expect(await icon("#mi-play svg path")).toBe(
+      await icon("#btn-play svg:not(.chev) path"),
+    );
+    await page.keyboard.press("Escape");
+    expect(await icon("#btn-play svg:not(.chev) path")).toBe(play);
   });
 
   test("TOC lists the H2 slides; a lone H1 stays the title in both views", async ({
@@ -412,9 +433,8 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
     page,
   }) => {
     await loadDeck(page);
-    await togglePlay(page);
     // The presenter view is the play button's dropdown (chevron),
-    // which offers the two presentation options.
+    // which offers the two presentation options; it starts the show.
     await page.locator("#btn-play").click();
     await expect(page.locator("#mi-play")).toBeVisible();
     await expect(page.locator("#mi-presenter")).toBeVisible();
@@ -477,7 +497,7 @@ test.describe("slideshow v2: H2 slides, notes, example deck", () => {
 });
 
 test.describe("slideshow: what a presenter sees (from recording the README demo)", () => {
-  test("each slide fits under the toolbar: no overflow, no side panels", async ({
+  test("each slide fills the screen: no toolbar, no overflow, no side panels", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -486,16 +506,14 @@ test.describe("slideshow: what a presenter sees (from recording the README demo)
     await page.locator("#the-doc h1").first().waitFor();
     await togglePlay(page);
     await expect(page.locator("html")).toHaveClass(/playing/);
-    // A slide as tall as the screen used to lose its top to the
-    // toolbar: "a slide overflows".
+    await expect(page.locator("header").first()).toBeHidden();
+    // A slide sized to the screen but under a toolbar overflowed.
     await expect(page.locator("#status")).toHaveText("Slide 1 of 4");
-    const head = await page.locator("header").first().boundingBox();
     const box = await page
       .locator("#the-doc .folio-slide")
       .first()
       .boundingBox();
-    const under = (head?.y ?? 0) + (head?.height ?? 0);
-    expect(Math.abs((box?.y ?? 0) - under)).toBeLessThan(2);
+    expect(Math.abs(box?.y ?? -1)).toBeLessThan(2);
     expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(721);
     await page.keyboard.press("Escape");
     await expect(page.locator("html")).not.toHaveClass(/playing/);
@@ -604,5 +622,32 @@ test.describe("presenter view: it opens, and shows the deck", () => {
       "allow pop-ups for this site",
     );
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
+  });
+});
+
+test.describe("presenter view: closing it", () => {
+  test("closing the presenter window ends the show, and never asks to save", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/?doc=demo/examples/deck.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    await page.locator("#btn-play").click();
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.locator("#mi-presenter").click(),
+    ]);
+    await expect(popup.locator("#presenter-bar")).toContainText("Slide 1 of 4");
+    await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
+    // Closing it is not closing the document: no unsaved prompt.
+    const asked = await popup.evaluate(() => {
+      const ev = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(ev);
+      return ev.defaultPrevented;
+    });
+    expect(asked).toBe(false);
+    await popup.close({ runBeforeUnload: true });
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
+    await expect(page.locator("header").first()).toBeVisible();
   });
 });

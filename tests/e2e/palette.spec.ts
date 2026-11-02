@@ -414,3 +414,31 @@ test.describe("example documents", () => {
     await caverave.locator(".folio-inspector .strudel-stop").click();
   });
 });
+
+test("help topics arriving late keep the row the arrow keys chose", async ({
+  page,
+}) => {
+  // Hold the help topics back until the palette is open and arrowed.
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/demo/help/*.md", async (route) => {
+    await held;
+    await route.continue();
+  });
+  await waitForDocument(page);
+  await openPalette(page);
+  await page.locator("#palette-input").fill("insert");
+  await page.keyboard.press("ArrowDown");
+  const second = page.locator("#palette-list .palette-item").nth(1);
+  const chosen = await second.textContent();
+  await expect(second).toHaveClass(/selected/);
+  release();
+  // The topics come in and the list refreshes...
+  await expect(
+    page.locator("#palette-list .palette-tag", { hasText: "Help" }).first(),
+  ).toBeVisible();
+  // ...and the chosen row is still the selected one.
+  await expect(page.locator("#palette-list .palette-item.selected")).toHaveText(
+    chosen ?? "",
+  );
+});

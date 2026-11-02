@@ -201,15 +201,25 @@ file), so nothing is special-cased: slides are H2 sections.
   starts at slide 1 (2026-11-01: a caret left in a table cell took the
   arrows, and the show opened wherever the document was scrolled,
   "Slide 1 of 4" over slide 2).
-- **The screen while playing** (2026-11-01): the toolbar stays (its
-  view buttons stop the show); the section browser and help panel
-  hide, and the page is black around the slides. A slide fills the
-  space under the toolbar: the host sets `--folio-slide-inset` (the
-  toolbar's height) and the component sizes the slide, its padding
-  and its figures from `--slide-h` (the screen less the inset). A
-  slide title has no top margin - the slide's padding is it. Sized to
-  the whole screen, each slide lost its top under the toolbar and
-  overflowed.
+- **The screen while playing** (2026-11-02): the slides are the whole
+  screen - no toolbar, section browser or help panel, black around
+  the slides. (2026-11-01 kept the toolbar so its view buttons could
+  stop the show; nobody presenting wants it.) The host can keep room
+  above the slides with `--folio-slide-inset` (0 now); the component
+  sizes the slide, its padding and its figures from `--slide-h` (the
+  screen less the inset). A slide title has no top margin - the
+  slide's padding is it.
+- **The show's controls** (`#show-controls`, bottom left): ‹, › and
+  "End show (Esc)". They show for 4 s as the show starts - so the way
+  out is learnt at once - and for 2.5 s whenever the mouse moves, then
+  fade; their clicks never also advance the show. Never printed.
+- **Ending the show**: Esc, End show, or closing the presenter window
+  (it sends "presenter-bye"; the main window stops playing - the
+  presenter tool was asked for to present). While playing, the play
+  button and its "Stop slideshow" menu item show a stop square.
+- **The presenter window never asks to save**: closing it closes no
+  document (it shows the main window's), so both close guards - the
+  browser's beforeunload and the desktop's close-requested - skip it.
 - **Recording the README demo**: `scripts/record-present-gif.mjs`
   (needs the dev server and ffmpeg) re-records `docs/media/present.gif`
   at 1280x720 - re-run it after changing how slides look.
