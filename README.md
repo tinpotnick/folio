@@ -206,7 +206,7 @@ silicon and Intel). The builds are not code-signed yet: on macOS,
 right-click the app and choose **Open** the first time; on Windows,
 choose **More info → Run anyway** if SmartScreen warns.
 
-folio is young (version 0.1): expect rough edges, and please
+folio is young (version 0.2): expect rough edges, and please
 [report them](https://github.com/tinpotnick/folio/issues). Your
 documents are plain Markdown, so they stay readable whatever happens
 to folio.

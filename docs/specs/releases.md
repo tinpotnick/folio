@@ -49,7 +49,11 @@ and apt repositories on GitHub Pages: docs/specs/package-repos.md.
 - Wordmark: the mark beside "folio" in EB Garamond italic (600) - the
   toolbar (`#btn-home`), the README header
   (`docs/media/wordmark-{light,dark}.png`) and the social card
-  (`docs/media/social.png`).
+  (`docs/media/social.png`, 1280x640: the wordmark and pitch beside a
+  live report and the same kind of file playing as a slide). Re-render
+  it with `node scripts/render-social-card.mjs` (needs `npm run dev`)
+  after the app's look changes, then upload it in the repo's Settings
+  -> Social preview - GitHub does not read it from the repo.
 - Bundle metadata (category, descriptions, publisher, licence) is in
   `tauri.conf.json` → `bundle`.
 
