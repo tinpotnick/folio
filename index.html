@@ -676,15 +676,76 @@
          panel go. Slides were sized to the whole screen, so each lost
          its top under the toolbar and overflowed. */
       html.playing {
-        scroll-padding-top: var(--header-h, 57px);
-        --folio-slide-inset: var(--header-h, 57px);
+        scroll-padding-top: 0;
+        --folio-slide-inset: 0px;
       }
       html.playing body {
         background: #000;
       }
+      html.playing header,
       html.playing #sidebar,
       html.playing #help-panel {
         display: none !important;
+      }
+      /* The show's own controls (no toolbar while presenting): shown
+         when the show starts and whenever the mouse moves, then they
+         fade - the way out is always one move away. */
+      #show-controls {
+        position: fixed;
+        left: 16px;
+        bottom: 16px;
+        z-index: 30;
+        display: flex;
+        gap: 6px;
+        padding: 6px;
+        border-radius: 999px;
+        background: rgba(20, 20, 22, 0.82);
+        /* A light edge, so the bar reads on dark slides too. */
+        border: 1px solid rgba(255, 255, 255, 0.22);
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+        opacity: 0;
+        transition: opacity 0.25s;
+        pointer-events: none;
+      }
+      #show-controls[hidden] {
+        display: none;
+      }
+      #show-controls.visible {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      #show-controls button {
+        font:
+          500 14px/1 system-ui,
+          sans-serif;
+        color: #f4f4f5;
+        background: transparent;
+        border: none;
+        border-radius: 999px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      #show-controls button:hover,
+      #show-controls button:focus-visible {
+        background: rgba(255, 255, 255, 0.14);
+        outline: none;
+      }
+      #show-prev,
+      #show-next {
+        font-size: 22px !important;
+        line-height: 0.9 !important;
+        min-width: 38px;
+      }
+      #show-controls kbd {
+        font: inherit;
+        font-size: 12px;
+        opacity: 0.7;
+        margin-left: 4px;
+      }
+      @media print {
+        #show-controls {
+          display: none !important;
+        }
       }
       html.playing main {
         padding: 0;
@@ -2801,6 +2862,27 @@
       </form>
     </dialog>
     <div id="status">Saved</div>
+    <div id="show-controls" role="toolbar" aria-label="Slideshow" hidden>
+      <button
+        id="show-prev"
+        type="button"
+        title="Previous slide"
+        aria-label="Previous slide"
+      >
+        ‹
+      </button>
+      <button
+        id="show-next"
+        type="button"
+        title="Next slide"
+        aria-label="Next slide"
+      >
+        ›
+      </button>
+      <button id="show-end" type="button" title="End the slideshow (Esc)">
+        End show<kbd>Esc</kbd>
+      </button>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

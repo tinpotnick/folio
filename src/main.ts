@@ -401,9 +401,20 @@ function slideHeads(): HTMLElement[] {
   );
 }
 
+const PLAY_ICON = "M4 2.5v11l9-5.5-9-5.5z";
+const STOP_ICON = "M4 4h8v8H4z";
+
 function reflectPlay(): void {
   btnPlay.classList.toggle("active", playing);
   btnPlay.title = playing ? "Stop slideshow" : "Play slideshow";
+  // Playing, the control stops the show: a stop square, not a play
+  // triangle (on the button and its menu item).
+  for (const path of [
+    btnPlay.querySelector("svg:not(.chev) path"),
+    document.querySelector("#mi-play svg path"),
+  ]) {
+    path?.setAttribute("d", playing ? STOP_ICON : PLAY_ICON);
+  }
   btnPlay.setAttribute("aria-label", btnPlay.title);
   // While presenting, the play control - not the view toggle - is
   // the active one (play always shows the document view).
@@ -436,6 +447,7 @@ function setPlaying(on: boolean, opts: { fullscreen?: boolean } = {}): void {
   // (docs/specs/slides.md; sized to the whole screen, each slide lost
   // its top under the toolbar and overflowed).
   document.documentElement.classList.toggle("playing", on);
+  showControls(on);
   if (on) {
     if (mdWrap.hidden === false) btnView.click();
     // The show starts at its first slide, with no editing caret left
@@ -568,6 +580,38 @@ function presenterShow(i: number): void {
 /** Main window: open (or focus) the presenter window. On desktop
  *  (Tauri) that's a second app window via a native command; on the
  *  web it's a popup. */
+/* The show's own controls (docs/specs/slides.md, "The screen while
+ * playing"): no toolbar while presenting, so the way out - and back and
+ * forth - appears when the show starts and whenever the mouse moves. */
+const showBar = requireEl<HTMLElement>("#show-controls");
+let showBarTimer: ReturnType<typeof setTimeout> | undefined;
+function revealShowBar(ms = 2500): void {
+  if (showBar.hidden) return;
+  showBar.classList.add("visible");
+  clearTimeout(showBarTimer);
+  showBarTimer = setTimeout(() => showBar.classList.remove("visible"), ms);
+}
+function showControls(on: boolean): void {
+  showBar.hidden = !on;
+  if (on) revealShowBar(4000);
+  else showBar.classList.remove("visible");
+}
+document.addEventListener("mousemove", () => {
+  if (playing) revealShowBar();
+});
+for (const [id, act] of [
+  ["#show-prev", () => advanceSlide(-1)],
+  ["#show-next", () => advanceSlide(1)],
+  ["#show-end", () => setPlaying(false)],
+] as const) {
+  const btn = requireEl<HTMLButtonElement>(id);
+  // Its own click, never also the show's "click advances".
+  btn.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    act();
+  });
+}
+
 /** The desktop's native presenter window is open (it reports when it
  * closes): leaving fullscreen while it is must not stop the show. */
 let presenterNative = false;
@@ -673,7 +717,10 @@ if (PRESENTER) {
     } else if (msg.t === "nav" && typeof msg.d === "number" && playing) {
       advanceSlide(msg.d);
     } else if (msg.t === "presenter-bye") {
+      // Closing the presenter tool ends the show it was opened for.
       presenterNative = false;
+      presenterWin = null;
+      if (playing) setPlaying(false);
     }
   });
   // Doc edits flow to the presenter window (debounced).
@@ -2524,7 +2571,9 @@ async function saveCurrent(): Promise<boolean> {
 
 // Closing or reloading the tab: the browser's own prompt.
 window.addEventListener("beforeunload", (ev) => {
-  if (isDirty()) ev.preventDefault();
+  // The presenter window shows the main window's document - closing it
+  // closes no document, so it never asks to save.
+  if (!PRESENTER && isDirty()) ev.preventDefault();
 });
 
 // Closing the desktop window: the same Save / Discard / Cancel.
@@ -2533,7 +2582,7 @@ if (isDesktop()) {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
     await win.onCloseRequested(async (ev) => {
-      if (!isDirty()) return;
+      if (PRESENTER || !isDirty()) return;
       ev.preventDefault();
       if (await confirmLeave("Closing the window")) await win.destroy();
     });
@@ -2664,8 +2713,21 @@ async function loadHelpTopics(): Promise<void> {
   } catch {
     helpTopics = [];
   }
-  // A palette opened before the topics arrived lists them now.
-  if (paletteModal.open) updatePalette();
+  // A palette opened before the topics arrived lists them now - keeping
+  // what is selected: refreshing put it back on the first row, undoing
+  // an arrow key pressed just before the topics came in.
+  if (paletteModal.open) {
+    const kept = paletteFiltered[paletteSel]?.title;
+    updatePalette();
+    const at =
+      kept === undefined
+        ? -1
+        : paletteFiltered.findIndex((e) => e.title === kept);
+    if (at > 0) {
+      paletteSel = at;
+      renderPalette();
+    }
+  }
 }
 void loadHelpTopics();
 

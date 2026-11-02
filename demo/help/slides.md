@@ -5,8 +5,10 @@ plain Markdown. Press the play button in the View group of the
 toolbar (or Ctrl+K, "Play slideshow"): each H2 heading becomes one
 slide, shown fullscreen. The H1 is the deck's title; anything under
 it before the first H2 is front matter (instructions for you), never
-a slide. Arrow keys, Page Down, Space, or a click advance; Esc or the
-play button again stops. Press N (or Ctrl+K, "Toggle speaker notes")
+a slide. Arrow keys, Page Down, Space, or a click advance. The
+toolbar steps aside while you present; move the mouse and a small
+bar appears in the corner with ‹ ›, and **End show** - or press
+**Esc** to stop. Closing the presenter view ends the show too. Press N (or Ctrl+K, "Toggle speaker notes")
 to show the speaker notes — off by default on the main display, like
 a projector, so "make them laugh" never projects. On a laptop plus
 projector, use Ctrl+K, "Open presenter view": a second window opens
