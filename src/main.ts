@@ -341,8 +341,6 @@ const PRESENTER =
   new URLSearchParams(window.location.search).get("presenter") === "1" ||
   isPresenterWindow();
 const slidesChannel = new BroadcastChannel("folio-slides");
-/** The presenter window, if open (its opening exits fullscreen). */
-let presenterWin: Window | null = null;
 
 /* Slides messaging between the main and presenter windows:
  * BroadcastChannel plus a localStorage mirror (WebKitGTK delivers
@@ -465,6 +463,8 @@ function setPlaying(on: boolean, opts: { fullscreen?: boolean } = {}): void {
   } else {
     el.removeAttribute("slides");
     if (document.fullscreenElement) void document.exitFullscreen();
+    // The presenter window goes with the show.
+    if (!PRESENTER) postSlideMsg({ t: "show-ended" });
   }
   reflectPlay();
 }
@@ -484,14 +484,15 @@ function advanceSlide(delta: number): void {
 // slideshow" (label flips in reflectPlay) and "Open presenter view".
 
 document.addEventListener("fullscreenchange", () => {
-  // Esc out of fullscreen ends the show too - but opening the
-  // presenter window also exits fullscreen, and that must not stop
-  // the show.
+  // Leaving fullscreen ends the show: it is the first Esc (the browser
+  // takes that key to leave fullscreen; the show never sees it). Only
+  // the moment a presenter window opens - which also leaves fullscreen -
+  // is not an Esc. (Ignoring every exit while one was open made Esc
+  // need pressing twice.)
   if (
     playing &&
     !document.fullscreenElement &&
-    (!presenterWin || presenterWin.closed) &&
-    !presenterNative
+    Date.now() - presenterOpenedAt > 2000
   )
     setPlaying(false);
 });
@@ -612,16 +613,27 @@ for (const [id, act] of [
   });
 }
 
-/** The desktop's native presenter window is open (it reports when it
- * closes): leaving fullscreen while it is must not stop the show. */
-let presenterNative = false;
+/** Close this window: the desktop's native window, or a web popup. */
+async function closeThisWindow(): Promise<void> {
+  if (isDesktop()) {
+    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+    await getCurrentWindow().close();
+    return;
+  }
+  window.close();
+}
+
+/** When a presenter window was last opened (its opening leaves
+ * fullscreen - not an Esc). */
+let presenterOpenedAt = 0;
 
 async function openPresenter(): Promise<void> {
   if (isDesktop()) {
     if (!playing) setPlaying(true);
+    presenterOpenedAt = Date.now();
     const err = await openPresenterWindow();
     if (err === null) {
-      presenterNative = true;
+      presenterOpenedAt = Date.now();
       flash("Presenter view opened in a new window");
       return;
     }
@@ -632,6 +644,7 @@ async function openPresenter(): Promise<void> {
   }
   // The window first, in the click itself: a fullscreen request before
   // it can use up the click's permission to open one (#131).
+  presenterOpenedAt = Date.now();
   const win = window.open(
     `${window.location.pathname}?presenter=1`,
     "folio-presenter",
@@ -645,7 +658,6 @@ async function openPresenter(): Promise<void> {
     );
     return;
   }
-  presenterWin = win;
   // Fullscreen only with a second screen: on one screen the full-screen
   // deck covered the presenter window, and it seemed never to open.
   const twoScreens =
@@ -684,15 +696,21 @@ if (PRESENTER) {
       presenterShow(msg.slide);
     } else if (msg.t === "bye") {
       bar.textContent = "Presenter view — the main window closed";
+    } else if (msg.t === "show-ended") {
+      // The show ended in the main window: the presenter tool goes too.
+      void closeThisWindow();
     }
   });
   // "hello" (asking the main window for the deck) is sent by boot(),
   // once this window's own start-up is done - sent here, the reply
   // could arrive first, and start-up's blank document replaced the deck
   // (the desktop, where start-up waits on the app, always lost it).
-  window.addEventListener("beforeunload", () =>
-    postSlideMsg({ t: "presenter-bye" }),
-  );
+  // Closing it ends the show it was opened for: said on every way a
+  // window goes (the desktop's native close does not reliably fire
+  // beforeunload - see the close-requested handler below).
+  const bye = (): void => postSlideMsg({ t: "presenter-bye" });
+  window.addEventListener("beforeunload", bye);
+  window.addEventListener("pagehide", bye);
   // The presenter window drives the show too: arrows navigate the
   // MAIN window (which owns the slide index and broadcasts it back).
   document.addEventListener("keydown", (ev) => {
@@ -718,8 +736,6 @@ if (PRESENTER) {
       advanceSlide(msg.d);
     } else if (msg.t === "presenter-bye") {
       // Closing the presenter tool ends the show it was opened for.
-      presenterNative = false;
-      presenterWin = null;
       if (playing) setPlaying(false);
     }
   });
@@ -2582,7 +2598,13 @@ if (isDesktop()) {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const win = getCurrentWindow();
     await win.onCloseRequested(async (ev) => {
-      if (PRESENTER || !isDirty()) return;
+      if (PRESENTER) {
+        // The presenter window: no save prompt (it is not the
+        // document), and the show it was opened for ends.
+        postSlideMsg({ t: "presenter-bye" });
+        return;
+      }
+      if (!isDirty()) return;
       ev.preventDefault();
       if (await confirmLeave("Closing the window")) await win.destroy();
     });

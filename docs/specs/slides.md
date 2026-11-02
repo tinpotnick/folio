@@ -205,18 +205,28 @@ file), so nothing is special-cased: slides are H2 sections.
   screen - no toolbar, section browser or help panel, black around
   the slides. (2026-11-01 kept the toolbar so its view buttons could
   stop the show; nobody presenting wants it.) The host can keep room
-  above the slides with `--folio-slide-inset` (0 now); the component
-  sizes the slide, its padding and its figures from `--slide-h` (the
-  screen less the inset). A slide title has no top margin - the
-  slide's padding is it.
+  above the slides with `--folio-slide-inset` (0 now). Each slide is
+  the whole screen tall (`--screen-h`), with its content laid out in
+  the largest 16:9 (or 4:3) box that fits (`--slide-h`), centred: a
+  screen taller than the slide (16:10) showed the top of the NEXT
+  slide under it (2026-11-02). Padding and figure sizes follow
+  `--slide-h`; on paper a slide is sized by its aspect, as before. A
+  slide title has no top margin - the slide's padding is it.
 - **The show's controls** (`#show-controls`, bottom left): ‹, › and
   "End show (Esc)". They show for 4 s as the show starts - so the way
   out is learnt at once - and for 2.5 s whenever the mouse moves, then
   fade; their clicks never also advance the show. Never printed.
 - **Ending the show**: Esc, End show, or closing the presenter window
-  (it sends "presenter-bye"; the main window stops playing - the
-  presenter tool was asked for to present). While playing, the play
-  button and its "Stop slideshow" menu item show a stop square.
+  (it sends "presenter-bye" - from the desktop's close-requested event,
+  beforeunload and pagehide, since a native close does not reliably
+  fire beforeunload; the main window stops playing). The first Esc is
+  the browser's, leaving fullscreen - so leaving fullscreen ends the
+  show, except in the 2 s after a presenter window opens (its opening
+  leaves fullscreen too). Ignoring every exit while one was open made
+  Esc need pressing twice. When the show ends, the main window sends
+  "show-ended" and the presenter window closes itself. While playing,
+  the play button and its "Stop slideshow" menu item show a stop
+  square.
 - **The presenter window never asks to save**: closing it closes no
   document (it shows the main window's), so both close guards - the
   browser's beforeunload and the desktop's close-requested - skip it.
