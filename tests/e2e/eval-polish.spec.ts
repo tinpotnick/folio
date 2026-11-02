@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
+import { scrollToFigure } from "./reader";
 
 /**
  * Findings from the drawing-languages first-contact eval: each test
@@ -71,6 +72,9 @@ test.describe("eval polish", () => {
 
   test("Vega-Lite text is a readable size", async ({ page }) => {
     await page.goto("/?doc=demo/examples/drawings.md");
+    await scrollToFigure(
+      page.locator("#the-doc figure.folio-vega-lite").first(),
+    );
     const svg = page
       .locator("#the-doc figure.folio-vega-lite .code-view svg")
       .first();
@@ -88,6 +92,9 @@ test.describe("eval polish", () => {
   }) => {
     await page.goto("/?doc=demo/examples/sales-review.md");
     await page.locator("#btn-mode").click();
+    await scrollToFigure(
+      page.locator("#the-doc figure.folio-vega-lite").first(),
+    );
     const svg = page
       .locator("#the-doc figure.folio-vega-lite .code-view svg")
       .first();
@@ -117,6 +124,7 @@ test.describe("eval polish", () => {
   }) => {
     await page.goto("/?doc=demo/examples/drawings.md");
     const fig = page.locator("#the-doc figure.folio-abc");
+    await scrollToFigure(fig);
     await expect(fig.locator(".abc-score svg")).toBeVisible({
       timeout: 15_000,
     });

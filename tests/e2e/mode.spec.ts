@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readThrough } from "./reader";
 
 /**
  * Dark and light mode (spec: docs/specs/dark-light-mode.md): the
@@ -124,6 +125,7 @@ test.describe("dark/light mode", () => {
     await page
       .locator("folio-doc h1", { hasText: "Q3 Field Operations Review" })
       .waitFor();
+    await readThrough(page);
     const fills = await page
       .locator("#the-doc .chart-holder svg")
       .evaluateAll((svgs) =>

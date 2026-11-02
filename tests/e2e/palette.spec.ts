@@ -44,12 +44,17 @@ test.describe("command palette", () => {
   }) => {
     await waitForDocument(page);
     await openPalette(page);
+    // Help topics are fetched at start; a palette opened before they
+    // arrive lists them when they do - wait for them, as a reader would
+    // see them appear (a one-shot read raced the fetch under load).
+    await expect(
+      page.locator("#palette-list .palette-tag", { hasText: "Help" }).first(),
+    ).toBeVisible();
     const groups = await page
       .locator("#palette-list .palette-tag")
       .allTextContents();
     expect(groups[0]).toBe("Command");
     expect(groups).toContain("Section");
-    expect(groups).toContain("Help");
   });
 
   test("typing a command word and pressing Enter runs it", async ({ page }) => {

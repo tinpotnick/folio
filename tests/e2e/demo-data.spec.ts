@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readThrough } from "./reader";
 
 /**
  * Shipped demo data + the report example (spec: docs/specs/
@@ -53,6 +54,7 @@ test.describe("demo data and the report example", () => {
       fig.locator('td[data-row-index="1"][data-col-index="4"]'),
     ).toHaveText("-2.7%");
     // Two line charts over the imported data.
+    await readThrough(page);
     await expect(
       // The two single-series line charts (the regions chart, with a
       // legend, draws one line per region on top of these).
