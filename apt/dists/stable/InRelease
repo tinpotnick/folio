@@ -1,0 +1,42 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Mon, 02 Nov 2026 17:47:55 +0000
+Label: folio
+Origin: folio
+Suite: stable
+MD5Sum:
+ ce8d83a336daa65c3f06b9a5c3dfcf73              134 Release
+ 0318d7b17c45bcd59caf7d34246d7014             3274 main/binary-amd64/Packages
+ a9695b56f71e07ecec082c96f5fbfb22             1157 main/binary-amd64/Packages.gz
+SHA1:
+ 8e5c389fa33631d49cd0294ad038e44c9dd4646c              134 Release
+ a2d75034751495c1b4f493863c2fd690dfb5c7d2             3274 main/binary-amd64/Packages
+ 3f70daaea365fe76577a42c26103e9169cadd53d             1157 main/binary-amd64/Packages.gz
+SHA256:
+ aca866397af822d72b9e30832c91c2131cf04bc4f7491c78898ae23b44fb3ed8              134 Release
+ 57cbe2e9a84ab46a3e9b31a0a9fdbb7cdfe1ddb754d3a9582fb2b35e49bdaa7a             3274 main/binary-amd64/Packages
+ a7082d27183b3713a2ba13ccd4cffe7f2be6459adf67483ee4f2016e8496bf47             1157 main/binary-amd64/Packages.gz
+SHA512:
+ dda865ec6601c7d0b683bb78fe7b46e3868939be3e3f74ebcc76d359659b09ba31cb7ba19c68f0f6d1a6050fd56c39f875b65223fa9b54494b1ceab94aaa97c2              134 Release
+ 2c36ccf72bd3e924e7d2ccfe5799890947fc7026aadfa24c45b3a0416df3c37c4b86d45e706812e350492b1259f78c25cce3d033035b20452fced975bc749835             3274 main/binary-amd64/Packages
+ a93a13a2404671b951837b149e1452004957d45707235f44407a29e7dcbed73a6ea013abeffd5ba6a41224728ae3f4c13808053cee35f3cc2d1977f334a90871             1157 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEEb4Jm35PiWoOtQ+QLCJx1jZy05YcFAmrozMsACgkQCJx1jZy0
+5YevyA//eGK8BpX37mZFLAiPtmZlN+gP6Ci21x65ecbYJWayS/kS7iDb94B+/IpU
+tUupffpLnBoZABT1gsD+3kTI0KiNKxU1yFT+dzAy7OKvbJN9aHEup6yMQ7aqrA9P
+mbhxjZUy3H3hcGf1IkyXNCTLL3b5PSgiRqGP8SGWUr5hMK74I4OJevjJRlS1xn/1
+Nv1llM+DOY6sfcDLViiySUG1VAlzt++afwSye3v+a6cTggW4htm1HYzcFM9S8BPt
+o8jYag25NV+N+TrZ4WhYaHlGGWIkYgofwP+lNDs5RcgqkQFnJS3tHhx2QkqaTlJd
+XFxcVmZ1Iu+Ia3suQyjvDq2S9OAfdhY03OaMGtb1XgZ03W0AFShEbraSdOSB2m5Q
+/ntzeGo04RxkQY781QaQAX1sTpm6+UuXCVBk7bbyKAZ4BBWugncV4R+NuXeKSgzG
+RShziiXcivlvZiMrT7YETrbEPVLH6Wv3OCv++QSZEeNdiOk1/Nm/kmYGUQbS2Q4Q
+sH2Mzy22x5a/zAAXuM2B8e1WUi50J4GAYU8dovITWpqyPECOsMZLelhkF359c10Q
+IBu5QqN67KqFx4dnXYLfEPt3V31vTV8HmooI/2YM6fv8jYfANIm9kEz45rvoLFFi
+9tV0y0zsgUaB9kbaf89xLa4JkQ3BIqbMviSuFeaElqmDvH3PJGI=
+=dWho
+-----END PGP SIGNATURE-----
