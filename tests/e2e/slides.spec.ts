@@ -526,3 +526,83 @@ test.describe("slideshow: what a presenter sees (from recording the README demo)
     await expect(page.locator("#status")).toHaveText("Slide 3 of 4");
   });
 });
+
+test.describe("presenter view: it opens, and shows the deck", () => {
+  test("desktop: a slow start-up no longer replaces the deck with a blank document", async ({
+    page,
+    context,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/?doc=demo/examples/deck.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    // The desktop's presenter window: Tauri, the window labelled
+    // "presenter", and start-up waiting on the app (every call slow).
+    const pres = await context.newPage();
+    await pres.addInitScript(() => {
+      (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+        metadata: { currentWindow: { label: "presenter" } },
+        invoke: () => new Promise((r) => setTimeout(() => r(null), 800)),
+        transformCallback: () => 0,
+      };
+    });
+    await pres.goto("/");
+    await expect(pres.locator("#presenter-bar")).toContainText(
+      "now: Revenue by region",
+      { timeout: 10_000 },
+    );
+    // ...and it is still the deck once start-up has long finished (it
+    // was replaced by a blank "Untitled" document).
+    await pres.waitForTimeout(2000);
+    await expect(pres.locator("#the-doc .folio-slide > h2").first()).toHaveText(
+      "Revenue by region",
+    );
+  });
+
+  test("web, one screen: the presenter window opens and the deck stays windowed beside it", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("folio.guided", "1");
+      // Count fullscreen requests: on one screen the full-screen deck
+      // covered the presenter window (#131) - headless Chromium never
+      // shows it, so the request itself is what is checked.
+      const w = window as unknown as { fullscreenAsks: number };
+      w.fullscreenAsks = 0;
+      Element.prototype.requestFullscreen = function () {
+        w.fullscreenAsks += 1;
+        return Promise.resolve();
+      };
+    });
+    await page.goto("/?doc=demo/examples/deck.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    await page.locator("#btn-play").click();
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.locator("#mi-presenter").click(),
+    ]);
+    await expect(popup.locator("#presenter-bar")).toContainText("Slide 1 of 4");
+    await expect(page.locator("#status")).toContainText("Slide 1 of 4");
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { fullscreenAsks: number }).fullscreenAsks,
+      ),
+    ).toBe(0);
+  });
+
+  test("web: a blocked pop-up says so, and the show does not start", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem("folio.guided", "1");
+      window.open = () => null;
+    });
+    await page.goto("/?doc=demo/examples/deck.md");
+    await page.locator("#the-doc h1").first().waitFor();
+    await page.locator("#btn-play").click();
+    await page.locator("#mi-presenter").click();
+    await expect(page.locator("#status")).toContainText(
+      "allow pop-ups for this site",
+    );
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
+  });
+});

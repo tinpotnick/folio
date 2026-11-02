@@ -13,6 +13,10 @@ projector, use Ctrl+K, "Open presenter view": a second window opens
 with the notes always visible, the current and next slide titles, and
 a "Slide n of N" counter, moving in step with the main window in
 either direction — put it on your own screen and present from there.
+With a second screen attached, the slides go full screen on the
+projector; on one screen they stay in a window beside the presenter
+view, so both can be seen. If your browser blocks the new window,
+folio says so: allow pop-ups for this site and choose it again.
 The play button's dropdown (its little arrow) in the View group offers
 both options: "Play slideshow" on this screen, or "Open presenter
 view".
