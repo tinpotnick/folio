@@ -63,6 +63,15 @@
     <control>pointing</control>
   </supports>
   <releases>
+    <release version="0.2.2" date="2026-11-02">
+      <description>
+        <p>The presenter view works.</p>
+        <ul>
+          <li>Desktop: the presenter window shows the deck, not a blank document</li>
+          <li>Web: the presenter window opens in Chrome; with one screen the slides stay in a window beside it, and a blocked pop-up says so</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.1" date="2026-11-02">
       <description>
         <p>Every platform again, and the fixes since 0.2.0.</p>
