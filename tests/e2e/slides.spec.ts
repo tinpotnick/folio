@@ -162,13 +162,15 @@ test.describe("slideshow", () => {
     });
     expect(before.wrappers).toBe(0);
     expect(before.attr).toBe(false);
+    await page.setViewportSize({ width: 1280, height: 720 });
     await togglePlay(page);
-    const during = await page.evaluate(() => {
-      const root = document.querySelector("#the-doc")?.shadowRoot;
-      const slide = root?.querySelector("article.folio-doc .folio-slide");
-      return slide ? getComputedStyle(slide as HTMLElement).aspectRatio : "";
-    });
-    expect(during).toBe("16 / 9");
+    // On a 16:9 screen a slide is exactly 16:9 (its box is the largest
+    // 16:9 that fits; a taller screen pads it, never stretches it).
+    const box = await page
+      .locator("#the-doc .folio-slide")
+      .first()
+      .boundingBox();
+    expect((box?.width ?? 0) / (box?.height ?? 1)).toBeCloseTo(16 / 9, 2);
   });
 
   test("print media while playing uses 16:9 pages, one slide per page", async ({
@@ -649,5 +651,119 @@ test.describe("presenter view: closing it", () => {
     await popup.close({ runBeforeUnload: true });
     await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
     await expect(page.locator("header").first()).toBeVisible();
+  });
+});
+
+test.describe("presenting: the screen, Esc, and the presenter window", () => {
+  const deck = async (page: Page): Promise<void> => {
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/?doc=demo/examples/deck.md");
+    await page.locator("#the-doc h1").first().waitFor();
+  };
+
+  test("a screen taller than 16:9 shows one slide, none of the next", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 }); // 16:10
+    await deck(page);
+    await togglePlay(page);
+    const slides = page.locator("#the-doc .folio-slide");
+    const first = await slides.nth(0).boundingBox();
+    const second = await slides.nth(1).boundingBox();
+    expect(Math.round(first?.height ?? 0)).toBe(800);
+    // The next slide's top used to show under this one.
+    expect(second?.y ?? 0).toBeGreaterThanOrEqual(799);
+  });
+
+  test("one Esc ends the show, even with the presenter window open", async ({
+    page,
+  }) => {
+    await deck(page);
+    await page.locator("#btn-play").click();
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.locator("#mi-presenter").click(),
+    ]);
+    await expect(popup.locator("#presenter-bar")).toContainText("Slide 1 of 4");
+    const leaveFullscreen = () =>
+      page.evaluate(() =>
+        document.dispatchEvent(new Event("fullscreenchange")),
+      );
+    // Opening the presenter window leaves fullscreen: not an Esc.
+    await leaveFullscreen();
+    await expect(page.locator("#the-doc")).toHaveAttribute("slides", /.*/);
+    // Later, leaving fullscreen is the Esc the browser took: the show ends.
+    await page.waitForTimeout(2200);
+    await leaveFullscreen();
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
+  });
+
+  test("ending the show closes the presenter window", async ({ page }) => {
+    await deck(page);
+    await page.locator("#btn-play").click();
+    const [popup] = await Promise.all([
+      page.waitForEvent("popup"),
+      page.locator("#mi-presenter").click(),
+    ]);
+    await expect(popup.locator("#presenter-bar")).toContainText("Slide 1 of 4");
+    await Promise.all([
+      popup.waitForEvent("close"),
+      page.locator("#show-end").click(),
+    ]);
+  });
+
+  test("desktop: closing the presenter window ends the show", async ({
+    page,
+    context,
+  }) => {
+    await deck(page);
+    await togglePlay(page);
+    // The desktop's presenter window, with Tauri's close-requested
+    // event captured as Tauri registers it (listen + transformCallback).
+    const pres = await context.newPage();
+    await pres.addInitScript(() => {
+      const w = window as unknown as Record<string, unknown>;
+      const cbs: Record<number, (e: unknown) => void> = {};
+      let next = 1;
+      w.__closeRequested = null;
+      w.__TAURI_INTERNALS__ = {
+        metadata: { currentWindow: { label: "presenter" } },
+        transformCallback: (cb: (e: unknown) => void) => {
+          const id = next++;
+          cbs[id] = cb;
+          return id;
+        },
+        invoke: (cmd: string, args: { event?: string; handler?: number }) => {
+          if (cmd === "plugin:event|listen") {
+            if (args.event === "tauri://close-requested")
+              w.__closeRequested = args.handler;
+            return Promise.resolve(next++);
+          }
+          return Promise.resolve(null);
+        },
+      };
+      w.__fire = (id: number) =>
+        cbs[id]?.({ event: "tauri://close-requested", id: 1, payload: null });
+    });
+    await pres.goto("/");
+    await expect(pres.locator("#presenter-bar")).toContainText("Slide 1 of 4");
+    await expect
+      .poll(() =>
+        pres.evaluate(
+          () =>
+            (window as unknown as { __closeRequested: unknown })
+              .__closeRequested,
+        ),
+      )
+      .not.toBeNull();
+    // The native close button.
+    await pres.evaluate(() => {
+      const w = window as unknown as {
+        __fire: (id: number) => void;
+        __closeRequested: number;
+      };
+      w.__fire(w.__closeRequested);
+    });
+    await expect(page.locator("#the-doc")).not.toHaveAttribute("slides", /.*/);
   });
 });

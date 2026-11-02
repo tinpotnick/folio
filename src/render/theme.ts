@@ -1065,7 +1065,12 @@ export function slideCss(theme: Theme, mode: Mode): string {
       /* A slide's height: the screen less what the host keeps above
          the slides (its toolbar). Slide padding and figure sizes follow
          it - they used the whole screen (vh), and overflowed. */
-      --slide-h: calc(100vh - var(--folio-slide-inset, 0px));
+      --screen-h: calc(100vh - var(--folio-slide-inset, 0px));
+      /* The slide's own box: the largest ${s.aspect === "4/3" ? "4:3" : "16:9"} that fits the screen. */
+      --slide-h: min(
+        var(--screen-h),
+        100vw * ${s.aspect === "4/3" ? "3 / 4" : "9 / 16"}
+      );
       max-width: none;
       margin: 0;
       background: ${bg};
@@ -1085,18 +1090,21 @@ export function slideCss(theme: Theme, mode: Mode): string {
       outline: 2px solid var(--folio-accent, #1f3fbf);
       outline-offset: -2px;
     }
+    /* Each slide is the whole screen tall, its ${s.aspect === "4/3" ? "4:3" : "16:9"} box centred in
+       it: a screen taller than the slide (16:10) showed the top of the
+       NEXT slide under this one. */
     article.folio-doc[slides] > .folio-slide {
       box-sizing: border-box;
-      aspect-ratio: ${aspect};
       width: 100%;
       /* The screen less what the host keeps above the slides (its
          toolbar: --folio-slide-inset). */
       max-width: calc(
         var(--slide-h) * ${s.aspect === "4/3" ? "4 / 3" : "16 / 9"}
       );
-      max-height: var(--slide-h);
+      height: var(--screen-h);
       margin: 0 auto;
-      padding: calc(var(--slide-h) * 0.06) 7vw;
+      padding: calc((var(--screen-h) - var(--slide-h)) / 2 + var(--slide-h) * 0.06)
+        7vw;
       display: flex;
       flex-direction: column;
       justify-content: ${valignCenter ? "center" : "flex-start"};
@@ -1191,6 +1199,10 @@ export function slideCss(theme: Theme, mode: Mode): string {
         page-break-before: always;
         aspect-ratio: ${aspect};
         max-height: none;
+        /* Paper sizes a slide by its aspect, as before - the screen's
+           full-height cell is for the screen. */
+        height: auto;
+        padding: calc(var(--slide-h) * 0.06) 7vw;
         break-inside: avoid;
       }
       article.folio-doc[slides] .folio-slide:first-of-type {
