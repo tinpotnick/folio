@@ -168,10 +168,23 @@ file), so nothing is special-cased: slides are H2 sections.
   slide index syncs both ways over a `BroadcastChannel`
   ("folio-slides"); document edits flow to the presenter window
   (debounced). The main display never shows notes; N still toggles
-  them there for single-screen use. Opening the popup exits
-  fullscreen on the main window, which re-requests it - and must
-  NOT stop the show (the fullscreenchange handler ignores it while
-  the presenter window is open). The file on disk is unchanged.
+  them there for single-screen use. The file on disk is unchanged.
+  Opening it (2026-11-02, #131):
+  - Web: the popup opens FIRST, in the click, before any fullscreen
+    request (one could use up the click's permission to open it). The
+    main window goes fullscreen only with a second screen
+    (`screen.isExtended`): on one screen the full-screen deck covered
+    the presenter window, and it seemed never to open. A blocked
+    popup says so ("allow pop-ups for this site") and the show does
+    not start, so the message is not replaced by the slide counter.
+  - Leaving fullscreen while a presenter window is open never stops
+    the show - the web popup, or the desktop's native window (tracked
+    until it sends "presenter-bye" as it closes).
+  - The presenter window asks for the deck ("hello") only once its
+    own start-up is done. Asked earlier, the reply could land first
+    and start-up's blank document replaced the deck - on the desktop,
+    where start-up waits on the app, it always did ("Untitled" in the
+    presenter window, the deck in the main one).
   Desktop (Tauri): "Open presenter view" invokes the
   `open_presenter_window` command, which builds a second
   `WebviewWindow` (label "presenter", same front-end with

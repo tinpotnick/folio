@@ -127,6 +127,14 @@ function bootPath(): string | null {
  * every launch after that opens a blank document.
  */
 async function boot(): Promise<void> {
+  if (PRESENTER) {
+    // The presenter window gets its document from the main window:
+    // a blank one until then - and it asks only now, with start-up
+    // done, so the deck that comes back is never replaced by it.
+    await openShipped(null, { history: "replace", unguarded: true });
+    postSlideMsg({ t: "hello" });
+    return;
+  }
   // Launched to open a file (desktop: "Open with folio", a
   // double-clicked .md): that file, before anything else.
   const launched = await launchDocument();
@@ -136,12 +144,6 @@ async function boot(): Promise<void> {
     return;
   }
   let path = bootPath();
-  if (path === null && PRESENTER) {
-    // The presenter window gets its document over the channel, not
-    // from the welcome page.
-    await openShipped(null, { history: "replace", unguarded: true });
-    return;
-  }
   if (path === null) {
     let guided = true;
     try {
@@ -426,7 +428,7 @@ function reflectPlay(): void {
   if (playing) postSlideMsg({ t: "slide", slide: currentSlide });
 }
 
-function setPlaying(on: boolean): void {
+function setPlaying(on: boolean, opts: { fullscreen?: boolean } = {}): void {
   if (on === playing) return;
   playing = on;
   currentSlide = 0;
@@ -443,7 +445,11 @@ function setPlaying(on: boolean): void {
     (document.activeElement as HTMLElement | null)?.blur();
     el.setAttribute("slides", "");
     requestAnimationFrame(() => advanceSlide(0));
-    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+    if (opts.fullscreen !== false) {
+      void document.documentElement
+        .requestFullscreen?.()
+        .catch(() => undefined);
+    }
   } else {
     el.removeAttribute("slides");
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -472,7 +478,8 @@ document.addEventListener("fullscreenchange", () => {
   if (
     playing &&
     !document.fullscreenElement &&
-    (!presenterWin || presenterWin.closed)
+    (!presenterWin || presenterWin.closed) &&
+    !presenterNative
   )
     setPlaying(false);
 });
@@ -561,11 +568,16 @@ function presenterShow(i: number): void {
 /** Main window: open (or focus) the presenter window. On desktop
  *  (Tauri) that's a second app window via a native command; on the
  *  web it's a popup. */
+/** The desktop's native presenter window is open (it reports when it
+ * closes): leaving fullscreen while it is must not stop the show. */
+let presenterNative = false;
+
 async function openPresenter(): Promise<void> {
-  if (!playing) setPlaying(true);
   if (isDesktop()) {
+    if (!playing) setPlaying(true);
     const err = await openPresenterWindow();
     if (err === null) {
+      presenterNative = true;
       flash("Presenter view opened in a new window");
       return;
     }
@@ -574,20 +586,35 @@ async function openPresenter(): Promise<void> {
     flash(`Presenter view unavailable: ${err}`);
     return;
   }
+  // The window first, in the click itself: a fullscreen request before
+  // it can use up the click's permission to open one (#131).
   const win = window.open(
     `${window.location.pathname}?presenter=1`,
     "folio-presenter",
     "width=960,height=720",
   );
-  if (win) {
-    presenterWin = win;
-    flash("Presenter view opened — move it to your own screen");
-    // Opening a popup exits fullscreen on the main window; take it
-    // back so the projector keeps the full-screen deck.
-    void document.documentElement.requestFullscreen?.().catch(() => undefined);
-  } else {
-    flash("Allow popups to open the presenter view");
+  if (!win) {
+    // Not playing yet, so the message stays readable (the show's slide
+    // counter would replace it).
+    flash(
+      "The presenter view was blocked - allow pop-ups for this site, then choose Open presenter view again",
+    );
+    return;
   }
+  presenterWin = win;
+  // Fullscreen only with a second screen: on one screen the full-screen
+  // deck covered the presenter window, and it seemed never to open.
+  const twoScreens =
+    (window.screen as Screen & { isExtended?: boolean }).isExtended === true;
+  if (!playing) setPlaying(true, { fullscreen: twoScreens });
+  else if (twoScreens) {
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  }
+  flash(
+    twoScreens
+      ? "Presenter view opened - move it to your own screen"
+      : "Presenter view opened in its own window",
+  );
 }
 
 if (PRESENTER) {
@@ -615,7 +642,13 @@ if (PRESENTER) {
       bar.textContent = "Presenter view — the main window closed";
     }
   });
-  postSlideMsg({ t: "hello" });
+  // "hello" (asking the main window for the deck) is sent by boot(),
+  // once this window's own start-up is done - sent here, the reply
+  // could arrive first, and start-up's blank document replaced the deck
+  // (the desktop, where start-up waits on the app, always lost it).
+  window.addEventListener("beforeunload", () =>
+    postSlideMsg({ t: "presenter-bye" }),
+  );
   // The presenter window drives the show too: arrows navigate the
   // MAIN window (which owns the slide index and broadcasts it back).
   document.addEventListener("keydown", (ev) => {
@@ -639,6 +672,8 @@ if (PRESENTER) {
       });
     } else if (msg.t === "nav" && typeof msg.d === "number" && playing) {
       advanceSlide(msg.d);
+    } else if (msg.t === "presenter-bye") {
+      presenterNative = false;
     }
   });
   // Doc edits flow to the presenter window (debounced).
