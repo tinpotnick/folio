@@ -1,6 +1,6 @@
 [package]
 name = "folio-desktop"
-version = "0.1.2"
+version = "0.2.0"
 description = "folio desktop host (Tauri, ADR-0006)"
 edition = "2021"
 license = "MIT"

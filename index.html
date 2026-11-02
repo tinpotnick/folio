@@ -670,6 +670,27 @@
       body.presenter main {
         padding-top: 46px;
       }
+      /* Presenting (docs/specs/slides.md): each slide fills the space
+         under the toolbar, letterboxed on black - the toolbar stays
+         (its view buttons stop the show), the section browser and help
+         panel go. Slides were sized to the whole screen, so each lost
+         its top under the toolbar and overflowed. */
+      html.playing {
+        scroll-padding-top: var(--header-h, 57px);
+        --folio-slide-inset: var(--header-h, 57px);
+      }
+      html.playing body {
+        background: #000;
+      }
+      html.playing #sidebar,
+      html.playing #help-panel {
+        display: none !important;
+      }
+      html.playing main {
+        padding: 0;
+        margin: 0;
+        border: none;
+      }
       #presenter-bar {
         position: fixed;
         top: 0;
