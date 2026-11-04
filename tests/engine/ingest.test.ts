@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import {
   importedTable,
+  isGzipFile,
   parseCsv,
   parseImport,
   parseJsonTable,
 } from "@folio/engine/ingest";
 import { parseDoc, serializeDoc } from "@folio/engine/doc";
+import { isSqliteFile, openSqlite } from "@folio/engine/sqlite";
+
+describe("isGzipFile", () => {
+  it("recognises the gzip magic; a gzipped database reads after gunzip", () => {
+    const gz = new Uint8Array(readFileSync("demo/data/calls-2026-03.db.gz"));
+    expect(isGzipFile(gz)).toBe(true);
+    expect(
+      isGzipFile(new Uint8Array(readFileSync("demo/data/calls-2026-03.db"))),
+    ).toBe(false);
+    const plain = gunzipSync(gz);
+    expect(isSqliteFile(plain)).toBe(true);
+    expect(openSqlite(new Uint8Array(plain)).read("cdr").rows).toHaveLength(36);
+  });
+});
 
 describe("parseCsv", () => {
   it("takes the first row as the header and infers number columns", () => {

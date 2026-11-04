@@ -1333,6 +1333,47 @@
         font-weight: 400;
         margin-bottom: 14px;
       }
+      #import-sqlite-tables {
+        margin-top: 12px;
+      }
+      #import-sqlite-tables p {
+        margin: 0 0 6px;
+        font-size: 13px;
+      }
+      #import-sqlite-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      #import-sqlite-list label {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        font-weight: 400;
+        cursor: pointer;
+      }
+      #import-sqlite-list small {
+        color: var(--text-muted);
+      }
+      .import-sqlite-internal {
+        margin-top: 8px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--text-muted);
+      }
+      .refresh-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 14px;
+      }
+      .refresh-list label {
+        font-size: 13px;
+        font-weight: 400;
+      }
       .unsaved-body {
         padding: 18px 20px 16px;
       }
@@ -2530,7 +2571,13 @@
       <input
         type="file"
         id="import-file"
-        accept=".csv,.json,text/csv,application/json,text/plain"
+        accept=".csv,.json,.db,.db3,.sqlite,.sqlite3,.gz,text/csv,application/json,text/plain,application/vnd.sqlite3,application/x-sqlite3,application/gzip,application/octet-stream"
+        hidden
+      />
+      <input
+        type="file"
+        id="refresh-file"
+        accept=".csv,.json,.db,.db3,.sqlite,.sqlite3,.gz,text/csv,application/json,application/vnd.sqlite3,application/x-sqlite3,application/gzip,application/octet-stream"
         hidden
       />
       <nav id="sidebar" aria-label="Section browser">
@@ -2656,8 +2703,9 @@
         </div>
         <section id="import-pane-file" class="import-pane">
           <p>
-            A CSV or JSON file becomes a dataset in this document: typed columns
-            (numbers, dates, text), ready for formulas and charts.
+            A CSV, JSON or SQLite file becomes a dataset in this document:
+            typed columns (numbers, dates, text), ready for formulas and
+            charts.
           </p>
           <div class="import-row">
             <button type="button" class="plain primary" id="btn-import-choose">
@@ -2666,6 +2714,10 @@
             <button type="button" class="plain" id="btn-import-demo">
               Use the demo dataset
             </button>
+          </div>
+          <div id="import-sqlite-tables" hidden>
+            <p id="import-sqlite-label"></p>
+            <div id="import-sqlite-list" role="radiogroup"></div>
           </div>
         </section>
         <section id="import-pane-known" class="import-pane" hidden>
@@ -2782,6 +2834,26 @@
             disabled
           >
             Import
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="refresh-modal" aria-label="Refresh imported data">
+      <form method="dialog" class="import-body" id="refresh-form">
+        <h2>Refresh imported data</h2>
+        <p>
+          Replace the data of the tables below with the picked file's current
+          content. Their name, caption, licence and citation stay; charts and
+          formulas over them recalculate.
+        </p>
+        <p id="refresh-error" class="import-error" role="alert" hidden></p>
+        <div id="refresh-list" class="refresh-list"></div>
+        <div class="unsaved-actions">
+          <button value="cancel" class="plain" id="btn-refresh-cancel">
+            Cancel
+          </button>
+          <button type="button" class="plain primary" id="btn-refresh-go">
+            Update
           </button>
         </div>
       </form>

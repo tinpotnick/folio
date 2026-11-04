@@ -15,10 +15,24 @@ import type { FolioDoc } from "./component.js";
 import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
   importedTable,
+  importOrigin as originFor,
+  isGzipFile,
   parseImport,
   sanitizeNames,
+  splitImportOrigin,
   type ParsedImport,
 } from "./engine/ingest.js";
+import {
+  isSqliteFile,
+  openSqlite,
+  type SqliteDb,
+  type SqliteTableInfo,
+} from "./engine/sqlite.js";
+import {
+  matchRefreshTargets,
+  refreshedTable,
+  type RefreshTarget,
+} from "./engine/refresh.js";
 import {
   parseFetched,
   publisherFor,
@@ -1316,8 +1330,17 @@ interface Pending {
   file?: string;
   /** The dataset name to offer (a known series' own). */
   id?: string;
+  /** The table inside a SQLite file, when the file holds several. */
+  sqliteTable?: string;
 }
 let pending: Pending | null = null;
+
+/** A picked SQLite file, waiting for its table to be chosen. */
+let sqlitePending: {
+  file: string;
+  db: SqliteDb;
+  tables: SqliteTableInfo[];
+} | null = null;
 
 function importTab(which: ImportTab): void {
   try {
@@ -1348,6 +1371,7 @@ function lastImportTab(): ImportTab {
 
 function openImport(which?: ImportTab): void {
   closeMenus();
+  resetSqlitePick();
   if (!importModal.open) {
     el.saveCaret();
     importModal.showModal();
@@ -1368,6 +1392,99 @@ function importReset(): void {
 function importFail(msg: string): void {
   importError.textContent = msg;
   importError.hidden = false;
+}
+
+/** A rejected file read, shown the same way. */
+function importFailFrom(e: unknown): void {
+  importReset();
+  importFail(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+}
+
+/** Forget a picked SQLite file and its table picker. */
+function resetSqlitePick(): void {
+  sqlitePending = null;
+  requireEl<HTMLElement>("#import-sqlite-tables").hidden = true;
+}
+
+/**
+ * A picked SQLite file: list its tables, then preview the chosen one.
+ * With a single table there is nothing to choose.
+ */
+function importFromSqlite(file: string, bytes: Uint8Array): void {
+  openImport("file");
+  let db: SqliteDb;
+  try {
+    db = openSqlite(bytes);
+  } catch (e) {
+    importReset();
+    importFail(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+  const tables = db.tables();
+  if (!tables.length) {
+    importReset();
+    importFail("That SQLite file contains no tables");
+    return;
+  }
+  sqlitePending = { file, db, tables };
+  const first = tables[0];
+  if (tables.length === 1 && first) {
+    requireEl<HTMLElement>("#import-sqlite-tables").hidden = true;
+    showSqliteTable(first.name);
+    return;
+  }
+  const list = requireEl<HTMLElement>("#import-sqlite-list");
+  list.textContent = "";
+  requireEl<HTMLElement>("#import-sqlite-label").textContent =
+    `This SQLite file holds ${String(tables.length)} tables - choose one:`;
+  const radio = (t: SqliteTableInfo): void => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "import-sqlite-table";
+    input.value = t.name;
+    label.append(input, ` ${t.name} `);
+    const small = document.createElement("small");
+    small.textContent = `${t.rowCount.toLocaleString()} rows · ${String(t.columns.length)} columns`;
+    label.appendChild(small);
+    list.appendChild(label);
+    input.addEventListener("change", () => showSqliteTable(t.name));
+  };
+  // Real tables first; tool bookkeeping (litestream's _litestream_*,
+  // …) is listed too, under a label - never hidden, so no table can
+  // go missing from the picker.
+  for (const t of tables.filter((t) => !t.internal)) radio(t);
+  const internal = tables.filter((t) => t.internal);
+  if (internal.length) {
+    const divider = document.createElement("div");
+    divider.className = "import-sqlite-internal";
+    divider.textContent = "Internal tables (tool bookkeeping)";
+    list.appendChild(divider);
+    for (const t of internal) radio(t);
+  }
+  requireEl<HTMLElement>("#import-sqlite-tables").hidden = false;
+}
+
+/** Preview one table of the picked SQLite file. */
+function showSqliteTable(name: string): void {
+  const sp = sqlitePending;
+  if (!sp) return;
+  try {
+    const parsed = sp.db.read(name);
+    // Strip compound extensions ("x.db.gz" -> "x") for the dataset name.
+    const stem = sp.file.replace(/\.[^.]+$/, "").replace(/\.[^.]+$/, "");
+    importShowParsed({
+      parsed,
+      meta: { title: `${name} from ${sp.file}` },
+      url: "",
+      file: sp.file,
+      sqliteTable: name,
+      id: `${stem}_${name}`,
+    });
+  } catch (e) {
+    importReset();
+    importFail(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 /** Today, as the ISO date an import was retrieved. */
@@ -1742,8 +1859,13 @@ function importCommit(): void {
       ? { licence: "personal use only, not for redistribution" }
       : {}),
   };
+  // A SQLite table records `file#table` as its source, whatever web
+  // address it was downloaded from - refresh reads the file again.
+  const provenance = pending.sqliteTable
+    ? originFor(file ?? "", pending.sqliteTable)
+    : address || (file ?? url);
   const table: Table = {
-    ...importedTable(id, parsed, address || (file ?? url)),
+    ...importedTable(id, parsed, provenance),
     ...(address ? { retrieved } : {}),
     ...(finalMeta.title ? { caption: finalMeta.title } : {}),
     ...(personal
@@ -1759,6 +1881,7 @@ function importCommit(): void {
     reference = sourceBibtex(key, finalMeta, address, retrieved);
   }
   importModal.close();
+  resetSqlitePick();
   el.restoreCaret();
   el.insertImportedTable(table, reference);
   flash(
@@ -1768,29 +1891,79 @@ function importCommit(): void {
   );
 }
 
-/** A picked file: read, then the same preview. */
+/**
+ * A gzipped file (a `.db.gz` out of an S3 archive) is decompressed
+ * first, so the raw archive object imports too. The content is
+ * sniffed after decompression, whatever the extension says.
+ */
+async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("this host cannot decompress gzip - gunzip the file first");
+  }
+  const stream = new Blob([bytes as BlobPart])
+    .stream()
+    .pipeThrough(new DecompressionStream("gzip"));
+  const buf = await new Response(stream).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+/** Read a picked file's bytes, decompressing a gzip wrapper. */
+async function readFileBytes(f: File): Promise<Uint8Array> {
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  if (!isGzipFile(bytes)) return bytes;
+  try {
+    return await gunzip(bytes);
+  } catch {
+    throw new Error("not a readable gzip file");
+  }
+}
+
+/** A picked file: read, then the same preview. A SQLite database is
+ * recognised by its magic header, whatever the extension. */
 function importFromFile(f: File): void {
   if (f.size > IMPORT_MAX_BYTES) {
     flash("File too large (over 8 MB) - the document stays one file");
     return;
   }
-  const format = f.name.toLowerCase().endsWith(".json") ? "json" : "csv";
-  void f.text().then((text) => {
-    openImport("file");
-    try {
-      importShowParsed({
-        parsed: parseImport(text, format),
-        meta: {},
-        url: "",
-        file: f.name,
-      });
-    } catch (e) {
-      importReset();
-      importFail(
-        `Import failed: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
-  });
+  resetSqlitePick();
+  void readFileBytes(f).then(
+    (bytes) => {
+      if (isSqliteFile(bytes)) {
+        importFromSqlite(f.name, bytes);
+        return;
+      }
+      // A database-named file that is not one gets that error, not a
+      // CSV parse of binary garbage.
+      if (/\.(db|sqlite|sqlite3)$/i.test(f.name)) {
+        openImport("file");
+        importReset();
+        importFail(
+          "Import failed: not a SQLite database file (it does not start with the SQLite header)",
+        );
+        return;
+      }
+      const text = new TextDecoder().decode(bytes);
+      const format = f.name.toLowerCase().endsWith(".json") ? "json" : "csv";
+      openImport("file");
+      try {
+        importShowParsed({
+          parsed: parseImport(text, format),
+          meta: {},
+          url: "",
+          file: f.name,
+        });
+      } catch (e) {
+        importReset();
+        importFail(
+          `Import failed: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+    },
+    (e: unknown) => {
+      openImport("file");
+      importFailFrom(e);
+    },
+  );
 }
 
 importFile.addEventListener("change", () => {
@@ -1852,7 +2025,8 @@ requireEl<HTMLButtonElement>("#btn-import-downloaded").addEventListener(
     const then = blockedThen;
     const pick = document.createElement("input");
     pick.type = "file";
-    pick.accept = ".csv,.json,text/csv,application/json";
+    pick.accept =
+      ".csv,.json,.db,.db3,.sqlite,.sqlite3,.gz,text/csv,application/json,application/vnd.sqlite3,application/gzip,application/octet-stream";
     pick.addEventListener("change", () => {
       const f = pick.files?.[0];
       if (!f || !then) return;
@@ -1860,11 +2034,174 @@ requireEl<HTMLButtonElement>("#btn-import-downloaded").addEventListener(
         importFail("File too large (over 8 MB) - the document stays one file");
         return;
       }
-      void f.text().then(then);
+      void readFileBytes(f).then((bytes) => {
+        if (bytes.length > IMPORT_MAX_BYTES) {
+          importFail(
+            "File too large (over 8 MB) - the document stays one file",
+          );
+          return;
+        }
+        // A database downloaded from the address goes through the
+        // file tab's table picker; the address belongs in "Came from".
+        if (isSqliteFile(bytes)) {
+          importFromSqlite(f.name, bytes);
+          return;
+        }
+        then(new TextDecoder().decode(bytes));
+      }, importFailFrom);
     });
     pick.click();
   },
 );
+
+/* --- Refresh imported data from a file (spec: docs/specs/
+       data-import.md, "Refresh from a file") --- */
+
+const refreshFile = requireEl<HTMLInputElement>("#refresh-file");
+const refreshModal = requireEl<HTMLDialogElement>("#refresh-modal");
+const refreshList = requireEl<HTMLElement>("#refresh-list");
+const refreshError = requireEl<HTMLElement>("#refresh-error");
+const refreshGo = requireEl<HTMLButtonElement>("#btn-refresh-go");
+
+interface PendingRefreshTarget extends RefreshTarget {
+  parsed: ParsedImport;
+  /** Rows the table has now. */
+  was: number;
+}
+let pendingRefresh: {
+  file: string;
+  targets: PendingRefreshTarget[];
+} | null = null;
+
+/**
+ * A picked file refreshes every imported table whose recorded source
+ * is that file - or a file in the same family (a newer month:
+ * cdr_2026_01.db is refreshed by cdr_2026_02.db). Nothing changes
+ * until the list is confirmed.
+ */
+function refreshFromFile(f: File): void {
+  if (f.size > IMPORT_MAX_BYTES) {
+    flash("File too large (over 8 MB) - the document stays one file");
+    return;
+  }
+  void readFileBytes(f).then(
+    (bytes) => {
+      const doc = el.getDoc();
+      const imported = (doc?.blocks ?? []).flatMap((b) =>
+        b.kind === "table" && b.table.import
+          ? [
+              {
+                id: b.table.id,
+                import: b.table.import,
+                rows: b.table.rows.length,
+              },
+            ]
+          : [],
+      );
+      let pickedTables: string[] = [];
+      let single: ParsedImport | null = null;
+      let db: SqliteDb | null = null;
+      try {
+        if (isSqliteFile(bytes)) {
+          db = openSqlite(bytes);
+          pickedTables = db.tables().map((t) => t.name);
+        } else if (/\.(db|db3|sqlite|sqlite3)$/i.test(f.name)) {
+          throw new Error("not a SQLite database file");
+        } else {
+          const text = new TextDecoder().decode(bytes);
+          single = parseImport(
+            text,
+            f.name.toLowerCase().endsWith(".json") ? "json" : "csv",
+          );
+        }
+      } catch (e) {
+        flash(`Refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      const targets = matchRefreshTargets(imported, f.name, pickedTables);
+      if (!targets.length) {
+        flash(
+          `No table in this document was imported from "${f.name}" (or a file like it)`,
+        );
+        return;
+      }
+      const rowsById = new Map(imported.map((t) => [t.id, t.rows] as const));
+      const withData: PendingRefreshTarget[] = [];
+      try {
+        for (const t of targets) {
+          const parsed = t.to.includes("#")
+            ? db?.read(splitImportOrigin(t.to).table ?? "")
+            : single;
+          if (!parsed) throw new Error(`cannot read "${t.to}" from ${f.name}`);
+          withData.push({ ...t, parsed, was: rowsById.get(t.id) ?? 0 });
+        }
+      } catch (e) {
+        flash(`Refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      pendingRefresh = { file: f.name, targets: withData };
+      refreshList.textContent = "";
+      refreshError.hidden = true;
+      for (const t of withData) {
+        const label = document.createElement("label");
+        label.className = "import-check";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = true;
+        input.value = t.id;
+        label.append(
+          input,
+          ` @${t.id} - ${t.from} becomes ${t.to} - ${t.was.toLocaleString()} rows become ${t.parsed.rows.length.toLocaleString()}`,
+        );
+        refreshList.appendChild(label);
+      }
+      refreshGo.textContent = `Update ${String(withData.length)} table${withData.length > 1 ? "s" : ""}`;
+      refreshModal.showModal();
+    },
+    (e: unknown) => {
+      flash(`Refresh failed: ${e instanceof Error ? e.message : String(e)}`);
+    },
+  );
+}
+
+function refreshCommit(): void {
+  const pr = pendingRefresh;
+  if (!pr) return;
+  const doc = el.getDoc();
+  const checked = new Set(
+    Array.from(
+      refreshList.querySelectorAll<HTMLInputElement>("input:checked"),
+    ).map((i) => i.value),
+  );
+  let n = 0;
+  let rows = 0;
+  for (const t of pr.targets) {
+    if (!checked.has(t.id)) continue;
+    const block = doc?.blocks.find(
+      (b) => b.kind === "table" && b.table.id === t.id,
+    );
+    if (!block || block.kind !== "table") continue;
+    const next = refreshedTable(block.table, t.parsed, t.to, todayIso());
+    if (el.replaceTableData(t.id, next)) {
+      n++;
+      rows += next.rows.length;
+    }
+  }
+  refreshModal.close();
+  pendingRefresh = null;
+  if (n > 0) {
+    flash(
+      `Refreshed ${String(n)} table${n > 1 ? "s" : ""} from ${pr.file} - ${rows.toLocaleString()} rows now`,
+    );
+  }
+}
+
+refreshFile.addEventListener("change", () => {
+  const f = refreshFile.files?.[0];
+  refreshFile.value = "";
+  if (f) refreshFromFile(f);
+});
+refreshGo.addEventListener("click", refreshCommit);
 
 const btnCodeBlock = requireEl<HTMLButtonElement>("#btn-code");
 btnCodeBlock.addEventListener("mousedown", (ev) => {
@@ -3343,6 +3680,16 @@ function paletteEntries(): PaletteEntry[] {
     },
   });
   entries.push({
+    title: "Show or hide columns of the table at the caret",
+    group: "Command",
+    keywords:
+      "columns hide show visible display table dataset caret uuid noise fewer width",
+    action: () => {
+      const why = el.focusTableColumns();
+      if (why) flash(why);
+    },
+  });
+  entries.push({
     title: "Read a chart's values",
     group: "Command",
     keywords:
@@ -3365,7 +3712,7 @@ function paletteEntries(): PaletteEntry[] {
     title: "Import data",
     group: "Command",
     keywords:
-      "import data dataset csv json file web url download open data source fetch personal use",
+      "import data dataset csv json sqlite db file web url download open data source fetch personal use",
     action: () => openImport(),
   });
   entries.push({
@@ -3376,12 +3723,20 @@ function paletteEntries(): PaletteEntry[] {
     action: () => openImport("web"),
   });
   entries.push({
-    title: "Import data from a file (CSV or JSON)",
+    title: "Import data from a file (CSV, JSON or SQLite)",
     group: "Command",
-    keywords: "import data csv json file table dataset load",
+    keywords: "import data csv json sqlite db database file table dataset load",
     // No prior document focus needed: without a caret the imported
     // table appends at the document end.
     action: () => importFile.click(),
+  });
+  entries.push({
+    title: "Refresh imported data from a file (CSV, JSON or SQLite)",
+    group: "Command",
+    keywords:
+      "refresh update reload re-import newer file month version sqlite db database csv json data source snapshot import table",
+    // Same focus-free contract as the import picker.
+    action: () => refreshFile.click(),
   });
   entries.push({
     title: "Insert an image",

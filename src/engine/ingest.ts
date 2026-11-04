@@ -42,7 +42,7 @@ export function parseCsv(text: string): ParsedImport {
  * contract formulas and formats rely on): numeric strings convert,
  * empties stay empty.
  */
-function applyTypes(parsed: ParsedImport): ParsedImport {
+export function applyTypes(parsed: ParsedImport): ParsedImport {
   return {
     columns: parsed.columns,
     rows: parsed.rows.map((row) =>
@@ -150,6 +150,33 @@ export function parseImport(
   format: "csv" | "json",
 ): ParsedImport {
   return format === "json" ? parseJsonTable(text) : parseCsv(text);
+}
+
+/**
+ * A gzipped file (magic 1f 8b) - e.g. a `.db.gz` straight out of an
+ * S3 archive. The host decompresses before sniffing the content.
+ */
+export function isGzipFile(bytes: Uint8Array): boolean {
+  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+}
+
+/**
+ * The provenance an import records in `table.import`: the file (or web
+ * address), plus `#<table>` for a table inside a SQLite file, so a
+ * later refresh knows which table of the file the data came from.
+ */
+export function importOrigin(file: string, table?: string): string {
+  return table !== undefined && table !== "" ? `${file}#${table}` : file;
+}
+
+/** Split recorded provenance back into its file and optional table. */
+export function splitImportOrigin(origin: string): {
+  file: string;
+  table?: string;
+} {
+  const at = origin.lastIndexOf("#");
+  if (at < 0) return { file: origin };
+  return { file: origin.slice(0, at), table: origin.slice(at + 1) };
 }
 
 function csvRows(text: string): string[][] {

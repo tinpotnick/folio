@@ -24,10 +24,14 @@
   column". A new column is named `new`; click its header to rename it
   and to choose its type (text, number, date, formula).
 - Clicking any cell or column heading reveals the **table
-  inspector** above the table: the column's name, type, unit,
-  format, the table's caption, and — for formula columns — the
-  ƒx expression, editable in place (the same edit as changing
-  the source by hand). Units show in the column headers ("q2
+  inspector** above the table: the column's name, **visible**
+  checkbox, type, unit, format, the table's caption, and — for
+  formula columns — the ƒx expression, editable in place (the same
+  edit as changing the source by hand). Untick **visible** to hide
+  a column from the rendered table (an import's uuid, say) - the
+  column stays in the data: formulas, charts and the dataset
+  browser still see it. (Ctrl+K "show or hide columns" opens this
+  bar too.) Units show in the column headers ("q2
   (£k)") in a separate italic span. The header's **name** is
   editable directly: click it and type to rename the column —
   Enter commits (and drops into the column's first cell), Tab

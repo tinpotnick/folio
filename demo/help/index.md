@@ -34,7 +34,7 @@ Ctrl+K from anywhere.
 
 - [Tables and datasets](tables.md) - the two kinds of table, editing cells, rows and columns
 - [Formulas](formulas.md) - formula columns: maths, money, dates, lookups
-- [Importing data](import-data.md) - files, open data, web addresses, licences
+- [Importing data](import-data.md) - CSV, JSON and SQLite files, open data, web addresses, licences, refreshing monthly data
 
 ## Charts
 

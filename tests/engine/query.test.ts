@@ -128,6 +128,116 @@ describe("executeQuery", () => {
   });
 });
 
+describe("grouped queries (spec: docs/specs/chart-rendering.md, 'Grouped queries')", () => {
+  // A long CDR-like table: day, destination, billed.
+  const calls: Table = {
+    id: "calls",
+    columns: [
+      { name: "day", type: "date" },
+      { name: "dest", type: "text" },
+      { name: "billed", type: "number" },
+      { name: "answered", type: "number" },
+    ],
+    rows: [
+      ["2026-03-01", "999", 1.5, 1],
+      ["2026-03-01", "999", 2.5, 0],
+      ["2026-03-01", "+44207", 0.75, 1],
+      ["2026-03-02", "999", 4, 1],
+      ["2026-03-02", "+44207", "", 0], // blank billed: skipped, not zero
+    ],
+  };
+
+  it("groups by one column and counts rows by default", () => {
+    const out = executeQuery(
+      calls,
+      chart({ select: ["day", "count"], group: ["day"] }),
+    );
+    expect(out.columns).toEqual(["day", "count"]);
+    expect(out.rows).toEqual([
+      ["2026-03-01", 3],
+      ["2026-03-02", 2],
+    ]);
+  });
+
+  it("groups by a, then b - one row per combination, first-appearance order", () => {
+    const out = executeQuery(
+      calls,
+      chart({
+        select: ["day", "dest", "n", "billed"],
+        group: ["day", "dest"],
+        agg: { n: "count", billed: "sum(billed)" },
+      }),
+    );
+    expect(out.columns).toEqual(["day", "dest", "n", "billed"]);
+    expect(out.rows).toEqual([
+      ["2026-03-01", "999", 2, 4],
+      ["2026-03-01", "+44207", 1, 0.75],
+      ["2026-03-02", "999", 1, 4],
+      ["2026-03-02", "+44207", 1, ""], // blank billed -> blank, not 0
+    ]);
+  });
+
+  it("aggregates sum, avg, min, max over numeric values only", () => {
+    const out = executeQuery(
+      calls,
+      chart({
+        select: ["dest", "total", "mean", "lo", "hi"],
+        group: ["dest"],
+        agg: {
+          total: "sum(billed)",
+          mean: "avg(billed)",
+          lo: "min(billed)",
+          hi: "max(billed)",
+        },
+      }),
+    );
+    expect(out.rows).toEqual([
+      ["999", 8, 8 / 3, 1.5, 4],
+      ["+44207", 0.75, 0.75, 0.75, 0.75],
+    ]);
+  });
+
+  it("answer rate = avg of a 0/1 column, filtered and sorted desc with a limit", () => {
+    const out = executeQuery(
+      calls,
+      chart({
+        select: ["day", "rate"],
+        group: ["day"],
+        agg: { rate: "avg(answered)" },
+        filter: "billed != '' || answered == 0", // keeps all 5 rows here
+        sort: { by: "rate", order: "desc" },
+        limit: 1,
+      }),
+    );
+    // day1: (1+0+1)/3 = 2/3 beats day2's 1/2.
+    expect(out.rows).toEqual([["2026-03-01", 2 / 3]]);
+  });
+
+  it("limit alone caps plain query rows", () => {
+    const out = executeQuery(
+      calls,
+      chart({ select: ["day", "billed"], limit: 2 }),
+    );
+    expect(out.rows).toHaveLength(2);
+  });
+
+  it("rejects an unknown aggregate and an unknown group column", () => {
+    expect(() =>
+      executeQuery(
+        calls,
+        chart({
+          select: ["day", "x"],
+          group: ["day"],
+          agg: { x: "median(billed)" },
+        }),
+      ),
+    ).toThrow(/Unknown aggregate/);
+    expect(() =>
+      executeQuery(calls, chart({ select: ["nope"], group: ["nope"] })),
+    ).toThrow(/Unknown column/);
+  });
+});
+
 describe("filterIndexes / sortIndexes (dataset browser primitives)", () => {
   const table: Table = {
     id: "t",

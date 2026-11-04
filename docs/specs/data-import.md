@@ -1,23 +1,28 @@
-# Data import (CSV, JSON)
+# Data import (CSV, JSON, SQLite)
 
-## Status: accepted (2026-10-18)
+## Status: accepted (2026-10-18); SQLite files and refresh from a
+file (2026-11-04)
 
 ## Decision
 
-A picked CSV or JSON file becomes a typed table INSIDE the
+A picked CSV, JSON or SQLite file becomes a typed table INSIDE the
 document - the import SNAPSHOT, in ADR-0005's terms. Nothing is
 ever a live binding: the data is the document's, and the file's
-name rides along as provenance metadata (`import: "sales.csv"`).
+name rides along as provenance metadata (`import: "sales.csv"`,
+`import: "cdr_2026_03.db#cdr"` for a table inside a database).
 Charts, formulas, and cross-table references work over imported
 data exactly like hand-authored tables.
 
 ## Contract
 
 - **Entry point**: the palette command "Import data from a file
-  (CSV or JSON)" (`<input type="file">`, the one code path for
-  web and every Tauri webview). Without a document caret the
+  (CSV, JSON or SQLite)" (`<input type="file">`, the one code path for
+  web and every Tauri webview). The picker's accept list names the
+  data extensions AND their MIME types plus `application/octet-stream`,
+  so a `.db` shows in native dialogs that filter by MIME type (GTK,
+  macOS), not only by extension. Without a document caret the
   table appends at the end. Files over 8 MB are refused with a
-  visible message.
+  visible message (the limit applies after any decompression).
 - **CSV** (`src/engine/ingest.ts`, RFC-4180): first row is the
   header; quoted fields, commas and newlines inside quotes,
   doubled quotes, CRLF or LF. Rows longer than the header
@@ -34,9 +39,10 @@ data exactly like hand-authored tables.
   value is numeric (values then carry actual numbers, the model
   contract formulas and formats rely on); otherwise `text`.
 - **Provenance**: `table.import` (quoted string, round-trips
-  byte-identically) records the origin file. A future
-  re-import/refresh command can use it; nothing reads it at
-  render time.
+  byte-identically) records the origin file - `file.csv`, or
+  `file.db#table` for a table inside a SQLite file (see below).
+  Nothing reads it at render time; the Refresh command (below)
+  uses it to find the tables a picked file updates.
 - **Id**: the file name slugified to identifier-legal, made
   unique within the document (`sales`, `sales_2`).
 - **Scale**: imported tables are ordinary tables - a 2,000-row
@@ -46,14 +52,91 @@ data exactly like hand-authored tables.
   carries every row; a multi-MB source view is the known ceiling
   (see section-windowing.md).
 
+## SQLite files (2026-11-04)
+
+A `.db` / `.db3` / `.sqlite` / `.sqlite3` file - or any file starting
+with the SQLite magic header, whatever its extension - is read by
+`src/engine/sqlite.ts`, a dependency-free reader for the standard
+SQLite file format (https://www.sqlite.org/fileformat2.html). No
+WASM, nothing to load: it works offline in the web host, the Tauri
+webviews and headless tests alike (ADR-0005, ADR-0007 - sql.js
+would have meant a WASM asset path in every host). A gzipped file
+(magic `1f 8b`, e.g. a `.db.gz` straight out of an S3 archive) is
+decompressed first (`DecompressionStream`), then sniffed - so an
+archive object imports without a manual gunzip.
+
+- **Tables**: the file's tables are listed in the dialog with row
+  counts and column counts; the user picks one (a file with a
+  single table goes straight to the preview). Nothing is ever
+  hidden: SQLite's own `sqlite_*` never appear (SQLite reserves that
+  prefix, so no user table can start with it), while tool
+  bookkeeping with a leading underscore - litestream's
+  `_litestream_seq` / `_litestream_lock`, which ride along in any
+  file litestream replicated while live - is listed under a labeled
+  "Internal tables" group at the end, so it is de-emphasized but
+  never missing (babble also strips it from the snapshot it ships).
+  Provenance records which table was read:
+  `import: "cdr_2026_03.db#cdr"`.
+- **Read support**: ordinary rowid tables - all three text
+  encodings (UTF-8/UTF-16LE/UTF-16BE), overflow pages, multi-level
+  b-trees, and the `INTEGER PRIMARY KEY` rowid alias (stored NULL,
+  read back as the rowid). A cleanly closed WAL database reads
+  complete from the one file (SQLite checkpoints on close); an
+  uncheckpointed `-wal` beside the file is not part of the file.
+- **Errors, always with guidance**: a database-named file that is
+  not a SQLite file ("not a SQLite database file..." - an
+  encrypted file fails the magic header the same way); a missing
+  table (named, with the tables the file has); `WITHOUT ROWID`
+  tables and generated columns (different storage) - such a table
+  still lists, with no columns, and fails only when read.
+- **Types come from the schema, not just the values**: `INTEGER` /
+  `REAL` columns are `number` when the values are; `TEXT` columns
+  are `date` when every value reads as one, else `text` - never
+  coerced to numbers, so identifiers like phone numbers keep their
+  leading zeros (a CSV column of `01632960123` would infer
+  `number`) - and they keep them across save/reload: TEXT columns
+  read their cells as text on every parse (block-schema.md, "Cell
+  reading is column-typed"). Dates are written ISO, numbers carry
+  actual numbers, NULL is an empty cell, blobs read as `0x<hex>`.
+- **Scale**: the same as any import - every row lands in the
+  document; the 8 MB file ceiling keeps the Markdown source sane.
+
+## Refresh from a file (2026-11-04)
+
+The palette command "Refresh imported data from a file (CSV, JSON
+or SQLite)" picks a file and updates, in place, every imported
+table whose recorded source is that file - or a file in the same
+**family**, where digit runs collapse: `cdr_2026_01.db` is
+refreshed by `cdr_2026_02.db`, `sales-2026-01.csv` by
+`sales-2026-02.csv`. A SQLite table (`...#cdr`) matches only when
+the picked file is a database holding that table. Web addresses
+(`import: "https://..."`) are never refreshed by a file.
+
+- **Nothing changes unconfirmed**: the dialog lists each matched
+  table - `@id`, old source becomes new source, "N rows become M
+  rows" - with a checkbox each (all ticked); Update applies the
+  ticked ones. No match: a visible message, no change.
+- **What a refresh keeps**: the table's id, caption, licence,
+  citation and `show:` window; columns keep their display settings
+  (unit, format, width, align) when the new file has a column of
+  the same name; formula columns the author added are kept and
+  recalculate over the new rows. `import:` moves to the picked
+  file (so next month's refresh matches exactly), `retrieved:`
+  updates when the import recorded one. Charts, formulas and the
+  dataset browser see the new data immediately - the document is
+  the report template, the file is the month.
+- **Engine**: `src/engine/refresh.ts` (`matchRefreshTargets`,
+  `refreshedTable`), pure and headless-tested; the component's
+  `replaceTableData` swaps the block and re-renders.
+
 ## The Import data dialog (2026-10-27)
 
 - **Where**: + Insert › **Import data…** (Tables and charts), and the
   palette's "Import data", "Import data from the web (a CSV or JSON
-  address)" and "Import data from a file (CSV or JSON)". It was
-  palette-only, and users could not find it.
-- **From a file**: "Choose a file…" (the existing file path) and "Use
-  the demo dataset".
+  address)" and "Import data from a file (CSV, JSON or SQLite)".
+  It was palette-only, and users could not find it.
+- **From a file**: "Choose a file…" (the existing file path - CSV,
+  JSON or SQLite) and "Use the demo dataset".
 - **From the web**: an address and Fetch (or Enter). What comes back
   is previewed before anything changes: the row count, each column's
   name and inferred type, the first rows, a dataset name, a caption
@@ -200,6 +283,12 @@ data exactly like hand-authored tables.
   for trying import - and for first-contact evals).
 - `demo/data/site-metrics.json` - 24 records, array-of-objects
   shape, for trying JSON.
+- `demo/data/calls-2026-03.db` and `demo/data/calls-2026-04.db` -
+  a small CDR-style monthly SQLite file (tables `cdr`,
+  `call_quality`, `monthly_totals`; unix-epoch `start_at`, billed
+  amounts), for trying SQLite import - and Refresh from
+  `calls-2026-04.db` over a table imported from the March file
+  (first-contact evals).
 - `demo/examples/report.md` - "Open example: An imported data report": the
   finished article - an imported 72-row table (with the growth
   running formula and a document-chosen `table.rows.show: 24`
@@ -208,12 +297,16 @@ data exactly like hand-authored tables.
 
 ## Non-goals
 
-- **Live links / refresh** - not now; the snapshot + metadata
-  contract is the precondition for a later explicit refresh.
+- **Refresh from the web** (fetch an `import:` address again) -
+  not now; file refresh exists (above), the snapshot + metadata
+  contract is the precondition for a later explicit web refresh.
 - **Parquet** - follow-up with its own ADR (dependency check:
   `hyparquet`, MIT, pure JS, lazy-loaded like mermaid/KaTeX).
 - **Deduplication, joins, SQL** - the Jexl formula and chart
   query languages already compose over imported data.
+- **A separate templating system** - the document IS the template
+  (charts, formulas, prose over an imported table); Refresh from
+  a file swaps the data under it each month.
 
 ## Acceptance
 
@@ -230,8 +323,18 @@ data exactly like hand-authored tables.
   quoting, type inference with value conversion, header
   sanitization/dedupe, CRLF, JSON shapes and errors, provenance
   round-trip).
-- e2e: `tests/e2e/import.spec.ts` (5 tests: CSV import with
+- SQLite: `tests/engine/sqlite.test.ts` (binary fixtures in
+  `tests/engine/fixtures/`, regenerate with `make-fixtures.py`:
+  table listing, schema-driven types, leading-zero TEXT, overflow
+  pages, rowid alias, multi-page b-trees, UTF-16, WAL, the
+  error shapes, `file#table` round-trip) and
+  `tests/engine/refresh.test.ts` (provenance split, exact and
+  month-family matching, what a refresh keeps).
+- e2e: `tests/e2e/import.spec.ts` (CSV import with
   inference + provenance, JSON import, the 2,000-row viewport
-  case, invalid file is a visible error, palette entry).
-- First-contact eval: `evals/data-import-first-contact.md`.
+  case, invalid file is a visible error, palette entry, SQLite
+  table picker + `file#table` provenance, not-a-database error,
+  refresh from the newer month, unmatched refresh is a no-op).
+- First-contact evals: `evals/data-import-first-contact.md`,
+  `evals/sqlite-import-first-contact.md`.
 - Documented in `demo/help/import-data.md`.

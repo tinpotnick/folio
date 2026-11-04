@@ -109,6 +109,34 @@ scatter keep their first series. The engine half is
 
 The chart bar has **Split by** (a column, or none) and **Stack**.
 
+## Grouped queries (2026-11-04)
+
+A chart can summarize instead of plotting raw rows - the reporting
+case over an imported table (a month of CDRs):
+
+- **query: group** `[day, destination]` groups rows by the columns
+  IN ORDER - by a, then b - one output row per combination, in
+  first-appearance order. Output columns are the group columns then
+  the agg names; `select` is derived and not written for grouped
+  queries.
+- **query: agg** `{n: count, billed: sum(total_billed)}` aggregates
+  each group: output name -> `fn` or `fn(column)`, `fn` one of
+  `count`, `sum`, `avg`, `min`, `max`. `count` alone counts rows;
+  with a column, its non-empty cells. Aggregates skip blanks (a
+  blank is never a zero); a group with no numeric values gets a
+  blank. With `group` and no `agg`, rows are counted (`count`).
+- **query: limit** `10` keeps only the first N output rows (after
+  sort) - top-N charts.
+- `filter` applies before grouping; `sort` applies to the OUTPUT
+  rows (its `by` must be an output column). Engine:
+  `executeGrouped()` in `src/engine/query.ts`, UI-free and tested
+  headlessly. In the chart bar these are **Group by**, **Aggregate**
+  and **Limit**; with a group set, the **Columns** box is read-only
+  (the output columns derive).
+
+Example: `query: {group: [day], agg: {n: count, billed: sum(total_billed)}, sort: {by: billed, order: desc}, limit: 10}`
+- calls and spend per day, best day first, at most ten.
+
 ## Acceptance
 
 - Unit: `tests/engine/series.test.ts` (both series forms, gaps,

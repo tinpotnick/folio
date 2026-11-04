@@ -121,6 +121,20 @@ export function monthsBetween(a: unknown, b: unknown): number {
 }
 
 /**
+ * Unix epoch seconds (as a CDR's `start_at` stores them) as an ISO
+ * UTC date-time `YYYY-MM-DDTHH:MM:SSZ` - `toIso` reads that back to
+ * its date, and year/month/day work on it. Unreadable input is empty,
+ * never an error.
+ */
+export function fromUnix(v: unknown): string {
+  const n = typeof v === "number" ? v : Number(String(v).trim());
+  if (!Number.isFinite(n)) return "";
+  const d = new Date(n * 1000);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.toISOString().slice(0, 19)}Z`;
+}
+
+/**
  * Whether every non-empty value is a date `toIso` reads - the import
  * test for a date column (at least one value, and not all bare
  * numbers: "2024" alone is a number column).

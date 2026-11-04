@@ -22,10 +22,18 @@ see.
   contenteditable="false" inside the article: its inputs own
   their keystrokes, and keydown/input events from it never reach
   the article's structural handlers.
-- **Controls**: column select (switch inspected column), type
-  select (text / number / formula), unit (shown in the header as
-  "(unit)"), format (plain / percent), and for formula columns
-  the ƒx expression input (Enter or blur applies).
+- **Controls**: column select (switch inspected column), **visible**
+  checkbox (2026-11-04), type select (text / number / formula), unit
+  (shown in the header as "(unit)"), format (plain / percent), and
+  for formula columns the ƒx expression input (Enter or blur
+  applies). Unticking **visible** sets `hidden: true` on the column:
+  it is not drawn in the table figure, but stays in the document's
+  data - formulas, charts, filters and the dataset browser all still
+  see it (wide imports hide their noise: a CDR's uuid). The column
+  select marks hidden columns "(hidden)". Simple (pipe) tables have
+  no hidden columns - their source is kept verbatim.
+- **Palette**: "Show or hide columns of the table at the caret"
+  (`focusTableColumns`) opens the bar and focuses the checkbox.
 - **Edits are model writes**: the patch writes
   `block.table.columns[c]`, refreshes the table figure in place,
   re-shows the bar, and emits change - identical to editing the

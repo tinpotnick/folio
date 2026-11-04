@@ -8,7 +8,7 @@ steps:
   - Open the example "Open example: An imported data report" to see the finished
     shape of an imported-data document.
   - Open the palette again and run "Import data from a file
-    (CSV or JSON)" with the shipped `demo/data/site-metrics.json`.
+    (CSV, JSON or SQLite)" with the shipped `demo/data/site-metrics.json`.
   - Pick a CSV file with a header row and a few hundred rows.
   - Look at the inserted table in the document view, then open
     the dataset browser from its status line.
