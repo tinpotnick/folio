@@ -302,10 +302,11 @@ function parseShow(raw: string, id: string): number | "all" {
 function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
   const table: Table = { id, columns: [], rows: [] };
   let section: "none" | "columns" | "data" = "none";
+  const dataRaw: string[] = [];
   for (const [k, raw] of body.entries) {
     if (k === "_item") {
       if (section === "columns") table.columns.push(parseColumn(raw));
-      else if (section === "data") table.rows.push(parseRow(raw));
+      else if (section === "data") dataRaw.push(raw);
       else
         throw new ParseError(`List item outside section in table '${id}'`, 0);
       continue;
@@ -321,6 +322,9 @@ function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
     else if (k === "data") section = "data";
     else throw new ParseError(`Unknown table key: '${k}'`, 0);
   }
+  // Rows parse after the columns are known: cell reading is
+  // column-typed (a TEXT column's "01632960123" stays text).
+  table.rows = dataRaw.map((raw) => parseRow(raw, table.columns));
   return { kind: "table", table };
 }
 
@@ -373,6 +377,7 @@ function parseColumn(raw: string): Table["columns"][number] {
     ...(col["align"] !== undefined
       ? { align: col["align"] as "left" | "right" }
       : {}),
+    ...(col["hidden"] === "true" ? { hidden: true } : {}),
   };
 }
 
@@ -394,7 +399,7 @@ function splitMapEntries(s: string): string[] {
   return out;
 }
 
-function parseRow(raw: string): Cell[] {
+function parseRow(raw: string, columns?: Table["columns"]): Cell[] {
   const inner = raw.replace(/^- \[|\]$/g, "");
   const out: Cell[] = [];
   let cur = "";
@@ -402,12 +407,22 @@ function parseRow(raw: string): Cell[] {
   for (const ch of inner) {
     if (ch === '"') quoted = !quoted;
     if (ch === "," && !quoted) {
-      out.push(cell(cur.trim()));
+      out.push(cellAt(cur.trim(), columns?.[out.length]));
       cur = "";
     } else cur += ch;
   }
-  out.push(cell(cur.trim()));
+  out.push(cellAt(cur.trim(), columns?.[out.length]));
   return out;
+}
+
+/**
+ * A TEXT or DATE column's cell always reads as text: a leading-zero
+ * number ("01632960123", a CDR caller id) is text, not 1632960123 -
+ * only NUMBER (and other non-text) columns coerce bare numerals.
+ */
+function cellAt(s: string, col?: Table["columns"][number]): Cell {
+  if (col && (col.type === "text" || col.type === "date")) return unquote(s);
+  return cell(s);
 }
 
 function cell(s: string): Cell {
@@ -475,11 +490,31 @@ function parseAudioDirective(body: DirectiveBody, id: string): DocBlock {
 
 function parseQuery(raw: string): Chart["query"] {
   const map = parseInlineMap(raw);
-  const select = (map["select"] ?? "")
-    .replace(/^\[|\]$/g, "")
-    .split(",")
-    .map((s) => s.trim());
-  const query: Chart["query"] = { select };
+  const query: Chart["query"] = { select: [] };
+  if (map["group"]) {
+    // Grouped query: output columns derive - group keys, then agg
+    // names - so `select` is not written for these (spec:
+    // docs/specs/chart-rendering.md, "Grouped queries").
+    query.group = map["group"]
+      .replace(/^\[|\]$/g, "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s !== "");
+    if (map["agg"]) {
+      const agg: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parseInlineMap(map["agg"]))) {
+        agg[k] = v;
+      }
+      query.agg = agg;
+    }
+    query.select = [...(query.group ?? []), ...Object.keys(query.agg ?? {})];
+  } else {
+    query.select = (map["select"] ?? "")
+      .replace(/^\[|\]$/g, "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s !== "");
+  }
   if (map["sort"]) {
     const s = parseInlineMap(map["sort"]);
     query.sort = {
@@ -500,6 +535,13 @@ function parseQuery(raw: string): Chart["query"] {
         value: cell(f["value"] ?? ""),
       };
     }
+  }
+  if (map["limit"] !== undefined) {
+    const n = Number(map["limit"]);
+    if (!Number.isInteger(n) || n < 0) {
+      throw new ParseError(`Bad query limit: '${map["limit"]}'`, 0);
+    }
+    query.limit = n;
   }
   return query;
 }
@@ -945,6 +987,7 @@ function serializeTable(table: Table): string {
     if (col.width !== undefined) entries.push(`width: ${col.width}`);
     if (col.expr !== undefined) entries.push(`expr: "${col.expr}"`);
     if (col.format !== undefined) entries.push(`format: ${col.format}`);
+    if (col.hidden) entries.push("hidden: true");
     lines.push(`  - {${entries.join(", ")}}`);
   }
   lines.push("data:");
@@ -958,7 +1001,19 @@ function serializeTable(table: Table): string {
 function serializeChart(chart: Chart): string {
   const lines = [`::: chart {#${chart.id ?? `chart-${chart.source}`}}`];
   lines.push(`source: @${chart.source}`);
-  const q: string[] = [`select: [${chart.query.select.join(", ")}]`];
+  const q: string[] = [];
+  if (chart.query.group?.length) {
+    q.push(`group: [${chart.query.group.join(", ")}]`);
+    if (chart.query.agg) {
+      q.push(
+        `agg: {${Object.entries(chart.query.agg)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(", ")}}`,
+      );
+    }
+  } else {
+    q.push(`select: [${chart.query.select.join(", ")}]`);
+  }
   if (chart.query.filter) {
     const f = chart.query.filter;
     q.push(
@@ -972,6 +1027,8 @@ function serializeChart(chart: Chart): string {
       `sort: {by: ${chart.query.sort.by}, order: ${chart.query.sort.order}}`,
     );
   }
+  if (chart.query.limit !== undefined)
+    q.push(`limit: ${String(chart.query.limit)}`);
   lines.push(`query: {${q.join(", ")}}`);
   lines.push(`type: ${chart.type}`);
   if (chart.series !== undefined) lines.push(`series: ${chart.series}`);

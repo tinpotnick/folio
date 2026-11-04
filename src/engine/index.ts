@@ -16,6 +16,14 @@ export interface Column {
   expr?: string;
   width?: number;
   align?: "left" | "right";
+  /**
+   * Render-time only (spec: docs/specs/table-inspector.md): a hidden
+   * column is not drawn in the table figure, but stays in the
+   * document's data - formulas, charts, filters and the dataset
+   * browser all still see it. Wide imports (a CDR's uuid,
+   * transcription) hide their noise without losing anything.
+   */
+  hidden?: boolean;
 }
 
 export type Cell = string | number;
@@ -114,6 +122,23 @@ export interface Chart {
     // or the legacy {column, op, value} triple - both round-trip.
     filter?: string | { column: string; op: string; value: Cell };
     sort?: { by: string; order: "asc" | "desc" };
+    /**
+     * Grouped query (spec: docs/specs/chart-rendering.md, "Grouped
+     * queries"): group rows by these columns IN ORDER - by a, then b -
+     * one output row per combination, in first-appearance order.
+     * Output columns are the group columns then the agg names;
+     * `select` is derived, not written. Without `group`, `select`
+     * picks source columns.
+     */
+    group?: string[];
+    /**
+     * Aggregates for a grouped query: output name -> "fn" or
+     * "fn(column)", fn one of count, sum, avg, min, max. `count`
+     * alone counts rows; with a column, its non-empty cells.
+     */
+    agg?: Record<string, string>;
+    /** Keep only the first N output rows (after sort). */
+    limit?: number;
   };
   type: "bar" | "line" | "area" | "pie" | "donut" | "scatter";
   /** Split the value into one series per distinct value of this

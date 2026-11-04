@@ -25,6 +25,7 @@ import * as fin from "./finance.js";
 import {
   addMonths,
   dayNumber,
+  fromUnix,
   isoOf,
   monthsBetween,
   partsOf,
@@ -315,6 +316,8 @@ registerFn("month", (v) => partsOf(v)?.m ?? Number.NaN);
 registerFn("day", (v) => partsOf(v)?.d ?? Number.NaN);
 registerFn("edate", (v, k) => addMonths(v, Number(k)) ?? "");
 registerFn("eomonth", (v, k) => addMonths(v, Number(k), true) ?? "");
+// Unix epoch seconds (CDR start_at) as an ISO UTC date-time.
+registerFn("fromUnix", (v) => fromUnix(v));
 // days(end, start), as the spreadsheets order it.
 registerFn("days", (end, start) => dayNumber(end) - dayNumber(start));
 registerFn("months", (start, end) => monthsBetween(start, end));

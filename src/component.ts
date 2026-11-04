@@ -4476,6 +4476,10 @@ export class FolioDoc extends HTMLElement {
     const thead = document.createElement("thead");
     const headRow = document.createElement("tr");
     block.table.columns.forEach((col, ci) => {
+      // A hidden column is not drawn - but its model index stays on
+      // the cells that are, so editing, the inspector and formulas
+      // still map to the right column (spec: table-inspector.md).
+      if (col.hidden) return;
       const th = document.createElement("th");
       th.dataset.colIndex = String(ci);
       // Only the NAME is editable in place - the unit is a separate
@@ -4527,6 +4531,7 @@ export class FolioDoc extends HTMLElement {
       const tr = document.createElement("tr");
       tr.dataset.rowIndex = String(r);
       block.table.columns.forEach((col, c) => {
+        if (col.hidden) return;
         const td = document.createElement("td");
         td.dataset.rowIndex = String(r);
         td.dataset.colIndex = String(c);
@@ -4750,6 +4755,24 @@ export class FolioDoc extends HTMLElement {
     colSel.addEventListener("change", () => {
       this.showInspector(figure, block, Math.max(colSel.selectedIndex, 0));
     });
+
+    // Visible: render-time only - a hidden column stays in the data
+    // (formulas, charts, filters, the dataset browser all see it).
+    const visLbl = document.createElement("label");
+    visLbl.className = "insp-vis";
+    const visBox = document.createElement("input");
+    visBox.type = "checkbox";
+    visBox.className = "insp-visible";
+    visBox.title =
+      "Show this column in the table - a hidden column stays in the data: formulas, charts and the dataset browser still see it";
+    visBox.setAttribute("aria-label", "Column visible in the table");
+    visBox.addEventListener("change", () => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      this.patchColumn(figure, block, c, {
+        hidden: visBox.checked ? undefined : true,
+      });
+    });
+    visLbl.append(visBox, " visible");
 
     // The bar says WHICH kind of table this is, and offers the way to
     // the other kind (spec: docs/specs/simple-tables.md).
@@ -4988,6 +5011,7 @@ export class FolioDoc extends HTMLElement {
       kind,
       dsBtn,
       colSel,
+      visLbl,
       typeSel,
       unitInp,
       fmtSel,
@@ -5292,10 +5316,30 @@ export class FolioDoc extends HTMLElement {
       const chart = block.chart;
       chart.source = srcSel.value;
       chart.type = typeSel.value as Chart["type"];
-      chart.query.select = selInp.value
+      const groupCols = groupInp.value
         .split(",")
         .map((s) => s.trim())
         .filter((s) => s !== "");
+      if (groupCols.length) {
+        // Grouped query: output columns derive (group keys, then agg
+        // names); the Columns box is read-only in this mode.
+        chart.query.group = groupCols;
+        const agg: Record<string, string> = {};
+        for (const part of aggInp.value.split(",")) {
+          const eq = part.indexOf("=");
+          if (eq > 0) agg[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+        }
+        if (Object.keys(agg).length) chart.query.agg = agg;
+        else delete chart.query.agg;
+        chart.query.select = [...groupCols, ...Object.keys(agg)];
+      } else {
+        delete chart.query.group;
+        delete chart.query.agg;
+        chart.query.select = selInp.value
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s !== "");
+      }
       if (filterInp.value.trim() === "") delete chart.query.filter;
       else chart.query.filter = filterInp.value.trim();
       const by = sortInp.value.trim();
@@ -5305,6 +5349,9 @@ export class FolioDoc extends HTMLElement {
           by,
           order: orderSel.value === "desc" ? "desc" : "asc",
         };
+      const lim = limitInp.value.trim();
+      if (lim === "") delete chart.query.limit;
+      else if (/^\d+$/.test(lim)) chart.query.limit = Number(lim);
       if (capInp.value.trim() === "") delete chart.caption;
       else chart.caption = capInp.value.trim();
       if (splitSel.value === "") delete chart.series;
@@ -5388,6 +5435,50 @@ export class FolioDoc extends HTMLElement {
       }
     });
 
+    // Grouped queries: group by a, then b; aggregate the rest; cap the
+    // output rows (spec: docs/specs/chart-rendering.md, "Grouped
+    // queries").
+    const groupInp = document.createElement("input");
+    groupInp.className = "insp-group";
+    groupInp.type = "text";
+    groupInp.placeholder = "group: day, destination";
+    groupInp.title =
+      "Group rows by these columns, in order (a, then b) - one output row per combination";
+    groupInp.addEventListener("change", () => patch());
+    groupInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        patch();
+      }
+    });
+
+    const aggInp = document.createElement("input");
+    aggInp.className = "insp-agg";
+    aggInp.type = "text";
+    aggInp.placeholder = "agg: n=count, billed=sum(total_billed)";
+    aggInp.title =
+      "Aggregates for a grouped query: name=fn or name=fn(column); fn is count, sum, avg, min, max";
+    aggInp.addEventListener("change", () => patch());
+    aggInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        patch();
+      }
+    });
+
+    const limitInp = document.createElement("input");
+    limitInp.className = "insp-limit";
+    limitInp.type = "text";
+    limitInp.placeholder = "limit: 10";
+    limitInp.title = "Keep only the first N output rows (after sort)";
+    limitInp.addEventListener("change", () => patch());
+    limitInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        patch();
+      }
+    });
+
     // Several series: split by a column, and stack (bar/area).
     const splitSel = document.createElement("select");
     splitSel.className = "insp-series";
@@ -5442,6 +5533,20 @@ export class FolioDoc extends HTMLElement {
       srcSel.value = block.chart.source;
       typeSel.value = block.chart.type;
       selInp.value = block.chart.query.select.join(", ");
+      // In a grouped query the columns are derived (group keys + agg
+      // names), so the box is read-only there.
+      selInp.disabled = Boolean(block.chart.query.group?.length);
+      selInp.title = selInp.disabled
+        ? "Grouped query: the columns are the group keys plus the aggregates"
+        : "Columns";
+      groupInp.value = (block.chart.query.group ?? []).join(", ");
+      aggInp.value = Object.entries(block.chart.query.agg ?? {})
+        .map(([k, v]) => `${k}=${v}`)
+        .join(", ");
+      limitInp.value =
+        block.chart.query.limit !== undefined
+          ? String(block.chart.query.limit)
+          : "";
       filterInp.value =
         typeof block.chart.query.filter === "string"
           ? block.chart.query.filter
@@ -5463,6 +5568,9 @@ export class FolioDoc extends HTMLElement {
       labelled("Data", srcSel),
       labelled("Type", typeSel),
       labelled("Columns", selInp),
+      labelled("Group by", groupInp),
+      labelled("Aggregate", aggInp),
+      labelled("Limit", limitInp),
       labelled("Filter", filterInp),
       labelled("Sort by", sortInp),
       labelled("Order", orderSel),
@@ -5538,11 +5646,13 @@ export class FolioDoc extends HTMLElement {
       block.table.columns.forEach((cc, i) => {
         const o = document.createElement("option");
         o.value = String(i);
-        o.textContent = cc.name;
+        o.textContent = cc.name + (cc.hidden ? " (hidden)" : "");
         colSel.appendChild(o);
       });
       colSel.selectedIndex = c;
     }
+    const visBox = bar.querySelector<HTMLInputElement>(".insp-visible");
+    if (visBox) visBox.checked = !col.hidden;
     const typeSel = bar.querySelector<HTMLSelectElement>(".insp-type");
     if (typeSel) typeSel.value = col.type;
     const unitInp = bar.querySelector<HTMLInputElement>(".insp-unit");
@@ -5572,6 +5682,7 @@ export class FolioDoc extends HTMLElement {
       unit?: string | undefined;
       format?: "percent" | "currency" | undefined;
       expr?: string;
+      hidden?: boolean | undefined;
     },
   ): void {
     const col = block.table.columns[c];
@@ -5587,6 +5698,10 @@ export class FolioDoc extends HTMLElement {
       else delete col.format;
     }
     if ("expr" in patch) col.expr = patch.expr;
+    if ("hidden" in patch) {
+      if (patch.hidden) col.hidden = true;
+      else delete col.hidden;
+    }
     const host = figure.parentElement;
     this.refreshTableBlock(figure, block);
     if (host) {
@@ -5738,6 +5853,24 @@ export class FolioDoc extends HTMLElement {
     // paragraph follows it, in reading order.
     if (at + 1 < this.doc.blocks.length) this.focusBlockStart(at + 1);
     else this.focusBlockStart(at, true);
+  }
+
+  /**
+   * Replace a table's data in place (spec: docs/specs/data-import.md,
+   * "Refresh from a file"): the caller has already merged the new
+   * columns/rows/provenance into the table - the block keeps its place
+   * and identity, so charts and formulas over it recalculate.
+   */
+  replaceTableData(id: string, next: Table): boolean {
+    if (!this.doc) return false;
+    const block = this.doc.blocks.find(
+      (b) => b.kind === "table" && b.table.id === id,
+    );
+    if (!block || block.kind !== "table") return false;
+    block.table = next;
+    this.render();
+    this.emitChange("refresh");
+    return true;
   }
 
   /** Datasets imported for personal use only (export and print
@@ -9351,6 +9484,25 @@ export class FolioDoc extends HTMLElement {
     }
     this.showInspector(figure, block, 0);
     figure.querySelector<HTMLSelectElement>(".insp-rows")?.focus();
+    return null;
+  }
+
+  /** Palette entry: open the table at the caret's column controls. */
+  focusTableColumns(): string | null {
+    const at = this.caretPoint();
+    const el =
+      at && (at.node instanceof Element ? at.node : at.node.parentElement);
+    const figure = el?.closest<HTMLElement>("figure[data-table-id]");
+    const block =
+      figure && this.doc?.blocks[Number(figure.dataset.blockIndex ?? -1)];
+    if (!figure || block?.kind !== "table") {
+      return "Click into a table first";
+    }
+    if (block.table.simple) {
+      return "A simple table shows all its columns - make it a dataset to hide some";
+    }
+    this.showInspector(figure, block, 0);
+    figure.querySelector<HTMLInputElement>(".insp-visible")?.focus();
     return null;
   }
 

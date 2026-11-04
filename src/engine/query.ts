@@ -117,10 +117,104 @@ export function sortIndexes(
     });
 }
 
+const AGG_FNS = ["count", "sum", "avg", "min", "max"] as const;
+type AggFn = (typeof AGG_FNS)[number];
+
+interface AggSpec {
+  out: string;
+  fn: AggFn;
+  colIdx: number | null;
+}
+
+/** Parse one agg spec: "count" or "fn(column)". */
+function parseAgg(out: string, spec: string, table: Table): AggSpec {
+  const m = /^([A-Za-z]+)(?:\(([^)]*)\))?$/.exec(spec.trim());
+  const fn = m?.[1]?.toLowerCase() ?? "";
+  if (!m || !(AGG_FNS as readonly string[]).includes(fn)) {
+    throw new Error(
+      `Unknown aggregate '${spec}' for '${out}' (use ${AGG_FNS.join(", ")})`,
+    );
+  }
+  const col = m[2]?.trim();
+  return {
+    out,
+    fn: fn as AggFn,
+    colIdx: col ? columnIndex(table, col) : null,
+  };
+}
+
+/** One aggregate over the group's rows. Blanks are skipped, never
+ * zeros; a group with no numeric values gets a blank, not a 0. */
+function aggregate(spec: AggSpec, rows: number[], table: Table): Cell {
+  if (spec.fn === "count") {
+    if (spec.colIdx === null) return rows.length;
+    return rows.filter((i) => {
+      const v = table.rows[i]?.[spec.colIdx ?? -1];
+      return v !== "" && v !== undefined && v !== null;
+    }).length;
+  }
+  const vals = rows
+    .map((i) => numericValue(table.rows[i]?.[spec.colIdx ?? -1] ?? ""))
+    .filter((v): v is number => v !== null);
+  if (vals.length === 0) return "";
+  const sum = vals.reduce((x, y) => x + y, 0);
+  if (spec.fn === "sum") return sum;
+  if (spec.fn === "avg") return sum / vals.length;
+  if (spec.fn === "min") return Math.min(...vals);
+  return Math.max(...vals);
+}
+
+/**
+ * A grouped query: one output row per combination of the group
+ * columns (by a, then b), in first-appearance order, each carrying
+ * the aggregates. Sort then applies to the OUTPUT rows; limit keeps
+ * the first N of them.
+ */
+function executeGrouped(
+  table: Table,
+  query: Chart["query"],
+  indexes: number[],
+): QueryResult {
+  const group = query.group ?? [];
+  const gIdx = group.map((name) => columnIndex(table, name));
+  const aggs = Object.entries(query.agg ?? { count: "count" }).map(
+    ([out, spec]) => parseAgg(out, spec, table),
+  );
+  const groups = new Map<string, { key: Cell[]; rows: number[] }>();
+  for (const i of indexes) {
+    const key = gIdx.map((gi) => table.rows[i]?.[gi] ?? "");
+    const k = JSON.stringify(key);
+    let g = groups.get(k);
+    if (!g) {
+      g = { key, rows: [] };
+      groups.set(k, g);
+    }
+    g.rows.push(i);
+  }
+  const columns = [...group, ...aggs.map((a) => a.out)];
+  let rows: Cell[][] = [...groups.values()].map((g) => [
+    ...g.key,
+    ...aggs.map((a) => aggregate(a, g.rows, table)),
+  ]);
+  if (query.sort) {
+    const si = columns.indexOf(query.sort.by);
+    if (si < 0) {
+      throw new Error(
+        `Unknown column: '${query.sort.by}' (grouped output has: ${columns.join(", ")})`,
+      );
+    }
+    const sign = query.sort.order === "desc" ? -1 : 1;
+    rows = rows
+      .map((r, i) => ({ r, i }))
+      .sort((x, y) => sign * compare(x.r[si] ?? "", y.r[si] ?? "") || x.i - y.i)
+      .map((x) => x.r);
+  }
+  if (query.limit !== undefined) rows = rows.slice(0, Math.max(0, query.limit));
+  return { columns, rows };
+}
+
 export function executeQuery(table: Table, chart: Chart): QueryResult {
   const { query } = chart;
-
-  for (const name of query.select) columnIndex(table, name);
 
   // The pipeline works on MODEL ROW INDEXES so filter and sort
   // compose (sorting must not resurrect filtered-out rows - the
@@ -151,14 +245,23 @@ export function executeQuery(table: Table, chart: Chart): QueryResult {
       });
     }
   }
+  if (query.group?.length) {
+    // Grouped query: filter applies, then group/aggregate; sort and
+    // limit act on the output rows (executeGrouped).
+    return executeGrouped(table, query, indexes);
+  }
   if (query.sort) {
     const keep = new Set(indexes);
     indexes = sortIndexes(table, query.sort.by, query.sort.order).filter((i) =>
       keep.has(i),
     );
   }
+  for (const name of query.select) columnIndex(table, name);
   const selected = query.select.map((name) => columnIndex(table, name));
-  const rows = indexes.map((i) => table.rows[i] ?? []) as Cell[][];
+  let rows = indexes.map((i) => table.rows[i] ?? []) as Cell[][];
+  if (query.limit !== undefined) {
+    rows = rows.slice(0, Math.max(0, query.limit));
+  }
   return {
     columns: query.select,
     rows: rows.map((r) => selected.map((i) => r[i] ?? "")),

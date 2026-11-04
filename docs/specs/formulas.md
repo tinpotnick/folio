@@ -168,7 +168,10 @@ is empty, never an error:
 `date(y, m, d)` → ISO; `year(d)`, `month(d)`, `day(d)`; `edate(d, n)`
 (n months on, the day clamped to the month's end, as EDATE);
 `eomonth(d, n)`; `days(end, start)`; `months(start, end)` (whole
-months); `yearfrac(start, end)` (actual days / 365.25). A formula
+months); `yearfrac(start, end)` (actual days / 365.25);
+`fromUnix(s)` → ISO UTC date-time (a CDR's epoch `start_at`:
+`fromUnix(1772323200)` is `2026-03-01T00:00:00Z`, and `toIso` reads
+that back to its date). A formula
 column may produce a date: `edate(start, self.row - 1)`.
 
 ## Blanks (2026-10-28)

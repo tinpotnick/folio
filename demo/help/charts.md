@@ -31,6 +31,16 @@ caption: "Quarter-on-quarter growth by region"
   `lt`) still works.
 - **query: sort** `{by: growth, order: desc}` sorts by a column,
   `asc` or `desc`.
+- **query: group** `[day, destination]` summarizes instead of
+  plotting raw rows: group by the columns in order (by a, then b),
+  one row per combination. **query: agg** `{n: count, billed:
+  sum(total_billed)}` aggregates each group - `count`, `sum`,
+  `avg`, `min`, `max`, with or without a column. **query: limit**
+  `10` keeps the first N rows after sorting (top-N charts). In the
+  chart's bar these are **Group by**, **Aggregate** and **Limit**;
+  with a group set, the plotted columns are the group keys plus the
+  aggregates. Example: calls and spend per day, best first -
+  `query: {group: [day], agg: {n: count, billed: sum(total_billed)}, sort: {by: billed, order: desc}, limit: 10}`.
 - **type** is `bar`, `line`, `area`, `pie`, `donut`, or
   `scatter`. Bar/line/area plot the first selected column as
   the category label and the last as the value; pie and donut

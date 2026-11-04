@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addMonths,
   dayNumber,
+  fromUnix,
   looksLikeDates,
   monthsBetween,
   toIso,
@@ -79,6 +80,25 @@ describe("dates", () => {
     expect(monthsBetween("2020-01-15", "2021-01-14")).toBe(11);
     expect(monthsBetween("2020-01-15", "2021-01-15")).toBe(12);
     expect(dayNumber("1970-01-02")).toBe(1);
+  });
+
+  it("reads unix epoch seconds (a CDR's start_at) as ISO UTC", () => {
+    expect(fromUnix(0)).toBe("1970-01-01T00:00:00Z");
+    expect(fromUnix(1772323200)).toBe("2026-03-01T00:00:00Z");
+    expect(fromUnix("1772323200")).toBe("2026-03-01T00:00:00Z");
+    // toIso reads it back to the date; year/month/day work on it.
+    expect(toIso(fromUnix(1772368800))).toBe("2026-03-01");
+    expect(fromUnix("not a number")).toBe("");
+    // Registered in Jexl too: a formula column over a CDR's start_at.
+    const t: Table = {
+      id: "calls",
+      columns: [
+        { name: "start_at", type: "number" },
+        { name: "when", type: "formula", expr: "fromUnix(start_at)" },
+      ],
+      rows: [[1772323200, ""]],
+    };
+    expect(recalcTable(t).rows[0]?.[1]).toBe("2026-03-01T00:00:00Z");
   });
 });
 

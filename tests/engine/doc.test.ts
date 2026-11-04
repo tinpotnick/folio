@@ -108,6 +108,40 @@ describe("property: round-trip is stable (idempotence)", () => {
     expect(serializeDoc(parseDoc(text))).toBe(text);
   });
 
+  it("a grouped chart query (group/agg/sort/limit) round-trips byte-identically and derives select", () => {
+    const text =
+      "# T\n\n::: chart {#c}\nsource: @calls\nquery: {group: [day, dest], agg: {n: count, billed: sum(total_billed)}, sort: {by: billed, order: desc}, limit: 10}\ntype: bar\n:::\n";
+    const once = serializeDoc(parseDoc(text));
+    expect(once).toBe(text);
+    expect(serializeDoc(parseDoc(once))).toBe(once);
+    const chart = parseDoc(text).blocks.find((b) => b.kind === "chart");
+    if (chart?.kind !== "chart") throw new Error("no chart");
+    expect(chart.chart.query.group).toEqual(["day", "dest"]);
+    expect(chart.chart.query.agg).toEqual({
+      n: "count",
+      billed: "sum(total_billed)",
+    });
+    expect(chart.chart.query.select).toEqual(["day", "dest", "n", "billed"]);
+    expect(chart.chart.query.limit).toBe(10);
+  });
+
+  it("a hidden column round-trips in the column map", () => {
+    const text =
+      "::: table {#calls}\n" +
+      "columns:\n" +
+      "  - {name: uuid, type: text, hidden: true}\n" +
+      "  - {name: total_billed, type: number}\n" +
+      "data:\n" +
+      "  - [abc, 1.5]\n" +
+      ":::\n";
+    const once = serializeDoc(parseDoc(text));
+    expect(once).toBe(text);
+    const block = parseDoc(text).blocks[0];
+    if (block?.kind !== "table") throw new Error("not a table");
+    expect(block.table.columns[0]?.hidden).toBe(true);
+    expect(block.table.columns[1]?.hidden).toBeUndefined();
+  });
+
   it("a chart filter string with escaped double quotes round-trips", () => {
     const doc = parseDoc(
       "# T\n\n::: chart {#c}\nsource: @t\nquery: {select: [region]}\ntype: bar\n:::\n",
@@ -521,6 +555,35 @@ describe("simple (GFM pipe) tables", () => {
   it("datasets still serialize as ::: table", () => {
     const text = loadGolden("sample-document.md");
     expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+});
+
+describe("dataset cell typing on parse", () => {
+  // Regression: a TEXT column's numeric-looking cell (a CDR caller id
+  // "01632960123") was parseFloat'd on every re-parse - the leading
+  // zero dropped on save/reload. Only NUMBER columns coerce.
+  it("a TEXT column keeps a numeric-looking cell as text, across a round-trip", () => {
+    const md =
+      "::: table {#calls}\n" +
+      'import: "cdr_2026_03.db#cdr"\n' +
+      "columns:\n" +
+      "  - {name: caller_id_number, type: text}\n" +
+      "  - {name: total_billed, type: number}\n" +
+      "data:\n" +
+      "  - [01632960123, 1.25]\n" +
+      '  - ["+442071234567", 0]\n' +
+      ":::\n";
+    const doc = parseDoc(md);
+    const block = doc.blocks[0];
+    if (block?.kind !== "table") throw new Error("not a table");
+    expect(block.table.rows[0]?.[0]).toBe("01632960123");
+    expect(typeof block.table.rows[0]?.[0]).toBe("string");
+    // A NUMBER column still coerces a bare numeral.
+    expect(block.table.rows[0]?.[1]).toBe(1.25);
+    expect(serializeDoc(doc)).toBe(md);
+    const re = parseDoc(serializeDoc(doc)).blocks[0];
+    if (re?.kind !== "table") throw new Error("not a table");
+    expect(re.table.rows[0]?.[0]).toBe("01632960123");
   });
 });
 

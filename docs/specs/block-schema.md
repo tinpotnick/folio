@@ -33,6 +33,13 @@ Table:
     type: text | number | date | select | formula | relation
     unit?: string
     format?: percent | currency | ...
+    hidden?: true      # render-time only: not drawn, still in the data
+                         # (formulas, charts, dataset browser see it)
+  Cell reading is column-typed (2026-11-04): a NUMBER (or other
+  non-text) column coerces a bare numeral to a number; TEXT and DATE
+  columns always read text, so a leading-zero identifier like
+  "01632960123" (a CDR caller id) keeps its zero across save/reload -
+  the Markdown source may show it bare, the column type decides.
   Binding:
     kind: csv | json-api | peer  # peer = table in another embedded doc
     descriptor: string           # connection metadata

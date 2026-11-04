@@ -1427,6 +1427,17 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       padding: 0 4px;
       white-space: nowrap;
     }
+    /* "visible" checkbox: hide a column from the rendered table only. */
+    .folio-inspector .insp-vis {
+      flex: none;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 12px;
+      color: var(--folio-ink-muted);
+      white-space: nowrap;
+      cursor: pointer;
+    }
     .folio-inspector .insp-convert {
       flex: none;
       margin-left: auto;
