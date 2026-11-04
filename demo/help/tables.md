@@ -30,7 +30,10 @@
   edit as changing the source by hand). Untick **visible** to hide
   a column from the rendered table (an import's uuid, say) - the
   column stays in the data: formulas, charts and the dataset
-  browser still see it. (Ctrl+K "show or hide columns" opens this
+  browser still see it. Faster for several columns: **right-click a
+  column header** and choose **Hide column '…'**; while any are
+  hidden, the right-click menu offers each back (**Show column
+  '…'**). (Ctrl+K "show or hide columns" opens this
   bar too.) Units show in the column headers ("q2
   (£k)") in a separate italic span. The header's **name** is
   editable directly: click it and type to rename the column —

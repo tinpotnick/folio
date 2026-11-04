@@ -34,6 +34,12 @@ see.
   no hidden columns - their source is kept verbatim.
 - **Palette**: "Show or hide columns of the table at the caret"
   (`focusTableColumns`) opens the bar and focuses the checkbox.
+- **Context menu** (2026-11-04, the fast path): right-clicking any
+  cell or column header of a dataset adds "Hide column '<name>'";
+  while any column is hidden, the menu offers each hidden column back
+  ("Show column '<name>'", individually up to five, else one "Show
+  all N hidden columns") - one click per column, no inspector
+  round-trip, one re-render per action (`setColumnsHidden`).
 - **Edits are model writes**: the patch writes
   `block.table.columns[c]`, refreshes the table figure in place,
   re-shows the bar, and emits change - identical to editing the
