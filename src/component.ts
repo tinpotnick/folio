@@ -9358,13 +9358,7 @@ export class FolioDoc extends HTMLElement {
     const menu = document.createElement("div");
     menu.className = "folio-menu folio-table-menu";
     menu.setAttribute("role", "menu");
-    const items: [string, TableAction][] = [
-      ["Insert row below", "row-below"],
-      ["Delete row", "delete-row"],
-      ["Insert column right", "column-right"],
-      ["Delete column", "delete-column"],
-    ];
-    for (const [label, action] of items) {
+    const addItem = (label: string, fn: () => void): void => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.setAttribute("role", "menuitem");
@@ -9373,9 +9367,53 @@ export class FolioDoc extends HTMLElement {
       btn.addEventListener("mousedown", (ev) => ev.preventDefault());
       btn.addEventListener("click", () => {
         this.closeMenu();
-        this.applyTableAction(block, r, c, action, figure);
+        fn();
       });
       menu.appendChild(btn);
+    };
+    const items: [string, TableAction][] = [
+      ["Insert row below", "row-below"],
+      ["Delete row", "delete-row"],
+      ["Insert column right", "column-right"],
+      ["Delete column", "delete-column"],
+    ];
+    for (const [label, action] of items) {
+      addItem(label, () => {
+        this.applyTableAction(block, r, c, action, figure);
+      });
+    }
+    // Column visibility from the same menu (datasets only): one click
+    // hides the column under the pointer - no inspector round-trip.
+    // Hidden columns have no header to right-click, so they are
+    // offered back here (individually up to five, else one "show all").
+    if (!block.table.simple) {
+      const col = block.table.columns[c];
+      if (col && !col.hidden) {
+        addItem(`Hide column '${col.name}'`, () => {
+          this.setColumnHidden(figure, block, c, true);
+        });
+      }
+      const hidden = block.table.columns
+        .map((x, i) => ({ x, i }))
+        .filter(({ x }) => x.hidden);
+      if (hidden.length > 0) {
+        if (hidden.length <= 5) {
+          for (const { x, i } of hidden) {
+            addItem(`Show column '${x.name}'`, () => {
+              this.setColumnHidden(figure, block, i, false);
+            });
+          }
+        } else {
+          addItem(`Show all ${String(hidden.length)} hidden columns`, () => {
+            this.setColumnsHidden(
+              figure,
+              block,
+              hidden.map(({ i }) => i),
+              false,
+            );
+          });
+        }
+      }
     }
     // Outside the editable article (its handlers must not see the
     // menu), fixed at the pointer.
@@ -9437,6 +9475,36 @@ export class FolioDoc extends HTMLElement {
     this.refreshTableBlock(figure, block);
     this.emitChange();
     return null;
+  }
+
+  /**
+   * Hide or show columns (spec: docs/specs/table-inspector.md):
+   * model write, one re-render for the whole batch, change event.
+   * Render-time only - the columns stay in the data.
+   */
+  private setColumnsHidden(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    indexes: number[],
+    hidden: boolean,
+  ): void {
+    for (const c of indexes) {
+      const col = block.table.columns[c];
+      if (!col) continue;
+      if (hidden) col.hidden = true;
+      else delete col.hidden;
+    }
+    this.refreshTableBlock(figure, block);
+    this.emitChange();
+  }
+
+  private setColumnHidden(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    c: number,
+    hidden: boolean,
+  ): void {
+    this.setColumnsHidden(figure, block, [c], hidden);
   }
 
   /**

@@ -280,6 +280,54 @@ test.describe("imported tables: hidden columns and grouped charts", () => {
     expect(md).toContain("call-202603-0000");
   });
 
+  test("hide and show columns from the right-click menu - no inspector round-trip", async ({
+    page,
+  }) => {
+    await importCdr(page);
+    const fig = page.locator('figure[data-table-id="calls_2026_03_cdr"]');
+    await expect(fig.locator("thead th")).toHaveCount(14);
+    // Right-click the uuid header: one menu item hides it.
+    await fig.locator('th[data-col-index="0"]').click({ button: "right" });
+    await page
+      .locator(".folio-table-menu button", { hasText: "Hide column 'uuid'" })
+      .click();
+    await expect(fig.locator("thead th")).toHaveCount(13);
+    // And the transcription header.
+    await fig.locator('th[data-col-index="13"]').click({ button: "right" });
+    await page
+      .locator(".folio-table-menu button", {
+        hasText: "Hide column 'transcription'",
+      })
+      .click();
+    await expect(fig.locator("thead th")).toHaveCount(12);
+    await page.locator("#btn-markdown").click();
+    let md = await page.locator("#editor").inputValue();
+    expect(md).toContain("{name: uuid, type: text, hidden: true}");
+    expect(md).toContain("{name: transcription, type: text, hidden: true}");
+    await page.locator("#btn-view").click();
+    // Hidden columns have no header, so any cell's menu offers them back.
+    await fig
+      .locator('td[data-row-index="0"]')
+      .first()
+      .click({ button: "right" });
+    await page
+      .locator(".folio-table-menu button", { hasText: "Show column 'uuid'" })
+      .click();
+    await fig
+      .locator('td[data-row-index="0"]')
+      .first()
+      .click({ button: "right" });
+    await page
+      .locator(".folio-table-menu button", {
+        hasText: "Show column 'transcription'",
+      })
+      .click();
+    await expect(fig.locator("thead th")).toHaveCount(14);
+    await page.locator("#btn-markdown").click();
+    md = await page.locator("#editor").inputValue();
+    expect(md).not.toContain("hidden: true");
+  });
+
   test("the palette command opens the column controls", async ({ page }) => {
     await importCdr(page);
     const fig = page.locator('figure[data-table-id="calls_2026_03_cdr"]');
