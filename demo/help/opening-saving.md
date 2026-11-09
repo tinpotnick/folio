@@ -6,6 +6,10 @@
 - **In the desktop app** you can also open a .md file straight from
   your file manager: double-click it, or choose **Open with → folio**.
   Save then writes back to that file.
+- **In a browser, once folio is installed as an app** (Chrome or Edge:
+  the ⋯ menu → **Install folio**), .md files can open with folio too —
+  choose **Open with → folio** in your file manager, and Save writes
+  back to the file.
 - **In a web browser** the files are on your own computer — nothing
   is uploaded anywhere. Chrome and Edge open and save real files;
   in Firefox and Safari, Open reads a file you pick and Save

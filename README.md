@@ -159,7 +159,9 @@ Open any of these in the [web version](https://tinpotnick.github.io/folio/)
 ## Install
 
 **Try it first in your browser:** <https://tinpotnick.github.io/folio/> —
-open and save files on your own computer; nothing is uploaded.
+open and save files on your own computer; nothing is uploaded. Install
+it as an app (Chrome/Edge: ⋯ → **Install folio**) and .md files can open
+with folio straight from your file manager, like the desktop app.
 
 ### Linux
 

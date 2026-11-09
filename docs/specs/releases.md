@@ -13,6 +13,7 @@ Release, built by `.github/workflows/release.yml`:
 | macOS (Apple silicon + Intel) | macos-latest, `universal-apple-darwin` | `.dmg` |
 | Linux (store) | Flathub's build image | Flatpak (`io.github.tinpotnick.folio`), built from source, offline; the `folio.flatpak` bundle is attached to each release |
 | Linux | ubuntu-22.04 (the oldest supported, so the AppImage runs widely) | `.rpm` (Fedora, openSUSE), `.deb` (Ubuntu, Debian), `.AppImage` |
+| Web | GitHub Pages (`.github/workflows/pages.yml`) | the site at <https://tinpotnick.github.io/folio/> — an installable app whose manifest `file_handlers` associate `.md` with folio (docs/specs/web-files.md) |
 
 ## How to release
 

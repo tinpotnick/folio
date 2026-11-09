@@ -75,6 +75,7 @@ import {
 import { clearDraft, keepDraft, readDraft, type Draft } from "./drafts.js";
 import {
   hasRealFiles,
+  onWebLaunch,
   openWebFile,
   saveWebFile,
   type WebFile,
@@ -135,6 +136,38 @@ function bootPath(): string | null {
   return null;
 }
 
+/* --- Web "Open with folio" (File Handling API, docs/specs/web-files.md)
+ * The installed web app declares .md in its manifest's file_handlers,
+ * so the OS launches it with a file. The launch that started the app
+ * settles `firstWebLaunch`; later launches on a running app go to
+ * openLaunchedWebFiles (like the desktop's macOS event). --- */
+let settleFirstLaunch: ((files: FileSystemFileHandle[] | null) => void) | null =
+  null;
+const firstWebLaunch = new Promise<FileSystemFileHandle[] | null>((resolve) => {
+  settleFirstLaunch = resolve;
+});
+if (!isDesktop()) {
+  onWebLaunch((files) => {
+    if (PRESENTER) return;
+    if (settleFirstLaunch) {
+      const settle = settleFirstLaunch;
+      settleFirstLaunch = null;
+      settle(files);
+    } else {
+      void openLaunchedWebFiles(files);
+    }
+  });
+}
+// A launch that carries no files never reaches the consumer: settle
+// the first launch on the next tick either way.
+setTimeout(() => {
+  if (settleFirstLaunch) {
+    const settle = settleFirstLaunch;
+    settleFirstLaunch = null;
+    settle(null);
+  }
+}, 0);
+
 /**
  * Boot (spec: docs/specs/welcome-page.md): a `?doc=` link opens that
  * document; the very first launch opens the getting-started guide;
@@ -155,6 +188,15 @@ async function boot(): Promise<void> {
   if (launched) {
     await openShipped(null, { history: "replace", unguarded: true });
     await showOpened(launched.path, launched.text);
+    return;
+  }
+  // Web "Open with folio": launched with a file, that file opens
+  // before anything else - not the blank page, the guide or a draft.
+  const launchedFiles = await firstWebLaunch;
+  const [launchedFile] = launchedFiles ?? [];
+  if (launchedFile) {
+    await openShipped(null, { history: "replace", unguarded: true });
+    await openLaunchedWebFile(launchedFile);
     return;
   }
   let path = bootPath();
@@ -2983,6 +3025,33 @@ async function showOpened(path: string | null, text: string): Promise<void> {
   flash("Opened document");
 }
 
+/** Open a file the OS launched the web app with ("Open with folio"):
+ * it becomes the open, clean document, and Save writes back to it. */
+async function openLaunchedWebFile(
+  handle: FileSystemFileHandle,
+): Promise<void> {
+  try {
+    const file = await handle.getFile();
+    const text = await file.text();
+    currentDocPath = null; // a web file has no desktop path
+    webFile = { name: file.name, handle };
+    await showOpened(null, text);
+  } catch (e) {
+    flash(`Could not open: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+/** A .md opened while the web app runs: the unsaved-changes check
+ * first, like the desktop's file-open event on macOS. */
+async function openLaunchedWebFiles(
+  files: FileSystemFileHandle[],
+): Promise<void> {
+  const [first] = files;
+  if (!first) return;
+  if (!(await confirmLeave())) return;
+  await openLaunchedWebFile(first);
+}
+
 btnOpen.addEventListener("click", async () => {
   if (!(await confirmLeave())) return;
   const text = await pickDocument();
@@ -5028,6 +5097,13 @@ function reflectTitle(): void {
   }
 }
 el.onChange(reflectTitle);
+
+// The installed web app (manifest + service worker, docs/specs/
+// web-files.md): the OS can then launch folio with a .md file, and the
+// app works offline. Never in the desktop shell or during dev.
+if (import.meta.env.PROD && !isDesktop() && "serviceWorker" in navigator) {
+  void navigator.serviceWorker.register("sw.js");
+}
 
 // Last: booting can finish synchronously (a blank document fetches
 // nothing), so everything above must exist first.

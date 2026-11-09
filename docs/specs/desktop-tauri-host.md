@@ -95,7 +95,10 @@ the named cases.
   (`packaging/linux/folio.desktop.hbs`) and the Flatpak's
   (`packaging/linux/io.github.tinpotnick.folio.desktop`) run
   `folio %F` with `MimeType=text/markdown;text/x-markdown;`; the
-  store listing `provides` the media type.
+  store listing `provides` the media type. The web version registers
+  the same association on an installed app via the manifest's
+  `file_handlers` (docs/specs/web-files.md, "Open with folio on the
+  web").
 - The shell keeps the first non-option argument as the launch file
   (`launch_file_from_args`, unit-tested; a `file://` prefix is
   dropped). The page asks for it once at boot (`launch_document`):

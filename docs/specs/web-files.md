@@ -39,9 +39,39 @@ later, host-level addition; documents never depend on it to render.
   Saving, or choosing **Discard changes**, clears it. Without storage
   (a private window) there is simply no draft.
 
+## Open with folio on the web (File Handling API, 2026-10-24)
+
+The desktop packages register folio as a Markdown editor
+(docs/specs/desktop-tauri-host.md, "Open with folio"); the web version
+gets the same OS-level association the one way the web has - the File
+Handling API, on an INSTALLED app (Chrome, Edge, ChromeOS):
+
+- `public/manifest.webmanifest` (linked from `index.html`) declares
+  `file_handlers` for `text/markdown` / `text/x-markdown` accepting
+  `.md` and `.markdown`, plus the icons and `start_url` that make the
+  site installable. Once installed, the OS offers folio for .md files
+  ("Open with folio").
+- `public/sw.js` is the service worker that makes the app installable
+  and launchable with files, and caches the app shell (same-origin
+  GET; `/pyodide/` and `/repo/` always go to the network) so the
+  installed app works offline. Registered in `src/main.ts` only on a
+  production web build - never in dev, never in the desktop shell.
+- `src/web-files.ts` `onWebLaunch` wraps `window.launchQueue`; the
+  page opens each launched file as the open, clean document and keeps
+  its handle, so Save writes back to it (write permission is asked
+  at save time, never at open). The launch that started the app opens
+  its file before anything else - not the guide or a restored draft;
+  a later launch on a running app goes through the unsaved-changes
+  check, like the desktop's macOS event.
+
 ## Acceptance
 
 - e2e: `tests/e2e/web-files.spec.ts` (upload/download path; real-file
   path writes back to the same file; the draft survives a relaunch
   until saved; Discard clears it; the dialog offers Save).
-- First-contact eval: `evals/web-files-first-contact.md`.
+- e2e: `tests/e2e/web-launch-file.spec.ts` (launchQueue stubbed: a
+  launch with a file opens it and Save writes back to it; a launch
+  without files starts as usual; a later launch replaces the
+  document).
+- First-contact eval: `evals/web-files-first-contact.md`,
+  `evals/web-open-with-folio-first-contact.md`.

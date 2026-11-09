@@ -34,6 +34,36 @@ const TYPES: PickerType[] = [
   },
 ];
 
+interface LaunchParamsLike {
+  files: FileSystemFileHandle[];
+}
+interface LaunchQueueLike {
+  setConsumer: (consumer: (params: LaunchParamsLike) => void) => void;
+}
+interface PermissionHandle {
+  queryPermission?: (o: { mode: string }) => Promise<string>;
+  requestPermission?: (o: { mode: string }) => Promise<string>;
+}
+
+/**
+ * File Handling API (spec: docs/specs/web-files.md, "Open with folio
+ * on the web"): the installed app declares .md in its manifest's
+ * file_handlers, so the OS launches it with files ("Open with folio").
+ * Call `handle` with the files of every such launch - the one that
+ * started the app and later ones on a running app. No-op where the
+ * API is unsupported (Firefox, Safari, the desktop shell).
+ */
+export function onWebLaunch(
+  handle: (files: FileSystemFileHandle[]) => void,
+): void {
+  const lq = (window as unknown as { launchQueue?: LaunchQueueLike })
+    .launchQueue;
+  if (!lq || typeof lq.setConsumer !== "function") return;
+  lq.setConsumer((params) => {
+    if (params.files.length > 0) handle(params.files);
+  });
+}
+
 export interface WebFile {
   name: string;
   /** Real-file handle (File System Access), or null for a download. */
@@ -100,6 +130,21 @@ export async function saveWebFile(
         handle ??
         (save ? await save({ suggestedName: name, types: TYPES }) : null);
       if (!target) return null;
+      // A handle from an OS launch ("Open with folio") may carry read
+      // only: ask for write then, not when the file is opened. Picker
+      // handles already have it, so this never prompts for them.
+      const perm = target as unknown as PermissionHandle;
+      if (perm.queryPermission && perm.requestPermission) {
+        try {
+          if (
+            (await perm.queryPermission({ mode: "readwrite" })) !== "granted"
+          ) {
+            await perm.requestPermission({ mode: "readwrite" });
+          }
+        } catch {
+          // createWritable below reports the refusal.
+        }
+      }
       const out = await (target as unknown as WritableHandle).createWritable();
       await out.write(text);
       await out.close();
