@@ -108,6 +108,19 @@ the named cases.
   (`RunEvent::Opened` → `folio-open-file`); the page opens each after
   the unsaved-changes check.
 - e2e: `tests/e2e/launch-file.spec.ts` (Tauri bridge stubbed).
+- On demand, not as a launch-time prompt (decision 2026-10-24: the
+  installers already put folio in "Open with", and Windows reserves
+  the default handler for the user in Settings, so a nag would ask
+  for something the app cannot deliver there): the palette entry
+  **Open .md files with folio by default** calls the shell's
+  `set_default_md_handler` - Linux `xdg-mime default` (through
+  `flatpak-spawn --host` inside the Flatpak), macOS
+  `LSSetDefaultRoleHandlerForContentType` for `public.markdown` /
+  `net.daringfireball.markdown`, Windows opens
+  `ms-settings:defaultapps` - and flashes the shell's answer.
+  In-app help: demo/help/opening-saving.md. e2e:
+  `tests/e2e/default-md.spec.ts` (bridge stubbed; entry absent on
+  web). Eval: `evals/desktop-default-md-first-contact.md`.
 
 ## Support link (2026-10-23)
 

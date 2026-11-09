@@ -5,7 +5,10 @@
   that back to the same file.
 - **In the desktop app** you can also open a .md file straight from
   your file manager: double-click it, or choose **Open with → folio**.
-  Save then writes back to that file.
+  Save then writes back to that file. To make folio the default app
+  for .md files, press **Ctrl+K** and run **Open .md files with folio
+  by default** (on Windows this opens Settings → Default apps, where
+  Windows lets you choose folio for .md).
 - **In a browser, once folio is installed as an app** (Chrome or Edge:
   the ⋯ menu → **Install folio**), .md files can open with folio too —
   choose **Open with → folio** in your file manager, and Save writes

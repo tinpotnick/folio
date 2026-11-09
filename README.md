@@ -206,7 +206,10 @@ Download from the [latest release](https://github.com/tinpotnick/folio/releases/
 the `.msi` or `-setup.exe` for Windows, the `.dmg` for macOS (Apple
 silicon and Intel). The builds are not code-signed yet: on macOS,
 right-click the app and choose **Open** the first time; on Windows,
-choose **More info → Run anyway** if SmartScreen warns.
+choose **More info → Run anyway** if SmartScreen warns. Once installed,
+folio appears in **Open with** for `.md` files; to make it the default,
+run **Ctrl+K → Open .md files with folio by default** inside folio
+(on Windows that opens Settings → Default apps, where you choose).
 
 folio is young: expect rough edges, and please
 [report them](https://github.com/tinpotnick/folio/issues). Your

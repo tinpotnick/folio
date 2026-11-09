@@ -71,6 +71,7 @@ import {
   openPresenterWindow,
   saveDocument,
   saveTextFile,
+  setDefaultMdHandler,
 } from "./desktop.js";
 import { clearDraft, keepDraft, readDraft, type Draft } from "./drafts.js";
 import {
@@ -3068,6 +3069,21 @@ void onFileOpened(() => {
   })();
 });
 
+/**
+ * Palette: "Open .md files with folio by default" (spec:
+ * docs/specs/desktop-tauri-host.md, "Open with folio"). The shell
+ * does what the OS allows - Linux: xdg-mime; macOS: LaunchServices;
+ * Windows: opens Settings, where only the user can choose - and its
+ * message says which.
+ */
+async function makeDefaultMdHandler(): Promise<void> {
+  const msg = await setDefaultMdHandler();
+  flash(
+    msg ??
+      "Could not set the default - see Help → Opening and saving for how to associate .md files",
+  );
+}
+
 btnSave.addEventListener("click", () => {
   void saveCurrent();
 });
@@ -4099,6 +4115,17 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "save write file document download markdown md",
     action: () => btnSave.click(),
   });
+  // Desktop only: the web has no OS file association (install the app
+  // for that - the help topic says so).
+  if (isDesktop()) {
+    entries.push({
+      title: "Open .md files with folio by default",
+      group: "Command",
+      keywords:
+        "default app association open with md markdown file handler system os settings",
+      action: () => void makeDefaultMdHandler(),
+    });
+  }
   for (const section of el.getOutline()) {
     entries.push({
       title: section.text,
