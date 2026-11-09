@@ -119,6 +119,11 @@ later from the palette: Ctrl+K, then "example".
 - [Signals and spectra](demo/examples/signal-processing.md) — a
   sampled signal, its FFT and a low-pass filter, every number a
   formula.
+- [A murmuration, simulated](demo/examples/swarm.md) — a swirling
+  swallow flock that plays in the document (frames from a Python
+  block or the built-in sim) and prints as a filmstrip.
+- [Traffic on a small road network](demo/examples/flow.md) — vehicles
+  flowing along an edge list; prints as a static flow map.
 - [Drawings from text](demo/examples/drawings.md) — Graphviz graphs,
   Vega-Lite heatmaps, hand-written SVG and playable sheet music, each
   drawn from a few lines of text.

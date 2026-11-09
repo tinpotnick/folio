@@ -14,6 +14,11 @@ export interface ComputeBinding {
   data: string[];
   /** Output dataset ids, in declared order. */
   out: string[];
+  /** Per-block run budget in seconds (`budget=60`): a long-but-finite
+   * run for simulations that publish a whole frame sequence, still
+   * capped (the component clamps it) so a stuck job always fails
+   * alone. Default 10 s. */
+  budget?: number;
 }
 
 /** Parse a fence's info string. Null when the block does not
@@ -31,7 +36,13 @@ export function parseComputeInfo(
       .split(",")
       .map((x) => (strip ? x.replace(/^@/, "") : x).trim())
       .filter(Boolean);
-  return { data: list(data, true), out: list(out, false) };
+  const budgetRaw = /(?:^|\s)budget=(\d+)/.exec(info ?? "")?.[1];
+  const budget = budgetRaw === undefined ? undefined : Number(budgetRaw);
+  return {
+    data: list(data, true),
+    out: list(out, false),
+    ...(budget !== undefined ? { budget } : {}),
+  };
 }
 
 /** Canonical fence-info form the header writes: `data=` before
@@ -41,6 +52,8 @@ export function formatComputeInfo(binding: ComputeBinding): string {
   if (binding.data.length > 0)
     parts.push(`data=${binding.data.map((d) => `@${d}`).join(",")}`);
   if (binding.out.length > 0) parts.push(`out=${binding.out.join(",")}`);
+  if (binding.budget !== undefined)
+    parts.push(`budget=${String(binding.budget)}`);
   return parts.join(" ");
 }
 

@@ -2691,6 +2691,61 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border: 1px dashed var(--folio-rule-strong, rgba(0,0,0,0.2));
       border-radius: 6px;
     }
+    /* --- Motion figures (spec: docs/specs/motion-figures.md) --- */
+    /* Screen shows the rendition the block's display: key chose; the
+       other rendition containers stay hidden. */
+    .folio-motion .motion-view,
+    .folio-motion .motion-filmstrip,
+    .folio-motion .motion-static,
+    .folio-motion .motion-print-static { display: none; }
+    .folio-motion[data-display="player"] .motion-view,
+    .folio-motion[data-display="poster"] .motion-static,
+    .folio-motion[data-display="frame"] .motion-static,
+    .folio-motion[data-display="flowmap"] .motion-static,
+    .folio-motion[data-display="trails"] .motion-static {
+      display: block;
+    }
+    .folio-motion[data-display="filmstrip"] .motion-filmstrip {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 6px;
+    }
+    .folio-motion .motion-view svg,
+    .folio-motion .motion-static svg,
+    .folio-motion .motion-print-static svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .folio-motion .motion-thumb {
+      width: 100%;
+      height: auto;
+      border: 1px solid var(--folio-rule, #e6e8eb);
+      border-radius: 6px;
+      background: var(--folio-paper, #ffffff);
+    }
+    /* Print/PDF shows the block's print: rendition (print: player
+       maps to filmstrip - a still PDF cannot play). */
+    @media print {
+      .folio-motion .motion-view,
+      .folio-motion .motion-filmstrip,
+      .folio-motion .motion-static,
+      .folio-motion .motion-print-static {
+        display: none !important;
+      }
+      .folio-motion[data-print="player"] .motion-view,
+      .folio-motion[data-print="poster"] .motion-print-static,
+      .folio-motion[data-print="frame"] .motion-print-static,
+      .folio-motion[data-print="flowmap"] .motion-print-static,
+      .folio-motion[data-print="trails"] .motion-print-static {
+        display: block !important;
+      }
+      .folio-motion[data-print="filmstrip"] .motion-filmstrip {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 6px;
+      }
+    }
     /* The chart readout (docs/specs/chart-readout.md). */
     .chart-holder { position: relative; }
     /* A chart still waiting to draw (lazy figures) keeps the space it

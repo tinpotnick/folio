@@ -44,6 +44,7 @@ Ctrl+K from anywhere.
 ## Figures and media
 
 - [Diagrams and drawings](diagrams.md) - Mermaid, Graphviz, Vega-Lite, SVG, sheet music
+- [Motion figures: swarms and flows](motion.md) - animated figures that play in the document and print as a static rendition
 - [3D models](3d-models.md) - parametric parts in JSCAD, driven by a dataset
 - [Images and audio](images-audio.md) - pictures, sound clips, recording
 - [Music with Strudel](music.md) - patterns that play

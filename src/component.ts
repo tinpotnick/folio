@@ -20,7 +20,14 @@ import {
   type RecalcMemo,
   type TablePool,
 } from "@folio/engine/recalc";
-import type { Audio, Cell, Chart, Image, Table } from "@folio/engine/index.js";
+import type {
+  Audio,
+  Cell,
+  Chart,
+  Image,
+  Motion,
+  Table,
+} from "@folio/engine/index.js";
 import {
   executeQuery,
   filterIndexes,
@@ -50,7 +57,12 @@ import {
 import { DRUM_KIT, drumKitUrls } from "./audio/drum-kit.js";
 import { onlineSampleSources } from "./audio/online-samples.js";
 import { notesFromAbc, playNotes, type Playback } from "./audio/tone-synth.js";
-import { themeFromDoc, themeCss, type Mode } from "./render/theme.js";
+import {
+  presetTheme,
+  themeFromDoc,
+  themeCss,
+  type Mode,
+} from "./render/theme.js";
 import { registerFonts } from "./render/fonts.js";
 import { formatComputed } from "./render/number.js";
 import { meshToSvg, VIEWS, type MeshPolygon } from "./render/mesh-svg.js";
@@ -70,6 +82,16 @@ import {
   type Readout,
 } from "./render/chart.js";
 import { chartSeries } from "@folio/engine/series";
+import {
+  filmstripSvg,
+  flowmapSvg,
+  frameSvg,
+  motionData,
+  playerSvg,
+  renditionsOf,
+  trailsSvg,
+  type Rendition,
+} from "./render/motion.js";
 import {
   inlineMarkdownToHtml,
   htmlToInlineMarkdown,
@@ -562,6 +584,9 @@ function labelled(text: string, control: HTMLElement): HTMLElement {
 /** Blocks whose text is inline Markdown: formats and links apply. */
 const INLINE_BLOCKS = new Set(["P", "UL", "OL"]);
 
+/** The hard cap on a compute block's `budget=` (seconds x 1000): a
+ * sim may run longer than the 10 s default, never unbounded. */
+const COMPUTE_BUDGET_MAX_MS = 120_000;
 /** Undo grouping: same-label changes within this window are one step. */
 const COALESCE_MS = 600;
 /** Two changes this close are one user action, whatever their labels. */
@@ -1473,6 +1498,9 @@ export class FolioDoc extends HTMLElement {
       case "audio": {
         return this.renderAudio(block, idx);
       }
+      case "motion": {
+        return this.renderMotion(block, idx);
+      }
       case "chart": {
         const figure = document.createElement("figure");
         figure.dataset.blockIndex = String(idx);
@@ -1634,6 +1662,10 @@ export class FolioDoc extends HTMLElement {
         kind = "fig";
         id = block.chart.id;
         caption = block.chart.caption;
+      } else if (block.kind === "motion") {
+        kind = "fig";
+        id = block.motion.id;
+        caption = block.motion.caption;
       } else if (block.kind === "image") {
         kind = "fig";
         id = block.image.id;
@@ -3304,6 +3336,9 @@ export class FolioDoc extends HTMLElement {
       source: string;
       inputs: ComputeInputs;
       out: string[];
+      /** This block's run budget in ms (`budget=N` on the fence),
+       * clamped to COMPUTE_BUDGET_MAX_MS; default 10 s. */
+      budgetMs?: number;
       timer?: ReturnType<typeof setTimeout>;
     }
   >();
@@ -3319,10 +3354,18 @@ export class FolioDoc extends HTMLElement {
     source: string,
     inputs: ComputeInputs,
     out: string[],
+    budgetMs?: number,
   ): Promise<ComputeResult> {
     const id = ++this.computeSeq;
     return new Promise((resolve, reject) => {
-      this.computePending.set(id, { resolve, reject, source, inputs, out });
+      this.computePending.set(id, {
+        resolve,
+        reject,
+        source,
+        inputs,
+        out,
+        ...(budgetMs !== undefined ? { budgetMs } : {}),
+      });
       this.postCompute(id);
     });
   }
@@ -3349,8 +3392,10 @@ export class FolioDoc extends HTMLElement {
         if (ev.data.started) {
           // The limit runs while the script runs - not while it waits
           // its turn (the worker runs one job at a time) or while the
-          // runtime loads.
-          job.timer = setTimeout(() => this.stopCompute(w, ev.data.id), 10_000);
+          // runtime loads. A block's `budget=N` raises it, still
+          // finite and capped, so a stuck job always fails alone.
+          const limit = Math.min(job.budgetMs ?? 10_000, COMPUTE_BUDGET_MAX_MS);
+          job.timer = setTimeout(() => this.stopCompute(w, ev.data.id), limit);
           return;
         }
         clearTimeout(job.timer);
@@ -3455,6 +3500,7 @@ export class FolioDoc extends HTMLElement {
         this.codeText(code),
         inputs,
         binding.out,
+        binding.budget !== undefined ? binding.budget * 1000 : undefined,
       );
       this.computeFound.set(figure, result.found);
       const tables = computeOutputs(binding, result.outputs);
@@ -5446,6 +5492,35 @@ export class FolioDoc extends HTMLElement {
     return null;
   }
 
+  /**
+   * The palette's "Insert a swarm figure" / "Insert a flow figure":
+   * a motion block after the caret's block. Swarm runs the built-in
+   * seeded sim (no data needed); flow needs an edge-list dataset at
+   * the caret (the nearest above/below). Returns why it could not.
+   */
+  insertMotion(type: "swarm" | "flow"): string | null {
+    if (!this.doc) return "No document";
+    const at = this.blockIndexAtCaret();
+    const placeAt = at >= 0 ? this.insertionPoint(at).at : undefined;
+    const motion: Motion = {
+      id: `${type}-${String(this.doc.blocks.length)}`,
+      type,
+    };
+    if (type === "flow") {
+      const ds = this.datasetAtCaret();
+      if (!ds) {
+        return "A flow figure reads an edge-list dataset (from, to, qty, speed) - make one first";
+      }
+      motion.source = ds.id;
+    }
+    const atIdx =
+      placeAt !== undefined ? placeAt - 1 : this.doc.blocks.length - 1;
+    this.doc.blocks.splice(atIdx + 1, 0, { kind: "motion", motion });
+    this.render();
+    this.emitChange();
+    return null;
+  }
+
   /** Dataset -> simple table, only when nothing would be lost. */
   private tableToSimple(
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
@@ -7268,6 +7343,270 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
+  /* --- Motion figures (spec: docs/specs/motion-figures.md) --- */
+
+  /** Playback timers by figure, so a re-render stops its own. */
+  private motionTimers = new WeakMap<HTMLElement, number>();
+
+  private renderMotion(
+    block: Extract<DocBlock, { kind: "motion" }>,
+    idx: number,
+  ): HTMLElement {
+    // A re-render replaces the figure: stop the old one's playback.
+    const old = this.shadowRoot?.querySelector<HTMLElement>(
+      `figure.folio-motion[data-block-index="${String(idx)}"]`,
+    );
+    if (old) this.motionStop(old);
+    const figure = document.createElement("figure");
+    figure.className = "folio-motion";
+    figure.dataset.blockIndex = String(idx);
+    const motion = block.motion;
+    if (motion.id) figure.dataset.motionId = motion.id;
+    if (motion.source) figure.dataset.motionSource = motion.source;
+    figure.contentEditable = "false";
+    const stage = document.createElement("div");
+    stage.className = "motion-stage";
+    figure.appendChild(stage);
+    figure.appendChild(this.buildMotionInspector(figure, block));
+    if (motion.caption) {
+      const cap = document.createElement("figcaption");
+      cap.textContent = motion.caption;
+      figure.appendChild(cap);
+    }
+    try {
+      let table: Table | undefined;
+      if (motion.source) {
+        const tb = this.doc?.blocks.find(
+          (b) => b.kind === "table" && b.table.id === motion.source,
+        );
+        if (!tb || tb.kind !== "table") {
+          throw new Error(`motion source table '@${motion.source}' not found`);
+        }
+        table = recalcTable(tb.table, this.tablePool(), this.memo());
+      }
+      const data = motionData(motion, table);
+      const theme = this.doc ? themeFromDoc(this.doc) : presetTheme(undefined);
+      const ink = theme.colors[this.mode()];
+      const style = {
+        ink: ink.ink,
+        muted: ink.muted,
+        accent: ink.accent,
+        paper: ink.paper,
+      };
+      const { display, print } = renditionsOf(motion);
+      figure.dataset.display = display.kind;
+      figure.dataset.print = print.kind;
+      if (display.kind === "frame")
+        figure.dataset.displayFrame = String(display.n);
+      if (print.kind === "frame") figure.dataset.printFrame = String(print.n);
+      // The player view is always built (poster/frame reuse the
+      // static container; the player is the display default).
+      const view = document.createElement("div");
+      view.className = "motion-view";
+      view.innerHTML = playerSvg(data, style);
+      stage.appendChild(view);
+      if (display.kind === "filmstrip" || print.kind === "filmstrip") {
+        const strip = document.createElement("div");
+        strip.className = "motion-filmstrip";
+        strip.innerHTML = filmstripSvg(data, style);
+        stage.appendChild(strip);
+      }
+      // Screen and print static renditions (poster / frame:N / flowmap)
+      // live in separate containers - they can differ (display: poster
+      // with a flow's print-default flowmap).
+      const staticContent = (r: Rendition): string =>
+        r.kind === "flowmap"
+          ? flowmapSvg(data, style)
+          : r.kind === "trails"
+            ? trailsSvg(data, style)
+            : frameSvg(data, r.kind === "frame" ? r.n : 0, style);
+      const isStatic = (k: string): boolean =>
+        k === "poster" || k === "frame" || k === "flowmap" || k === "trails";
+      if (isStatic(display.kind)) {
+        const stat = document.createElement("div");
+        stat.className = "motion-static";
+        stat.innerHTML = staticContent(display);
+        stage.appendChild(stat);
+      }
+      if (isStatic(print.kind)) {
+        const pstat = document.createElement("div");
+        pstat.className = "motion-print-static";
+        pstat.innerHTML = staticContent(print);
+        stage.appendChild(pstat);
+      }
+      this.showMotionFrame(figure, 0);
+      // The player autoplays and loops - no transport controls.
+      if (display.kind === "player") this.motionPlay(figure);
+    } catch (e) {
+      stage.textContent = `Motion error: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    return figure;
+  }
+
+  /** Show exactly one frame group of a motion figure's player SVG.
+   * Scoped to the player view: filmstrip thumbs and the static
+   * poster/frame renditions also contain .mframe groups and must
+   * stay visible. */
+  private showMotionFrame(figure: HTMLElement, i: number): void {
+    const groups = figure.querySelectorAll<SVGGElement>(".motion-view .mframe");
+    groups.forEach((g, gi) => {
+      g.style.display = gi === i ? "" : "none";
+    });
+    figure.dataset.frame = String(i);
+  }
+
+  private motionPlay(figure: HTMLElement): void {
+    this.motionStop(figure);
+    const n = figure.querySelectorAll(".motion-view .mframe").length;
+    if (n < 2 || figure.dataset.display !== "player") return;
+    figure.dataset.playing = "1";
+    let i = Number(figure.dataset.frame ?? 0);
+    const timer = window.setInterval(() => {
+      i = (i + 1) % n;
+      this.showMotionFrame(figure, i);
+    }, 1000 / 15);
+    this.motionTimers.set(figure, timer);
+  }
+
+  private motionStop(figure: HTMLElement): void {
+    const t = this.motionTimers.get(figure);
+    if (t !== undefined) {
+      window.clearInterval(t);
+      this.motionTimers.delete(figure);
+    }
+    delete figure.dataset.playing;
+  }
+
+  /** The motion figure's inspector bar (the one inspector contract):
+   * Source, display and print rendition, caption - model writes that
+   * re-render the figure in place. Playback itself needs no controls -
+   * the player autoplays and loops. */
+  private buildMotionInspector(
+    figure: HTMLElement,
+    block: Extract<DocBlock, { kind: "motion" }>,
+  ): HTMLElement {
+    const bar = this.figureBar();
+    bar.classList.add("labelled-bar");
+    const motion = block.motion;
+    const rerender = (): void => {
+      const host = figure.parentElement;
+      const fresh = this.renderMotion(
+        block,
+        Number(figure.dataset.blockIndex ?? -1),
+      );
+      if (host) host.replaceChild(fresh, figure);
+      // The bar was open while editing: keep it open on the fresh figure.
+      const nb = fresh.querySelector<HTMLElement>(".folio-inspector");
+      if (nb && !bar.hidden) nb.hidden = false;
+      this.emitChange();
+    };
+
+    const srcSel = document.createElement("select");
+    srcSel.className = "insp-source";
+    srcSel.title = "Source table";
+    if (motion.type === "swarm") {
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "(built-in simulation)";
+      srcSel.appendChild(none);
+    }
+    for (const b of this.doc?.blocks ?? []) {
+      if (b.kind !== "table" || b.table.simple) continue;
+      const o = document.createElement("option");
+      o.value = b.table.id;
+      o.textContent = `@${b.table.id}`;
+      srcSel.appendChild(o);
+    }
+    srcSel.value = motion.source ?? "";
+    srcSel.addEventListener("change", () => {
+      if (srcSel.value === "") delete motion.source;
+      else motion.source = srcSel.value;
+      rerender();
+    });
+
+    // flowmap only exists for flow figures (it needs edges).
+    const renditionOpts =
+      motion.type === "flow"
+        ? ["player", "filmstrip", "flowmap", "trails", "poster"]
+        : ["player", "filmstrip", "trails", "poster"];
+    const mkRendition = (
+      label: string,
+      current: string | undefined,
+      dflt: string,
+    ): HTMLSelectElement => {
+      const sel = document.createElement("select");
+      sel.title = label;
+      const def = document.createElement("option");
+      def.value = "";
+      def.textContent = `default (${dflt})`;
+      sel.appendChild(def);
+      for (const v of renditionOpts) {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = v;
+        sel.appendChild(o);
+      }
+      sel.value = current ?? "";
+      return sel;
+    };
+    const displaySel = mkRendition(
+      "Shown in the document",
+      motion.display,
+      "player",
+    );
+    displaySel.className = "insp-display";
+    displaySel.addEventListener("change", () => {
+      if (displaySel.value === "") delete motion.display;
+      else motion.display = displaySel.value;
+      rerender();
+    });
+    const printSel = mkRendition(
+      "Printed / PDF rendition",
+      motion.print,
+      motion.type === "flow" ? "flowmap" : "filmstrip",
+    );
+    printSel.className = "insp-print";
+    printSel.addEventListener("change", () => {
+      if (printSel.value === "") delete motion.print;
+      else motion.print = printSel.value;
+      rerender();
+    });
+
+    const capInp = document.createElement("input");
+    capInp.className = "insp-caption";
+    capInp.type = "text";
+    capInp.placeholder = "caption";
+    capInp.value = motion.caption ?? "";
+    capInp.addEventListener("change", () => {
+      const v = capInp.value.trim();
+      if (v) motion.caption = v;
+      else delete motion.caption;
+      rerender();
+    });
+    capInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        capInp.dispatchEvent(new Event("change"));
+      }
+    });
+
+    bar.append(
+      labelled("Data", srcSel),
+      labelled("Display", displaySel),
+      labelled("Print", printSel),
+      labelled("Caption", capInp),
+    );
+    const show = (): void => {
+      srcSel.value = motion.source ?? "";
+      displaySel.value = motion.display ?? "";
+      printSel.value = motion.print ?? "";
+      capInp.value = motion.caption ?? "";
+      bar.hidden = false;
+    };
+    figure.addEventListener("mousedown", () => show());
+    return bar;
+  }
+
   /** Each chart's readout, by its holder (it is redrawn in place). */
   private readouts = new WeakMap<
     HTMLElement,
@@ -7665,6 +8004,7 @@ export class FolioDoc extends HTMLElement {
       (b) =>
         b.kind === "table" ||
         b.kind === "chart" ||
+        b.kind === "motion" ||
         b.kind === "diagram" ||
         b.kind === "math" ||
         b.kind === "image" ||
@@ -8072,6 +8412,19 @@ export class FolioDoc extends HTMLElement {
     )) {
       this.drawChart(cf);
     }
+    // Motion figures reading this dataset redraw in place.
+    for (const mf of Array.from(
+      host?.querySelectorAll<HTMLElement>(
+        "figure.folio-motion[data-motion-source]",
+      ) ?? [],
+    )) {
+      if (mf.dataset.motionSource !== tableId) continue;
+      const idx = Number(mf.dataset.blockIndex ?? -1);
+      const b = this.doc?.blocks[idx];
+      if (b?.kind === "motion" && mf.parentElement) {
+        mf.parentElement.replaceChild(this.renderMotion(b, idx), mf);
+      }
+    }
     for (const mf of Array.from(
       host?.querySelectorAll<HTMLElement>("figure.folio-jscad") ?? [],
     )) {
@@ -8117,6 +8470,7 @@ export class FolioDoc extends HTMLElement {
       !block ||
       block.kind === "table" ||
       block.kind === "chart" ||
+      block.kind === "motion" ||
       block.kind === "diagram" ||
       block.kind === "math" ||
       block.kind === "image" ||
@@ -9096,7 +9450,12 @@ export class FolioDoc extends HTMLElement {
     if (idx < 0) return;
     const block = this.doc.blocks[idx];
     if (!block) return;
-    if (block.kind === "table" || block.kind === "chart") return;
+    if (
+      block.kind === "table" ||
+      block.kind === "chart" ||
+      block.kind === "motion"
+    )
+      return;
     if (block.kind === "math") {
       // Math blocks are generated output; never split into one.
       if (

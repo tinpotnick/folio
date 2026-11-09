@@ -3361,6 +3361,20 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     file: "demo/examples/amensister.md",
     blurb: "music strudel amen break breakbeat online samples felix roos",
   },
+  {
+    id: "swarm",
+    title: "A murmuration, simulated",
+    file: "demo/examples/swarm.md",
+    blurb:
+      "motion swarm murmuration flock birds animated play simulation frames python compute animation movement swirl",
+  },
+  {
+    id: "flow",
+    title: "Traffic on a small road network",
+    file: "demo/examples/flow.md",
+    blurb:
+      "motion flow traffic road network edges packets animated diagram quantity speed vehicles filmstrip flowmap",
+  },
 ];
 
 interface PaletteEntry {
@@ -3556,6 +3570,26 @@ function paletteEntries(): PaletteEntry[] {
     action: () => {
       const why = el.insertHeatmap();
       flash(why ?? "Heatmap chart inserted");
+    },
+  });
+  entries.push({
+    title: "Insert a swarm figure (animated)",
+    group: "Command",
+    keywords:
+      "swarm flock boids birds animation motion animated play simulate agents figure insert",
+    action: () => {
+      const why = el.insertMotion("swarm");
+      if (why) flash(why);
+    },
+  });
+  entries.push({
+    title: "Insert a flow figure (animated)",
+    group: "Command",
+    keywords:
+      "flow traffic road network edges packets animated motion diagram figure insert",
+    action: () => {
+      const why = el.insertMotion("flow");
+      if (why) flash(why);
     },
   });
   entries.push({
