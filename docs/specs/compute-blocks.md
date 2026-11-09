@@ -4,7 +4,7 @@
 
 ## Decision
 
-A ```` ```python ```` fence with `data=` and/or `out=` runs as Python
+A ` ```python ` fence with `data=` and/or `out=` runs as Python
 in a sealed Pyodide worker. It READS datasets (`data=`) and PUBLISHES
 variables (`out=`) as the document's datasets and values - it never
 draws its own output. The block is its code; charts, tables and
@@ -15,7 +15,7 @@ inert code, exactly as on GitHub.
 
 - **Model**: `{ kind: "code", lang: "python", info: "data=@a,@b out=x,y" }`
   - the fence round-trips byte for byte. Either key makes it compute
-  (a script may make data from nothing: `out=` alone).
+    (a script may make data from nothing: `out=` alone).
 - **Inputs** (`data=@takings,@slope`): each arrives as a variable of
   its name. A dataset is a `Table` - a list of row dicts, recalculated,
   in document order - with `.col("name")` (a column, as a list) and
@@ -31,8 +31,8 @@ inert code, exactly as on GitHub.
   - number, text, bool, date/datetime -> a value;
   - not set, empty, or anything else -> an error naming it;
   - an id another table, value or chart uses -> an error.
-  Names starting with `_` are never offered. `return` is an error that
-  says what replaced it.
+    Names starting with `_` are never offered. `return` is an error that
+    says what replaced it.
 - **Snapshot** (ADR-0005): the outputs are the run of
   `computed: python` blocks right after the code block -
   `::: table {#fit}` / `::: value {#slope}` - parsed by the engine
@@ -66,7 +66,10 @@ inert code, exactly as on GitHub.
   importScripts, IndexedDB, caches, channels and nested workers are
   gone. One job at a time, fresh variables per job; a 10 s limit from
   when the script starts (not while queued or loading); a stuck job
-  fails alone and the queue moves to a new worker.
+  fails alone and the queue moves to a new worker. A block may raise
+  its own limit with `budget=N` in the fence info (seconds, hard-capped
+  at 120 s) - for a simulation that runs once and publishes a whole
+  frame sequence as a snapshot; nothing ever runs per frame tick.
 - **Runtime**: Pyodide, lazy-loaded in the worker; dev serves it from
   node_modules (`vite.config.ts`, not pre-bundled), a build copies it
   to `dist/pyodide`.
@@ -77,7 +80,7 @@ inert code, exactly as on GitHub.
 
 - Unit: `tests/engine/compute-values.test.ts` (snapshot round trip,
   values in formulas, paths into a value), `tests/compute/
-  evaluate.test.ts` (binding, outputs, errors, `pythonError`).
+evaluate.test.ts` (binding, outputs, errors, `pythonError`).
 - e2e: `tests/e2e/compute.spec.ts` - the example; values in formulas
   and in the source; code and data edits running again with their
   readers following; the dataset browser; errors; unpublishable and

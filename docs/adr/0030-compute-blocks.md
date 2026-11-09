@@ -26,9 +26,9 @@ import - not a figure.
    data). Dots go INTO a thing (`@fit.r3.trend`, `@fit.col.trend`),
    never into its producer. New kinds of thing become new kinds of
    `@name`, never new path levels.
-2. **The block is code.** ```` ```python data=@takings out=fit,slope ````
+2. **The block is code.** ` ```python data=@takings out=fit,slope `
    always renders as an editable, highlighted code block - never
-   replaced by output. A plain ```` ```python ```` fence (no `data=`
+   replaced by output. A plain ` ```python ` fence (no `data=`
    or `out=`) is inert code, exactly as on GitHub.
 3. **In: `data=`.** Each named dataset arrives as a Python variable of
    the same name - a `Table`: a list of row dicts in document order
@@ -66,7 +66,9 @@ import - not a figure.
 7. **Sandbox.** A worker with no network, storage or DOM; the only
    fetch it keeps is the bundled runtime's own files. One script runs
    at a time, each with fresh variables, and a 10 s limit while it
-   runs.
+   runs; a block may set a higher finite `budget=` (capped at 120 s)
+   for a one-shot simulation publishing a frame sequence - never
+   unbounded, never per-tick.
 8. **Engine stays UI-free (ADR-0001).** The snapshot blocks and value
    resolution live in `src/engine/`; the binding, conversion and
    running live in `src/compute/`.

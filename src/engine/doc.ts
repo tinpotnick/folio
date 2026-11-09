@@ -4,7 +4,15 @@
  * frontmatter, prose, headings, table and chart directive blocks.
  * serializeDoc(parseDoc(text)) === text for any canonical doc.
  */
-import type { Audio, Cell, Chart, Image, Table, TableAlign } from "./index.js";
+import type {
+  Audio,
+  Cell,
+  Chart,
+  Image,
+  Motion,
+  Table,
+  TableAlign,
+} from "./index.js";
 
 export interface Frontmatter {
   theme?: string;
@@ -30,6 +38,7 @@ export type DocBlock =
   | { kind: "math"; text: string }
   | { kind: "table"; table: Table }
   | { kind: "chart"; chart: Chart }
+  | { kind: "motion"; motion: Motion }
   | { kind: "diagram"; diagram: { id: string; text: string } }
   | { kind: "image"; image: Image }
   | { kind: "audio"; audio: Audio }
@@ -65,7 +74,8 @@ export interface Doc {
   blocks: DocBlock[];
 }
 
-const DIRECTIVE_RE = /^::: (table|chart|image|audio|value) \{#([^}]+)\}$/;
+const DIRECTIVE_RE =
+  /^::: (table|chart|image|audio|value|motion) \{#([^}]+)\}$/;
 const MERMAID_RE = /^::: mermaid \{#([^}]+)\}$/;
 
 export class ParseError extends Error {
@@ -149,6 +159,8 @@ export function parseDoc(text: string): Doc {
       if (m[1] === "table") doc.blocks.push(parseTableDirective(body, id));
       else if (m[1] === "value") doc.blocks.push(parseValueDirective(body, id));
       else if (m[1] === "chart") doc.blocks.push(parseChartDirective(body, id));
+      else if (m[1] === "motion")
+        doc.blocks.push(parseMotionDirective(body, id));
       else if (m[1] === "audio") doc.blocks.push(parseAudioDirective(body, id));
       else doc.blocks.push(parseImageDirective(body, id));
       i = body.endLine + 1;
@@ -448,6 +460,75 @@ function parseChartDirective(body: DirectiveBody, id: string): DocBlock {
       : {}),
   };
   return { kind: "chart", chart };
+}
+
+const MOTION_KEYS = new Set([
+  "type",
+  "source",
+  "time",
+  "id",
+  "x",
+  "y",
+  "from",
+  "to",
+  "qty",
+  "speed",
+  "seed",
+  "agents",
+  "frames",
+  "width",
+  "height",
+  "display",
+  "print",
+  "caption",
+]);
+/** A motion figure (spec: docs/specs/motion-figures.md):
+ * `::: motion {#flock}` with type/source/column-mapping/sim/rendition
+ * keys. Unknown keys are a parse error, like the image directive. */
+function parseMotionDirective(body: DirectiveBody, id: string): DocBlock {
+  const values: Record<string, string> = {};
+  for (const [k, v] of body.entries) {
+    if (!MOTION_KEYS.has(k)) {
+      throw new ParseError(`Unknown motion key: '${k}'`, 0);
+    }
+    values[k] = v;
+  }
+  if (values["type"] !== "swarm" && values["type"] !== "flow") {
+    throw new ParseError("Motion directive needs type: swarm or flow", 0);
+  }
+  const num = (k: string): number | undefined =>
+    values[k] === undefined ? undefined : Number(values[k]);
+  const seed = num("seed");
+  const agents = num("agents");
+  const frames = num("frames");
+  const width = num("width");
+  const height = num("height");
+  const motion: Motion = {
+    id,
+    type: values["type"] as Motion["type"],
+    ...(values["source"] !== undefined
+      ? { source: values["source"].replace(/^@/, "") }
+      : {}),
+    ...(values["time"] !== undefined ? { time: values["time"] } : {}),
+    ...(values["id"] !== undefined ? { idCol: values["id"] } : {}),
+    ...(values["x"] !== undefined ? { xCol: values["x"] } : {}),
+    ...(values["y"] !== undefined ? { yCol: values["y"] } : {}),
+    ...(values["from"] !== undefined ? { fromCol: values["from"] } : {}),
+    ...(values["to"] !== undefined ? { toCol: values["to"] } : {}),
+    ...(values["qty"] !== undefined ? { qtyCol: values["qty"] } : {}),
+    ...(values["speed"] !== undefined ? { speedCol: values["speed"] } : {}),
+    ...(seed !== undefined ? { seed } : {}),
+    ...(agents !== undefined ? { agents } : {}),
+    ...(frames !== undefined ? { frames } : {}),
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(values["display"] !== undefined ? { display: values["display"] } : {}),
+    ...(values["print"] !== undefined ? { print: values["print"] } : {}),
+    ...(values["caption"] !== undefined
+      ? { caption: unquote(values["caption"]) }
+      : {}),
+  };
+  return { kind: "motion", motion };
 }
 
 function parseImageDirective(body: DirectiveBody, id: string): DocBlock {
@@ -921,6 +1002,8 @@ function serializeBlock(block: DocBlock): string {
         : serializeTable(block.table);
     case "chart":
       return serializeChart(block.chart);
+    case "motion":
+      return serializeMotion(block.motion);
     case "diagram":
       return `::: mermaid {#${block.diagram.id}}\n${block.diagram.text}\n:::`;
     case "image":
@@ -928,6 +1011,30 @@ function serializeBlock(block: DocBlock): string {
     case "audio":
       return serializeAudio(block.audio);
   }
+}
+
+function serializeMotion(m: Motion): string {
+  const lines = [`::: motion {#${m.id ?? "motion"}}`];
+  lines.push(`type: ${m.type}`);
+  if (m.source !== undefined) lines.push(`source: @${m.source}`);
+  if (m.time !== undefined) lines.push(`time: ${m.time}`);
+  if (m.idCol !== undefined) lines.push(`id: ${m.idCol}`);
+  if (m.xCol !== undefined) lines.push(`x: ${m.xCol}`);
+  if (m.yCol !== undefined) lines.push(`y: ${m.yCol}`);
+  if (m.fromCol !== undefined) lines.push(`from: ${m.fromCol}`);
+  if (m.toCol !== undefined) lines.push(`to: ${m.toCol}`);
+  if (m.qtyCol !== undefined) lines.push(`qty: ${m.qtyCol}`);
+  if (m.speedCol !== undefined) lines.push(`speed: ${m.speedCol}`);
+  if (m.seed !== undefined) lines.push(`seed: ${String(m.seed)}`);
+  if (m.agents !== undefined) lines.push(`agents: ${String(m.agents)}`);
+  if (m.frames !== undefined) lines.push(`frames: ${String(m.frames)}`);
+  if (m.width !== undefined) lines.push(`width: ${String(m.width)}`);
+  if (m.height !== undefined) lines.push(`height: ${String(m.height)}`);
+  if (m.display !== undefined) lines.push(`display: ${m.display}`);
+  if (m.print !== undefined) lines.push(`print: ${m.print}`);
+  if (m.caption !== undefined) lines.push(`caption: "${m.caption}"`);
+  lines.push(":::");
+  return lines.join("\n");
 }
 
 function serializeImage(image: Image): string {

@@ -44,6 +44,14 @@ describe("parseComputeInfo", () => {
     expect(parseComputeInfo('title="example"')).toBeNull();
   });
 
+  it("parses a per-block run budget (budget=60) and round-trips it", () => {
+    const b = parseComputeInfo("out=frames budget=60");
+    expect(b).toEqual({ data: [], out: ["frames"], budget: 60 });
+    expect(b === null ? "" : formatComputeInfo(b)).toBe("out=frames budget=60");
+    // budget alone does not make a fence compute
+    expect(parseComputeInfo("budget=60")).toBeNull();
+  });
+
   it("round-trips through formatComputeInfo", () => {
     const binding = parseComputeInfo(
       "data=@budget,@rates out=forecast,sensitivity",

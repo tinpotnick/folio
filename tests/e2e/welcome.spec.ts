@@ -31,7 +31,7 @@ test.describe("welcome page", () => {
     await expect(share).toHaveText("67.9%");
     // Every shipped example is linked from a real list.
     const links = page.locator("#the-doc article > ul li a");
-    await expect(links).toHaveCount(14);
+    await expect(links).toHaveCount(16);
   });
 
   test("an example link opens in place; the wordmark comes home", async ({

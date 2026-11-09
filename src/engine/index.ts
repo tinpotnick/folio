@@ -140,11 +140,49 @@ export interface Chart {
     /** Keep only the first N output rows (after sort). */
     limit?: number;
   };
-  type: "bar" | "line" | "area" | "pie" | "donut" | "scatter";
+  type: "bar" | "line" | "area" | "pie" | "donut" | "scatter" | "heatmap";
   /** Split the value into one series per distinct value of this
    * column (long tables). */
   series?: string;
   /** Stack the series (bar, area) instead of grouping/overlapping. */
   stack?: boolean;
+  caption?: string;
+}
+
+/**
+ * A motion figure (spec: docs/specs/motion-figures.md): a frame
+ * sequence rendered as SVG groups; the open document plays it, print
+ * shows a designed static rendition. Frames are ordinary table rows -
+ * the time axis is a COLUMN (long format), never a nested structure.
+ */
+export interface Motion {
+  id?: string;
+  type: "swarm" | "flow";
+  /** Dataset of frames (swarm: frame/id/x/y rows) or edges (flow:
+   * from/to/qty/speed rows). Absent on swarm: a built-in seeded sim. */
+  source?: string;
+  /** The frame/time column name (default "frame"). Any column can
+   * play this role - it is chosen here, not baked into the model. */
+  time?: string;
+  /** Column mapping, per type (defaults shown). */
+  idCol?: string; // swarm: "agent"
+  xCol?: string; // swarm: "x"
+  yCol?: string; // swarm: "y"
+  fromCol?: string; // flow: "from"
+  toCol?: string; // flow: "to"
+  qtyCol?: string; // flow: "qty"
+  speedCol?: string; // flow: "speed"
+  /** Built-in swarm sim (no source): deterministic seeded vortex murmuration. */
+  seed?: number; // 1
+  agents?: number; // 120
+  frames?: number; // 90
+  width?: number; // 640
+  height?: number; // 360
+  /** In-document rendition: "player" (default) | "filmstrip" |
+   * "flowmap" (flow) | "poster" | "frame:N". */
+  display?: string;
+  /** Print/PDF rendition, same vocabulary. Defaults: swarm
+   * "filmstrip", flow "flowmap". */
+  print?: string;
   caption?: string;
 }

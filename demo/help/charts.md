@@ -41,12 +41,25 @@ caption: "Quarter-on-quarter growth by region"
   with a group set, the plotted columns are the group keys plus the
   aggregates. Example: calls and spend per day, best first -
   `query: {group: [day], agg: {n: count, billed: sum(total_billed)}, sort: {by: billed, order: desc}, limit: 10}`.
-- **type** is `bar`, `line`, `area`, `pie`, `donut`, or
-  `scatter`. Bar/line/area plot the first selected column as
-  the category label and the last as the value; pie and donut
-  slice by the value (non-negative data only — a negative shows
-  as the chart's error text); scatter plots the first selected
-  column as x and the last as y, both numeric.
+- **type** is `bar`, `line`, `area`, `pie`, `donut`,
+  `scatter`, or `heatmap`. Bar/line/area plot the first selected
+  column as the category label and the last as the value; pie and
+  donut slice by the value (non-negative data only — a negative
+  shows as the chart's error text); scatter plots the first
+  selected column as x and the last as y, both numeric. In the
+  chart's bar, **Type** is a row of icons, one per type — click one
+  and the chart redraws in place and the source follows.
+- **heatmap** plots a matrix: the first selected column is the
+  bottom axis, the second the left axis, the last the cell's value
+  (its color). Group by two columns and aggregate —
+  `query: {group: [hour_utc, dow_utc], agg: {posts: count}}` — or
+  select any three columns (repeated pairs sum). A missing
+  combination is a gap, never a zero; cells show their value when
+  they are big enough, and every cell has a hover tooltip. Colors
+  run from a faint tint to the theme's accent, with a small legend
+  naming the value column. **+ Insert › Heatmap chart** (or
+  "heatmap" in the palette) inserts one of the dataset at the
+  caret, grouped by its first two text columns.
 - **caption** is the figure caption.
 
 **Several series**: select more than one value column

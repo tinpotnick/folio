@@ -1972,6 +1972,133 @@
                 </button>
                 <button
                   role="menuitem"
+                  data-insert="Insert a heatmap chart"
+                  title="Insert a heatmap chart"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" stroke="none">
+                    <rect
+                      x="1.5"
+                      y="1.5"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="0.25"
+                    />
+                    <rect
+                      x="6"
+                      y="1.5"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="0.55"
+                    />
+                    <rect
+                      x="10.5"
+                      y="1.5"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="0.9"
+                    />
+                    <rect
+                      x="1.5"
+                      y="6"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="0.4"
+                    />
+                    <rect
+                      x="6"
+                      y="6"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="0.7"
+                    />
+                    <rect
+                      x="10.5"
+                      y="6"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="1"
+                    />
+                    <rect
+                      x="1.5"
+                      y="10.5"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="0.55"
+                    />
+                    <rect
+                      x="6"
+                      y="10.5"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="0.85"
+                    />
+                    <rect
+                      x="10.5"
+                      y="10.5"
+                      width="4"
+                      height="4"
+                      rx="0.6"
+                      fill-opacity="1"
+                    />
+                  </svg>
+                  <span class="mi-label">Heatmap chart</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a swarm figure (animated)"
+                  title="Insert a swarm figure (animated)"
+                >
+                  <svg viewBox="0 0 16 16" fill="currentColor" stroke="none">
+                    <path
+                      d="M3 11l3-3 2 2 4-5 1 1-5 6-2-2-2 2z"
+                      opacity="0.9"
+                    />
+                  </svg>
+                  <span class="mi-label">Swarm figure</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Insert a flow figure (animated)"
+                  title="Insert a flow figure (animated)"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M2 8h9M8.5 4.5L12 8l-3.5 3.5"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                    <circle
+                      cx="2.5"
+                      cy="8"
+                      r="1.4"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                    <circle
+                      cx="13.5"
+                      cy="8"
+                      r="1.4"
+                      fill="currentColor"
+                      stroke="none"
+                    />
+                  </svg>
+                  <span class="mi-label">Flow figure</span>
+                </button>
+                <button
+                  role="menuitem"
                   data-insert="Insert a Vega-Lite chart"
                   title="Insert a Vega-Lite chart"
                 >
@@ -2703,9 +2830,8 @@
         </div>
         <section id="import-pane-file" class="import-pane">
           <p>
-            A CSV, JSON or SQLite file becomes a dataset in this document:
-            typed columns (numbers, dates, text), ready for formulas and
-            charts.
+            A CSV, JSON or SQLite file becomes a dataset in this document: typed
+            columns (numbers, dates, text), ready for formulas and charts.
           </p>
           <div class="import-row">
             <button type="button" class="plain primary" id="btn-import-choose">

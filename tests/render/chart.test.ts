@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  mixHex,
   renderAreaChart,
   renderBarChart,
+  renderHeatmap,
   renderLineChart,
   renderPieChart,
   renderScatterChart,
@@ -149,6 +151,132 @@ describe("renderScatterChart", () => {
         ]),
       ),
     ).toThrow(/two numeric/);
+  });
+});
+
+describe("renderHeatmap", () => {
+  const grid = (rows: [string, string, number][]): QueryResult => ({
+    columns: ["hour", "dow", "posts"],
+    rows,
+  });
+  const style = {
+    paper: "#ffffff",
+    accent: "#2b5d94",
+    text: "#1f2328",
+    textMuted: "#57606a",
+    grid: "#e6e8eb",
+    seriesName: "posts",
+    xTitle: "hour",
+    yTitle: "dow",
+  };
+
+  it("draws one cell per x/y combination; repeated pairs sum", () => {
+    const svg = renderHeatmap(
+      grid([
+        ["0", "0", 2],
+        ["0", "1", 5],
+        ["1", "0", 3],
+        ["1", "0", 4], // repeated pair sums to 7
+      ]),
+      style,
+    ).svg;
+    expect((svg.match(/class="heat-cell"/g) ?? []).length).toBe(3);
+    // The whole matrix is drawn as gaps first: 2x2 cells.
+    expect((svg.match(/class="heat-gap"/g) ?? []).length).toBe(4);
+    // The summed cell's tooltip reads 7.
+    expect(svg).toContain("1, 0: 7");
+  });
+
+  it("orders numeric axes numerically, text axes in first appearance", () => {
+    const svg = renderHeatmap(
+      grid([
+        ["10", "b", 1],
+        ["2", "a", 2],
+        ["1", "b", 3],
+      ]),
+      style,
+    ).svg;
+    // x labels 1, 2, 10 appear in numeric order along the axis.
+    const xTicks = [...svg.matchAll(/class="x-tick"[^>]*>([^<]*)</g)].map(
+      (m) => m[1],
+    );
+    expect(xTicks).toEqual(["1", "2", "10"]);
+    // y labels: first appearance (b before a).
+    const yTicks = [...svg.matchAll(/class="tick-y"[^>]*>([^<]*)</g)]
+      .map((m) => m[1])
+      .filter((t) => t === "a" || t === "b");
+    expect(yTicks).toEqual(["b", "a"]);
+  });
+
+  it("colors run the theme ramp: max cell is the accent, min is accent-18%-into-paper", () => {
+    const svg = renderHeatmap(
+      grid([
+        ["0", "0", 1],
+        ["1", "0", 9],
+      ]),
+      style,
+    ).svg;
+    expect(svg).toContain('fill="#2b5d94"'); // max = accent
+    expect(svg).toContain(`fill="${mixHex("#ffffff", "#2b5d94", 0.18)}"`); // min
+    // The legend names the value column and its extremes.
+    expect(svg).toContain(">posts</text>");
+    expect(svg).toContain(">1</text>");
+    expect(svg).toContain(">9</text>");
+  });
+
+  it("labels cell values when they fit, omits them when the cells are small", () => {
+    const few = renderHeatmap(
+      grid([
+        ["a", "x", 3],
+        ["b", "x", 4],
+      ]),
+      style,
+    ).svg;
+    expect((few.match(/class="v-label"/g) ?? []).length).toBe(2);
+    // 24 x 7 cells: too small for labels.
+    const dense = renderHeatmap(
+      grid(
+        Array.from({ length: 24 }, (_, h) => [String(h), "0", h]) as [
+          string,
+          string,
+          number,
+        ][],
+      ),
+      style,
+    ).svg;
+    expect(dense).not.toContain('class="v-label"');
+  });
+
+  it("a blank value is a gap cell, never a zero", () => {
+    const svg = renderHeatmap(
+      grid([
+        ["0", "0", 5],
+        ["1", "0", Number.NaN as unknown as number],
+      ]),
+      style,
+    ).svg;
+    expect((svg.match(/class="heat-cell"/g) ?? []).length).toBe(1);
+    expect((svg.match(/class="heat-gap"/g) ?? []).length).toBe(2);
+  });
+
+  it("percent values label as percentages, matching the table", () => {
+    const svg = renderHeatmap(grid([["a", "x", 0.216]]), {
+      ...style,
+      valueFormat: "percent",
+    }).svg;
+    expect(svg).toContain("21.6%");
+  });
+
+  it("wrong column count is a visible error, not a broken render", () => {
+    expect(() =>
+      renderHeatmap({ columns: ["a", "b"], rows: [["a", 1]] }, style),
+    ).toThrow(/three columns/);
+  });
+
+  it("axis titles name both category columns", () => {
+    const svg = renderHeatmap(grid([["a", "x", 1]]), style).svg;
+    expect(svg).toContain(">hour</text>");
+    expect(svg).toContain(">dow</text>");
   });
 });
 

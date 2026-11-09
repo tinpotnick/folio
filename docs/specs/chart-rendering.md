@@ -93,7 +93,7 @@ both run through the query (filter and sort apply):
   one series per value column, named after it. (Before this, only the
   LAST column was plotted; no shipped document relied on that.)
 - **A split-by column**: `series: region` with `select: [month,
-  revenue]` gives one series per distinct region, in first-appearance
+revenue]` gives one series per distinct region, in first-appearance
   order, for long (imported) tables. Repeated category/series pairs
   sum; a missing pair is a gap, not a zero.
 
@@ -135,7 +135,50 @@ case over an imported table (a month of CDRs):
   (the output columns derive).
 
 Example: `query: {group: [day], agg: {n: count, billed: sum(total_billed)}, sort: {by: billed, order: desc}, limit: 10}`
+
 - calls and spend per day, best day first, at most ten.
+
+## Heatmap (2026-11-05)
+
+A heatmap plots a two-dimensional table: each query row is one cell.
+The natural query is a grouped one over two category columns and one
+aggregate - `query: {group: [hour_utc, dow_utc], agg: {posts: count}}`
+
+- but a plain three-column `select` works too (repeated x/y pairs
+  sum, like series pairs do).
+
+- **Shape**: `select[0]` is the x axis (bottom), `select[1]` the y
+  axis (left), the last selected column the cell's value. Any other
+  column count is the chart's visible error ("heatmap charts plot
+  three columns: x, y and the value ...").
+- **Axis order**: numeric labels sort numerically (hour 0..23 lands
+  in order), ISO dates chronologically, anything else in
+  first-appearance order.
+- **Cells**: a missing x/y combination is a GAP - paper with a
+  hairline grid cell, never a zero (the blanks contract). A blank
+  aggregate is a gap too. Cell value labels draw only when the cells
+  are big enough (>= 24px wide, >= 14px tall) - a chart never
+  clutters; dense matrices rely on color alone. Each cell carries the
+  browser's own tooltip (`<title>`: "18, Mon: 7"), like scatter
+  points - a heatmap has no single x to read across, so no guide
+  readout.
+- **Color**: the theme's heatmap ramp (the same one Vega-Lite gets in
+  ADR-0022): from the accent mixed 18% into the paper (the minimum,
+  so low cells never vanish on dark paper) to the accent (the
+  maximum). A small gradient legend top-right names the value column
+  (with its unit) and the min/max. Value formatting follows the
+  column's `format` (percent cells label `21.6%`).
+- **Axes**: x tick labels thin like any dense axis (at most eight
+  plus the last); axis titles name both category columns
+  (`select[0]` bottom, `select[1]` rotated left). The value column
+  names the legend, not the y axis.
+- **Identity**: `figure[data-chart-id]` carries the chart block's
+  anchor id, so several charts over one dataset stay addressable.
+- **Insert**: palette "Insert a heatmap chart" / **+ Insert › Heatmap
+  chart** charts the dataset at the caret as a heatmap - grouped by
+  its first two text columns with a row count, or a three-column
+  select when it has fewer. The chart bar's **Type** segmented
+  control has a heatmap icon (a 3x3 cell grid) beside the other six.
 
 ## Acceptance
 
@@ -151,6 +194,13 @@ Example: `query: {group: [day], agg: {n: count, billed: sum(total_billed)}, sort
   percent formats, label collisions and floor placement, negative
   bar label clearance, line fill below the curve, thinning,
   sparse/dense labeling, axis titles, style colors, unique
-  gradients).
+  gradients; heatmap: cells/gaps/summed pairs, axis ordering, ramp
+  ends, label fit threshold, percent labels, wrong-column error).
+- Unit: `tests/engine/subreddit-meta-demo.test.ts` (the demo's
+  hour x day heatmap query covers all 857 posts).
 - e2e: the report example's 24-month charts assert thinned ticks,
   sparse labels, and axis titles (`tests/e2e/demo-data.spec.ts`).
+- e2e: `tests/e2e/heatmap.spec.ts` (matrix, gaps, tooltips, legend,
+  live re-color on a table edit, type-icon switching, the demo's
+  24x7 matrix with thinned ticks, the palette's insert).
+- First-contact eval: `evals/chart-heatmap-first-contact.md`.

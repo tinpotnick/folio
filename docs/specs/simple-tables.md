@@ -6,13 +6,13 @@
 
 Two kinds of table, named in the UI:
 
-| | **Table** (simple) | **Dataset** |
-|---|---|---|
-| Stored as | a standard Markdown pipe table | a `::: table {#id}` directive |
-| Cells | text, exactly as written | typed (text, number, formula, ...) |
-| Extras | none | id, units, formats, formulas, caption, import |
-| Charts and formulas can use it | no | yes, by id |
-| Created by | the Insert table button, "Insert a table" | "Insert a dataset", or "Make it a dataset" |
+|                                | **Table** (simple)                        | **Dataset**                                   |
+| ------------------------------ | ----------------------------------------- | --------------------------------------------- |
+| Stored as                      | a standard Markdown pipe table            | a `::: table {#id}` directive                 |
+| Cells                          | text, exactly as written                  | typed (text, number, formula, ...)            |
+| Extras                         | none                                      | id, units, formats, formulas, caption, import |
+| Charts and formulas can use it | no                                        | yes, by id                                    |
+| Created by                     | the Insert table button, "Insert a table" | "Insert a dataset", or "Make it a dataset"    |
 
 ## Syntax and round-trip
 
@@ -52,7 +52,7 @@ is no caption.
   as number when every non-empty cell is a number, text otherwise.
 - A dataset's bar adds **Chart it**, which inserts a bar chart of
   its first text and first number/formula column right below it.
-  It also has **Convert to simple table**, which converts only when
+  It also has **Convert to table**, which converts only when
   nothing would be lost. Otherwise, pressing it shows the reason
   VISIBLY in the bar (not just in a hover tooltip), naming what
   blocks it: "growth is a formula, and formulas need a dataset",
