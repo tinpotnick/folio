@@ -216,7 +216,7 @@ test.describe("example documents", () => {
     ).toBeVisible();
     // East declined: its bar hangs below the zero baseline.
     const svg = await page
-      .locator('figure[data-chart-source="pl"] svg')
+      .locator('figure[data-chart-source="pl"] .chart-holder svg')
       .first()
       .textContent();
     expect(svg).toContain("-15.3%"); // labeled like the table

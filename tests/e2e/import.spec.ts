@@ -351,7 +351,7 @@ test.describe("imported tables: hidden columns and grouped charts", () => {
     await fig.locator('td[data-row-index="0"]').first().click();
     await fig.locator(".insp-chart").click();
     const chart = page.locator('figure[data-chart-source="calls_2026_03_cdr"]');
-    await expect(chart.locator("svg")).toBeVisible();
+    await expect(chart.locator(".chart-holder svg")).toBeVisible();
     // Open the chart inspector and group by hangup_cause with a count.
     await chart.locator(".chart-holder").click();
     const insp = chart.locator(".folio-inspector");
@@ -359,10 +359,12 @@ test.describe("imported tables: hidden columns and grouped charts", () => {
     await insp.locator(".insp-group").press("Enter");
     await insp.locator(".insp-agg").fill("n=count");
     await insp.locator(".insp-agg").press("Enter");
-    await insp.locator(".insp-type").selectOption("pie");
+    await insp.locator(".insp-type button[data-type='pie']").click();
     // Two causes in the data: NORMAL_CLEARING and NO_ANSWER.
-    await expect(chart.locator("svg")).toContainText("NORMAL_CLEARING");
-    await expect(chart.locator("svg")).toContainText("NO_ANSWER");
+    await expect(chart.locator(".chart-holder svg")).toContainText(
+      "NORMAL_CLEARING",
+    );
+    await expect(chart.locator(".chart-holder svg")).toContainText("NO_ANSWER");
     // The grouped query is in the source; select derives from it.
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();
@@ -392,8 +394,10 @@ test.describe("imported tables: hidden columns and grouped charts", () => {
     await insp.locator(".insp-limit").press("Enter");
     // The chart renders the grouped rows (all top groups are
     // NORMAL_CLEARING), and the grouped query is in the source.
-    await expect(chart.locator("svg")).toBeVisible();
-    await expect(chart.locator("svg")).toContainText("NORMAL_CLEARING");
+    await expect(chart.locator(".chart-holder svg")).toBeVisible();
+    await expect(chart.locator(".chart-holder svg")).toContainText(
+      "NORMAL_CLEARING",
+    );
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();
     expect(md).toContain("group: [hangup_cause, destination_number]");

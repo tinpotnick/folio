@@ -140,7 +140,7 @@ export interface Chart {
     /** Keep only the first N output rows (after sort). */
     limit?: number;
   };
-  type: "bar" | "line" | "area" | "pie" | "donut" | "scatter";
+  type: "bar" | "line" | "area" | "pie" | "donut" | "scatter" | "heatmap";
   /** Split the value into one series per distinct value of this
    * column (long tables). */
   series?: string;

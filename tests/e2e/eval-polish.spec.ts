@@ -133,7 +133,8 @@ test.describe("eval polish", () => {
     const radius = await fig
       .locator(".abc-play")
       .evaluate((b) => getComputedStyle(b).borderTopLeftRadius);
-    expect(radius).toBe("5px");
+    // Header buttons are the bar's controls: the toolbar's 6px.
+    expect(radius).toBe("6px");
     await fig.locator(".abc-play").click();
     await expect(fig.locator(".abc-stop")).toBeEnabled();
     await fig.locator(".abc-stop").click();

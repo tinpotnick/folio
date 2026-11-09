@@ -50,6 +50,134 @@ test.describe("table inspector", () => {
     );
   });
 
+  test("spreadsheet-style bar: column picker + format options in one group, full-width formula row, labelled dataset button", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page
+      .locator(
+        '#the-doc figure[data-table-id="regional-data"] td[data-row-index="0"][data-col-index="3"]',
+      )
+      .click();
+    const bar = inspector(page);
+    const fig = page.locator('#the-doc figure[data-table-id="regional-data"]');
+    await expect(bar).toBeVisible();
+    // The column picker AND the formatting options (visible, type,
+    // unit, format) sit in one bordered group box - the column
+    // editor; its tooltip names the column.
+    const group = bar.locator(".insp-group");
+    await expect(group).toBeVisible();
+    await expect(group.locator(".insp-col")).toBeVisible();
+    await expect(group.locator(".insp-visible")).toBeVisible();
+    await expect(group.locator(".insp-type")).toBeVisible();
+    await expect(group.locator(".insp-unit")).toBeVisible();
+    await expect(group.locator(".insp-format")).toBeVisible();
+    await expect(group).toHaveAttribute("title", /column 'growth'/);
+    // Scoped rows, in order: table-level controls, the caption on its
+    // own full-width line, then the column group and its ƒx row (the
+    // column editor is one contiguous block).
+    const rowOrder = await bar.evaluate((el) =>
+      Array.from(el.children).map((c) => c.className),
+    );
+    expect(rowOrder).toEqual([
+      "insp-table-row",
+      "insp-cap-row",
+      "insp-group",
+      "insp-fx-row",
+    ]);
+    // Row 1 order: id, Open dataset, Convert, then Rows + Chart it as
+    // one pair (they wrap together, never "Chart it" alone).
+    const row1 = bar.locator(".insp-table-row");
+    const controls = await row1.evaluate((el) =>
+      Array.from(el.children)
+        .map((c) => c.className.split(" ")[0] ?? "")
+        .filter((c) => c !== "" && c !== "insp-note"),
+    );
+    expect(controls).toEqual([
+      "insp-kind",
+      "insp-dataset",
+      "insp-convert",
+      "insp-pair",
+    ]);
+    const pair = row1.locator(".insp-pair");
+    await expect(pair.locator(".insp-rows")).toBeVisible();
+    await expect(pair.locator(".insp-chart")).toBeVisible();
+    // Chart it carries its bar-chart icon.
+    await expect(pair.locator(".insp-chart svg")).toBeVisible();
+    // Row 1 fits on ONE line at this page width (one 28px control).
+    const row1Box = await row1.boundingBox();
+    expect(row1Box).not.toBeNull();
+    if (row1Box) expect(row1Box.height).toBeLessThanOrEqual(44);
+    // The caption spans the bar's full width on its own line.
+    const capRow = bar.locator(".insp-cap-row");
+    await expect(capRow).toBeVisible();
+    const barW = (await bar.boundingBox())?.width ?? 0;
+    const capW = (await capRow.locator(".insp-caption").boundingBox())?.width;
+    expect(capW).toBeGreaterThanOrEqual(barW - 20);
+    // The inspected column lights up in the table: the figure carries
+    // data-insp-col and its header gets the accent ring while the bar
+    // is open (text color untouched - contrast holds in every theme).
+    await expect(fig).toHaveAttribute("data-insp-col", "3");
+    const th = fig.locator('th[data-col-index="3"]');
+    const ringOf = () => th.evaluate((el) => getComputedStyle(el).boxShadow);
+    const ringOpen = await ringOf();
+    expect(ringOpen).toContain("inset");
+    const cellBg = await fig
+      .locator('td[data-row-index="0"][data-col-index="3"]')
+      .evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(cellBg).not.toBe("rgba(0, 0, 0, 0)");
+    // The formula bar is a full-width row: the textarea spans the
+    // bar's width and is tall enough to edit a long expression.
+    const fxRow = bar.locator(".insp-fx-row");
+    await expect(fxRow).toBeVisible();
+    const expr = bar.locator(".insp-expr");
+    await expect(expr.evaluate((el) => el.tagName)).resolves.toBe("TEXTAREA");
+    const barBox = await bar.boundingBox();
+    const rowBox = await fxRow.boundingBox();
+    const exprBox = await expr.boundingBox();
+    expect(barBox).not.toBeNull();
+    expect(rowBox).not.toBeNull();
+    expect(exprBox).not.toBeNull();
+    if (barBox && rowBox && exprBox) {
+      expect(rowBox.width).toBeGreaterThanOrEqual(barBox.width - 20);
+      expect(exprBox.height).toBeGreaterThanOrEqual(40);
+    }
+    // A non-formula column keeps the formula row (a spreadsheet's
+    // formula bar never disappears) but disabled, saying how to make
+    // the column a formula.
+    await page
+      .locator(
+        '#the-doc figure[data-table-id="regional-data"] td[data-row-index="0"][data-col-index="1"]',
+      )
+      .click();
+    await expect(fig).toHaveAttribute("data-insp-col", "1");
+    await expect(fxRow).toBeVisible();
+    await expect(expr).toBeDisabled();
+    await expect(expr).toHaveAttribute("placeholder", /formula/);
+    // Switching the type to formula (in the same group box) enables
+    // the row, seeded with 0.
+    await group.locator(".insp-type").selectOption("formula");
+    await expect(expr).toBeEnabled();
+    await expect(expr).toHaveValue("0");
+    // Clicking away hides the bar; the column highlight goes with it.
+    await page
+      .locator("folio-doc p", { hasText: "Growth was strongest" })
+      .click();
+    await expect(bar).toBeHidden();
+    expect(await ringOf()).toBe("none");
+    // The dataset button says what it does.
+    await page
+      .locator(
+        '#the-doc figure[data-table-id="regional-data"] td[data-row-index="0"][data-col-index="1"]',
+      )
+      .click();
+    await expect(bar.locator(".insp-dataset")).toContainText("Open dataset");
+    await expect(bar.locator(".insp-dataset")).toHaveAttribute(
+      "title",
+      /dataset browser/,
+    );
+  });
+
   test("clicking away from the table hides the bar", async ({ page }) => {
     await waitForDocument(page);
     await page
