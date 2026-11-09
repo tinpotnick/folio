@@ -254,3 +254,54 @@ describe("slides (docs/specs/slides.md)", () => {
     }
   });
 });
+
+/**
+ * The chrome style contract (the mechanical traps from PR #138, pinned
+ * so they fail in `just test` instead of in review): the theme CSS is
+ * one template literal, shared inspector-control rules must not use
+ * the `font:` shorthand, one 28px control height, and print hides the
+ * editing furniture including the inspected-column highlight.
+ */
+describe("chrome style contract", () => {
+  it("the built theme CSS never contains a stray backtick", () => {
+    for (const mode of ["light", "dark"] as const) {
+      const css = themeCss(presetTheme("default"), mode);
+      expect(css).not.toContain("`");
+    }
+  });
+
+  it("shared inspector control rules: 28px height, 6px radius, no font shorthand", () => {
+    const css = themeCss(presetTheme("default"), "light");
+    const inputRule =
+      /\.folio-inspector select,[^}]*?input:not\(\[type="checkbox"\]\) \{([^}]*)\}/.exec(
+        css,
+      )?.[1] ?? "";
+    expect(inputRule).toContain("height: 28px");
+    expect(inputRule).toContain("border-radius: 6px");
+    // The shorthand resets font-style and outranks class rules (it
+    // broke .insp-unit's italic) - pinned so it does not return.
+    expect(inputRule).not.toMatch(/\bfont:/);
+    const btnRule = /\.folio-inspector button \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(btnRule).toContain("height: 28px");
+    expect(btnRule).toContain("border-radius: 6px");
+  });
+
+  it("the formula row is a full-width, tall textarea rule", () => {
+    const css = themeCss(presetTheme("default"), "light");
+    const fx =
+      /\.folio-inspector \.insp-fx-row \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(fx).toContain("flex-basis: 100%");
+    const expr =
+      /\.folio-inspector \.insp-expr \{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(expr).toContain("min-height");
+    expect(expr).toContain("resize: vertical");
+  });
+
+  it("print hides the inspector and the inspected-column highlight", () => {
+    const css = themeCss(presetTheme("default"), "light");
+    const print = css.slice(css.indexOf("@media print"));
+    expect(print).toContain(".folio-inspector");
+    expect(print).toContain("figure[data-insp-col] td");
+    expect(print).toContain("figure[data-insp-col] th");
+  });
+});

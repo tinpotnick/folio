@@ -1,12 +1,14 @@
 # AGENTS.md — Standing orders for AI agents working on folio
 
 ## Product in one line
+
 A document-first workspace: semantic Markdown documents where tables
 are typed datasets, charts are queries over them, and the rendered
 output reads like a polished report. Not a notebook — no execution
 affordances, ever.
 
 ## Non-negotiables (see docs/adr/)
+
 1. Markdown is semantic only. NO inline styling in documents, ever.
 2. Style lives in themes; the theme schema is closed and typed.
 3. Documents must render fully offline — external bindings are
@@ -19,6 +21,7 @@ affordances, ever.
    apps (web, desktop, mobile) are hosts of that component.
 
 ## Definition of done
+
 - All tests pass (`just test`), lint and build are green (`just lint`, `just build`)
 - New public behavior has a spec entry in docs/specs/ and, if
   user-visible, an eval case
@@ -36,6 +39,7 @@ affordances, ever.
   the exact failure and what you tried. Do not thrash.
 
 ## Working rules
+
 - Read docs/adr/ before touching anything architectural.
 - Review the spec, not the diff, when unsure of intent.
 - Never introduce a dependency without checking ADR-0007.
@@ -45,3 +49,17 @@ affordances, ever.
   close buttons. See docs/specs/figure-inspectors.md - do not
   add per-inspector dismissal special cases.
 - Specs live in docs/specs/; the sample document is the north star.
+- Chrome CSS traps (learned in PR #138 - see docs/reviewers/
+  ui-design.md for the full list): src/render/theme.ts builds CSS in
+  ONE template literal, so no backticks in its comments; shared
+  control rules set font-family/font-size explicitly, never the
+  `font:` shorthand (it resets font-style and outranks class rules
+  by specificity); icons added to an inspector bar leak into
+  `figure svg` test locators, so scope those to `.chart-holder`;
+  structural table edits go through applyTableAction, which
+  commits+blurs the caret cell first (the re-render's removal-blur
+  otherwise writes the stale cell into the shifted model); never
+  color table header TEXT with the accent (banded themes fail
+  contrast - use a ring/underline and tint the cells); in e2e, after
+  a structural edit, dispatch `contextmenu` on the exact cell
+  locator because the bar-reveal scroll shifts real right-clicks.
