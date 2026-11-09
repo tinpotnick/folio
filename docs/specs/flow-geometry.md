@@ -1,6 +1,49 @@
-# Flow-figure geometry: a nodes table for real map layouts
+# Flow-figure geometry: real layouts for flow figures
 
 ## Status: proposed (2026-11-09)
+
+## Alternatives considered
+
+**A. Nodes table only** (`nodes: @places` below). Explicit, fully
+data-driven, but the author places every node by hand - painful for
+larger graphs, and it duplicates nothing.
+
+**B. Mermaid as the layout engine** (`diagram: @net` on the motion
+block, referencing a `::: mermaid {#net}` block). The edge TABLE
+stays the single source of truth for data (`from, to, qty, speed` -
+frames are still ordinary table rows); the mermaid block provides only
+STRUCTURE + POSITIONS (`graph LR` / `flowchart TD` / ... - block and
+direction choice is the user's). The component renders the mermaid
+SVG once, extracts node centres from its node groups, and rides the
+packets along the table's edges between those centres. Validation:
+every node/edge in the table must exist in the mermaid graph, else a
+visible error (no silent drift between the two). Engine stays pure -
+it stores only the `@net` reference; all mermaid work happens in the
+component, like `drawDiagram` today (bundled, offline, strict).
+
+**C. A `::: mermaid-motion` block whose body is mermaid text with
+labeled edges** (`Market -->|9| Square`). One block, mermaid diagram
+types (incl. sankey for pure flow maps), but edge data leaves the
+table world and parsing mermaid's text syntax in the render layer is
+brittle across diagram types.
+
+**Recommendation: A + B together.** Layout is just "node id -> x,y",
+so flow figures take an optional layout source with three modes:
+circle (default) / `nodes: @places` (explicit map) / `diagram: @net`
+(mermaid auto-layout). Data, frames, renditions and the inspector are
+unchanged in all three - they all read `MotionData.nodes`. C is
+rejected for now: it forks the data model; if sankey-style flow maps
+are wanted later, that is a separate static rendition, not a motion
+layout.
+
+Risks of B, honestly: node positions are extracted from mermaid's
+rendered SVG (node `<g id="flowchart-<id>-<n>">` groups with translate
+transforms + rect sizes), which is mermaid-version-sensitive - pinned
+via the existing `^12.2.0` dependency and unit-tested against a
+fixture SVG; mermaid renders async, so the motion figure re-renders
+when its diagram block changes (dependents, like charts); print
+renditions (flowmap/trails/filmstrip) reuse the same extracted
+positions, computed once per render.
 
 ## Context
 
@@ -70,6 +113,10 @@ Same edge list, hand-placed towns - reads as a map:
 
 ## Rules
 
+- Layout modes: circle (default), `nodes: @places` (this spec's
+  table), `diagram: @net` (mermaid layout, alternatives B above).
+  `nodes:` and `diagram:` are mutually exclusive - a visible parse
+  error if both are set.
 - `nodes:` is optional. An edge naming a node id that is not in the
   nodes table is a visible error; a node in the table with no edges
   is drawn, with no edges.
@@ -81,7 +128,9 @@ Same edge list, hand-placed towns - reads as a map:
   flowmap (print default), trails, poster, frame:N.
 - The motion block's `id:`/`x:`/`y:` keys stay swarm column renames;
   the nodes table's columns are fixed `id, x, y` (the MOTION_KEYS
-  allowlist stays closed; renames can come later if needed).
+  allowlist gains only `nodes` and `diagram`; renames can come later
+  if needed).
 - The directive round-trips byte-identically like every other key.
-- Example: `demo/examples/flow.md` gains the `#places` table and
-  `nodes: @places` on the traffic figure.
+- Examples: `demo/examples/flow.md` gains the `#places` table and
+  `nodes: @places` on the traffic figure; a second example (or the
+  same doc) shows `diagram: @net` with a `graph LR` mermaid block.
