@@ -6,7 +6,7 @@
   units, formulas and a caption. Charts and formulas can only use
   datasets.
 - Click a table to see its kind at the start of its bar. **Make it a
-  dataset** upgrades a table; **Convert to simple table** turns a
+  dataset** upgrades a table; **Convert to table** turns a
   dataset back into a pipe table when nothing would be lost (the
   button says why when it can't). **+ Insert › Dataset** (or
   "dataset" in the palette) inserts one directly.
@@ -18,16 +18,38 @@
   the next cell to continue. A row added this way that you leave
   without typing in goes away again, so pressing Enter to confirm a
   value never leaves an empty row behind.
-- **Add or remove rows and columns**: right-click a cell (Insert row
-  below, Delete row, Insert column right, Delete column), or with
-  the cursor in a cell search Ctrl+K for "insert a row" / "insert a
-  column". A new column is named `new`; click its header to rename it
-  and to choose its type (text, number, date, formula).
+- **Add or remove rows and columns**: right-click a cell (or press
+  Shift+F10 in a cell) for the **context menu** — its top item is
+  **Open the dataset** (the whole table in a full-window spreadsheet
+  view), then clipboard (Cut, Copy, Paste), Insert (row
+  above/below, column left/right), Delete (row, column, clear
+  contents), and Organize (sort the table by this column ascending
+  or descending, hide the column), each with its icon and shortcut,
+  disabled with a reason when it cannot run (a formula column cannot
+  be deleted or cleared; a simple table's columns cannot be hidden).
+  Sorting rewrites the table's rows in the document. The same
+  actions are in the palette: with the cursor in a cell, Ctrl+K
+  "insert a row", "sort", "hide the column", "copy the cell", "open
+  the dataset browser", and so on. A new column is named `new`;
+  click its header to rename it and to choose its type (text,
+  number, date, formula).
 - Clicking any cell or column heading reveals the **table
-  inspector** above the table: the column's name, **visible**
-  checkbox, type, unit, format, the table's caption, and — for
-  formula columns — the ƒx expression, editable in place (the same
-  edit as changing the source by hand). Untick **visible** to hide
+  inspector** above the table, laid out like a spreadsheet — and it
+  shows WHICH column it is editing: the clicked column lights up in
+  the table (accent ring on its header, tinted cells) while the bar
+  is open. The bar's first row is table-level, in a fixed order, on
+  one line: the kind label (truncating if long), **Open dataset**,
+  **Convert to table**, **Rows**, **Chart it**. The **caption** then
+  takes its own full-width line.
+  Then the column editor: one group box holding the column picker and all
+  that column's formatting options (**visible**, type, unit, format),
+  and directly under it a full-width **ƒx row** — together they are
+  the column's own block, nearest the table. The ƒx row is always
+  there, like a spreadsheet's formula bar: a large textarea for the
+  expression (Enter applies, Shift+Enter for a new line), the same
+  edit as changing the source by hand. It enables when the column's
+  type is formula (set it in the same box); until then it is
+  disabled and says so. Untick **visible** to hide
   a column from the rendered table (an import's uuid, say) - the
   column stays in the data: formulas, charts and the dataset
   browser still see it. Faster for several columns: **right-click a
@@ -55,5 +77,5 @@
   sorting (asc, then desc, then unsorted - a view sort, never
   written to the document), and click-to-edit cells (arrow keys
   move the selection, Enter edits). **✕** (or Esc) closes it and
-  returns to the table; the grid button on the table's inspector
-  bar opens it too.
+  returns to the table; the table bar's **Open dataset** button and
+  the context menu's top item open it too.

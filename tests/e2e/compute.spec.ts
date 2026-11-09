@@ -76,10 +76,14 @@ test.describe("Compute blocks", () => {
     await expect(page.locator("#the-doc .folio-computed").first()).toBeHidden();
     // Charts over the outputs, and a formula over @slope.
     await expect(
-      page.locator('#the-doc figure[data-chart-source="fit"] svg'),
+      page.locator(
+        '#the-doc figure[data-chart-source="fit"] .chart-holder svg',
+      ),
     ).toBeVisible();
     await expect(
-      page.locator('#the-doc figure[data-chart-source="projection"] svg'),
+      page.locator(
+        '#the-doc figure[data-chart-source="projection"] .chart-holder svg',
+      ),
     ).toBeVisible();
     await expect(
       page.locator('#the-doc figure[data-table-id="growth"] tbody tr').first(),
@@ -271,10 +275,14 @@ test.describe("Compute blocks", () => {
     await page.locator("#the-doc h1").first().waitFor();
     await readThrough(page);
     await expect(
-      page.locator('#the-doc figure[data-chart-source="fit"] svg'),
+      page.locator(
+        '#the-doc figure[data-chart-source="fit"] .chart-holder svg',
+      ),
     ).toBeVisible();
     await expect(
-      page.locator('#the-doc figure[data-chart-source="projection"] svg'),
+      page.locator(
+        '#the-doc figure[data-chart-source="projection"] .chart-holder svg',
+      ),
     ).toBeVisible();
     await expect(status(page).first()).toContainText(
       "could not load the Python runtime",

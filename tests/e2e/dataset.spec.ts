@@ -62,7 +62,7 @@ test.describe("table viewport", () => {
     // though the figure shows 50.
     await expect(
       page.locator(
-        'figure[data-chart-source="big"] svg rect:not(.readout-band)',
+        'figure[data-chart-source="big"] .chart-holder svg rect:not(.readout-band)',
       ),
     ).toHaveCount(120);
   });

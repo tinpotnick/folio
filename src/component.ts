@@ -21,7 +21,12 @@ import {
   type TablePool,
 } from "@folio/engine/recalc";
 import type { Audio, Cell, Chart, Image, Table } from "@folio/engine/index.js";
-import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
+import {
+  executeQuery,
+  filterIndexes,
+  sortIndexes,
+  sortedRows,
+} from "@folio/engine/query";
 import type { StrudelRepl } from "@strudel/web";
 import {
   STRUDEL_SIZE,
@@ -53,8 +58,10 @@ import { meshToStl } from "./render/stl.js";
 import { sanitizeSvg } from "./render/svg-sanitize.js";
 import { bindVegaData, vegaDataRefs } from "./render/vega-data.js";
 import {
+  mixHex,
   renderAreaChart,
   renderBarChart,
+  renderHeatmap,
   renderLineChart,
   renderPieChart,
   renderScatterChart,
@@ -243,23 +250,6 @@ function flattenList(body: ListBody): string[] {
   ]);
 }
 
-/** Blend two #rrggbb colours: `t` of the way from `a` to `b`. */
-function mixHex(a: string, b: string, t: number): string {
-  const rgb = (h: string): number[] =>
-    [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-  const [x, y] = [rgb(a), rgb(b)];
-  return (
-    "#" +
-    x
-      .map((v, i) =>
-        Math.round(v + ((y[i] ?? v) - v) * t)
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("")
-  );
-}
-
 /**
  * Code languages whose block is DRAWN (spec: docs/specs/
  * drawn-blocks.md): the figure is the picture, the code shows on
@@ -360,9 +350,24 @@ function readoutValue(
 }
 
 /** A bibliography block (docs/specs/citations.md). */
-/** Edits to a table's shape (context menu, palette). */
+/** Edits to a table (context menu, palette): shape, clipboard,
+ * cell contents, sorting, visibility (spec:
+ * docs/specs/table-context-menu.md). */
 export type TableAction =
-  "row-below" | "delete-row" | "column-right" | "delete-column";
+  | "row-above"
+  | "row-below"
+  | "column-left"
+  | "column-right"
+  | "delete-row"
+  | "delete-column"
+  | "clear-cell"
+  | "sort-asc"
+  | "sort-desc"
+  | "hide-column"
+  | "cut-cell"
+  | "copy-cell"
+  | "paste-cell"
+  | "open-dataset";
 
 function isBibLang(lang: string | undefined): boolean {
   return lang === "bibtex" || lang === "biblatex";
@@ -484,6 +489,64 @@ function escapeHtml(s: string): string {
     (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" })[c] ?? c,
   );
 }
+
+/** A 16x16 stroke icon, the toolbar's icon language (index.html
+ * menus): `inner` is the svg's content - paths, rects, circles. */
+function iconSvg(inner: string): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.5");
+  svg.setAttribute("aria-hidden", "true");
+  svg.innerHTML = inner;
+  return svg;
+}
+
+/** Icons for the table context menu (spec:
+ * docs/specs/table-context-menu.md), 16x16 stroke. */
+const MENU_ICONS = {
+  cut: '<circle cx="4" cy="4.5" r="1.8"/><circle cx="4" cy="11.5" r="1.8"/><path d="M5.6 5.8L13.5 13M5.6 10.2L13.5 3" stroke-linecap="round"/>',
+  copy: '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5h-7a1 1 0 0 0-1 1v7" stroke-linecap="round"/>',
+  paste:
+    '<rect x="3.5" y="4" width="9" height="10" rx="1.5"/><path d="M6 4V2.8a.8.8 0 0 1 .8-.8h2.4a.8.8 0 0 1 .8.8V4M5.8 8h4.4M5.8 11h4.4" stroke-linecap="round"/>',
+  "row-above":
+    '<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 7h13"/><path d="M8 5.6V9.4M6.4 7.2L8 5.6l1.6 1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  "row-below":
+    '<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 7h13"/><path d="M8 10.4V6.6M6.4 8.8L8 10.4l1.6-1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  "column-left":
+    '<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M7 3v10"/><path d="M5.6 8h3.8M7.2 6.4L5.6 8l1.6 1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  "column-right":
+    '<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M7 3v10"/><path d="M10.4 8H6.6M8.8 6.4L10.4 8 8.8 9.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  "delete-row":
+    '<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 7h13"/><path d="M9.6 9.4l2.8 2.8M12.4 9.4l-2.8 2.8" stroke-linecap="round"/>',
+  "delete-column":
+    '<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M7 3v10"/><path d="M9.6 6.2l2.8 2.8M12.4 6.2l-2.8 2.8" stroke-linecap="round"/>',
+  "clear-cell":
+    '<path d="M9.8 12.5H14" stroke-linecap="round"/><path d="M10 12.5L4.6 7.1a1.4 1.4 0 0 1 2-2l5.4 5.4-4 2z" stroke-linejoin="round"/>',
+  "sort-asc":
+    '<path d="M4 13V3M4 3L2.2 5M4 3l1.8 2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 5.5h5M7.5 8.5h5M7.5 11.5h5" stroke-linecap="round"/>',
+  "sort-desc":
+    '<path d="M4 3v10M4 13l-1.8-2M4 13l1.8-2" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 5.5h5M7.5 8.5h5M7.5 11.5h5" stroke-linecap="round"/>',
+  "hide-column":
+    '<path d="M2.2 8S4.6 4.2 8 4.2c.9 0 1.8.25 2.5.65M13.8 8s-2.4 3.8-5.8 3.8c-.9 0-1.8-.25-2.5-.65" stroke-linecap="round"/><path d="M3.2 12.8L12.8 3.2" stroke-linecap="round"/><circle cx="8" cy="8" r="1.7"/>',
+  "open-dataset":
+    '<rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><path d="M1.5 6.5h13M6.5 6.5v7M10.5 6.5v7" stroke-linecap="round"/>',
+} as const;
+
+/** Icons for the chart bar's segmented type picker (spec:
+ * docs/specs/figure-inspectors.md), 16x16. */
+const CHART_TYPE_ICONS = {
+  bar: '<path d="M2.5 13.5h11" stroke-linecap="round"/><path d="M4.5 13V8M8 13V4M11.5 13V6.5" stroke-linecap="round"/>',
+  line: '<path d="M2.5 12.5L6 8l3 2.5L13.5 4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="8" r="1.1" fill="currentColor" stroke="none"/><circle cx="13.5" cy="4" r="1.1" fill="currentColor" stroke="none"/>',
+  area: '<path d="M2.5 12.5L6 8l3 2.5L13.5 4v9.5h-11z" fill="currentColor" fill-opacity="0.3" stroke-linejoin="round"/><path d="M2.5 12.5L6 8l3 2.5L13.5 4" stroke-linecap="round" stroke-linejoin="round"/>',
+  pie: '<circle cx="8" cy="8" r="5.5"/><path d="M8 8V2.5M8 8l4.8 2.6" stroke-linecap="round"/>',
+  donut: '<circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="2.2"/>',
+  scatter:
+    '<circle cx="4" cy="11.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="7" cy="6.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="10" cy="9.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12.8" cy="4" r="1.3" fill="currentColor" stroke="none"/>',
+  heatmap:
+    '<rect x="1.5" y="1.5" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.2" stroke="none"/><rect x="6" y="1.5" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.45" stroke="none"/><rect x="10.5" y="1.5" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.7" stroke="none"/><rect x="1.5" y="6" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.35" stroke="none"/><rect x="6" y="6" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.6" stroke="none"/><rect x="10.5" y="6" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.85" stroke="none"/><rect x="1.5" y="10.5" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.5" stroke="none"/><rect x="6" y="10.5" width="4" height="4" rx="0.6" fill="currentColor" fill-opacity="0.75" stroke="none"/><rect x="10.5" y="10.5" width="4" height="4" rx="0.6" fill="currentColor" stroke="none"/>',
+} as const;
 
 /** A figure-bar control with a visible label (its accessible name). */
 function labelled(text: string, control: HTMLElement): HTMLElement {
@@ -1414,6 +1477,7 @@ export class FolioDoc extends HTMLElement {
         const figure = document.createElement("figure");
         figure.dataset.blockIndex = String(idx);
         figure.dataset.chartSource = block.chart.source;
+        if (block.chart.id) figure.dataset.chartId = block.chart.id;
         // Generated output: the SVG and caption never swallow
         // typed text; the inspector inputs are their own region.
         figure.contentEditable = "false";
@@ -4797,10 +4861,9 @@ export class FolioDoc extends HTMLElement {
       return bar;
     }
     kind.textContent = `Dataset · ${block.table.id}`;
-    kind.title =
-      "A dataset: typed columns, units, formulas and a caption; charts and other tables refer to it by id";
+    kind.title = `@${block.table.id} - a dataset: typed columns, units, formulas and a caption; charts and other tables refer to it by id`;
     const blocker = this.simpleBlocker(block.table);
-    convert.textContent = "Convert to simple table";
+    convert.textContent = "Convert to table";
     convert.classList.toggle("blocked", blocker !== null);
     convert.title =
       blocker ??
@@ -4823,7 +4886,10 @@ export class FolioDoc extends HTMLElement {
     const chartBtn = document.createElement("button");
     chartBtn.type = "button";
     chartBtn.className = "insp-chart";
-    chartBtn.textContent = "Chart it";
+    chartBtn.appendChild(iconSvg(CHART_TYPE_ICONS.bar));
+    const chartLbl = document.createElement("span");
+    chartLbl.textContent = "Chart it";
+    chartBtn.appendChild(chartLbl);
     chartBtn.title = "Insert a chart of this dataset below it";
     chartBtn.addEventListener("mousedown", (ev) => {
       ev.preventDefault();
@@ -4904,14 +4970,21 @@ export class FolioDoc extends HTMLElement {
       });
     });
 
+    // The formula bar: a full-width row under the controls, with a
+    // textarea big enough to edit a long expression (Excel's formula
+    // bar, in the bar). Enter applies; Shift+Enter is a newline.
+    const fxRow = document.createElement("div");
+    fxRow.className = "insp-fx-row";
     const fx = document.createElement("span");
     fx.className = "insp-fx";
     fx.textContent = "ƒx";
-
-    const exprInp = document.createElement("input");
+    const exprInp = document.createElement("textarea");
     exprInp.className = "insp-expr";
-    exprInp.type = "text";
+    exprInp.rows = 2;
     exprInp.placeholder = "formula (Jexl)";
+    exprInp.title =
+      "The column's Jexl expression - Enter applies, Shift+Enter for a new line";
+    exprInp.setAttribute("aria-label", "Formula (Jexl)");
     const exprPatch = (): void => {
       const c = Math.max(colSel.selectedIndex, 0);
       const v = exprInp.value.trim();
@@ -4919,11 +4992,12 @@ export class FolioDoc extends HTMLElement {
     };
     exprInp.addEventListener("change", exprPatch);
     exprInp.addEventListener("keydown", (ev) => {
-      if (ev.key === "Enter") {
+      if (ev.key === "Enter" && !ev.shiftKey) {
         ev.preventDefault();
         exprPatch();
       }
     });
+    fxRow.append(fx, exprInp);
 
     const capInp = document.createElement("input");
     capInp.className = "insp-caption";
@@ -4954,11 +5028,17 @@ export class FolioDoc extends HTMLElement {
       }
     });
 
+    // The way into the full-window sheet: a labelled button (a bare
+    // glyph said nothing), same action as the context menu's top item.
     const dsBtn = document.createElement("button");
     dsBtn.className = "insp-dataset";
     dsBtn.type = "button";
-    dsBtn.title = "Open the dataset browser (all rows)";
-    dsBtn.textContent = "▦";
+    dsBtn.title =
+      "Open the dataset browser: the whole table in a full-window spreadsheet view (all rows)";
+    dsBtn.appendChild(iconSvg(MENU_ICONS["open-dataset"]));
+    const dsLabel = document.createElement("span");
+    dsLabel.textContent = "Open dataset";
+    dsBtn.appendChild(dsLabel);
     dsBtn.addEventListener("mousedown", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
@@ -4971,9 +5051,9 @@ export class FolioDoc extends HTMLElement {
     // (spec: docs/specs/dataset-browser.md, "Rows shown").
     const rowsSel = document.createElement("select");
     rowsSel.className = "insp-rows";
-    rowsSel.title = "Rows shown in the page (charts and formulas use them all)";
     rowsSel.setAttribute("aria-label", "Rows shown");
     const dflt = this.tableRowsWindow();
+    rowsSel.title = `Rows shown in the page (charts and formulas use them all); default: ${String(dflt)}`;
     const counts = [5, 10, 25, 50, 100];
     if (
       typeof block.table.show === "number" &&
@@ -4983,7 +5063,7 @@ export class FolioDoc extends HTMLElement {
       counts.sort((a, b) => a - b);
     }
     for (const [value, label] of [
-      ["default", `Rows: default (${String(dflt)})`],
+      ["default", "Rows: default"],
       ...counts.map((n) => [String(n), `Rows: ${String(n)}`]),
       ["all", "Rows: all"],
     ]) {
@@ -5007,22 +5087,34 @@ export class FolioDoc extends HTMLElement {
       if (fresh) this.showInspector(fresh, block, c);
       this.emitChange();
     });
-    bar.append(
-      kind,
-      dsBtn,
-      colSel,
-      visLbl,
-      typeSel,
-      unitInp,
-      fmtSel,
-      fx,
-      exprInp,
-      capInp,
-      rowsSel,
-      chartBtn,
-      convert,
-      note,
-    );
+    // The column picker and all the column's formatting options sit
+    // together in one toolbar-style group box - the box is the
+    // "column editor" (spec: docs/specs/table-inspector.md,
+    // "Spreadsheet-style bar layout"): the picker at its left edge
+    // (the name box), everything inside applies to the picked column.
+    const fmtGroup = document.createElement("div");
+    fmtGroup.className = "insp-group";
+    fmtGroup.setAttribute("role", "group");
+    fmtGroup.append(colSel, visLbl, typeSel, unitInp, fmtSel);
+    // The bar is scoped rows, not a flat wrap (spec:
+    // docs/specs/table-inspector.md, "Spreadsheet-style bar
+    // layout"): row 1 is table-level controls in a fixed order -
+    // id, Open dataset, Convert, Rows, Chart it; then the caption on
+    // its own full-width line; then the column editor (the group box)
+    // and its ƒx row, contiguous, sharing the accent left edge,
+    // nearest the table.
+    const tableRow = document.createElement("div");
+    tableRow.className = "insp-table-row";
+    // Rows + Chart it wrap as ONE unit (never "Chart it" alone on a
+    // second line); the kind label truncates, so row 1 fits a page.
+    const pair = document.createElement("div");
+    pair.className = "insp-pair";
+    pair.append(rowsSel, chartBtn);
+    tableRow.append(kind, dsBtn, convert, pair, note);
+    const capRow = document.createElement("div");
+    capRow.className = "insp-cap-row";
+    capRow.appendChild(capInp);
+    bar.append(tableRow, capRow, fmtGroup, fxRow);
     return bar;
   }
 
@@ -5142,7 +5234,11 @@ export class FolioDoc extends HTMLElement {
    * values, a bar chart (spec: docs/specs/simple-tables.md, "Charts").
    * Returns why it could not, or null on success.
    */
-  chartTable(tableId: string, placeAt?: number): string | null {
+  chartTable(
+    tableId: string,
+    placeAt?: number,
+    heatmap = false,
+  ): string | null {
     if (!this.doc) return "No document";
     const tableAt = this.doc.blocks.findIndex(
       (b) => b.kind === "table" && !b.table.simple && b.table.id === tableId,
@@ -5154,6 +5250,44 @@ export class FolioDoc extends HTMLElement {
     const cols = block.table.columns;
     const value = cols.find((c) => c.type === "number" || c.type === "formula");
     if (!value) return "A chart needs a number or formula column";
+    // A heatmap plots x, y and a value: group by the first two text
+    // columns and count rows (the reporting shape); with fewer than
+    // two text columns, select three columns and let repeated pairs
+    // sum in the renderer.
+    if (heatmap) {
+      const texts = cols.filter((c) => c.type === "text");
+      const a = texts[0];
+      const b = texts[1];
+      if (a && b) {
+        this.spliceChartBlock(
+          at,
+          tableId,
+          {
+            query: {
+              group: [a.name, b.name],
+              agg: { n: "count" },
+              select: [a.name, b.name, "n"],
+            },
+            type: "heatmap",
+          },
+          placeAt !== undefined,
+        );
+        return null;
+      }
+      if (cols.length >= 3) {
+        this.spliceChartBlock(
+          at,
+          tableId,
+          {
+            query: { select: cols.slice(0, 3).map((c) => c.name) },
+            type: "heatmap",
+          },
+          placeAt !== undefined,
+        );
+        return null;
+      }
+      return "A heatmap needs three columns: x, y and a value";
+    }
     // A time series (a date column) is a line over time, every number
     // column a line of its own.
     const dated = cols.find((c) => c.type === "date");
@@ -5169,18 +5303,10 @@ export class FolioDoc extends HTMLElement {
     const splitBy = repeats
       ? cols.find((c) => c !== label && c !== value && c.type === "text")
       : undefined;
-    const ids = new Set(
-      this.doc.blocks.flatMap((b) =>
-        b.kind === "chart" && b.chart.id ? [b.chart.id] : [],
-      ),
-    );
-    let id = `${tableId}-chart`;
-    for (let n = 2; ids.has(id); n++) id = `${tableId}-chart-${String(n)}`;
-    this.doc.blocks.splice(at + 1, 0, {
-      kind: "chart",
-      chart: {
-        id,
-        source: tableId,
+    this.spliceChartBlock(
+      at,
+      tableId,
+      {
         query: {
           select: dated
             ? [
@@ -5194,7 +5320,45 @@ export class FolioDoc extends HTMLElement {
         },
         type: dated ? "line" : "bar",
         ...(splitBy && !dated ? { series: splitBy.name } : {}),
-        ...(block.table.caption ? { caption: block.table.caption } : {}),
+      },
+      placeAt !== undefined,
+    );
+    return null;
+  }
+
+  /** Splice a chart block in after block `at`, dress it with a unique
+   * id and the table's caption, render; when placed at the caret
+   * (palette), carry the caret on below the chart. */
+  private spliceChartBlock(
+    at: number,
+    tableId: string,
+    chart: {
+      query: Chart["query"];
+      type: Chart["type"];
+      series?: string;
+    },
+    carryCaret: boolean,
+  ): void {
+    if (!this.doc) return;
+    const tableBlock = this.doc.blocks.find(
+      (b) => b.kind === "table" && b.table.id === tableId,
+    );
+    const ids = new Set(
+      this.doc.blocks.flatMap((b) =>
+        b.kind === "chart" && b.chart.id ? [b.chart.id] : [],
+      ),
+    );
+    let id = `${tableId}-chart`;
+    for (let n = 2; ids.has(id); n++) id = `${tableId}-chart-${String(n)}`;
+    this.doc.blocks.splice(at + 1, 0, {
+      kind: "chart",
+      chart: {
+        id,
+        source: tableId,
+        ...chart,
+        ...(tableBlock?.kind === "table" && tableBlock.table.caption
+          ? { caption: tableBlock.table.caption }
+          : {}),
       },
     });
     this.render();
@@ -5205,10 +5369,9 @@ export class FolioDoc extends HTMLElement {
       )
       ?.scrollIntoView({ block: "center" });
     // The caret carries on below the chart, so typing is not lost.
-    if (placeAt !== undefined && this.doc.blocks[at + 2]) {
+    if (carryCaret && this.doc.blocks[at + 2]) {
       this.focusBlockStart(at + 2);
     }
-    return null;
   }
 
   /**
@@ -5217,6 +5380,43 @@ export class FolioDoc extends HTMLElement {
    */
   insertChart(): string | null {
     if (!this.doc) return "No document";
+    const at = this.datasetAtCaret();
+    if (!at) {
+      return 'Charts are drawn from a dataset - insert one, or click a table\'s "Make it a dataset"';
+    }
+    // The chart goes where the caret is, not under its dataset.
+    return this.chartTable(
+      at.id,
+      at.placeAt !== undefined ? this.insertionPoint(at.placeAt).at : undefined,
+    );
+  }
+
+  /**
+   * The palette's "Insert a heatmap chart": like insertChart, but the
+   * new chart is a heatmap - grouped by the dataset's first two text
+   * columns with a row count (spec: docs/specs/chart-rendering.md,
+   * "Heatmap"). Returns why it could not.
+   */
+  insertHeatmap(): string | null {
+    if (!this.doc) return "No document";
+    const at = this.datasetAtCaret();
+    if (!at) {
+      return 'A heatmap is drawn from a dataset - insert one, or click a table\'s "Make it a dataset"';
+    }
+    return this.chartTable(
+      at.id,
+      at.placeAt !== undefined ? this.insertionPoint(at.placeAt).at : undefined,
+      true,
+    );
+  }
+
+  /** The dataset at the caret, else the nearest above (else below):
+   * {id, placeAt} - or null when there is none. */
+  private datasetAtCaret(): {
+    id: string;
+    placeAt?: number | undefined;
+  } | null {
+    if (!this.doc) return null;
     const at = this.blockIndexAtCaret();
     const isDataset = (i: number): boolean => {
       const b = this.doc?.blocks[i];
@@ -5241,13 +5441,9 @@ export class FolioDoc extends HTMLElement {
     }
     const b = this.doc.blocks[found];
     if (b?.kind === "table") {
-      // The chart goes where the caret is, not under its dataset.
-      return this.chartTable(
-        b.table.id,
-        at >= 0 ? this.insertionPoint(at).at : undefined,
-      );
+      return { id: b.table.id, placeAt: at >= 0 ? at : undefined };
     }
-    return 'Charts are drawn from a dataset - insert one, or click a table\'s "Make it a dataset"';
+    return null;
   }
 
   /** Dataset -> simple table, only when nothing would be lost. */
@@ -5312,10 +5508,48 @@ export class FolioDoc extends HTMLElement {
     block: Extract<Doc["blocks"][number], { kind: "chart" }>,
   ): HTMLElement {
     const bar = this.figureBar();
+    // The type picker is a segmented icon control, in the toolbar's
+    // visual language (spec: docs/specs/figure-inspectors.md).
+    const typeSeg = document.createElement("div");
+    typeSeg.className = "insp-seg insp-type";
+    typeSeg.setAttribute("role", "group");
+    typeSeg.setAttribute("aria-label", "Chart type");
+    typeSeg.title = "Chart type";
+    const typeBtns: Record<string, HTMLButtonElement> = {};
+    for (const t of [
+      "bar",
+      "line",
+      "area",
+      "pie",
+      "donut",
+      "scatter",
+      "heatmap",
+    ] as const) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "insp-type-btn";
+      b.dataset.type = t;
+      b.title = t;
+      b.setAttribute("aria-label", t);
+      b.setAttribute("aria-pressed", "false");
+      b.appendChild(iconSvg(CHART_TYPE_ICONS[t]));
+      b.addEventListener("mousedown", (ev) => ev.preventDefault());
+      b.addEventListener("click", () => {
+        for (const [name, btn] of Object.entries(typeBtns)) {
+          btn.setAttribute("aria-pressed", String(name === t));
+        }
+        patch();
+      });
+      typeBtns[t] = b;
+      typeSeg.appendChild(b);
+    }
+    const currentType = (): Chart["type"] =>
+      (typeSeg.querySelector<HTMLButtonElement>("button[aria-pressed='true']")
+        ?.dataset.type ?? "bar") as Chart["type"];
     const patch = (): void => {
       const chart = block.chart;
       chart.source = srcSel.value;
-      chart.type = typeSel.value as Chart["type"];
+      chart.type = currentType();
       const groupCols = groupInp.value
         .split(",")
         .map((s) => s.trim())
@@ -5377,24 +5611,6 @@ export class FolioDoc extends HTMLElement {
       srcSel.appendChild(o);
     }
     srcSel.addEventListener("change", patch);
-
-    const typeSel = document.createElement("select");
-    typeSel.className = "insp-type";
-    typeSel.title = "Chart type";
-    for (const t of [
-      "bar",
-      "line",
-      "area",
-      "pie",
-      "donut",
-      "scatter",
-    ] as const) {
-      const o = document.createElement("option");
-      o.value = t;
-      o.textContent = t;
-      typeSel.appendChild(o);
-    }
-    typeSel.addEventListener("change", patch);
 
     const selInp = document.createElement("input");
     selInp.className = "insp-select";
@@ -5531,7 +5747,9 @@ export class FolioDoc extends HTMLElement {
 
     const show = (): void => {
       srcSel.value = block.chart.source;
-      typeSel.value = block.chart.type;
+      for (const [name, btn] of Object.entries(typeBtns)) {
+        btn.setAttribute("aria-pressed", String(name === block.chart.type));
+      }
       selInp.value = block.chart.query.select.join(", ");
       // In a grouped query the columns are derived (group keys + agg
       // names), so the box is read-only there.
@@ -5566,7 +5784,7 @@ export class FolioDoc extends HTMLElement {
     bar.classList.add("labelled-bar");
     bar.append(
       labelled("Data", srcSel),
-      labelled("Type", typeSel),
+      labelled("Type", typeSeg),
       labelled("Columns", selInp),
       labelled("Group by", groupInp),
       labelled("Aggregate", aggInp),
@@ -5659,14 +5877,37 @@ export class FolioDoc extends HTMLElement {
     if (unitInp) unitInp.value = col.unit ?? "";
     const fmtSel = bar.querySelector<HTMLSelectElement>(".insp-format");
     if (fmtSel) fmtSel.value = col.format ?? "default";
-    const exprInp = bar.querySelector<HTMLInputElement>(".insp-expr");
-    if (exprInp) {
-      exprInp.value = col.expr ?? "";
-      exprInp.disabled = col.type !== "formula";
-      exprInp.hidden = col.type !== "formula";
+    // The inspected column lights up in the table itself (CSS:
+    // figure[data-insp-col] + a visible bar) - the bar says WHICH
+    // column the controls configure by highlighting it.
+    figure.dataset.inspCol = String(c);
+    // The group box and the ƒx row name their column in the tooltip
+    // and for screen readers - no visible text plastered on the bar.
+    const fmtGroup = bar.querySelector<HTMLElement>(".insp-group");
+    if (fmtGroup) {
+      fmtGroup.title = `Formatting for column '${col.name}'`;
+      fmtGroup.setAttribute(
+        "aria-label",
+        `Formatting for column '${col.name}'`,
+      );
     }
-    const fx = bar.querySelector<HTMLElement>(".insp-fx");
-    if (fx) fx.hidden = col.type !== "formula";
+    const exprInp = bar.querySelector<HTMLTextAreaElement>(".insp-expr");
+    const fxRow = bar.querySelector<HTMLElement>(".insp-fx-row");
+    if (fxRow) {
+      fxRow.title = `The expression for column '${col.name}' (Jexl)`;
+      fxRow.setAttribute("aria-label", `Expression for column '${col.name}'`);
+    }
+    if (exprInp) {
+      // The formula row is ALWAYS there (a spreadsheet's formula bar
+      // never disappears); it enables when the column is a formula,
+      // and its placeholder says how to make it one.
+      const isFx = col.type === "formula";
+      exprInp.value = isFx ? (col.expr ?? "") : "";
+      exprInp.disabled = !isFx;
+      exprInp.placeholder = isFx
+        ? "formula (Jexl)"
+        : "set the type to formula to give this column an expression";
+    }
     const capInp = bar.querySelector<HTMLInputElement>(".insp-caption");
     if (capInp) capInp.value = block.table.caption ?? "";
     bar.hidden = false;
@@ -6945,6 +7186,7 @@ export class FolioDoc extends HTMLElement {
         textMuted: ink.muted,
         grid: ink.hairline,
         paper: ink.paper,
+        accent: ink.accent,
         valueFormat: valueColumn?.format,
         // Slices keep their category's color through re-sorts.
         colorKeys: (() => {
@@ -6956,11 +7198,21 @@ export class FolioDoc extends HTMLElement {
             : [...new Set(sourceTable.rows.map((r) => String(r[ci] ?? "")))];
         })(),
         xTitle: select[0],
+        // A heatmap's left axis is its second selected column; the
+        // value column names the color legend instead (seriesName).
         yTitle:
+          block.chart.type === "heatmap"
+            ? (select[1] ?? undefined)
+            : valueCol === ""
+              ? undefined
+              : `${valueCol}${unit ? ` (${unit})` : ""}`,
+      };
+      if (block.chart.type === "heatmap") {
+        style.seriesName =
           valueCol === ""
             ? undefined
-            : `${valueCol}${unit ? ` (${unit})` : ""}`,
-      };
+            : `${valueCol}${unit ? ` (${unit})` : ""}`;
+      }
       // Several series (spec: chart-rendering.md "Several series"):
       // more than one value column, or a split-by column, on a bar,
       // line or area chart. Pie/donut/scatter keep the first series.
@@ -7001,11 +7253,13 @@ export class FolioDoc extends HTMLElement {
             ? renderAreaChart(result, style)
             : block.chart.type === "scatter"
               ? renderScatterChart(result, style)
-              : block.chart.type === "pie"
-                ? renderPieChart(result, false, style)
-                : block.chart.type === "donut"
-                  ? renderPieChart(result, true, style)
-                  : renderBarChart(result, style);
+              : block.chart.type === "heatmap"
+                ? renderHeatmap(result, style)
+                : block.chart.type === "pie"
+                  ? renderPieChart(result, false, style)
+                  : block.chart.type === "donut"
+                    ? renderPieChart(result, true, style)
+                    : renderBarChart(result, style);
       holder.innerHTML = rendered.svg;
       if (rendered.readout)
         this.attachReadout(holder, rendered.readout, formatOf);
@@ -7609,6 +7863,19 @@ export class FolioDoc extends HTMLElement {
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     defer = false,
   ): void {
+    // A structural edit (context menu, palette) re-renders the table;
+    // the focused cell's removal-blur then fires on the OLD figure,
+    // and committing it would write the stale text into the SHIFTED
+    // model (an inserted row inheriting the old cell's text). Only
+    // the live cell at these coordinates may commit.
+    if (!td.isConnected) return;
+    const fig = td.closest("figure");
+    if (!fig || !this.shadowRoot?.contains(fig)) return;
+    const live = this.shadowRoot.querySelector(
+      `figure[data-block-index="${String(Number(fig.dataset.blockIndex ?? -1))}"] ` +
+        `td[data-row-index="${td.dataset.rowIndex ?? ""}"][data-col-index="${td.dataset.colIndex ?? ""}"]`,
+    );
+    if (live !== td) return;
     const r = Number(td.dataset.rowIndex);
     const c = Number(td.dataset.colIndex);
     const col = block.table.columns[c];
@@ -8656,6 +8923,26 @@ export class FolioDoc extends HTMLElement {
         return;
       }
     }
+    // The table context menu from the keyboard: Shift+F10 or the
+    // Menu key opens it at the caret's cell (spec:
+    // docs/specs/table-context-menu.md).
+    if (ev.key === "ContextMenu" || (ev.key === "F10" && ev.shiftKey)) {
+      const at = this.tableCellAtCaret();
+      if (at) {
+        ev.preventDefault();
+        const rect = at.cell.getBoundingClientRect();
+        this.showMenu(
+          rect.left + 4,
+          rect.bottom + 4,
+          at.block,
+          at.r,
+          at.c,
+          at.header,
+          at.figure,
+        );
+        return;
+      }
+    }
     // Esc dismisses a code figure's open header early - the one
     // inspector contract (docs/specs/figure-inspectors.md). A drawn
     // figure's source hides with it, so the caret moves past it.
@@ -9337,101 +9624,269 @@ export class FolioDoc extends HTMLElement {
     if (!block || block.kind !== "table") return;
     const tr = cell.closest("tr") as HTMLTableRowElement | null;
     const rowIndex = tr ? Number(tr.dataset.rowIndex ?? 0) : 0;
-    const colIndex =
-      cell.tagName === "TH"
-        ? Number(cell.dataset.colIndex ?? 0)
-        : Number(cell.dataset.colIndex ?? 0);
-    this.showMenu(ev.clientX, ev.clientY, block, rowIndex, colIndex, figure);
+    const colIndex = Number(cell.dataset.colIndex ?? 0);
+    this.showMenu(
+      ev.clientX,
+      ev.clientY,
+      block,
+      rowIndex,
+      colIndex,
+      cell.tagName === "TH",
+      figure,
+    );
   }
 
+  /** One item of the table context menu (spec:
+   * docs/specs/table-context-menu.md). */
   private showMenu(
     x: number,
     y: number,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     r: number,
     c: number,
+    header: boolean,
     figure: HTMLElement,
   ): void {
     this.closeMenu();
     const root = this.shadowRoot;
     if (!root) return;
-    const menu = document.createElement("div");
-    menu.className = "folio-menu folio-table-menu";
-    menu.setAttribute("role", "menu");
-    const addItem = (label: string, fn: () => void): void => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.setAttribute("role", "menuitem");
-      btn.textContent = label;
-      // The press must not reach the document (caret, inspectors).
-      btn.addEventListener("mousedown", (ev) => ev.preventDefault());
-      btn.addEventListener("click", () => {
-        this.closeMenu();
-        fn();
-      });
-      menu.appendChild(btn);
-    };
-    const items: [string, TableAction][] = [
-      ["Insert row below", "row-below"],
-      ["Delete row", "delete-row"],
-      ["Insert column right", "column-right"],
-      ["Delete column", "delete-column"],
+    const t = block.table;
+    const col = t.columns[c];
+    // Only a data cell (not a header, not a formula column) takes
+    // cut/paste/clear - the same guards applyTableAction enforces.
+    const editableCell = !header && col !== undefined && col.type !== "formula";
+    const groups: {
+      label: string;
+      action: TableAction;
+      icon: string;
+      kbd?: string | undefined;
+      disabled?: string | undefined;
+      /** Direct handler instead of applyTableAction (e.g. show a
+       * specific hidden column by index). */
+      run?: (() => void) | undefined;
+    }[][] = [
+      [
+        {
+          // The discoverable way into the full-window sheet.
+          label: "Open the dataset",
+          action: "open-dataset",
+          icon: MENU_ICONS["open-dataset"],
+          disabled: t.simple
+            ? "A simple table has no dataset browser - make it a dataset first"
+            : undefined,
+        },
+      ],
+      [
+        {
+          label: "Cut",
+          action: "cut-cell",
+          icon: MENU_ICONS.cut,
+          kbd: "Ctrl+X",
+          disabled: editableCell
+            ? undefined
+            : "Only an editable data cell can be cut",
+        },
+        {
+          label: "Copy",
+          action: "copy-cell",
+          icon: MENU_ICONS.copy,
+          kbd: "Ctrl+C",
+        },
+        {
+          label: "Paste",
+          action: "paste-cell",
+          icon: MENU_ICONS.paste,
+          kbd: "Ctrl+V",
+          disabled: editableCell
+            ? undefined
+            : "Only an editable data cell can be pasted into",
+        },
+      ],
+      [
+        {
+          label: "Insert row above",
+          action: "row-above",
+          icon: MENU_ICONS["row-above"],
+        },
+        {
+          label: "Insert row below",
+          action: "row-below",
+          icon: MENU_ICONS["row-below"],
+        },
+        {
+          label: "Insert column left",
+          action: "column-left",
+          icon: MENU_ICONS["column-left"],
+        },
+        {
+          label: "Insert column right",
+          action: "column-right",
+          icon: MENU_ICONS["column-right"],
+        },
+      ],
+      [
+        {
+          label: "Delete row",
+          action: "delete-row",
+          icon: MENU_ICONS["delete-row"],
+          disabled:
+            t.rows.length <= 1 ? "A table keeps at least one row" : undefined,
+        },
+        {
+          label: "Delete column",
+          action: "delete-column",
+          icon: MENU_ICONS["delete-column"],
+          disabled:
+            col?.type === "formula"
+              ? "Delete a formula column from its inspector (other formulas may use it)"
+              : t.columns.length <= 1
+                ? "A table keeps at least one column"
+                : undefined,
+        },
+        {
+          label: "Clear contents",
+          action: "clear-cell",
+          icon: MENU_ICONS["clear-cell"],
+          disabled: editableCell
+            ? undefined
+            : "Only an editable data cell can be cleared",
+        },
+      ],
+      [
+        {
+          label: "Sort ascending",
+          action: "sort-asc",
+          icon: MENU_ICONS["sort-asc"],
+          disabled: col === undefined ? "No column here" : undefined,
+        },
+        {
+          label: "Sort descending",
+          action: "sort-desc",
+          icon: MENU_ICONS["sort-desc"],
+          disabled: col === undefined ? "No column here" : undefined,
+        },
+        {
+          label:
+            col === undefined ? "Hide column" : `Hide column '${col.name}'`,
+          action: "hide-column",
+          icon: MENU_ICONS["hide-column"],
+          disabled: t.simple
+            ? "A simple table shows all its columns - make it a dataset to hide some"
+            : col?.hidden
+              ? "Already hidden"
+              : undefined,
+        },
+      ],
     ];
-    for (const [label, action] of items) {
-      addItem(label, () => {
-        this.applyTableAction(block, r, c, action, figure);
-      });
-    }
-    // Column visibility from the same menu (datasets only): one click
-    // hides the column under the pointer - no inspector round-trip.
-    // Hidden columns have no header to right-click, so they are
-    // offered back here (individually up to five, else one "show all").
-    if (!block.table.simple) {
-      const col = block.table.columns[c];
-      if (col && !col.hidden) {
-        addItem(`Hide column '${col.name}'`, () => {
-          this.setColumnHidden(figure, block, c, true);
-        });
-      }
-      const hidden = block.table.columns
+    // Hidden columns have no header to right-click, so the menu offers
+    // them back here (individually up to five, else one "show all") -
+    // merged from the hide/show-column menu work.
+    if (!t.simple) {
+      const hidden = t.columns
         .map((x, i) => ({ x, i }))
         .filter(({ x }) => x.hidden);
       if (hidden.length > 0) {
+        const org = groups[groups.length - 1];
+        if (!org) return;
         if (hidden.length <= 5) {
           for (const { x, i } of hidden) {
-            addItem(`Show column '${x.name}'`, () => {
-              this.setColumnHidden(figure, block, i, false);
+            org.push({
+              label: `Show column '${x.name}'`,
+              action: "hide-column",
+              icon: MENU_ICONS["hide-column"],
+              run: () => this.setColumnsHidden(figure, block, [i], false),
             });
           }
         } else {
-          addItem(`Show all ${String(hidden.length)} hidden columns`, () => {
-            this.setColumnsHidden(
-              figure,
-              block,
-              hidden.map(({ i }) => i),
-              false,
-            );
+          org.push({
+            label: `Show all ${String(hidden.length)} hidden columns`,
+            action: "hide-column",
+            icon: MENU_ICONS["hide-column"],
+            run: () =>
+              this.setColumnsHidden(
+                figure,
+                block,
+                hidden.map(({ i }) => i),
+                false,
+              ),
           });
         }
       }
     }
+    const menu = document.createElement("div");
+    menu.className = "folio-menu folio-table-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Table menu");
+    menu.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.closeMenu();
+      }
+    });
+    groups.forEach((group, gi) => {
+      if (gi > 0) {
+        const sep = document.createElement("div");
+        sep.className = "menu-sep";
+        sep.setAttribute("role", "separator");
+        menu.appendChild(sep);
+      }
+      for (const item of group) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.setAttribute("role", "menuitem");
+        btn.dataset.action = item.action;
+        btn.appendChild(iconSvg(item.icon));
+        const label = document.createElement("span");
+        label.className = "mi-label";
+        label.textContent = item.label;
+        btn.appendChild(label);
+        if (item.kbd) {
+          const kbd = document.createElement("span");
+          kbd.className = "menu-kbd";
+          kbd.textContent = item.kbd;
+          btn.appendChild(kbd);
+        }
+        if (item.disabled) {
+          btn.disabled = true;
+          btn.title = item.disabled;
+          btn.setAttribute("aria-disabled", "true");
+        } else {
+          btn.title = item.label;
+        }
+        // The press must not reach the document (caret, inspectors).
+        btn.addEventListener("mousedown", (ev) => ev.preventDefault());
+        btn.addEventListener("click", () => {
+          this.closeMenu();
+          if (item.run) item.run();
+          else this.applyTableAction(block, r, c, item.action, figure, header);
+        });
+        menu.appendChild(btn);
+      }
+    });
     // Outside the editable article (its handlers must not see the
-    // menu), fixed at the pointer.
-    menu.style.left = `${String(Math.min(x, window.innerWidth - 180))}px`;
-    menu.style.top = `${String(Math.min(y, window.innerHeight - 170))}px`;
+    // menu), fixed at the pointer - clamped into the window once the
+    // menu's real size is known.
+    menu.style.left = "0px";
+    menu.style.top = "0px";
     root.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${String(Math.max(8, Math.min(x, window.innerWidth - rect.width - 8)))}px`;
+    menu.style.top = `${String(Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)))}px`;
     this.menu = menu;
     setTimeout(() => {
       document.addEventListener("pointerdown", this.menuCloser, {
         once: true,
       });
+      document.addEventListener("keydown", this.menuKeyCloser);
     });
   }
 
   /**
-   * One edit to a table's shape - from the context menu or the palette
-   * ("Insert a column", ...). A formula column cannot be deleted this
-   * way (other formulas may read it). Returns why not, or null.
+   * One edit to a table - from the context menu or the palette
+   * ("Insert a column", "Sort ascending", ...). A formula column
+   * cannot be deleted or cleared this way (other formulas may read
+   * it). Returns why not, or null.
    */
   private applyTableAction(
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
@@ -9439,9 +9894,53 @@ export class FolioDoc extends HTMLElement {
     c: number,
     action: TableAction,
     figure: HTMLElement,
+    header = false,
   ): string | null {
     const t = block.table;
+    const col = t.columns[c];
+    // A structural edit must not lose a typed-but-uncommitted cell,
+    // and must not let the re-render's removal-blur commit the stale
+    // cell into the SHIFTED model (an inserted row inheriting the old
+    // cell's text): commit the caret's cell and drop its focus first,
+    // while the model still matches the DOM.
+    this.commitCaretCell();
+    const active = this.shadowRoot?.activeElement;
+    if (active instanceof HTMLElement) active.blur();
+
+    // Clipboard and visibility are not shape edits; they get their
+    // own paths (hide re-shows the inspector on the column).
+    if (
+      action === "cut-cell" ||
+      action === "copy-cell" ||
+      action === "paste-cell"
+    ) {
+      return this.applyCellClipboard(block, r, c, action, figure, header);
+    }
+    if (action === "hide-column") {
+      if (t.simple) {
+        return "A simple table shows all its columns - make it a dataset to hide some";
+      }
+      if (!col) return "No column here";
+      if (col.hidden) return null;
+      this.patchColumn(figure, block, c, { hidden: true });
+      return null;
+    }
+    if (action === "open-dataset") {
+      if (t.simple) {
+        return "A simple table has no dataset browser - make it a dataset first";
+      }
+      this.openDataset(t.id);
+      return null;
+    }
+
     switch (action) {
+      case "row-above":
+        t.rows.splice(
+          r,
+          0,
+          t.columns.map(() => ""),
+        );
+        break;
       case "row-below":
         t.rows.splice(
           r + 1,
@@ -9453,22 +9952,54 @@ export class FolioDoc extends HTMLElement {
         if (t.rows.length <= 1) return "A table keeps at least one row";
         t.rows.splice(r, 1);
         break;
+      case "column-left":
       case "column-right": {
-        const names = new Set(t.columns.map((col) => col.name.toLowerCase()));
+        const at = action === "column-left" ? c : c + 1;
+        const names = new Set(t.columns.map((cc) => cc.name.toLowerCase()));
         let name = "new";
         for (let i = 2; names.has(name); i++) name = `new_${String(i)}`;
-        t.columns.splice(c + 1, 0, { name, type: "text" });
-        t.rows.forEach((row) => row.splice(c + 1, 0, ""));
+        t.columns.splice(at, 0, { name, type: "text" });
+        t.rows.forEach((row) => row.splice(at, 0, ""));
         break;
       }
       case "delete-column": {
-        const col = t.columns[c];
         if (col?.type === "formula") {
           return "Delete a formula column from its inspector (other formulas may use it)";
         }
         if (t.columns.length <= 1) return "A table keeps at least one column";
         t.columns.splice(c, 1);
         t.rows.forEach((row) => row.splice(c, 1));
+        break;
+      }
+      case "clear-cell": {
+        if (!col) return "No column here";
+        if (col.type === "formula") {
+          return "A formula cell is computed - edit its ƒx in the inspector";
+        }
+        const row = t.rows[r];
+        if (row) row[c] = "";
+        break;
+      }
+      case "sort-asc":
+      case "sort-desc": {
+        if (!col) return "No column here";
+        // A formula column sorts by what it computes, so recalculate
+        // first (and surface a broken formula as the reason).
+        try {
+          const recalced =
+            col.type === "formula"
+              ? recalcTable(t, this.tablePool(), this.memo())
+              : undefined;
+          t.rows = sortedRows(
+            t,
+            col.name,
+            action === "sort-asc" ? "asc" : "desc",
+            recalced,
+          );
+        } catch (e) {
+          return e instanceof Error ? e.message : String(e);
+        }
+        this.forgetRecalc();
         break;
       }
     }
@@ -9498,20 +10029,94 @@ export class FolioDoc extends HTMLElement {
     this.emitChange();
   }
 
-  private setColumnHidden(
-    figure: HTMLElement,
+  /** The component's own clipboard for cell cut/copy/paste (context
+   * menu, palette): always works - offline, in tests, in WebKitGTK.
+   * The system clipboard is written best-effort on copy/cut and read
+   * best-effort on paste when the internal buffer is empty. */
+  private cellClipboard = "";
+
+  /** Cut/copy/paste of the cell at (r, c) - see cellClipboard. */
+  private applyCellClipboard(
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    r: number,
     c: number,
-    hidden: boolean,
-  ): void {
-    this.setColumnsHidden(figure, block, [c], hidden);
+    action: "cut-cell" | "copy-cell" | "paste-cell",
+    figure: HTMLElement,
+    header = false,
+  ): string | null {
+    const t = block.table;
+    const col = t.columns[c];
+    if (!col) return "No column here";
+    const row = t.rows[r];
+    if (action === "copy-cell" || action === "cut-cell") {
+      if (action === "cut-cell" && header) {
+        return "A header is renamed in place - click its name";
+      }
+      let text: string;
+      if (header) {
+        text = col.name;
+      } else if (col.type === "formula") {
+        // Copy what the formula computes, not its source.
+        try {
+          text = String(
+            recalcTable(t, this.tablePool(), this.memo()).rows[r]?.[c] ?? "",
+          );
+        } catch {
+          text = String(row?.[c] ?? "");
+        }
+      } else {
+        text = String(row?.[c] ?? "");
+      }
+      this.cellClipboard = text;
+      void navigator.clipboard?.writeText(text).catch(() => {});
+      if (action === "cut-cell") {
+        if (col.type === "formula") {
+          return "A formula cell is computed - edit its ƒx in the inspector";
+        }
+        if (row) row[c] = "";
+        this.refreshTableBlock(figure, block);
+        this.emitChange();
+      }
+      return null;
+    }
+    // paste-cell
+    if (header) return "A header is renamed in place - click its name";
+    if (col.type === "formula") {
+      return "A formula cell is computed - edit its ƒx in the inspector";
+    }
+    if (!row) return "No row here";
+    const put = (text: string): void => {
+      const v = text.replace(/\s+$/, "");
+      if (v === "") return;
+      const n = Number(v);
+      row[c] =
+        col.type === "number" && v.trim() !== "" && !Number.isNaN(n) ? n : v;
+      this.refreshTableBlock(figure, block);
+      this.emitChange();
+    };
+    if (this.cellClipboard !== "") {
+      put(this.cellClipboard);
+      return null;
+    }
+    // Nothing cut or copied in folio yet: try the system clipboard
+    // (best-effort; the permission may be denied).
+    void navigator.clipboard
+      ?.readText()
+      .then(put)
+      .catch(() => {});
+    return null;
   }
 
-  /**
-   * The palette's table edits act on the table cell at the caret.
-   * Returns why not, or null.
-   */
-  tableActionAtCaret(action: TableAction): string | null {
+  /** The table cell at the caret, with its model coordinates - the
+   * palette's table actions and the keyboard-opened context menu. */
+  private tableCellAtCaret(): {
+    block: Extract<Doc["blocks"][number], { kind: "table" }>;
+    r: number;
+    c: number;
+    header: boolean;
+    figure: HTMLElement;
+    cell: HTMLElement;
+  } | null {
     const at = this.caretPoint();
     const el =
       at && (at.node instanceof Element ? at.node : at.node.parentElement);
@@ -9521,15 +10126,30 @@ export class FolioDoc extends HTMLElement {
     const figure = cell?.closest<HTMLElement>("figure[data-table-id]");
     const block =
       figure && this.doc?.blocks[Number(figure.dataset.blockIndex ?? -1)];
-    if (!cell || !figure || block?.kind !== "table") {
-      return "Click into a table cell first";
-    }
+    if (!cell || !figure || block?.kind !== "table") return null;
     const tr = cell.closest<HTMLElement>("tr");
     const r = Number(tr?.dataset.rowIndex ?? cell.dataset.rowIndex ?? 0);
     const c = Number(
       cell.dataset.colIndex ?? (cell as HTMLTableCellElement).cellIndex,
     );
-    return this.applyTableAction(block, r, c, action, figure);
+    return { block, r, c, header: cell.tagName === "TH", figure, cell };
+  }
+
+  /**
+   * The palette's table edits act on the table cell at the caret.
+   * Returns why not, or null.
+   */
+  tableActionAtCaret(action: TableAction): string | null {
+    const at = this.tableCellAtCaret();
+    if (!at) return "Click into a table cell first";
+    return this.applyTableAction(
+      at.block,
+      at.r,
+      at.c,
+      action,
+      at.figure,
+      at.header,
+    );
   }
 
   /**
@@ -9552,6 +10172,18 @@ export class FolioDoc extends HTMLElement {
     }
     this.showInspector(figure, block, 0);
     figure.querySelector<HTMLSelectElement>(".insp-rows")?.focus();
+    return null;
+  }
+
+  /** Palette entry: open the dataset browser for the table at the
+   * caret (the context menu's top item is the same action). */
+  openDatasetAtCaret(): string | null {
+    const at = this.tableCellAtCaret();
+    if (!at) return "Click into a table first";
+    if (at.block.table.simple) {
+      return "A simple table has no dataset browser - make it a dataset first";
+    }
+    this.openDataset(at.block.table.id);
     return null;
   }
 
@@ -9579,7 +10211,14 @@ export class FolioDoc extends HTMLElement {
     this.closeMenu();
   };
 
+  /** Esc closes an open menu even when the focus is in the
+   * document, not the menu (the keyboard-opened menu's case). */
+  private menuKeyCloser = (ev: Event): void => {
+    if (ev instanceof KeyboardEvent && ev.key === "Escape") this.closeMenu();
+  };
+
   private closeMenu(): void {
+    document.removeEventListener("keydown", this.menuKeyCloser);
     if (this.menu) {
       this.menu.remove();
       this.menu = null;

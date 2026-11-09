@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { executeQuery, filterIndexes, sortIndexes } from "@folio/engine/query";
+import {
+  executeQuery,
+  filterIndexes,
+  sortIndexes,
+  sortedRows,
+} from "@folio/engine/query";
+import { recalcTable } from "@folio/engine/recalc";
 import type { Chart, Table } from "@folio/engine";
 
 const table: Table = {
@@ -284,6 +290,69 @@ describe("filterIndexes / sortIndexes (dataset browser primitives)", () => {
     expect(sortIndexes(table, "v", "desc")).toEqual([1, 2, 0]);
     expect(sortIndexes(table, "v", "asc")).toEqual([0, 2, 1]);
     expect(table.rows[0]).toEqual(["North", 10]);
+  });
+});
+
+describe("sortedRows (the context menu's model sort, spec: docs/specs/table-context-menu.md)", () => {
+  const table: Table = {
+    id: "t",
+    columns: [
+      { name: "region", type: "text" },
+      { name: "v", type: "number" },
+    ],
+    rows: [
+      ["North", 10],
+      ["South", 40],
+      ["Midlands", 20],
+      ["East", ""],
+    ],
+  };
+
+  it("reorders rows, blanks last, without mutating the table", () => {
+    const asc = sortedRows(table, "v", "asc");
+    expect(asc.map((r) => r[0])).toEqual([
+      "North",
+      "Midlands",
+      "South",
+      "East",
+    ]);
+    const desc = sortedRows(table, "v", "desc");
+    expect(desc.map((r) => r[0])).toEqual([
+      "South",
+      "Midlands",
+      "North",
+      "East",
+    ]);
+    expect(table.rows[0]).toEqual(["North", 10]);
+  });
+
+  it("sorts text columns collated, and sorts by computed values when given the recalculated table", () => {
+    const t: Table = {
+      id: "t2",
+      columns: [
+        { name: "name", type: "text" },
+        { name: "base", type: "number" },
+        { name: "double", type: "formula", expr: "base * 2" },
+      ],
+      rows: [
+        ["pear", 3, ""],
+        ["apple", 10, ""],
+        ["fig", 1, ""],
+      ],
+    };
+    expect(sortedRows(t, "name", "asc").map((r) => r[0])).toEqual([
+      "apple",
+      "fig",
+      "pear",
+    ]);
+    // Raw formula cells are empty - sorting by them needs the
+    // recalculated table (what the component passes).
+    const recalced = recalcTable(t);
+    expect(sortedRows(t, "double", "desc", recalced).map((r) => r[0])).toEqual([
+      "apple",
+      "pear",
+      "fig",
+    ]);
   });
 });
 

@@ -112,8 +112,8 @@ test.describe("chart inspector", () => {
     await figure.locator(".chart-holder").click();
     const insp = figure.locator(".folio-inspector");
     await expect(insp).toBeVisible();
-    await insp.locator(".insp-type").selectOption("line");
-    await expect(figure.locator("svg polyline")).toBeVisible();
+    await insp.locator(".insp-type button[data-type='line']").click();
+    await expect(figure.locator(".chart-holder svg polyline")).toBeVisible();
     await page.locator("#btn-markdown").click();
     expect(await page.locator("#editor").inputValue()).toContain("type: line");
   });
@@ -130,8 +130,10 @@ test.describe("chart inspector", () => {
     await insp.locator(".insp-filter").fill("q2 > 400");
     await insp.locator(".insp-filter").press("Enter");
     // Only North passes the filter.
-    await expect(figure.locator("svg")).toContainText("North");
-    await expect(figure.locator("svg")).not.toContainText("South");
+    await expect(figure.locator(".chart-holder svg")).toContainText("North");
+    await expect(figure.locator(".chart-holder svg")).not.toContainText(
+      "South",
+    );
     await page.locator("#btn-markdown").click();
     expect(await page.locator("#editor").inputValue()).toContain(
       'filter: "q2 > 400"',
@@ -205,8 +207,10 @@ test.describe("math and diagram inspectors", () => {
     await expect(insp).toBeVisible();
     await insp.locator("textarea").fill("graph TD\n  C --> D");
     await insp.locator("textarea").press("Enter");
-    await expect(figure.locator("svg")).toBeVisible({ timeout: 10_000 });
-    const svg = await figure.locator("svg").textContent();
+    await expect(figure.locator(".diagram-holder svg")).toBeVisible({
+      timeout: 10_000,
+    });
+    const svg = await figure.locator(".diagram-holder svg").textContent();
     expect(svg).toContain("C");
     await page.locator("#btn-markdown").click();
     expect(await page.locator("#editor").inputValue()).toContain(
@@ -256,14 +260,16 @@ type: pie
     );
     await figure.locator(".chart-holder").click();
     const insp = figure.locator(".folio-inspector");
-    const options = insp.locator(".insp-type option");
-    await expect(options).toHaveCount(6);
-    await insp.locator(".insp-type").selectOption("donut");
+    const types = insp.locator(".insp-type button");
+    await expect(types).toHaveCount(7);
+    await insp.locator(".insp-type button[data-type='donut']").click();
     // A donut is a pie (3 slices for 3 regions) with a
     // punched-out white center.
-    await expect(figure.locator("svg path")).toHaveCount(3);
+    await expect(figure.locator(".chart-holder svg path")).toHaveCount(3);
     // The hole is the page's own paper (the theme's, per mode).
-    await expect(figure.locator("svg circle[fill='#ffffff']")).toHaveCount(1);
+    await expect(
+      figure.locator(".chart-holder svg circle[fill='#ffffff']"),
+    ).toHaveCount(1);
     await page.locator("#btn-markdown").click();
     expect(await page.locator("#editor").inputValue()).toContain("type: donut");
   });

@@ -11,12 +11,26 @@ steps:
   - Click the region column's header name, type "area" over it,
     and press Enter.
   - Click into a paragraph.
+  - Click a q2 cell again; in the bar, click "Open dataset" and
+    close the browser with Esc.
 expected:
   - The bar appears above the table the moment a cell is clicked,
-    showing the column's name, type, unit, format, and - for
-    formula columns - the ƒx expression.
+    and the clicked column lights up in the table (accent ring on
+    its header, tinted cells) while the bar is open. The bar's rows
+    are scoped: row 1 is table-level in a fixed order on one line
+    (kind, "Open dataset", "Convert to table", Rows, Chart it — Rows
+    and Chart it wrap together if the page is narrow, so Chart it is
+    never alone); the caption takes the next full-width line; then
+    the column editor —
+    one group box with the column picker and the formatting options
+    (visible, type, unit, format), its tooltip naming the column,
+    and directly under it the always-present full-width ƒx row with
+    a large textarea (disabled until the column's type is formula,
+    then enabled and seeded with 0).
   - Editing the expression recalculates the whole column live and
     the Markdown source shows the new expression.
+  - The "Open dataset" button opens the full-window dataset browser
+    for the table; Esc closes it back onto the table.
   - The unit appears in the column header ("q2 (£m)") without
     hovering, in italic, and the source reflects it. The unit is
     read-only: clicking the header never lets you type into it.

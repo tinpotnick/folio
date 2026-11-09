@@ -3303,6 +3303,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
       "sales quarterly review report revenue regions pipeline heatmap stacked",
   },
   {
+    id: "subreddit-meta",
+    title: "r/datavisualization, visualized",
+    file: "demo/examples/subreddit-meta.md",
+    blurb:
+      "reddit subreddit meta dataset scores upvotes histogram top posts by hour flair pie import",
+  },
+  {
     id: "design-review",
     title: "Bracket design review",
     file: "demo/examples/design-review.md",
@@ -3542,6 +3549,16 @@ function paletteEntries(): PaletteEntry[] {
     },
   });
   entries.push({
+    title: "Insert a heatmap chart",
+    group: "Command",
+    keywords:
+      "heatmap heat map matrix cells grid calendar hour day activity density chart insert group count",
+    action: () => {
+      const why = el.insertHeatmap();
+      flash(why ?? "Heatmap chart inserted");
+    },
+  });
+  entries.push({
     title: "Insert a Vega-Lite chart",
     group: "Command",
     keywords:
@@ -3633,9 +3650,19 @@ function paletteEntries(): PaletteEntry[] {
   });
   for (const [title, action, words] of [
     [
+      "Insert a row above",
+      "row-above",
+      "add row new record line above table dataset",
+    ],
+    [
       "Insert a row below",
       "row-below",
       "add row new record line below table dataset",
+    ],
+    [
+      "Insert a column to the left",
+      "column-left",
+      "add column new field left table dataset",
     ],
     [
       "Insert a column to the right",
@@ -3647,6 +3674,41 @@ function paletteEntries(): PaletteEntry[] {
       "Delete the column",
       "delete-column",
       "remove column delete field table dataset",
+    ],
+    [
+      "Clear the cell's contents",
+      "clear-cell",
+      "empty blank clear cell value contents table dataset",
+    ],
+    [
+      "Sort the table by the caret's column, ascending",
+      "sort-asc",
+      "sort ascending a-z smallest first order rows column table dataset",
+    ],
+    [
+      "Sort the table by the caret's column, descending",
+      "sort-desc",
+      "sort descending z-a largest first order rows column table dataset",
+    ],
+    [
+      "Hide the column at the caret",
+      "hide-column",
+      "hide column visible show display fewer width noise table dataset",
+    ],
+    [
+      "Copy the cell at the caret",
+      "copy-cell",
+      "copy cell value clipboard table dataset",
+    ],
+    [
+      "Cut the cell at the caret",
+      "cut-cell",
+      "cut cell clipboard table dataset",
+    ],
+    [
+      "Paste into the cell at the caret",
+      "paste-cell",
+      "paste cell clipboard value table dataset",
     ],
   ] as const) {
     entries.push({
@@ -3686,6 +3748,16 @@ function paletteEntries(): PaletteEntry[] {
       "columns hide show visible display table dataset caret uuid noise fewer width",
     action: () => {
       const why = el.focusTableColumns();
+      if (why) flash(why);
+    },
+  });
+  entries.push({
+    title: "Open the dataset browser for the table at the caret",
+    group: "Command",
+    keywords:
+      "open dataset browser spreadsheet sheet grid all rows full window table caret view browse",
+    action: () => {
+      const why = el.openDatasetAtCaret();
       if (why) flash(why);
     },
   });

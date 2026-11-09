@@ -1441,34 +1441,13 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .folio-inspector .insp-convert {
       flex: none;
       margin-left: auto;
-      font: inherit;
-      font-size: 12px;
-      border: 1px solid var(--folio-rule-strong);
-      background: var(--folio-input-bg);
-      color: var(--folio-ink);
-      border-radius: 5px;
-      padding: 3px 8px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-    .folio-inspector .insp-convert:hover:not(:disabled) {
-      background: var(--folio-hover);
     }
     .folio-inspector .insp-convert.blocked {
       opacity: 0.6;
     }
     .folio-inspector .insp-chart {
       flex: none;
-      font: inherit;
-      font-size: 12px;
-      border: 1px solid var(--folio-rule-strong);
-      background: var(--folio-input-bg);
-      color: var(--folio-ink);
-      border-radius: 5px;
-      padding: 3px 8px;
-      cursor: pointer;
     }
-    .folio-inspector .insp-chart:hover { background: var(--folio-hover); }
     .folio-inspector .insp-hint {
       align-self: center;
       color: var(--folio-ink-muted);
@@ -1519,15 +1498,21 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       outline: 2px solid var(--folio-focus, #1f3fbf);
       border-style: solid;
     }
+    /* The bar is a chip in the main toolbar's language (spec:
+       docs/specs/toolbar.md): a 1px rule-strong border, 8px radius,
+       one 28px control height - the same shapes the header uses. */
     .folio-inspector {
       display: flex;
-      gap: 6px;
+      gap: 8px;
       align-items: center;
-      padding: 6px 8px;
+      padding: 4px 8px;
       margin-bottom: 8px;
-      border: 1px solid var(--folio-rule, #e6e8eb);
-      border-radius: 6px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 8px;
       background: var(--folio-surface-2, #fafbfc);
+      box-shadow:
+        0 1px 2px rgba(0, 0, 0, 0.05),
+        0 4px 14px rgba(0, 0, 0, 0.06);
       font-family: system-ui, sans-serif;
       font-size: 12px;
     }
@@ -1556,19 +1541,208 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       color: var(--folio-ink-muted);
     }
     .folio-inspector select,
-    .folio-inspector input {
-      font: inherit;
+    .folio-inspector input:not([type="checkbox"]) {
+      /* No font shorthand here: it would reset font-style and
+         outrank .insp-unit's italic (specificity (0,2,1) beats
+         (0,2,0)). */
+      font-family: inherit;
       font-size: 12px;
-      padding: 3px 6px;
+      height: 28px;
+      box-sizing: border-box;
+      padding: 2px 8px;
       border: 1px solid var(--folio-rule-strong, #d0d7de);
-      border-radius: 5px;
+      border-radius: 6px;
       background: var(--folio-input-bg, #ffffff);
       color: var(--folio-ink, #1f2328);
     }
+    .folio-inspector input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--folio-accent, #1f3fbf);
+      margin: 0;
+    }
+    .folio-inspector select:hover,
+    .folio-inspector input:not([type="checkbox"]):hover {
+      border-color: var(--folio-ink-muted, #57606a);
+    }
+    .folio-inspector select:focus-visible,
+    .folio-inspector input:focus-visible {
+      outline: 2px solid var(--folio-focus, #1f3fbf);
+      outline-offset: 1px;
+    }
+    .folio-inspector input:disabled {
+      opacity: 0.55;
+    }
+    /* Every button in a bar: one 28px height, 6px radius, bordered
+       chip - the toolbar's standalone-button shape. */
+    .folio-inspector button {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font: inherit;
+      font-size: 12px;
+      height: 28px;
+      box-sizing: border-box;
+      padding: 0 10px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 6px;
+      background: var(--folio-input-bg, #ffffff);
+      color: var(--folio-ink, #1f2328);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .folio-inspector button svg {
+      width: 14px;
+      height: 14px;
+      flex: none;
+    }
+    /* A group of related controls (the table bar's formatting
+       options) sits in one toolbar-style box: border, 8px radius,
+       tight padding - the header's group shape. */
+    .folio-inspector .insp-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 4px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-left: 3px solid var(--folio-accent, #1f3fbf);
+      border-radius: 8px;
+      background: var(--folio-input-bg, #ffffff);
+    }
+    /* The picker at the group's left edge is the "name box": bold,
+       borderless on the group's own background. */
+    .folio-inspector .insp-group .insp-col {
+      font-weight: 600;
+      border-color: transparent;
+      background: transparent;
+    }
+    /* The inspected column lights up in the table while its bar is
+       open (spec: docs/specs/table-inspector.md): the header in the
+       accent with an accent underline, the cells on the tint - like
+       Excel's selected column. :has() ties it to the bar's being
+       visible, so no cleanup is needed when the bar hides. */
+    ${Array.from({ length: 41 }, (_, c) => {
+      const sel = `figure[data-insp-col="${String(c)}"]:has(> .folio-inspector:not([hidden]))`;
+      // The header keeps its own ink (an accent-colored label fails
+      // contrast on some themes' banded headers): an accent ring
+      // plus underline instead; the cells take the tint.
+      return `${sel} th[data-col-index="${String(c)}"] { box-shadow: inset 0 0 0 1.5px var(--folio-accent, #1f3fbf), inset 0 -2px 0 var(--folio-accent, #1f3fbf); }
+    ${sel} td[data-col-index="${String(c)}"] { background: var(--folio-tint); }`;
+    }).join("\n    ")}
+    /* The bar's rows are scoped, not accidental wraps: row 1 is
+       table-level (identity, actions, Rows, Chart it); the caption,
+       the column group box and the ƒx row follow as their own lines.
+       Row 1 is kept to one line on a normal page: the kind label
+       truncates (its title carries the full id) and Rows + Chart it
+       sit in a pair that wraps as one unit - never "Chart it" alone. */
+    .folio-inspector .insp-table-row {
+      flex-basis: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .folio-inspector .insp-kind {
+      max-width: 90px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .folio-inspector .insp-pair {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+    }
+    /* The caption gets its own full-width line under the row-1
+       controls - a table's title is not a cramped side field. */
+    .folio-inspector .insp-cap-row {
+      flex-basis: 100%;
+      display: flex;
+    }
+    .folio-inspector .insp-cap-row .insp-caption {
+      flex: 1;
+      width: 100%;
+    }
+    .folio-inspector .insp-group {
+      flex-basis: 100%;
+    }
+    /* The formula bar: a full-width row under the column group, its
+       textarea tall enough to edit a long expression (Excel's
+       formula bar, in the bar) - same accent left edge as the group
+       above it, so the two read as one column editor. */
+    .folio-inspector .insp-fx-row {
+      flex-basis: 100%;
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      border-left: 3px solid var(--folio-accent, #1f3fbf);
+      padding-left: 5px;
+    }
+    .folio-inspector textarea {
+      font: inherit;
+      font-size: 12px;
+      box-sizing: border-box;
+      padding: 4px 8px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 6px;
+      background: var(--folio-input-bg, #ffffff);
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-inspector textarea:hover {
+      border-color: var(--folio-ink-muted, #57606a);
+    }
+    .folio-inspector textarea:focus-visible {
+      outline: 2px solid var(--folio-focus, #1f3fbf);
+      outline-offset: 1px;
+    }
+    .folio-inspector textarea:disabled {
+      opacity: 0.55;
+    }
     .folio-inspector .insp-expr {
       flex: 1;
-      min-width: 80px;
+      width: 100%;
+      min-width: 0;
+      min-height: 2.8em;
+      resize: vertical;
       font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      line-height: 1.4;
+    }
+    .folio-inspector button:hover:not(:disabled) {
+      background: var(--folio-hover, #f3f4f6);
+    }
+    .folio-inspector button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    /* The chart bar's segmented type picker: icon buttons at the
+       same 28px height, the active type ringed in the accent. */
+    .folio-inspector .insp-seg {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+    .folio-inspector .insp-seg .insp-type-btn {
+      width: 30px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border-color: transparent;
+      background: transparent;
+      color: var(--folio-ink-muted, #57606a);
+    }
+    .folio-inspector .insp-seg .insp-type-btn svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+    }
+    .folio-inspector .insp-seg .insp-type-btn:hover:not(:disabled) {
+      background: var(--folio-hover, #f3f4f6);
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-inspector .insp-seg .insp-type-btn[aria-pressed="true"] {
+      background: var(--folio-tint);
+      color: var(--folio-accent);
+      border-color: var(--folio-accent);
     }
     .folio-inspector .insp-unit {
       font-style: italic;
@@ -1591,11 +1765,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-style: italic;
       color: var(--folio-ink-muted, #57606a);
       flex: none;
-    }
-    .folio-inspector .insp-fx {
-      font-style: italic;
-      color: var(--folio-ink-muted, #57606a);
-      flex: none;
+      padding-top: 6px;
     }
     /* --- Table viewport status line (windowed tables) --- */
     .folio-table-more {
@@ -1619,15 +1789,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .folio-table-more .ds-open:hover { background: var(--folio-hover, #f3f4f6); }
     .folio-inspector .insp-dataset {
       flex: none;
-      border: 1px solid var(--folio-rule-strong, #d0d7de);
-      background: var(--folio-input-bg, #ffffff);
-      border-radius: 5px;
-      padding: 2px 7px;
-      cursor: pointer;
-      color: var(--folio-ink, #1f2328);
+      padding: 0 8px;
       line-height: 1.4;
     }
-    .folio-inspector .insp-dataset:hover { background: var(--folio-hover, #f3f4f6); }
 
     /* --- Dataset browser: a full-bleed spreadsheet surface on the
          document's paper (spec: docs/specs/dataset-browser.md). No
@@ -2053,21 +2217,6 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
        controls, sized to their label - not stretched browser grey. */
     figure.folio-codeblock .folio-inspector button.insp-select {
       flex: none;
-      font: inherit;
-      font-size: 12px;
-      padding: 3px 10px;
-      border: 1px solid var(--folio-rule-strong);
-      border-radius: 5px;
-      background: var(--folio-input-bg);
-      color: var(--folio-ink);
-      cursor: pointer;
-    }
-    figure.folio-codeblock .folio-inspector button.insp-select:hover:not(:disabled) {
-      background: var(--folio-hover);
-    }
-    figure.folio-codeblock .folio-inspector button.insp-select:disabled {
-      opacity: 0.45;
-      cursor: default;
     }
     /* Compute blocks (ADR-0030): the output tables are the figure,
        themed like every table; the out= names field sits in the bar. */
@@ -2116,13 +2265,6 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     figure.folio-codeblock .folio-inspector input.insp-input {
       flex: none;
       width: 140px;
-      font: inherit;
-      font-size: 12px;
-      padding: 3px 8px;
-      border: 1px solid var(--folio-rule-strong);
-      border-radius: 5px;
-      background: var(--folio-input-bg);
-      color: var(--folio-ink);
     }
     /* Code shows what was typed: no ligatures (-> must not become an
        arrow glyph while writing DOT or JavaScript). */
@@ -2469,34 +2611,76 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     th { user-select: none; }
     figure[data-chart-source] { user-select: none; }
-    /* The table's menu sits at the pointer, outside the article. */
+    /* The table's menu sits at the pointer, outside the article. It
+       is dressed like the host toolbar's menus (index.html .menu):
+       10px radius, 6px padding, icon + label + kbd rows, group
+       separators, disabled items dimmed with the reason in their
+       tooltip (spec: docs/specs/table-context-menu.md). */
     .folio-menu.folio-table-menu { position: fixed; }
     .folio-menu {
       position: absolute;
-      font: 14px system-ui, -apple-system, "Segoe UI", sans-serif;
+      font: 13px system-ui, -apple-system, "Segoe UI", sans-serif;
       color: var(--folio-ink);
       z-index: 100;
       background: var(--folio-input-bg, #ffffff);
       border: 1px solid var(--folio-rule-strong, #d0d7de);
-      border-radius: 8px;
-      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-      padding: 4px;
-      min-width: 160px;
+      border-radius: 10px;
+      box-shadow:
+        0 12px 32px rgba(15, 20, 30, 0.14),
+        0 2px 6px rgba(15, 20, 30, 0.08);
+      padding: 6px;
+      min-width: 230px;
       display: flex;
       flex-direction: column;
+      gap: 1px;
     }
     .folio-menu button {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      min-height: 32px;
+      padding: 0 10px;
       border: none;
       background: transparent;
       text-align: left;
-      padding: 6px 12px;
       font: inherit;
-      font-size: 14px;
-      border-radius: 5px;
+      font-size: 13px;
+      border-radius: 6px;
       cursor: pointer;
       color: var(--folio-ink, #1f2328);
+      white-space: nowrap;
     }
-    .folio-menu button:hover { background: var(--folio-hover, #f3f4f6); }
+    .folio-menu button svg {
+      width: 16px;
+      height: 16px;
+      flex: none;
+      color: var(--folio-ink-muted, #57606a);
+    }
+    .folio-menu button .mi-label { flex: 1 1 auto; }
+    .folio-menu button .menu-kbd {
+      flex: none;
+      font-size: 11px;
+      line-height: 1.3;
+      color: var(--folio-ink-muted, #57606a);
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 5px;
+      padding: 1px 5px;
+      background: var(--folio-surface-2, #fafbfc);
+    }
+    .folio-menu button:hover:not(:disabled) {
+      background: var(--folio-hover, #f3f4f6);
+    }
+    .folio-menu button:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .folio-menu .menu-sep {
+      flex: none;
+      height: 1px;
+      margin: 4px 8px;
+      background: var(--folio-rule, #e6e8eb);
+    }
     .chart-holder svg { width: 100%; height: auto; display: block; }
     .chart-empty {
       margin: 0;
@@ -2574,6 +2758,11 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       flex: 0 0 auto;
       align-items: center;
     }
+    /* The segmented type picker keeps its own width (six icon
+       buttons), not the fields' stretch. */
+    .folio-inspector .insp-field:has(> .insp-seg) {
+      flex: 0 1 auto;
+    }
     @media print {
       /* Print is always the LIGHT rendition on white paper,
          whatever the app mode. */
@@ -2600,13 +2789,21 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
         display: none;
       }
       /* Paper shows the document, never the editing furniture: an
-         inspector bar left open, or a drawn figure's source. */
+         inspector bar left open, or a drawn figure's source - and
+         never the inspected-column highlight. */
       .folio-inspector,
       figure.folio-compute .compute-status,
       figure.folio-drawn > pre.folio-code,
       .folio-table-more .ds-open,
       .folio-ds-overlay {
         display: none !important;
+      }
+      figure[data-insp-col] th {
+        color: inherit !important;
+        box-shadow: none !important;
+      }
+      figure[data-insp-col] td {
+        background: none !important;
       }
       figure.folio-drawn > .code-view {
         border-bottom: none !important;

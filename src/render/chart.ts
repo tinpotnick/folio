@@ -67,6 +67,27 @@ export interface ChartStyle {
   /** Category labels in their stable (source table) order: a pie
    * slice takes the color of its category's position here. */
   colorKeys?: string[] | undefined;
+  /** The theme's accent: heatmap ramps run paper -> accent. */
+  accent?: string | undefined;
+}
+
+/** Mix two #rrggbb colors: t=0 is a, t=1 is b. The theme's heatmap
+ * ramp (ADR-0022) runs from the accent mixed into the paper to the
+ * accent itself, so the lowest cells never vanish on dark paper. */
+export function mixHex(a: string, b: string, t: number): string {
+  const rgb = (h: string): number[] =>
+    [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const [x, y] = [rgb(a), rgb(b)];
+  return (
+    "#" +
+    x
+      .map((v, i) =>
+        Math.round(v + ((y[i] ?? v) - v) * t)
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")
+  );
 }
 
 const W = 640;
@@ -641,6 +662,179 @@ export function renderScatterChart(
       // The browser's own tooltip names the point (a scatter has no
       // single x to read across).
       `<circle cx="${xOf(p.x)}" cy="${yOf(p.y)}" r="3.5" fill="${color}"><title>${escapeXml(`${fmt(p.x)}, ${valueFormatter(style.valueFormat)(p.y)}`)}</title></circle>`,
+    );
+  }
+  parts.push(`</svg>`);
+  return { svg: parts.join("") };
+}
+
+/* --- Heatmap (spec: docs/specs/chart-rendering.md, "Heatmap") --- */
+
+/** An axis' category order: numeric labels sort numerically (hour
+ * 0..23 lands in order), ISO dates chronologically, anything else in
+ * first-appearance order. */
+function heatAxisOrder(labels: string[]): string[] {
+  const allNum = labels.every(
+    (l) => l.trim() !== "" && Number.isFinite(Number(l)),
+  );
+  if (allNum) return [...labels].sort((a, b) => Number(a) - Number(b));
+  if (labels.every((l) => /^\d{4}-\d{2}-\d{2}$/.test(l))) {
+    return [...labels].sort();
+  }
+  return labels;
+}
+
+/**
+ * Heatmap: each query row is one cell - x (select[0], the bottom
+ * axis), y (select[1], the left axis), value (the last selected
+ * column, the cell's color). Repeated x/y pairs SUM (a plain
+ * three-column select works as well as a grouped query). A missing
+ * combination is a gap - paper with a hairline, never a zero.
+ * Colors run the theme's ramp from accent-18%-into-paper (the
+ * minimum) to the accent (the maximum); a small gradient legend
+ * top-right names the value column and its extremes. Cells carry
+ * the browser's own tooltip ("18, 3: 42"), like scatter points.
+ */
+export function renderHeatmap(
+  result: QueryResult,
+  style: ChartStyle = {},
+): RenderedChart {
+  if (result.columns.length !== 3) {
+    throw new Error(
+      "heatmap charts plot three columns: x, y and the value (group by two columns and aggregate, or select three)",
+    );
+  }
+  if (result.rows.length === 0) {
+    throw new Error("heatmap charts need at least one row");
+  }
+  const ink = style.text ?? TEXT_DARK;
+  const inkMuted = style.textMuted ?? TEXT_MUTED;
+  const grid = style.grid ?? GRID_COLOR;
+  const paper = style.paper ?? "#ffffff";
+  const accent = style.accent ?? style.color ?? "#4c6ef5";
+  const ramp = (t: number): string =>
+    mixHex(paper, accent, 0.18 + 0.82 * Math.min(1, Math.max(0, t)));
+
+  // Bucket the rows into cells; repeated pairs sum.
+  const cells = new Map<string, { x: string; y: string; v: number }>();
+  const xs: string[] = [];
+  const ys: string[] = [];
+  for (const r of result.rows) {
+    const x = String(r[0] ?? "");
+    const y = String(r[1] ?? "");
+    const v = cellNumber(r[2]);
+    if (!xs.includes(x)) xs.push(x);
+    if (!ys.includes(y)) ys.push(y);
+    const key = `${x}\u0000${y}`;
+    const cur = cells.get(key);
+    if (cur) {
+      if (Number.isFinite(v)) cur.v += v;
+    } else {
+      cells.set(key, { x, y, v });
+    }
+  }
+  const xLabels = heatAxisOrder(xs);
+  const yLabels = heatAxisOrder(ys);
+  const xIndex = new Map(xLabels.map((l, i) => [l, i] as const));
+  const yIndex = new Map(yLabels.map((l, i) => [l, i] as const));
+  const values = [...cells.values()]
+    .map((c) => c.v)
+    .filter((v) => Number.isFinite(v));
+  if (!values.length) {
+    throw new Error("heatmap charts need at least one numeric value");
+  }
+  const vMin = Math.min(...values);
+  const vMax = Math.max(...values);
+  const vSpan = vMax - vMin;
+  const tOf = (v: number): number => (vSpan > 0 ? (v - vMin) / vSpan : 1);
+  const valFmt = valueFormatter(style.valueFormat);
+
+  // Layout: y labels need room on the left; the legend takes the top.
+  const yLabelW = Math.max(...yLabels.map((l) => l.length), 1) * 6.5 + 10;
+  const padLeft = Math.min(120, Math.max(52, yLabelW));
+  const padTop = style.seriesName ? 36 : PAD.top;
+  const padBottom = style.xTitle ? 44 : 32;
+  const innerW = W - padLeft - PAD.right;
+  const innerH = H - padTop - padBottom;
+  const nX = xLabels.length;
+  const nY = yLabels.length;
+  const cellW = innerW / nX;
+  const cellH = innerH / nY;
+  const xOf = (i: number): number => padLeft + i * cellW;
+  const yOf = (i: number): number => padTop + i * cellH;
+  // Value labels only where they fit - a chart never clutters.
+  const labelCells = cellW >= 24 && cellH >= 14;
+
+  const parts: string[] = [];
+  parts.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" role="img">`,
+  );
+  // The legend: a gradient bar naming the value column and its ends.
+  const gradId = `heat-grad-${String(gradientSeq++)}`;
+  parts.push(
+    `<defs><linearGradient id="${gradId}" x1="0" y1="0" x2="1" y2="0">` +
+      `<stop offset="0%" stop-color="${ramp(0)}"/>` +
+      `<stop offset="100%" stop-color="${ramp(1)}"/></linearGradient></defs>`,
+  );
+  if (style.seriesName) {
+    parts.push(
+      `<text class="axis-title" x="${W - PAD.right}" y="12" text-anchor="end" font-size="11" fill="${ink}">${escapeXml(style.seriesName)}</text>`,
+    );
+  }
+  const legW = 90;
+  const legX = W - PAD.right - legW;
+  const legY = padTop - 14;
+  parts.push(
+    `<rect x="${legX}" y="${legY}" width="${legW}" height="7" fill="url(#${gradId})" rx="2"/>`,
+    `<text class="tick-y" x="${legX - 6}" y="${legY + 7}" text-anchor="end" font-size="10" fill="${inkMuted}">${escapeXml(valFmt(vMin))}</text>`,
+    `<text class="tick-y" x="${legX + legW + 6}" y="${legY + 7}" text-anchor="start" font-size="10" fill="${inkMuted}">${escapeXml(valFmt(vMax))}</text>`,
+  );
+  // Gap cells first: the whole matrix as hairline paper.
+  for (const y of yLabels) {
+    for (const x of xLabels) {
+      parts.push(
+        `<rect class="heat-gap" x="${xOf(xIndex.get(x) ?? 0).toFixed(2)}" y="${yOf(yIndex.get(y) ?? 0).toFixed(2)}" width="${cellW.toFixed(2)}" height="${cellH.toFixed(2)}" fill="none" stroke="${grid}"/>`,
+      );
+    }
+  }
+  // Value cells on top, seamed in the paper color.
+  for (const c of cells.values()) {
+    if (!Number.isFinite(c.v)) continue;
+    const xi = xIndex.get(c.x);
+    const yi = yIndex.get(c.y);
+    if (xi === undefined || yi === undefined) continue;
+    const t = tOf(c.v);
+    const label = valFmt(c.v);
+    parts.push(
+      `<rect class="heat-cell" x="${xOf(xi).toFixed(2)}" y="${yOf(yi).toFixed(2)}" width="${cellW.toFixed(2)}" height="${cellH.toFixed(2)}" fill="${ramp(t)}" stroke="${paper}" stroke-width="1">` +
+        `<title>${escapeXml(`${c.x}, ${c.y}: ${label}`)}</title></rect>`,
+    );
+    if (labelCells) {
+      parts.push(
+        `<text class="v-label" x="${(xOf(xi) + cellW / 2).toFixed(2)}" y="${(yOf(yi) + cellH / 2 + 3.5).toFixed(2)}" text-anchor="middle" font-size="${String(Math.min(11, cellH - 5))}" fill="${t > 0.6 ? paper : ink}">${escapeXml(label)}</text>`,
+      );
+    }
+  }
+  // Axes: x categories thinned like any dense axis; y categories one
+  // per row.
+  for (const i of xTickIndices(nX)) {
+    parts.push(
+      `<text class="x-tick" x="${(xOf(i) + cellW / 2).toFixed(2)}" y="${H - padBottom + 16}" text-anchor="middle" font-size="11" fill="${inkMuted}">${escapeXml(xLabels[i] ?? "")}</text>`,
+    );
+  }
+  yLabels.forEach((l, i) => {
+    parts.push(
+      `<text class="tick-y" x="${padLeft - 8}" y="${(yOf(i) + cellH / 2 + 4).toFixed(2)}" text-anchor="end" font-size="11" fill="${inkMuted}">${escapeXml(l)}</text>`,
+    );
+  });
+  if (style.xTitle) {
+    parts.push(
+      `<text class="axis-title" x="${(padLeft + W - PAD.right) / 2}" y="${H - 6}" text-anchor="middle" font-size="12" fill="${ink}">${escapeXml(style.xTitle)}</text>`,
+    );
+  }
+  if (style.yTitle) {
+    parts.push(
+      `<text class="axis-title" transform="translate(14 ${padTop + innerH / 2}) rotate(-90)" text-anchor="middle" font-size="12" fill="${ink}">${escapeXml(style.yTitle)}</text>`,
     );
   }
   parts.push(`</svg>`);

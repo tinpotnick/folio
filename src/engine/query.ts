@@ -117,6 +117,24 @@ export function sortIndexes(
     });
 }
 
+/**
+ * A table's rows reordered by one column - the MODEL sort behind the
+ * table context menu's Sort ascending/descending (spec:
+ * docs/specs/table-context-menu.md), unlike sortIndexes' view sort.
+ * Same comparison (numbers first-class, empties last, text collated);
+ * pass the recalculated table as `values` to sort a formula column by
+ * what it computes. Returns new row arrays; the table is not mutated.
+ */
+export function sortedRows(
+  table: Table,
+  by: string,
+  order: "asc" | "desc",
+  values?: Table,
+): Cell[][] {
+  const src = values ?? table;
+  return sortIndexes(src, by, order).map((i) => table.rows[i]?.slice() ?? []);
+}
+
 const AGG_FNS = ["count", "sum", "avg", "min", "max"] as const;
 type AggFn = (typeof AGG_FNS)[number];
 

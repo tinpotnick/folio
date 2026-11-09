@@ -66,12 +66,32 @@ the source to change a filter or fix a Mermaid typo.
   place; the unit is a separate, italic field there, and the
   header's unit span renders italic too).
 
+## Bars wear the toolbar's clothes (2026-11-05)
+
+An inspector bar is a chip in the main toolbar's visual language
+(docs/specs/toolbar.md): a 1px rule-strong border, 8px radius, one
+28px control height, 6px-radius bordered controls on the input
+background, hover fills, focus rings - instead of the earlier loose
+form row. No `font:` shorthand on the shared control rule: it would
+reset `font-style` and outrank the unit field's italic.
+
+- **The chart bar's Type is a segmented icon control**
+  (`.insp-seg`, one 16px icon button per type, `aria-pressed` on the
+  current one, ringed in the accent when active), not a `<select>`.
+  The other fields stay labelled text/select controls.
+- The table bar's selects, inputs and buttons get the same 28px
+  height and chip shape; the checkbox keeps its native size with the
+  accent as its check color.
+- The dismissal contract above is unchanged: reveal on a click
+  inside the figure, hide on any click outside it, Esc dismisses
+  early, no close button.
+
 ## Acceptance
 
 - e2e: `tests/e2e/figures.spec.ts` (equation insert via button and
   palette, H3 convert/reflection/settings, header-click bar with
-  italic unit, chart flip to line + filter edit reaching source,
-  math and Mermaid in-place edits).
+  italic unit, chart flip to line via the type icons + filter edit
+  reaching source, math and Mermaid in-place edits).
 - First-contact eval: `evals/figure-inspectors-first-contact.md`.
 
 ## Revealing a bar never moves the figure (2026-10-21)
@@ -96,4 +116,3 @@ click. Before, the engine left the selection at the document's start,
 and a chart caption click lit H1.
 
 e2e: `tests/e2e/backlog-polish.spec.ts`.
-

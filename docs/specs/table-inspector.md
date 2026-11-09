@@ -106,6 +106,55 @@ see.
   caption. Chart figures are contenteditable=false for the same
   reason (their SVG must never swallow typed text).
 
+## Spreadsheet-style bar layout (2026-11-05)
+
+The bar reads like a spreadsheet's, in the toolbar's visual language,
+and it SAYS which column it configures - without plastering text on
+it. Its rows are scoped, not accidental wraps:
+
+- **Row 1 - table level** (`.insp-table-row`, full width), in a
+  fixed order: the kind label, **Open dataset**, **Convert to table**,
+  **Rows**, **Chart it** - kept to ONE line on a normal page: the
+  kind label truncates with ellipsis (its title carries the full
+  `@id`), and Rows + Chart it sit in a `.insp-pair` that wraps as one
+  unit, so "Chart it" is never alone on a second line.
+- **Row 2 - the caption** (`.insp-cap-row`): its own full-width line
+  under the row-1 controls - a table's title is not a cramped side
+  field.
+- **Row 3 - the column editor group**: the column picker and all the
+  column's formatting options - **visible**, type, unit, format - in
+  ONE bordered group box (`.insp-group`, the header's group shape,
+  full width, accent left edge). The box is the scope: the picker at
+  its left edge (the name box, bold and borderless on the group's own
+  background) names the column; everything inside applies to it.
+- **Row 4 - the column's formula row**: directly under the group,
+  same accent left edge, so rows 3-4 read as one column-editor block
+  nearest the table (like Excel's formula bar above the grid).
+- **The inspected column lights up in the table**: `showInspector`
+  stamps `figure[data-insp-col="c"]`; while the bar is visible
+  (CSS `:has(> .folio-inspector:not([hidden]))`), that column's
+  header gets an accent ring + underline and its cells the theme
+  tint - Excel's selected column. The header keeps its own ink (an
+  accent-colored label fails contrast on banded headers); print
+  neutralizes the highlight with the bar. Cell clicks select the
+  column too, and the highlight follows.
+- **Dynamic names, no visible text**: the group's tooltip/aria-label
+  reads "Formatting for column 'q2'" and the ƒx row's "Expression for
+  column 'growth'", updated on every selection change.
+- **Formula row**: ALWAYS present (a spreadsheet's formula bar never
+  disappears): a full-width row directly under the column group, ƒx
+  plus a
+  textarea (`.insp-expr`, two rows, resizable, mono) big enough to
+  edit a long expression. Enter applies, Shift+Enter is a newline.
+  For a non-formula column the textarea is disabled with a
+  placeholder saying how to make the column one ("set the type to
+  formula..."); switching the type select in the group box to
+  formula enables it, seeded with `0`. (The dataset browser's own
+  formula bar, `.folio-ds-fbar`, is already full-width.)
+- **Open dataset**: the button into the dataset browser is labelled
+  (icon + "Open dataset"), not a bare glyph - the same action as the
+  context menu's top item and the palette entry.
+
 ## Acceptance
 
 - e2e: `tests/e2e/inspector.spec.ts` (reveal/hide, formula cell
@@ -116,6 +165,15 @@ see.
   is not, in-place rename reaches header/source/charts, rename
   on blur, rename breaking a formula shows the guarded error and
   no crash, Escape and empty renames revert, Tab/Enter header
-  navigation).
+  navigation; spreadsheet-style layout: column picker + format
+  options in one group box with a dynamic "column 'x'" tooltip, the
+  inspected column highlighted in the table (accent header ring,
+  tinted cells) while the bar is open and not in print, the
+  always-present full-width formula row (textarea, tall; disabled
+  with a how-to placeholder until the type is formula, then enabled
+  and seeded 0), labelled Open dataset button).
 - First-contact eval: `evals/table-inspector-first-contact.md`.
 - Documented in `demo/help/tables.md`.
+- The right-click / Shift+F10 menu over a cell (insert, delete,
+  clipboard, sort, hide) is its own spec:
+  docs/specs/table-context-menu.md.
