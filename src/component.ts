@@ -17,6 +17,7 @@ import {
 import { outlineOf, type OutlineEntry } from "@folio/engine/outline";
 import {
   recalcTable,
+  recalcTotals,
   type RecalcMemo,
   type TablePool,
 } from "@folio/engine/recalc";
@@ -4687,6 +4688,42 @@ export class FolioDoc extends HTMLElement {
       tbody.appendChild(tr);
     });
     table.appendChild(tbody);
+    // Totals row (spec: docs/specs/table-totals.md): a derived footer
+    // computed from the recalculated rows - never part of the data,
+    // so charts, formulas and queries do not see it.
+    if (block.table.totals?.length) {
+      let totals = new Map<number, Cell>();
+      try {
+        totals = recalcTotals(recalced, this.tablePool(), this.memo());
+      } catch (e) {
+        const err = document.createElement("div");
+        err.className = "folio-table-error";
+        err.textContent = `Totals error: ${e instanceof Error ? e.message : String(e)}`;
+        figure.appendChild(err);
+      }
+      const tfoot = document.createElement("tfoot");
+      const tr = document.createElement("tr");
+      tr.className = "folio-totals";
+      let labelPending = true;
+      block.table.columns.forEach((col, ci) => {
+        if (col.hidden) return;
+        const td = document.createElement("td");
+        td.dataset.colIndex = String(ci);
+        const tv = totals.get(ci);
+        if (tv !== undefined) {
+          td.classList.add("folio-total");
+          td.textContent = formatComputed(tv, col.format);
+          if (typeof tv === "number") td.classList.add("num");
+        } else if (labelPending) {
+          td.classList.add("folio-total-label");
+          td.textContent = "Total";
+        }
+        labelPending = false;
+        tr.appendChild(td);
+      });
+      tfoot.appendChild(tr);
+      table.appendChild(tfoot);
+    }
     // Browsers hand click focus to the article (the outer editing
     // host), so cell commits and Tab/Enter navigation would never see
     // a focused cell. Focus the clicked data cell ourselves: record
@@ -8340,11 +8377,39 @@ export class FolioDoc extends HTMLElement {
         cell.classList.toggle("num", typeof v === "number");
       }
     });
+    this.updateTotalsRow(figure, block);
     this.refreshDependents(block.table.id);
     // Cross-table references ripple: another table's formulas may
     // read this one (budget.r3.q2), so their cells refresh too -
     // text-only updates in place, the edited caret untouched.
     this.rippleFormulas(block.table.id);
+  }
+
+  /** Refresh the totals footer in place after a cell edit (text-only,
+   * like the formula cells - no re-render, so the caret stays put). */
+  private updateTotalsRow(
+    figure: HTMLElement | null,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    if (!block.table.totals?.length) return;
+    const foot = figure?.querySelector<HTMLElement>("tfoot tr.folio-totals");
+    if (!foot) return;
+    let totals: Map<number, Cell>;
+    try {
+      totals = recalcTotals(block.table, this.tablePool(), this.memo());
+    } catch (e) {
+      foot.title = `Totals error: ${e instanceof Error ? e.message : String(e)}`;
+      return;
+    }
+    for (const td of Array.from(foot.querySelectorAll<HTMLTableCellElement>("td[data-col-index]"))) {
+      const ci = Number(td.dataset.colIndex ?? -1);
+      const col = block.table.columns[ci];
+      const tv = totals.get(ci);
+      if (tv !== undefined && col) {
+        td.textContent = formatComputed(tv, col.format);
+        td.classList.toggle("num", typeof tv === "number");
+      }
+    }
   }
 
   /**

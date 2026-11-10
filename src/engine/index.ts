@@ -63,6 +63,14 @@ export interface Table {
   columns: Column[];
   rows: Cell[][];
   /**
+   * Derived totals row (spec: docs/specs/table-totals.md), rendered as
+   * the table's footer. NOT data: charts, formulas and queries never
+   * see it - it is computed from the recalculated rows at render
+   * time. Each entry names a column and a Jexl expr evaluated with
+   * the whole table as `self` (e.g. `self.col.amount | sum()`).
+   */
+  totals?: { col: string; expr: string }[];
+  /**
    * Present when this is a SIMPLE table (spec: docs/specs/
    * simple-tables.md): a standard GitHub pipe table, stored as one.
    * Cells are text exactly as written; `align` is the delimiter

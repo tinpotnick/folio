@@ -1401,6 +1401,15 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     .folio-table-error[title] { cursor: pointer; }
     .folio-table-error[title]:hover { text-decoration: underline; }
+    /* The derived totals row (spec: docs/specs/table-totals.md). */
+    table.folio-table tfoot tr.folio-totals td {
+      border-top: 2px solid var(--folio-table-rule, currentColor);
+      font-weight: 600;
+    }
+    table.folio-table tfoot tr.folio-totals td.folio-total-label {
+      color: var(--folio-ink-muted);
+      font-weight: 600;
+    }
     ${tableCss(theme.tableStyle, mode)}
     ${
       theme.pageBreakH1

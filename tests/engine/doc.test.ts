@@ -707,3 +707,38 @@ describe("slides golden-style invariant", () => {
     expect(serializeDoc(parseDoc(deck))).toBe(deck);
   });
 });
+
+describe("table totals rows", () => {
+  it("totals section parses and round-trips byte-identically", () => {
+    const src =
+      "::: table {#inv}\n" +
+      "columns:\n" +
+      "  - {name: qty, type: number}\n" +
+      '  - {name: amount, type: formula, expr: "qty * price"}\n' +
+      "data:\n" +
+      "  - [2, 100]\n" +
+      "totals:\n" +
+      '  - {col: amount, expr: "self.col.amount | sum()"}\n' +
+      ":::\n";
+    const doc = parseDoc(src);
+    expect(serializeDoc(doc)).toBe(src);
+    const b = doc.blocks[0];
+    if (b?.kind !== "table") throw new Error("not a table");
+    expect(b.table.totals).toEqual([
+      { col: "amount", expr: "self.col.amount | sum()" },
+    ]);
+  });
+
+  it("totals entry naming an unknown column or missing expr is a parse error", () => {
+    expect(() =>
+      parseDoc(
+        '::: table {#t}\ncolumns:\n  - {name: a, type: number}\ndata:\n  - [1]\ntotals:\n  - {col: nope, expr: "1"}\n:::\n',
+      ),
+    ).toThrow(/unknown column 'nope'/);
+    expect(() =>
+      parseDoc(
+        "::: table {#t}\ncolumns:\n  - {name: a, type: number}\ndata:\n  - [1]\ntotals:\n  - {col: a}\n:::\n",
+      ),
+    ).toThrow(/needs col and expr/);
+  });
+});

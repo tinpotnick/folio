@@ -120,6 +120,8 @@ later from the palette: Ctrl+K, then "example".
   sampled signal, its FFT and a low-pass filter, every number a
   formula.
 - [A murmuration, simulated](demo/examples/swarm.md) — a swirling
+- [Invoice 2026-041](demo/examples/invoice.md) — line items with a
+  formula column and a derived totals row at the bottom.
   swallow flock that plays in the document (frames from a Python
   block or the built-in sim) and prints as a filmstrip.
 - [Traffic on a small road network](demo/examples/flow.md) — vehicles
