@@ -53,6 +53,10 @@ test.describe("table inspector", () => {
   test("spreadsheet-style bar: column picker + format options in one group, full-width formula row, labelled dataset button", async ({
     page,
   }) => {
+    // Wide viewport: the one-line assertion below is borderline at the
+    // default 1280px when the runner's font rendering is wider - CI has
+    // wrapped this row since #141. 1600px leaves slack for that.
+    await page.setViewportSize({ width: 1600, height: 900 });
     await waitForDocument(page);
     await page
       .locator(
