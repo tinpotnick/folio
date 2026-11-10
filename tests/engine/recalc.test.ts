@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { recalcTable, type TablePool } from "@folio/engine/recalc";
+import {
+  recalcTable,
+  recalcTotals,
+  type TablePool,
+} from "@folio/engine/recalc";
 import type { Table } from "@folio/engine";
 
 function sampleTable(): Table {
@@ -800,5 +804,75 @@ describe("recalcTable math catalog", () => {
     expect(out[0]?.[1]).toBeCloseTo(0.5, 10);
     expect(out[1]?.[1]).toBeCloseTo(0.75, 10);
     expect(out[2]?.[1]).toBeCloseTo(0.875, 10);
+  });
+});
+
+describe("recalcTotals", () => {
+  it("evaluates totals exprs once over the recalculated table (self.col arrays)", () => {
+    const t: Table = {
+      id: "invoice",
+      columns: [
+        { name: "item", type: "text" },
+        { name: "qty", type: "number" },
+        { name: "price", type: "number" },
+        { name: "amount", type: "formula", expr: "qty * price" },
+      ],
+      rows: [
+        ["Workshop", 2, 450],
+        ["Days", 12, 620],
+        ["Retainer", 1, 900],
+      ],
+      totals: [
+        { col: "qty", expr: "self.col.qty | sum()" },
+        { col: "amount", expr: "self.col.amount | sum()" },
+        { col: "price", expr: "self.col.amount | sum() * 0.2" },
+      ],
+    };
+    const totals = recalcTotals(t);
+    expect(totals.get(1)).toBe(15); // qty
+    expect(totals.get(3)).toBe(9240); // amount, formula column recalced first
+    expect(totals.get(2)).toBeCloseTo(1848, 6); // VAT expr
+  });
+
+  it("skips blanks/non-finite in aggregates; non-finite results are absent; no current row", () => {
+    const t: Table = {
+      id: "t",
+      columns: [
+        { name: "a", type: "number" },
+        { name: "b", type: "number" },
+      ],
+      rows: [
+        [1, 0],
+        ["", 5],
+      ],
+      totals: [
+        { col: "a", expr: "self.col.a | sum()" },
+        { col: "b", expr: "self.col.b | mean()" },
+      ],
+    };
+    const totals = recalcTotals(t);
+    expect(totals.get(0)).toBe(1); // "" skipped by aggregates
+    expect(totals.get(1)).toBe(2.5);
+    // 0/0 yields 0 per the reporting contract (division by zero)
+    expect(
+      recalcTotals({
+        id: "t0",
+        columns: [{ name: "a", type: "number" }],
+        rows: [[1]],
+        totals: [{ col: "a", expr: "0 / 0" }],
+      }).get(0),
+    ).toBe(0);
+    expect(() =>
+      recalcTotals({
+        id: "t2",
+        columns: [{ name: "a", type: "number" }],
+        rows: [[1]],
+        totals: [{ col: "a", expr: "self.row" }],
+      }),
+    ).toThrow(/no current row/);
+  });
+
+  it("no totals -> empty map", () => {
+    expect(recalcTotals({ id: "x", columns: [], rows: [] }).size).toBe(0);
   });
 });

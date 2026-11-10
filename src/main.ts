@@ -3335,6 +3335,12 @@ helpDoc.addEventListener("folio-link", (ev) => {
 
 const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
   {
+    id: "invoice",
+    title: "Invoice 2026-041",
+    file: "demo/examples/invoice.md",
+    blurb: "invoice line items formula column totals row sum currency table",
+  },
+  {
     id: "field-operations",
     title: "Q3 Field Operations Review",
     file: "demo/examples/field-operations.md",

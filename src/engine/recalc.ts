@@ -1094,3 +1094,56 @@ function compute(
   cache.set(table.id, result);
   return result;
 }
+
+/**
+ * A table's totals row (spec: docs/specs/table-totals.md): each
+ * entry's expr is Jexl evaluated ONCE, with the whole recalculated
+ * table as `self` - `self.col.<name>` is that column's array of
+ * values, so `self.col.amount | sum()` is the folio spelling of
+ * sum(a1:a20). There is no current row in a totals row: anything but
+ * `self.col.*` under `self` is an error. Results come back by column
+ * index; non-finite numbers render empty (the reporting contract).
+ */
+export function recalcTotals(
+  table: Table,
+  pool?: TablePool,
+  memo?: RecalcMemo,
+): Map<number, Cell> {
+  const out = new Map<number, Cell>();
+  if (!table.totals?.length) return out;
+  const recalced = recalcTable(table, pool, memo);
+  const indexByName = new Map(
+    recalced.columns.map((c, i) => [c.name, i] as const),
+  );
+  const colArrays: Record<string, number[]> = {};
+  for (const [name, i] of indexByName) {
+    colArrays[name] = recalced.rows
+      .map((r) => r[i])
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+  }
+  const self = new Proxy(
+    {},
+    {
+      get(_t, prop) {
+        if (prop === "col") return colArrays;
+        throw new Error(
+          `Totals expr in table '${table.id}': a totals row has no current row - only self.col.<name> is available`,
+        );
+      },
+    },
+  );
+  const ctx: Record<string, unknown> = { ...CONSTANTS, self };
+  for (const t of table.totals) {
+    const ci = indexByName.get(t.col);
+    if (ci === undefined) continue;
+    const raw = jexl.evalSync(spreadsheetHabits(t.expr), ctx);
+    const v =
+      typeof raw === "number"
+        ? Number.isFinite(raw)
+          ? raw
+          : undefined
+        : (raw ?? undefined);
+    if (v !== undefined) out.set(ci, v as Cell);
+  }
+  return out;
+}

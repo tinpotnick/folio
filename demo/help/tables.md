@@ -62,6 +62,22 @@
   Enter commits (and drops into the column's first cell), Tab
   moves to the next header, Escape reverts. The unit itself is
   read-only; that is what the inspector is for.
+- A dataset can end with a **totals row** (spec: table-totals.md) - a
+  derived footer, not stored data: charts and formulas never see it.
+  Declare it in the source with a `totals:` section, one entry per
+  column; the expr is the usual formula language over the whole
+  column, so `self.col.amount | sum()` is folio's sum(A1:A20):
+
+```
+totals:
+  - {col: qty, expr: "self.col.qty | sum()"}
+  - {col: amount, expr: "self.col.amount | sum()"}
+```
+
+  The footer shows "Total" plus each computed cell (formatted with
+  its column's format, e.g. currency) and updates the moment you
+  edit a cell. Expressions can do arithmetic too:
+  `self.col.amount | sum() * 0.2` for VAT.
 - A table longer than the theme's window (`table.rows.show`,
   default 50) shows its head rows plus a "120 rows x 3 columns -
   showing first 50" line. To choose for one dataset, click it and

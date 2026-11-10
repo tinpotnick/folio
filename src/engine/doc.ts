@@ -327,12 +327,14 @@ function parseShow(raw: string, id: string): number | "all" {
 
 function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
   const table: Table = { id, columns: [], rows: [] };
-  let section: "none" | "columns" | "data" = "none";
+  let section: "none" | "columns" | "data" | "totals" = "none";
   const dataRaw: string[] = [];
+  const totalsRaw: string[] = [];
   for (const [k, raw] of body.entries) {
     if (k === "_item") {
       if (section === "columns") table.columns.push(parseColumn(raw));
       else if (section === "data") dataRaw.push(raw);
+      else if (section === "totals") totalsRaw.push(raw);
       else
         throw new ParseError(`List item outside section in table '${id}'`, 0);
       continue;
@@ -346,11 +348,38 @@ function parseTableDirective(body: DirectiveBody, id: string): DocBlock {
     else if (k === "computed") table.computed = unquote(raw);
     else if (k === "columns") section = "columns";
     else if (k === "data") section = "data";
+    else if (k === "totals") section = "totals";
     else throw new ParseError(`Unknown table key: '${k}'`, 0);
   }
   // Rows parse after the columns are known: cell reading is
   // column-typed (a TEXT column's "01632960123" stays text).
   table.rows = dataRaw.map((raw) => parseRow(raw, table.columns));
+  if (totalsRaw.length > 0) {
+    table.totals = totalsRaw.map((raw) => {
+      const inner = raw.replace(/^- \{|\}$/g, "");
+      const m: Record<string, string> = {};
+      for (const part of splitMapEntries(inner)) {
+        const idx = part.indexOf(":");
+        if (idx < 0) throw new ParseError(`Bad totals entry: '${part}'`, 0);
+        m[part.slice(0, idx).trim()] = unquote(part.slice(idx + 1).trim());
+      }
+      const col = m["col"];
+      const expr = m["expr"];
+      if (col === undefined || expr === undefined) {
+        throw new ParseError(
+          `Totals entry in table '${id}' needs col and expr`,
+          0,
+        );
+      }
+      if (!table.columns.some((c) => c.name === col)) {
+        throw new ParseError(
+          `Totals entry in table '${id}' names unknown column '${col}'`,
+          0,
+        );
+      }
+      return { col, expr };
+    });
+  }
   return { kind: "table", table };
 }
 
@@ -1115,6 +1144,12 @@ function serializeTable(table: Table): string {
   lines.push("data:");
   for (const row of table.rows) {
     lines.push(`  - [${row.map(formatCell).join(", ")}]`);
+  }
+  if (table.totals !== undefined) {
+    lines.push("totals:");
+    for (const t of table.totals) {
+      lines.push(`  - {col: ${t.col}, expr: "${t.expr}"}`);
+    }
   }
   lines.push(":::");
   return lines.join("\n");
