@@ -7110,6 +7110,11 @@ export class FolioDoc extends HTMLElement {
     if (!cdef) return;
     this.dsState.selected = { display, col };
     this.renderDatasetRows(); // also refreshes the formula bar
+    // Focus the grid BEFORE opening the control: the control's own
+    // select/input takes focus itself (and may open its native list).
+    this.dsBrowser
+      ?.querySelector<HTMLElement>(".folio-ds-grid")
+      ?.focus({ preventScroll: true });
     const canvas =
       this.dsBrowser?.querySelector<HTMLElement>(".folio-ds-canvas");
     const rowEl = canvas?.querySelector<HTMLElement>(
@@ -7118,9 +7123,6 @@ export class FolioDoc extends HTMLElement {
     // +1: the gutter cell is the row's first child.
     const cellEl = rowEl?.children[col + 1] as HTMLElement | undefined;
     if (cellEl) this.openCellControl(cellEl, block, cdef);
-    this.dsBrowser
-      ?.querySelector<HTMLElement>(".folio-ds-grid")
-      ?.focus({ preventScroll: true });
   }
 
   /**
@@ -8764,22 +8766,30 @@ export class FolioDoc extends HTMLElement {
     const pop = document.createElement("div");
     pop.className = "folio-cell-pop";
     // The sheet's cells clip (overflow: hidden); lift the clip while
-    // the pop is open so it is not cut off.
+    // a pop is open so it is not cut off.
     const overflow = td.style.overflow;
     td.style.position = "relative";
     td.style.overflow = "visible";
-    td.appendChild(pop);
-    this.activeCellPop = { pop, td, overflow };
+    // The "anchor" is the element a click counts as inside: the pop
+    // box for pickers/lists, or the chip-turned-select for a single
+    // select (the chip itself is the dropdown).
+    let anchor: HTMLElement = pop;
+    const setAnchor = (el: HTMLElement, restore?: () => void): void => {
+      anchor = el;
+      this.activeCellPop = { pop: el, td, overflow, restore };
+    };
     const close = () => this.closeCellControl();
-    // The pop closes on a click OUTSIDE it (never on blur: the
+    // The control closes on a click OUTSIDE it (never on blur: the
     // dropdown/picker itself takes focus when clicked). composedPath
-    // sees through the shadow boundary, so a click inside the pop -
+    // sees through the shadow boundary, so a click inside the anchor -
     // retargeted to the host at the document listener - still counts
     // as inside.
     this.cellPopOutside = (ev: MouseEvent) => {
-      if (!ev.composedPath().includes(pop)) close();
+      if (!ev.composedPath().includes(anchor)) close();
     };
     document.addEventListener("mousedown", this.cellPopOutside, true);
+    td.appendChild(pop);
+    setAnchor(pop);
 
     if (col.type === "date" || col.type === "datetime") {
       const input = document.createElement("input");
@@ -8854,8 +8864,16 @@ export class FolioDoc extends HTMLElement {
       return;
     }
 
+    // Single select: the CHIP itself becomes the dropdown - a styled
+    // <select> in the chip's place (same pill, same hue, a caret), not
+    // a detached list spaced below the cell (spec: select-columns.md).
+    const wrap = document.createElement("span");
+    wrap.className = "folio-chip-open";
     const sel = document.createElement("select");
-    sel.className = "folio-cell-input folio-cell-select";
+    sel.className = "folio-chip folio-chip-select";
+    sel.title = "Choose a value";
+    sel.setAttribute("aria-label", col.name);
+    sel.style.setProperty("--chip-hue", String(this.chipHue(current)));
     const blank = document.createElement("option");
     blank.value = "";
     blank.textContent = "(blank)";
@@ -8867,6 +8885,20 @@ export class FolioDoc extends HTMLElement {
       sel.appendChild(o);
     }
     sel.value = col.options?.includes(current) ? current : "";
+    const caret = document.createElement("span");
+    caret.className = "folio-chip-caret";
+    caret.textContent = "▾";
+    wrap.append(sel, caret);
+    td.textContent = "";
+    td.appendChild(wrap);
+    setAnchor(wrap, () => {
+      // Re-draw the chip on close: a commit already re-rendered the
+      // cell; Esc / an outside click lands here unchanged.
+      const rr = Number(td.dataset.rowIndex);
+      const cc = Number(td.dataset.colIndex);
+      const recalced = recalcTable(block.table, this.tablePool(), this.memo());
+      this.renderControlCell(td, col, recalced.rows[rr]?.[cc]);
+    });
     sel.addEventListener("change", () => {
       this.commitCellValue(td, block, sel.value);
       close();
@@ -8875,14 +8907,22 @@ export class FolioDoc extends HTMLElement {
       if (ev.key === "Escape") close();
       ev.stopPropagation();
     });
-    pop.appendChild(sel);
     sel.focus();
+    // Open the native list right away where supported, so the chip
+    // literally turns into the dropdown (we are inside the click /
+    // Enter gesture here).
+    try {
+      (sel as HTMLSelectElement & { showPicker?: () => void }).showPicker?.();
+    } catch {
+      // not supported - the styled select still shows in place
+    }
   }
 
   private activeCellPop: {
     pop: HTMLElement;
     td: HTMLElement;
     overflow: string;
+    restore: (() => void) | undefined;
   } | null = null;
 
   private cellPopOutside: ((ev: MouseEvent) => void) | null = null;
@@ -8895,6 +8935,7 @@ export class FolioDoc extends HTMLElement {
     if (this.activeCellPop) {
       this.activeCellPop.pop.remove();
       this.activeCellPop.td.style.overflow = this.activeCellPop.overflow;
+      this.activeCellPop.restore?.();
       this.activeCellPop = null;
     }
   }

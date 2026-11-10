@@ -18,18 +18,22 @@ test.describe("cell controls and cross-filtering", () => {
     const chips = fig.locator("tbody td[data-col-index='1'] .folio-chip");
     await expect(chips).toHaveCount(4);
     await expect(chips.first()).toHaveText("doing");
-    // click the first status cell -> dropdown with the options
-    await fig
-      .locator("tbody td[data-row-index='0'][data-col-index='1']")
-      .click();
-    const pop = fig.locator(".folio-cell-pop select");
-    await expect(pop).toBeVisible();
-    await expect(pop.locator("option")).toHaveCount(4); // blank + 3 options
-    // The pop must survive the dropdown taking focus (blur): it
+    // click the first status cell -> the chip itself becomes the
+    // dropdown: a styled <select> in the cell, no separate pop
+    const cell = fig.locator(
+      "tbody td[data-row-index='0'][data-col-index='1']",
+    );
+    await cell.click();
+    const sel = cell.locator("select.folio-chip-select");
+    await expect(sel).toBeVisible();
+    // the chip span is replaced by the select (which wears the class)
+    await expect(cell.locator("span.folio-chip")).toHaveCount(0);
+    await expect(sel.locator("option")).toHaveCount(4); // blank + 3 options
+    // The select must survive the dropdown taking focus (blur): it
     // closes on outside click, not blur.
-    await pop.evaluate((el) => (el as HTMLElement).blur());
-    await expect(pop).toBeVisible();
-    await pop.selectOption("done");
+    await sel.evaluate((el) => (el as HTMLElement).blur());
+    await expect(sel).toBeVisible();
+    await sel.selectOption("done");
     await expect(
       fig.locator(
         "tbody td[data-row-index='0'][data-col-index='1'] .folio-chip",
@@ -86,13 +90,15 @@ test.describe("cell controls and cross-filtering", () => {
     );
     await expect(chips).toHaveCount(4);
     await expect(chips.first()).toHaveText("doing");
-    // click a status cell -> dropdown inside the sheet
-    await sheet
-      .locator(".folio-ds-row[data-display='0'] .folio-ds-cell[data-col='1']")
-      .click();
-    const pop = sheet.locator(".folio-cell-pop select");
-    await expect(pop).toBeVisible();
-    await pop.selectOption("done");
+    // click a status cell -> the chip itself becomes the dropdown
+    const statusCell = sheet.locator(
+      ".folio-ds-row[data-display='0'] .folio-ds-cell[data-col='1']",
+    );
+    await statusCell.click();
+    const sel = statusCell.locator("select.folio-chip-select");
+    await expect(sel).toBeVisible();
+    await expect(statusCell.locator("span.folio-chip")).toHaveCount(0);
+    await sel.selectOption("done");
     await expect(
       sheet.locator(
         ".folio-ds-row[data-display='0'] .folio-ds-cell[data-col='1'] .folio-chip",
@@ -128,6 +134,46 @@ test.describe("cell controls and cross-filtering", () => {
     expect(src).toContain('["Chip rendering in tables", done');
     expect(src).toContain("2026-11-20");
     await page.locator("#btn-view").click();
+  });
+
+  test("inspector bar never overflows the figure or page, even with the select-column options open", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/project-plan.md");
+    await expect(page.locator("#the-doc h1").first()).toBeVisible();
+    const fig = page.locator('#the-doc figure[data-table-id="plan"]');
+    await fig.scrollIntoViewIfNeeded();
+    // clicking a status chip opens the chip-dropdown AND selects the
+    // column in the inspector, revealing the options + multi controls
+    await fig
+      .locator("tbody td[data-row-index='0'][data-col-index='1']")
+      .click();
+    await expect(fig.locator("> .folio-inspector")).toBeVisible();
+    await expect(
+      fig.locator(".folio-inspector .insp-select-opts"),
+    ).toBeVisible();
+    const noOverflow = async (): Promise<void> => {
+      const bar = await fig.locator("> .folio-inspector").evaluate((el) => ({
+        scrollW: el.scrollWidth,
+        clientW: el.clientWidth,
+      }));
+      expect(bar.scrollW).toBeLessThanOrEqual(bar.clientW);
+      const f = await fig.evaluate((el) => ({
+        scrollW: el.scrollWidth,
+        clientW: el.clientWidth,
+      }));
+      expect(f.scrollW).toBeLessThanOrEqual(f.clientW);
+      const doc = await page.evaluate(() => ({
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+      }));
+      expect(doc.scrollW).toBeLessThanOrEqual(doc.clientW);
+    };
+    await noOverflow();
+    // narrow viewport: still no horizontal page overflow
+    await page.setViewportSize({ width: 700, height: 900 });
+    await page.waitForTimeout(200);
+    await noOverflow();
   });
 
   test("totals row sums effort", async ({ page }) => {

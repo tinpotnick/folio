@@ -39,14 +39,18 @@ data:
   into the theme's ramp, so the same status is the same color in
   every table and every chart legend). The full value is the chip
   label; the cell's `<title>` repeats it.
-- Editing: click the cell → the dropdown opens in place; choosing
-  commits (model write, like typing); Esc cancels. Keyboard: Enter
-  opens, arrows choose, Enter commits. Multi: checkbox list, tick
-  toggles a value in/out, Close/Enter commits the ticked set.
+- Editing: click the cell → the chip itself becomes the dropdown - a
+  `<select>` in the chip's place, wearing the same pill, hue and a
+  caret (the native list opens immediately where the platform allows
+  it), not a detached list spaced below the cell. Choosing commits
+  (model write, like typing); Esc or an outside click cancels and the
+  chip is restored. Keyboard: Enter opens, arrows choose, Enter
+  commits. Multi: checkbox-list pop, tick toggles a value in/out,
+  Done/Enter commits the ticked set.
   The dataset browser (spreadsheet view) has the same controls:
-  select cells render as chips there too, and click/Enter opens the
-  same in-cell dropdown; the commit is one model write, so the
-  in-document figure and the sheet both refresh.
+  select cells render as chips there too, and click/Enter turns the
+  chip into the same in-place dropdown; the commit is one model
+  write, so the in-document figure and the sheet both refresh.
 - A value not in `options` (typed in Markdown by hand) is a visible
   cell error (chip drawn in the error style with the message in the
   title; for multi, each offending part flagged) - consistent with

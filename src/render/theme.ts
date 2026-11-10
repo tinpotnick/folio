@@ -1424,6 +1424,33 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       background: color-mix(in srgb, var(--folio-error, #b42318) 14%, var(--folio-paper, #ffffff));
       border-color: var(--folio-error, #b42318);
     }
+    /* A single-select chip mid-edit IS the dropdown: a <select>
+       wearing the chip's own pill and hue, with a caret (spec:
+       select-columns.md) - not a detached list below the cell. */
+    .folio-chip-open {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+    }
+    select.folio-chip.folio-chip-select {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      padding-right: 18px;
+      max-width: 100%;
+      font-family: inherit;
+      font-weight: inherit;
+      height: auto;
+      min-height: 0;
+    }
+    .folio-chip-caret {
+      position: absolute;
+      right: 6px;
+      pointer-events: none;
+      font-size: 0.7em;
+      opacity: 0.75;
+    }
     .folio-cell-pop {
       position: absolute;
       top: 100%;
@@ -1716,6 +1743,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-left: 3px solid var(--folio-accent, #1f3fbf);
       border-radius: 8px;
       background: var(--folio-input-bg, #ffffff);
+      /* The group must never push the bar (or the page) wider than
+         the figure: shrink below min-content and wrap the column
+         controls inside the box instead of overflowing. */
+      min-width: 0;
+      flex-wrap: wrap;
+      row-gap: 4px;
     }
     /* The picker at the group's left edge is the "name box": bold,
        borderless on the group's own background. */
@@ -1745,6 +1778,10 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
        sit in a pair that wraps as one unit - never "Chart it" alone. */
     .folio-inspector .insp-table-row {
       flex-basis: 100%;
+      /* min-width: 0 lets the row shrink to the bar's width so its
+         own overflow-x scroll works - otherwise the nowrap row's
+         min-content width pushes the whole bar (and figure) wide. */
+      min-width: 0;
       display: flex;
       /* One line, always: the controls scroll sideways rather than
          wrapping when the table (and so the bar) is narrow or the
@@ -1860,6 +1897,27 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .folio-inspector .insp-unit {
       font-style: italic;
       width: 5em;
+    }
+    /* The select-column extras (options list + multi checkbox) sit
+       inline in the column group; the options input is a compact
+       field that can shrink inside a narrow bar. */
+    .folio-inspector .insp-select-opts {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+    .folio-inspector .insp-options {
+      width: 12ch;
+      min-width: 0;
+    }
+    .folio-inspector .insp-multi {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--folio-ink, #1f2328);
     }
     .folio-inspector .insp-source-text {
       flex: 1;
