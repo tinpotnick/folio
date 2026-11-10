@@ -32,9 +32,11 @@ data:
 - Editing: the cell stays text-editable (type the ISO value, as
   today); the **calendar icon** in the cell (shown on hover/focus)
   opens an in-place `<input type="date">` (or `type="datetime-local">`),
-  pre-filled with the current value. Picking a value commits
-  immediately (model write); Esc cancels; clearing the input writes
-  blank. Keyboard reachable. In the dataset browser (spreadsheet
+  pre-filled with the current value - and goes STRAIGHT to the native
+  calendar (`showPicker()` from the icon click, no intermediate
+  segmented-field click; where unsupported, the input's own calendar
+  glyph works). Picking a value commits immediately (model write);
+  Esc cancels; clearing the input writes blank. Keyboard reachable. In the dataset browser (spreadsheet
   view) date/datetime cells carry the same calendar icon opening the
   same picker; the cell body stays text-editable there too.
 - A malformed value typed in Markdown is a visible cell error

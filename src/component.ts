@@ -8815,6 +8815,15 @@ export class FolioDoc extends HTMLElement {
       });
       pop.appendChild(input);
       input.focus();
+      // Go straight to the calendar: open the native picker right
+      // away (we are inside the click/Enter gesture), instead of
+      // leaving the segmented MM/DD/YYYY fields to be clicked first.
+      try {
+        input.showPicker();
+      } catch {
+        // no user activation / not supported: the segmented input
+        // (and its own calendar glyph) still works
+      }
       return;
     }
 
@@ -8912,7 +8921,7 @@ export class FolioDoc extends HTMLElement {
     // literally turns into the dropdown (we are inside the click /
     // Enter gesture here).
     try {
-      (sel as HTMLSelectElement & { showPicker?: () => void }).showPicker?.();
+      sel.showPicker();
     } catch {
       // not supported - the styled select still shows in place
     }
