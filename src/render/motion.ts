@@ -195,8 +195,15 @@ export function swarmFromTable(table: Table, motion: Motion): MotionData {
   return { width: W, height: H, frames };
 }
 
-/** Flow from an edge-list table; nodes laid out on a circle (deterministic). */
-export function flowFromTable(table: Table, motion: Motion): MotionData {
+/** Flow from an edge-list table. Nodes come from `nodesLayout` when
+ * given (a nodes table's id/x/y rows, or mermaid-extracted positions
+ * fitted into the viewBox - spec: docs/specs/flow-geometry.md), else
+ * they are laid out on a circle (deterministic fallback). */
+export function flowFromTable(
+  table: Table,
+  motion: Motion,
+  nodesLayout?: { id: string; x: number; y: number }[],
+): MotionData {
   const W = motion.width ?? 640;
   const H = motion.height ?? 360;
   const fCol = colIndex(table, motion.fromCol ?? "from");
@@ -216,11 +223,15 @@ export function flowFromTable(table: Table, motion: Motion): MotionData {
       if (!nodeIds.includes(v)) nodeIds.push(v);
     }
   }
-  const R = Math.min(W, H) / 2 - 36;
-  const nodes = nodeIds.map((id, i) => {
-    const a = (i / nodeIds.length) * Math.PI * 2 - Math.PI / 2;
-    return { id, x: W / 2 + R * Math.cos(a), y: H / 2 + R * Math.sin(a) };
-  });
+  const nodes =
+    nodesLayout ??
+    (() => {
+      const R = Math.min(W, H) / 2 - 36;
+      return nodeIds.map((id, i) => {
+        const a = (i / nodeIds.length) * Math.PI * 2 - Math.PI / 2;
+        return { id, x: W / 2 + R * Math.cos(a), y: H / 2 + R * Math.sin(a) };
+      });
+    })();
   const pos = new Map(nodes.map((n) => [n.id, n] as const));
   const edges: MotionEdge[] = table.rows.map((r) => {
     const from = String(r[fCol] ?? "");
@@ -251,9 +262,11 @@ export function flowFromTable(table: Table, motion: Motion): MotionData {
     const points: MotionPoint[] = [];
     edges.forEach((e, ei) => {
       const n = Math.min(8, Math.max(1, Math.round(e.qty)));
-      const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1) || 1;
       for (let k = 0; k < n; k++) {
-        const t = ((f * e.speed) / (len * 12) + k / n) % 1;
+        // A packet crosses an edge in 30/speed ticks (2 s at 15 fps
+        // for speed 1) - fast enough to read as movement, and longer
+        // edges visibly stream faster in px/frame.
+        const t = ((f * e.speed) / 30 + k / n) % 1;
         points.push({
           id: `e${String(ei)}p${String(k)}`,
           x: e.x1 + (e.x2 - e.x1) * t,
@@ -509,12 +522,30 @@ export function frameSvg(
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" role="img" class="motion-frame">${frameGroup(f, n, style, data.edges ? 3 : 4.5, data.frames[n + 1])}</svg>`;
 }
 
+/** Fit an external layout (e.g. mermaid's coordinate space) into the
+ * figure's viewBox, preserving aspect - unlike swarm data, flow nodes
+ * from a table are used raw; only foreign coordinate spaces are
+ * rescaled. */
+export function fitNodeLayout(
+  nodes: { id: string; x: number; y: number }[],
+  W: number,
+  H: number,
+): { id: string; x: number; y: number }[] {
+  const fit = fitBounds(nodes, W, H);
+  return nodes.map((n) => ({ id: n.id, x: fit.sx(n.x), y: fit.sy(n.y) }));
+}
+
 /** Build the frame data for a motion block: built-in sim when no
- * source, else read the dataset (recalculated by the caller). */
-export function motionData(motion: Motion, table?: Table): MotionData {
+ * source, else read the dataset (recalculated by the caller). Flow
+ * figures may take an external node layout. */
+export function motionData(
+  motion: Motion,
+  table?: Table,
+  nodesLayout?: { id: string; x: number; y: number }[],
+): MotionData {
   if (motion.type === "flow") {
     if (!table) throw new Error("A flow figure needs a source: @edge-list");
-    return flowFromTable(table, motion);
+    return flowFromTable(table, motion, nodesLayout);
   }
   if (!table) return murmurationSim(motion);
   return swarmFromTable(table, motion);
