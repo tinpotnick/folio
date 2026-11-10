@@ -30,6 +30,16 @@ test.describe("motion figures", () => {
     await expect(fig.locator(".motion-view .mframe:visible")).toHaveCount(1);
     const f0 = await fig.getAttribute("data-frame");
     await expect.poll(() => fig.getAttribute("data-frame")).not.toBe(f0 ?? "");
+    // ...and the packets themselves move, not just the frame counter.
+    const pkt = () =>
+      fig.evaluate((f) => {
+        const g = Array.from(f.querySelectorAll(".motion-view .mframe")).find(
+          (g) => (g as HTMLElement).style.display !== "none",
+        );
+        return g?.querySelector(".mpoint")?.getAttribute("transform") ?? "";
+      });
+    const p0 = await pkt();
+    await expect.poll(() => pkt()).not.toBe(p0);
     // No transport controls.
     await expect(fig.locator(".motion-play")).toHaveCount(0);
     // Clicking the figure reveals the inspector bar with its controls.

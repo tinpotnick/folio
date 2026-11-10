@@ -262,9 +262,11 @@ export function flowFromTable(
     const points: MotionPoint[] = [];
     edges.forEach((e, ei) => {
       const n = Math.min(8, Math.max(1, Math.round(e.qty)));
-      const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1) || 1;
       for (let k = 0; k < n; k++) {
-        const t = ((f * e.speed) / (len * 12) + k / n) % 1;
+        // A packet crosses an edge in 30/speed ticks (2 s at 15 fps
+        // for speed 1) - fast enough to read as movement, and longer
+        // edges visibly stream faster in px/frame.
+        const t = ((f * e.speed) / 30 + k / n) % 1;
         points.push({
           id: `e${String(ei)}p${String(k)}`,
           x: e.x1 + (e.x2 - e.x1) * t,

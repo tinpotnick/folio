@@ -98,6 +98,17 @@ describe("motion figures", () => {
     expect(flow.edges).toHaveLength(2);
     expect(flow.nodes).toHaveLength(3);
     expect(flow.frames.length).toBeGreaterThan(0);
+    // packets visibly move: the same packet several frames apart is
+    // several px away (guards the "player has no movement" bug)
+    const at = (fi: number) =>
+      flow.frames[fi]?.points.find((p) => p.id === "e0p0");
+    const a0 = at(0);
+    const a10 = at(10);
+    expect(a0).toBeDefined();
+    expect(a10).toBeDefined();
+    expect(
+      Math.hypot((a10?.x ?? 0) - (a0?.x ?? 0), (a10?.y ?? 0) - (a0?.y ?? 0)),
+    ).toBeGreaterThan(2);
     const fm = flowmapSvg(flow, { accent: "#2b5d94" });
     expect(fm).toContain("A");
     expect(fm).toContain("marker-end");

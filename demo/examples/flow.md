@@ -12,7 +12,7 @@ table (`nodes: @places`) or from a mermaid diagram (`diagram: @net`);
 without either, nodes sit on a circle.*
 
 ::: table {#roads}
-caption: "Edges of a little road network (qty = vehicles per tick, speed in edge-lengths per tick)"
+caption: "Edges of a little road network (qty = vehicles per edge, speed = relative pace: an edge is crossed in 30/speed ticks)"
 columns:
   - {name: from, type: text}
   - {name: to, type: text}
