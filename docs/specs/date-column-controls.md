@@ -31,17 +31,18 @@ data:
   adds the time).
 - Editing: the cell stays text-editable (type the ISO value, as
   today); the **calendar icon** in the cell (shown on hover/focus)
-  goes STRAIGHT to the native calendar: an invisible `<input
-type="date">` (or `type="datetime-local">`) anchored over the cell
-  calls `showPicker()` from the icon click, so the calendar opens at
-  the cell - no intermediate pop with segmented MM/DD/YYYY fields.
-  Where `showPicker` is unsupported, re-clicking the icon retries and
-  the cell body still accepts a typed ISO value. Picking a value
-  commits immediately (model write); Esc or an outside click closes;
-  clearing the input writes blank. Keyboard: focus + ArrowDown/Space
-  opens the picker, Enter commits. In the dataset browser (spreadsheet
-  view) date/datetime cells carry the same calendar icon opening the
-  same picker; the cell body stays text-editable there too.
+  opens an in-cell CALENDAR - folio's own month-grid pop at the cell
+  (prev/next month, today ringed, the current value filled), not the
+  native picker: `showPicker` is not reliable cross-browser and an
+  invisible anchor input gives no fallback. Clicking a day commits
+  the ISO value immediately (model write); for `datetime` columns a
+  time field rides under the grid (a day click commits date + that
+  time; changing the time commits with the current date). Esc or an
+  outside click closes. Keyboard: the grid's day buttons are
+  focusable (selected day / today / the 1st gets focus), Enter picks.
+  In the dataset browser (spreadsheet view) date/datetime cells carry
+  the same calendar icon opening the same calendar pop; the cell body
+  stays text-editable there too.
 - A malformed value typed in Markdown is a visible cell error
   (existing date-error contract), document still round-trips.
 - `datetime` joins `ColumnType`; `type: datetime` parses/serializes

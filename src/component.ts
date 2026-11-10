@@ -4716,9 +4716,22 @@ export class FolioDoc extends HTMLElement {
               col.type === "datetime" ? "Pick a date and time" : "Pick a date";
             btn.innerHTML =
               '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="2"/><path d="M2 6.5h12M5.5 2v3M10.5 2v3"/></svg>';
-            btn.addEventListener("click", (ev) => {
+            // Open on MOUSEDOWN, not click: the click's mousedown
+            // reveals the inspector bar, the table shifts, and the
+            // click then lands off the small icon. preventDefault
+            // keeps the article from stealing focus.
+            btn.addEventListener("mousedown", (ev) => {
+              ev.preventDefault();
               ev.stopPropagation();
               if (td.isConnected) this.openCellControl(td, block, col);
+            });
+            // Keyboard activation (Enter/Space on the button fires
+            // click without a mousedown-open): open only if the
+            // mousedown path did not already open it.
+            btn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (td.isConnected && this.activeCellPop?.td !== td)
+                this.openCellControl(td, block, col);
             });
             td.appendChild(btn);
           }
@@ -7080,9 +7093,17 @@ export class FolioDoc extends HTMLElement {
               col.type === "datetime" ? "Pick a date and time" : "Pick a date";
             btn.innerHTML =
               '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="2"/><path d="M2 6.5h12M5.5 2v3M10.5 2v3"/></svg>';
-            btn.addEventListener("click", (ev) => {
+            // Open on mousedown (see the document table's date-btn):
+            // a click can land off the icon after layout shifts.
+            btn.addEventListener("mousedown", (ev) => {
+              ev.preventDefault();
               ev.stopPropagation();
               if (cell.isConnected)
+                this.openDatasetCellControl(display, c, block);
+            });
+            btn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (cell.isConnected && this.activeCellPop?.td !== cell)
                 this.openDatasetCellControl(display, c, block);
             });
             cell.appendChild(btn);
@@ -8777,6 +8798,11 @@ export class FolioDoc extends HTMLElement {
       restore: (() => void) | undefined,
     ): void => {
       anchor = el;
+      // A mousedown inside the control must not reach the table's
+      // handler: revealing the inspector bar shifts the table (and
+      // the pop with it) mid-click, and the click then lands off the
+      // control's button.
+      el.addEventListener("mousedown", (ev) => ev.stopPropagation());
       this.activeCellPop = { pop: el, td, overflow, restore };
     };
     const close = () => this.closeCellControl();
@@ -8791,51 +8817,14 @@ export class FolioDoc extends HTMLElement {
     document.addEventListener("mousedown", this.cellPopOutside, true);
 
     if (col.type === "date" || col.type === "datetime") {
-      // STRAIGHT to the native calendar: an invisible input covering
-      // the cell is the picker's anchor, so showPicker opens the
-      // calendar right at the cell - no intermediate pop with
-      // segmented date fields. The cell's own content (ISO text +
-      // calendar icon) stays in place underneath; a typed ISO value
-      // still works via the cell's text editing.
-      const input = document.createElement("input");
-      input.type = col.type === "datetime" ? "datetime-local" : "date";
-      input.className = "folio-date-anchor";
-      input.setAttribute(
-        "aria-label",
-        col.type === "datetime" ? "Pick a date and time" : "Pick a date",
-      );
-      input.value =
-        col.type === "datetime" ? current.slice(0, 16) : current.slice(0, 10);
-      td.appendChild(input);
-      setAnchor(input, undefined);
-      input.addEventListener("change", () => {
-        const v = input.value;
-        if (v) this.commitCellValue(td, block, v);
-        close();
-      });
-      input.addEventListener("keydown", (ev) => {
-        if (ev.key === "Escape") close();
-        if (ev.key === "Enter") {
-          ev.preventDefault();
-          input.dispatchEvent(new Event("change"));
-        }
-        if (ev.key === "ArrowDown" || ev.key === " ") {
-          ev.preventDefault();
-          try {
-            input.showPicker();
-          } catch {
-            // unsupported - typing still works
-          }
-        }
-        ev.stopPropagation();
-      });
-      input.focus();
-      try {
-        input.showPicker();
-      } catch {
-        // no activation / unsupported: re-clicking the calendar icon
-        // retries; the cell body still accepts a typed ISO value
-      }
+      // The in-cell calendar: a month-grid pop right at the cell.
+      // Own calendar, not the native picker - showPicker is not
+      // reliable cross-browser and an invisible anchor gives no
+      // fallback. The cell's own content (ISO text + calendar icon)
+      // stays in place underneath; a typed ISO value still works via
+      // the cell's text editing.
+      const calPop = this.openDatePicker(td, block, col, current, close);
+      setAnchor(calPop, undefined);
       return;
     }
 
@@ -8941,6 +8930,183 @@ export class FolioDoc extends HTMLElement {
     } catch {
       // not supported - the styled select still shows in place
     }
+  }
+
+  /** The in-cell calendar (spec: date-column-controls.md): a
+   * month-grid pop anchored at the cell - prev/next month, today
+   * ringed, the current value filled. Clicking a day commits the ISO
+   * value (plus the time field's HH:MM for datetime columns) and
+   * closes. Returns the pop element (the outside-click anchor). */
+  private openDatePicker(
+    td: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    col: Table["columns"][number],
+    current: string,
+    close: () => void,
+  ): HTMLElement {
+    const pop = document.createElement("div");
+    pop.className = "folio-cal-pop";
+    pop.contentEditable = "false";
+    td.appendChild(pop);
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(current);
+    const now = new Date();
+    let vy = m ? Number(m[1]) : now.getFullYear();
+    let vm = m ? Number(m[2]) - 1 : now.getMonth();
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    const monthFmt = new Intl.DateTimeFormat(undefined, {
+      month: "long",
+      year: "numeric",
+    });
+    const wdFmt = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+    // 2026-11-02 is a Monday: weekday labels, Monday-first grid.
+    const weekdays = Array.from({ length: 7 }, (_, i) =>
+      wdFmt.format(new Date(2026, 10, 2 + i)),
+    );
+    let timeInput: HTMLInputElement | null = null;
+
+    // Keep the pop inside the viewport: flip above the cell when
+    // there is no room below, align right edges when there is no room
+    // to the right, clamp to the left edge as a last resort.
+    const place = (): void => {
+      pop.style.top = "";
+      pop.style.bottom = "";
+      pop.style.left = "";
+      pop.style.right = "";
+      const cellRect = td.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const margin = 8;
+      let r = pop.getBoundingClientRect();
+      if (r.bottom > vh - margin && cellRect.top > r.height + margin) {
+        pop.style.top = "auto";
+        pop.style.bottom = "100%"; // open upward
+        r = pop.getBoundingClientRect();
+      }
+      if (r.right > vw - margin) {
+        pop.style.left = "auto";
+        pop.style.right = "0"; // pop's right edge on the cell's
+        r = pop.getBoundingClientRect();
+      }
+      if (r.left < margin) {
+        pop.style.right = "auto";
+        pop.style.left = `${Math.round(margin - r.left)}px`;
+      }
+    };
+
+    const render = (): void => {
+      pop.textContent = "";
+      const head = document.createElement("div");
+      head.className = "folio-cal-head";
+      const prev = document.createElement("button");
+      prev.type = "button";
+      prev.className = "folio-cal-nav";
+      prev.textContent = "‹";
+      prev.title = "Previous month";
+      prev.setAttribute("aria-label", "Previous month");
+      const next = document.createElement("button");
+      next.type = "button";
+      next.className = "folio-cal-nav";
+      next.textContent = "›";
+      next.title = "Next month";
+      next.setAttribute("aria-label", "Next month");
+      const title = document.createElement("span");
+      title.className = "folio-cal-title";
+      title.textContent = monthFmt.format(new Date(vy, vm, 1));
+      prev.addEventListener("click", () => {
+        vm -= 1;
+        if (vm < 0) {
+          vm = 11;
+          vy -= 1;
+        }
+        render();
+      });
+      next.addEventListener("click", () => {
+        vm += 1;
+        if (vm > 11) {
+          vm = 0;
+          vy += 1;
+        }
+        render();
+      });
+      head.append(prev, title, next);
+      pop.appendChild(head);
+
+      const grid = document.createElement("div");
+      grid.className = "folio-cal-grid";
+      for (const wd of weekdays) {
+        const el = document.createElement("span");
+        el.className = "folio-cal-wd";
+        el.textContent = wd;
+        grid.appendChild(el);
+      }
+      const firstOffset = (new Date(vy, vm, 1).getDay() + 6) % 7;
+      const daysInMonth = new Date(vy, vm + 1, 0).getDate();
+      for (let i = 0; i < firstOffset; i++)
+        grid.appendChild(document.createElement("span"));
+      for (let d = 1; d <= daysInMonth; d++) {
+        const day = document.createElement("button");
+        day.type = "button";
+        day.className = "folio-cal-day";
+        day.textContent = String(d);
+        if (
+          vy === now.getFullYear() &&
+          vm === now.getMonth() &&
+          d === now.getDate()
+        )
+          day.classList.add("today");
+        if (
+          m &&
+          vy === Number(m[1]) &&
+          vm === Number(m[2]) - 1 &&
+          d === Number(m[3])
+        )
+          day.classList.add("selected");
+        day.addEventListener("click", () => {
+          const iso = `${String(vy)}-${pad(vm + 1)}-${pad(d)}`;
+          const value =
+            col.type === "datetime"
+              ? `${iso}T${timeInput?.value || "09:00"}`
+              : iso;
+          this.commitCellValue(td, block, value);
+          close();
+        });
+        grid.appendChild(day);
+      }
+      pop.appendChild(grid);
+
+      if (col.type === "datetime") {
+        const row = document.createElement("div");
+        row.className = "folio-cal-time";
+        timeInput = document.createElement("input");
+        timeInput.type = "time";
+        timeInput.className = "folio-cell-input";
+        timeInput.value = m?.[4] ? `${m[4]}:${m[5]}` : "09:00";
+        timeInput.setAttribute("aria-label", "Time");
+        timeInput.addEventListener("change", () => {
+          if (!timeInput?.value) return;
+          const datePart = m
+            ? `${m[1]}-${m[2]}-${m[3]}`
+            : `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+          this.commitCellValue(td, block, `${datePart}T${timeInput.value}`);
+          close();
+        });
+        row.appendChild(timeInput);
+        pop.appendChild(row);
+      }
+      // Keyboard: focus the selected day, else today, else the 1st.
+      const focusSel =
+        pop.querySelector<HTMLElement>(".folio-cal-day.selected") ??
+        pop.querySelector<HTMLElement>(".folio-cal-day.today") ??
+        pop.querySelector<HTMLElement>(".folio-cal-day");
+      focusSel?.focus();
+      place();
+    };
+    pop.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") close();
+      ev.stopPropagation();
+    });
+    render();
+    return pop;
   }
 
   private activeCellPop: {

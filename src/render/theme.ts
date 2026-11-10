@@ -1451,7 +1451,8 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.7em;
       opacity: 0.75;
     }
-    .folio-cell-pop {
+    .folio-cell-pop,
+    .folio-cal-pop {
       position: absolute;
       top: 100%;
       left: 0;
@@ -1466,20 +1467,72 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       flex-direction: column;
       gap: 2px;
     }
-    /* The date picker's anchor: an invisible input covering the cell,
-       so showPicker opens the native calendar right at the cell - no
-       intermediate pop with segmented date fields (spec:
-       date-column-controls.md). */
-    .folio-date-anchor {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      opacity: 0;
-      pointer-events: none;
+    /* The in-cell calendar (spec: date-column-controls.md): a
+       month grid pop at the cell - today ringed, the current value
+       filled. Own calendar, so it looks and behaves the same in every
+       browser (the native showPicker is not reliable everywhere). */
+    .folio-cal-pop { min-width: 224px; user-select: none; }
+    .folio-cal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+    .folio-cal-title {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-cal-nav {
       border: none;
-      padding: 0;
-      margin: 0;
+      background: none;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 3px 8px;
+      border-radius: 6px;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-cal-nav:hover { background: var(--folio-tint, #f0f2f5); }
+    .folio-cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+    }
+    .folio-cal-wd {
+      font-size: 10px;
+      color: var(--folio-ink-muted, #57606a);
+      text-align: center;
+      padding: 2px 0;
+    }
+    .folio-cal-day {
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 4px 0;
+      font-size: 12px;
+      text-align: center;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-cal-day:hover { background: var(--folio-tint, #f0f2f5); }
+    .folio-cal-day:focus-visible {
+      outline: 2px solid var(--folio-focus, #1f3fbf);
+      outline-offset: -1px;
+    }
+    .folio-cal-day.today {
+      box-shadow: inset 0 0 0 1px var(--folio-accent, #1f3fbf);
+    }
+    .folio-cal-day.selected {
+      background: var(--folio-accent, #1f3fbf);
+      color: #ffffff;
+    }
+    .folio-cal-time {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     .folio-cell-input {
       font: inherit;

@@ -47,7 +47,9 @@ test.describe("cell controls and cross-filtering", () => {
     await page.locator("#btn-view").click();
   });
 
-  test("date cell opens a date picker and commits ISO", async ({ page }) => {
+  test("date cell opens an in-cell calendar and commits ISO", async ({
+    page,
+  }) => {
     await page.goto("/?doc=demo/examples/project-plan.md");
     await expect(page.locator("#the-doc h1").first()).toBeVisible();
     const fig = page.locator('#the-doc figure[data-table-id="plan"]');
@@ -56,20 +58,65 @@ test.describe("cell controls and cross-filtering", () => {
       "tbody td[data-row-index='0'][data-col-index='3']",
     );
     await expect(cell).toHaveText("2026-11-11");
-    // the calendar icon goes straight to the picker: an invisible
-    // anchored input in the cell, no intermediate pop; the cell
-    // itself stays text-editable (type the ISO value)
+    // the calendar icon opens folio's own month-grid calendar at the
+    // cell (no native-picker dependency); the cell body stays
+    // text-editable (type the ISO value)
     await cell.hover();
     await cell.locator(".folio-date-btn").click();
-    const input = cell.locator("input.folio-date-anchor[type='date']");
-    await expect(input).toBeVisible();
+    const cal = cell.locator(".folio-cal-pop");
+    await expect(cal).toBeVisible();
     await expect(fig.locator(".folio-cell-pop")).toHaveCount(0);
-    // Blur (the picker taking focus) must not close the control.
-    await input.evaluate((el) => (el as HTMLElement).blur());
-    await expect(input).toBeVisible();
-    await input.fill("2026-11-20");
-    await page.keyboard.press("Enter"); // commits via the change handler
+    // the current value's month, with the 11th selected
+    await expect(cal.locator(".folio-cal-title")).toContainText(
+      "November 2026",
+    );
+    await expect(cal.locator(".folio-cal-day.selected")).toHaveText("11");
+    // month navigation
+    await cal.locator(".folio-cal-nav").nth(1).click();
+    await expect(cal.locator(".folio-cal-title")).toContainText(
+      "December 2026",
+    );
+    await cal.locator(".folio-cal-nav").nth(0).click();
+    await expect(cal.locator(".folio-cal-title")).toContainText(
+      "November 2026",
+    );
+    // blur must not close the calendar (it closes on outside click)
+    await cal.evaluate((el) => (el as HTMLElement).blur());
+    await expect(cal).toBeVisible();
+    // pick the 20th -> commits immediately and closes
+    await cal.locator(".folio-cal-day", { hasText: /^20$/ }).click();
     await expect(cell).toHaveText(/2026-11-20/);
+    await expect(fig.locator(".folio-cal-pop")).toHaveCount(0);
+  });
+
+  test("datetime column: calendar plus time field commit a datetime", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => localStorage.setItem("folio.guided", "1"));
+    await page.goto("/");
+    await page.locator("folio-doc h1").first().waitFor();
+    await page.locator("#btn-markdown").click();
+    await page
+      .locator("#editor")
+      .fill(
+        "# T\n\n::: table {#ev}\ncolumns:\n  - {name: what, type: text}\n  - {name: at, type: datetime}\ndata:\n  - [standup, 2026-11-12T09:30]\n:::\n",
+      );
+    await page.locator("#btn-view").click();
+    await page.locator("#the-doc h1").first().waitFor();
+    const fig = page.locator('#the-doc figure[data-table-id="ev"]');
+    const cell = fig.locator(
+      "tbody td[data-row-index='0'][data-col-index='1']",
+    );
+    await cell.hover();
+    await cell.locator(".folio-date-btn").click();
+    const cal = cell.locator(".folio-cal-pop");
+    await expect(cal).toBeVisible();
+    await expect(cal.locator(".folio-cal-day.selected")).toHaveText("12");
+    const time = cal.locator("input[type='time']");
+    await expect(time).toHaveValue("09:30");
+    // pick another day; the time field rides along
+    await cal.locator(".folio-cal-day", { hasText: /^20$/ }).click();
+    await expect(cell).toHaveText(/2026-11-20T09:30/);
   });
 
   test("dataset browser: chips, dropdown, and date picker work in the sheet", async ({
@@ -119,11 +166,10 @@ test.describe("cell controls and cross-filtering", () => {
     await expect(dateCell).toContainText("2026-11-11");
     await dateCell.hover();
     await dateCell.locator(".folio-date-btn").click();
-    const input = dateCell.locator("input.folio-date-anchor[type='date']");
-    await expect(input).toBeVisible();
+    const cal = dateCell.locator(".folio-cal-pop");
+    await expect(cal).toBeVisible();
     await expect(sheet.locator(".folio-cell-pop")).toHaveCount(0);
-    await input.fill("2026-11-20");
-    await page.keyboard.press("Enter"); // commits via the change handler
+    await cal.locator(".folio-cal-day", { hasText: /^20$/ }).click();
     await expect(
       sheet.locator(
         ".folio-ds-row[data-display='0'] .folio-ds-cell[data-col='3']",
@@ -177,6 +223,34 @@ test.describe("cell controls and cross-filtering", () => {
     await page.setViewportSize({ width: 700, height: 900 });
     await page.waitForTimeout(200);
     await noOverflow();
+  });
+
+  test("calendar pop flips up to stay inside the viewport", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 420 });
+    await page.goto("/?doc=demo/examples/project-plan.md");
+    await expect(page.locator("#the-doc h1").first()).toBeVisible();
+    const fig = page.locator('#the-doc figure[data-table-id="plan"]');
+    // put a bottom-row date cell at the bottom edge of a short viewport
+    const cell = fig.locator(
+      "tbody td[data-row-index='3'][data-col-index='3']",
+    );
+    await cell.evaluate((el) => el.scrollIntoView({ block: "end" }));
+    await page.waitForTimeout(200);
+    await cell.hover();
+    await cell.locator(".folio-date-btn").click();
+    const cal = cell.locator(".folio-cal-pop");
+    await expect(cal).toBeVisible();
+    const cb = await cal.boundingBox();
+    const cellb = await cell.boundingBox();
+    expect(cb).not.toBeNull();
+    expect(cellb).not.toBeNull();
+    if (!cb || !cellb) return;
+    // fully inside the viewport, and flipped above the cell
+    expect(cb.y).toBeGreaterThanOrEqual(7);
+    expect(cb.y + cb.height).toBeLessThanOrEqual(420 - 7);
+    expect(cb.y + cb.height).toBeLessThanOrEqual(cellb.y + 2);
   });
 
   test("totals row sums effort", async ({ page }) => {
