@@ -4,12 +4,10 @@ theme: technical
 
 # Traffic on a small road network
 
-*A flow figure plays packets travelling an edge list. The edges are
-an ordinary dataset - edit a quantity and the flow follows. With
-`diagram: @net` the figure animates inside the mermaid diagram itself:
-the diagram's own SVG is the base and the packets move through it. In
-print/PDF the default rendition is a static flow map: one map, edge
-widths proportional to total flow.*
+*A mermaid diagram with `flow=@roads` is also a flow figure: the
+packets play inside the diagram itself. The edges are an ordinary
+dataset - edit a quantity and the flow follows. In print/PDF the
+packets become trails over the diagram.*
 
 ::: table {#roads}
 caption: "Edges of a little road network (qty = vehicles per edge, speed = relative pace: an edge is crossed in 30/speed ticks)"
@@ -31,10 +29,10 @@ data:
   - [Park, Docks, 3, 0.9]
 :::
 
-The network as a diagram - mermaid lays the nodes out, and the figure
-below animates inside that very diagram:
+The network as a diagram with traffic flowing through it - mermaid
+lays the nodes out, `flow=@roads` animates the vehicles inside it:
 
-::: mermaid {#net}
+::: mermaid {#net} flow=@roads
 graph LR
   Market --> Square
   Square --> Market
@@ -48,14 +46,6 @@ graph LR
   Park --> Docks
 :::
 
-::: motion {#traffic}
-type: flow
-source: @roads
-diagram: @net
-frames: 48
-caption: "Vehicles per tick moving through the network diagram above"
-:::
-
 ::: chart {#busiest}
 source: @roads
 query: {group: [from], agg: {out: sum(qty)}, sort: {by: out, order: desc}, limit: 5}
@@ -63,8 +53,7 @@ type: bar
 caption: "Busiest origins by total flow"
 :::
 
-Print this document (or export PDF) and the flow figure becomes the
-flow map - `print: filmstrip` would give the frames as thumbnails
-instead, `print: trails` each packet's path over the diagram, and
-`display: flowmap` shows the static map in the document itself. A flow
-figure without `diagram:` lays its nodes out on a circle.
+Print this document (or export PDF) and the vehicles become trails
+over the diagram. A flow figure in its own block
+(`::: motion` with `type: flow`) lays its nodes out on a circle and
+offers the filmstrip/flowmap/poster renditions instead.

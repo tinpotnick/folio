@@ -159,13 +159,11 @@ export interface Motion {
   id?: string;
   type: "swarm" | "flow";
   /** Dataset of frames (swarm: frame/id/x/y rows) or edges (flow:
-   * from/to/qty/speed rows). Absent on swarm: a built-in seeded sim. */
+   * from/to/qty/speed rows). Absent on swarm: a built-in seeded sim.
+   * Flow figures lay nodes out on a circle; to animate inside a
+   * mermaid diagram, put `flow=@edges` on the mermaid block instead
+   * (spec: docs/specs/flow-geometry.md). */
   source?: string;
-  /** Flow layout: a mermaid diagram block (@id). The diagram's own SVG
-   * is the figure's base and the packets animate inside it - node
-   * locations live in the diagram, not in a table (spec:
-   * docs/specs/flow-geometry.md). Default layout: circle. */
-  diagram?: string;
   /** The frame/time column name (default "frame"). Any column can
    * play this role - it is chosen here, not baked into the model. */
   time?: string;

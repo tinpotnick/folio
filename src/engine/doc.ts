@@ -39,7 +39,10 @@ export type DocBlock =
   | { kind: "table"; table: Table }
   | { kind: "chart"; chart: Chart }
   | { kind: "motion"; motion: Motion }
-  | { kind: "diagram"; diagram: { id: string; text: string } }
+  | {
+      kind: "diagram";
+      diagram: { id: string; text: string; flow?: string };
+    }
   | { kind: "image"; image: Image }
   | { kind: "audio"; audio: Audio }
   /** Footnote definitions (spec: docs/specs/footnotes.md), GitHub's
@@ -76,7 +79,7 @@ export interface Doc {
 
 const DIRECTIVE_RE =
   /^::: (table|chart|image|audio|value|motion) \{#([^}]+)\}$/;
-const MERMAID_RE = /^::: mermaid \{#([^}]+)\}$/;
+const MERMAID_RE = /^::: mermaid \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 
 export class ParseError extends Error {
   constructor(
@@ -122,10 +125,21 @@ export function parseDoc(text: string): Doc {
     const mm = MERMAID_RE.exec(line.trim());
     if (mm) {
       const end = findDirectiveEnd(lines, i + 1);
+      // Optional opener attributes: `flow=@edges` binds an edge table,
+      // turning the diagram into an animated flow figure (spec:
+      // docs/specs/flow-geometry.md).
+      let flow: string | undefined;
+      for (const attr of (mm[2] ?? "").trim().split(/\s+/)) {
+        if (!attr) continue;
+        const fm = /^flow=@?([\w-]+)$/.exec(attr);
+        if (fm) flow = fm[1];
+        else throw new ParseError(`Unknown mermaid attribute: '${attr}'`, 0);
+      }
       doc.blocks.push({
         kind: "diagram",
         diagram: {
           id: mm[1] ?? "",
+          ...(flow !== undefined ? { flow } : {}),
           text: lines
             .slice(i + 1, end)
             .join("\n")
@@ -465,7 +479,6 @@ function parseChartDirective(body: DirectiveBody, id: string): DocBlock {
 const MOTION_KEYS = new Set([
   "type",
   "source",
-  "diagram",
   "time",
   "id",
   "x",
@@ -510,9 +523,6 @@ function parseMotionDirective(body: DirectiveBody, id: string): DocBlock {
     type: values["type"] as Motion["type"],
     ...(values["source"] !== undefined
       ? { source: values["source"].replace(/^@/, "") }
-      : {}),
-    ...(values["diagram"] !== undefined
-      ? { diagram: values["diagram"].replace(/^@/, "") }
       : {}),
     ...(values["time"] !== undefined ? { time: values["time"] } : {}),
     ...(values["id"] !== undefined ? { idCol: values["id"] } : {}),
@@ -1010,7 +1020,7 @@ function serializeBlock(block: DocBlock): string {
     case "motion":
       return serializeMotion(block.motion);
     case "diagram":
-      return `::: mermaid {#${block.diagram.id}}\n${block.diagram.text}\n:::`;
+      return `::: mermaid {#${block.diagram.id}}${block.diagram.flow !== undefined ? ` flow=@${block.diagram.flow}` : ""}\n${block.diagram.text}\n:::`;
     case "image":
       return serializeImage(block.image);
     case "audio":
@@ -1022,7 +1032,6 @@ function serializeMotion(m: Motion): string {
   const lines = [`::: motion {#${m.id ?? "motion"}}`];
   lines.push(`type: ${m.type}`);
   if (m.source !== undefined) lines.push(`source: @${m.source}`);
-  if (m.diagram !== undefined) lines.push(`diagram: @${m.diagram}`);
   if (m.time !== undefined) lines.push(`time: ${m.time}`);
   if (m.idCol !== undefined) lines.push(`id: ${m.idCol}`);
   if (m.xCol !== undefined) lines.push(`x: ${m.xCol}`);

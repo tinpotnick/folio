@@ -4,69 +4,58 @@
 
 ## Decision
 
-Node locations live in the **diagram**, not in a table. A flow figure
-with `diagram: @net` references a `::: mermaid {#net}` block: mermaid
-lays the nodes out (block and direction are the author's choice -
-`graph LR`, `flowchart TD`, ...), and the motion figure animates
-**inside the mermaid diagram's own SVG** - the rendered diagram is the
-player base and the packet frames are injected into it, in the
-diagram's coordinate space. Without `diagram:`, nodes sit on a
-circle (deterministic fallback, own SVG).
+Node locations live in the **diagram**, not in a table. A mermaid
+block with a `flow=@edges` opener attribute is also a flow figure:
+mermaid lays the nodes out (block and direction are the author's
+choice - `graph LR`, `flowchart TD`, ...), and the packets animate
+**inside the diagram's own SVG**. There is one figure, not two.
 
 ```
-::: mermaid {#net}
+::: mermaid {#net} flow=@roads
 graph LR
   Market --> Square
   ...
-:::
-
-::: motion {#traffic}
-type: flow
-source: @roads
-diagram: @net
 :::
 ```
 
 The edge table remains the single source of truth for DATA
 (`from, to, qty, speed` - frames are still ordinary table rows).
 Mermaid provides structure + positions only. Every edge/node in the
-table must exist in the diagram, else a visible error.
+table must exist in the diagram, else a visible error. A `::: motion`
+block with `type: flow` and no diagram stays as-is: circle layout,
+own SVG, filmstrip/flowmap/poster renditions.
 
 ## Rules
 
-- `diagram:` is optional and the only layout key (an earlier
-  `nodes: @table` key was removed - locations in a table were
-  rejected in review).
-- Mermaid renders async: the figure first shows "Laying out from
-  @net…", then redraws in place once the layout lands. Layouts are
-  cached per diagram id and invalidated when the diagram text changes
-  (the cache is keyed to the text; cleared on document load). Editing
-  the diagram or the edge table redraws the figure in place.
+- The mermaid directive opener takes optional attributes:
+  `flow=@table` binds an edge list. Unknown attributes are a parse
+  error. Round-trips byte-identically.
 - The mermaid SVG's viewBox becomes the figure's width/height, so the
-  player, filmstrip, poster/frame and trails all share the diagram's
-  coordinate space. The flowmap (print default) is the designed
-  analytical overlay: our own SVG at the same dimensions.
-- Player base: the diagram's own edges are hidden and redrawn with
-  qty-weighted widths (log scale, capped at 16), so quantity reads in
-  the animated diagram; packets (up to 16 per edge, one per vehicle)
-  move on top. Filmstrip thumbs and poster/frame embed the base with
-  one frame group; trails draw packet paths over the base.
+  player, filmstrip, poster/frame and trails share the diagram's
+  coordinate space (`MotionData.baseSvg` carries the diagram; frame
+  groups are injected before its `</svg>`).
+- Screen: the diagram with its own edges hidden and redrawn
+  qty-weighted (log scale, cap 16) plus the moving packets (up to 16
+  per edge), autoplaying in a loop at 15 fps - the figure hosts the
+  player, so the rendition CSS and playback are the motion figure's.
+  Print/PDF: trails over the diagram (a still cannot play).
 - Node ids in the mermaid text must be simple (letters/digits/dash/
   underscore) and match the edge table's from/to values - mermaid
   rewrites anything else. Positions are extracted from the rendered
   SVG's node groups (`<renderId>-flowchart-<id>-<n>`, rect centred on
   the translate); pinned via the `^12.2.0` dependency and fixture unit
   tests. A diagram with no flowchart nodes is a visible error.
-- Engine stays pure: it stores only the `@net` reference. Mermaid runs
-  in the component (bundled, offline, securityLevel strict), like
-  diagram blocks. The directive round-trips byte-identically.
+- Editing the edge table or the diagram text redraws the figure in
+  place (dependents, like charts).
+- Engine stays pure: it stores the raw text + the `flow` reference.
+  Mermaid runs in the component (bundled, offline, securityLevel
+  strict), like plain diagram blocks.
 - qty scaling: packets per edge = min(16, round(qty)); edge width =
-  0.8 + log2(1+qty)*1.8, capped at 16 (player overlay) and proportional
-  share of total in the flowmap. So 9 vs 90 vehicles is visibly
-  different.
+  0.8 + log2(1+qty)*1.8, capped at 16 - so 9 vs 90 vehicles is
+  visibly different.
 
 ## Example
 
-`demo/examples/flow.md`: edge table + `::: mermaid {#net}` + one
-motion figure with `diagram: @net` animating inside the diagram, plus
-a bar chart of busiest origins.
+`demo/examples/flow.md`: edge table + one `::: mermaid {#net}
+flow=@roads` block animating traffic inside the diagram, plus a bar
+chart of busiest origins.

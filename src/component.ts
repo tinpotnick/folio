@@ -95,7 +95,6 @@ import {
 import {
   mermaidViewBox,
   nodeCentersFromMermaidSvg,
-  type NodePos,
 } from "./render/mermaid-layout.js";
 import {
   inlineMarkdownToHtml,
@@ -928,7 +927,6 @@ export class FolioDoc extends HTMLElement {
       const same =
         this.doc !== null && serializeDoc(this.doc) === serializeDoc(parsed);
       this.doc = parsed;
-      this.mermaidLayouts.clear();
       // A new document invalidates any open dataset browser.
       this.closeDataset();
       if (same) {
@@ -1472,6 +1470,11 @@ export class FolioDoc extends HTMLElement {
         figure.className = "folio-diagram";
         figure.dataset.blockIndex = String(idx);
         figure.dataset.diagramId = block.diagram.id;
+        // A re-render replaces the figure: stop the old flow's playback.
+        const old = this.shadowRoot?.querySelector<HTMLElement>(
+          `figure.folio-diagram[data-block-index="${String(idx)}"]`,
+        );
+        if (old) this.motionStop(old);
         // Diagrams are generated output, not editable prose, but
         // they are selectable (tabindex) so Backspace/Delete on a
         // selected diagram removes the block.
@@ -7369,7 +7372,6 @@ export class FolioDoc extends HTMLElement {
     const motion = block.motion;
     if (motion.id) figure.dataset.motionId = motion.id;
     if (motion.source) figure.dataset.motionSource = motion.source;
-    if (motion.diagram) figure.dataset.motionDiagram = motion.diagram;
     figure.contentEditable = "false";
     const stage = document.createElement("div");
     stage.className = "motion-stage";
@@ -7391,45 +7393,7 @@ export class FolioDoc extends HTMLElement {
         }
         table = recalcTable(tb.table, this.tablePool(), this.memo());
       }
-      // Flow layout (spec: docs/specs/flow-geometry.md): with
-      // `diagram: @net`, the mermaid diagram's own SVG is the figure's
-      // base and the packets animate inside it (async - the figure
-      // first shows a placeholder, then redraws in place). Without it,
-      // nodes sit on a circle.
-      let nodesLayout: NodePos[] | undefined;
-      let baseSvg: string | undefined;
-      if (motion.diagram) {
-        const db = this.doc?.blocks.find(
-          (b) => b.kind === "diagram" && b.diagram.id === motion.diagram,
-        );
-        if (!db || db.kind !== "diagram") {
-          throw new Error(`motion diagram '@${motion.diagram}' not found`);
-        }
-        const cached = this.mermaidLayouts.get(motion.diagram);
-        if (cached && cached.text === db.diagram.text) {
-          if (cached.nodes.length === 0) {
-            throw new Error(
-              `no flowchart/graph nodes found in @${motion.diagram} - the layout needs a mermaid graph`,
-            );
-          }
-          nodesLayout = cached.nodes;
-          baseSvg = cached.svg;
-        } else {
-          stage.textContent = `Laying out from @${motion.diagram}…`;
-          void this.loadMermaidLayout(motion.diagram).then(() =>
-            this.redrawMotionFromDiagram(motion.diagram ?? ""),
-          );
-          return figure;
-        }
-      }
-      // The diagram's viewBox becomes the figure's coordinate space.
-      const vb = baseSvg ? mermaidViewBox(baseSvg) : null;
-      const data = motionData(
-        vb ? { ...motion, width: vb.w, height: vb.h } : motion,
-        table,
-        nodesLayout,
-      );
-      if (baseSvg) data.baseSvg = baseSvg;
+      const data = motionData(motion, table);
       const theme = this.doc ? themeFromDoc(this.doc) : presetTheme(undefined);
       const ink = theme.colors[this.mode()];
       const style = {
@@ -7983,62 +7947,6 @@ export class FolioDoc extends HTMLElement {
     return svg;
   }
 
-  /** Mermaid layouts by diagram id, keyed to the diagram's text so
-   * an edit invalidates the cache (spec: flow-geometry.md). */
-  /** Mermaid layouts by diagram id (rendered SVG + node positions),
-   * keyed to the diagram's text so an edit invalidates the cache
-   * (spec: flow-geometry.md). */
-  private mermaidLayouts = new Map<
-    string,
-    { text: string; nodes: NodePos[]; svg: string }
-  >();
-
-  /** Render a mermaid diagram block and cache its SVG + node positions. */
-  private async loadMermaidLayout(diagramId: string): Promise<void> {
-    const db = this.doc?.blocks.find(
-      (b) => b.kind === "diagram" && b.diagram.id === diagramId,
-    );
-    if (!db || db.kind !== "diagram") {
-      this.mermaidLayouts.set(diagramId, { text: "", nodes: [], svg: "" });
-      return;
-    }
-    try {
-      const svg = await this.renderMermaidSvg(
-        diagramId,
-        db.diagram.text,
-        "folio-layout-",
-      );
-      this.mermaidLayouts.set(diagramId, {
-        text: db.diagram.text,
-        nodes: nodeCentersFromMermaidSvg(svg),
-        svg,
-      });
-    } catch {
-      this.mermaidLayouts.set(diagramId, {
-        text: db.diagram.text,
-        nodes: [],
-        svg: "",
-      });
-    }
-  }
-
-  /** Redraw the motion figures that take their layout from a diagram. */
-  private redrawMotionFromDiagram(diagramId: string): void {
-    const host = this.shadowRoot?.querySelector("article.folio-doc");
-    for (const mf of Array.from(
-      host?.querySelectorAll<HTMLElement>(
-        "figure.folio-motion[data-motion-diagram]",
-      ) ?? [],
-    )) {
-      if (mf.dataset.motionDiagram !== diagramId) continue;
-      const idx = Number(mf.dataset.blockIndex ?? -1);
-      const b = this.doc?.blocks[idx];
-      if (b?.kind === "motion" && mf.parentElement) {
-        mf.parentElement.replaceChild(this.renderMotion(b, idx), mf);
-      }
-    }
-  }
-
   private async drawDiagram(figure: HTMLElement): Promise<void> {
     if (!this.doc) return;
     const id = figure.dataset.diagramId;
@@ -8049,7 +7957,59 @@ export class FolioDoc extends HTMLElement {
     if (!block || block.kind !== "diagram" || !holder) return;
     try {
       const svg = await this.renderMermaidSvg(id ?? "", block.diagram.text);
-      if (figure.isConnected) holder.innerHTML = svg;
+      if (!figure.isConnected) return;
+      const flowId = block.diagram.flow;
+      if (!flowId) {
+        holder.innerHTML = svg;
+        return;
+      }
+      // flow=@edges: the diagram becomes an animated flow figure - the
+      // packets play inside the diagram's own SVG (spec:
+      // docs/specs/flow-geometry.md).
+      const tb = this.doc.blocks.find(
+        (b) => b.kind === "table" && b.table.id === flowId,
+      );
+      if (!tb || tb.kind !== "table") {
+        holder.textContent = `Flow error: edge table '@${flowId}' not found`;
+        return;
+      }
+      const centers = nodeCentersFromMermaidSvg(svg);
+      if (centers.length === 0) {
+        holder.textContent = `Flow error: no flowchart/graph nodes in #${id ?? ""} - a flow needs a mermaid graph`;
+        return;
+      }
+      const vb = mermaidViewBox(svg);
+      const table = recalcTable(tb.table, this.tablePool(), this.memo());
+      const data = motionData(
+        { type: "flow", source: flowId, width: vb.w, height: vb.h },
+        table,
+        centers,
+      );
+      data.baseSvg = svg;
+      const theme = themeFromDoc(this.doc);
+      const c = theme.colors[this.mode()];
+      const style = {
+        ink: c.ink,
+        muted: c.muted,
+        accent: c.accent,
+        paper: c.paper,
+      };
+      // The figure hosts the player: the same classes/datasets as a
+      // motion figure, so the rendition CSS and playback work as-is.
+      // Screen plays the packets in the diagram; print shows trails.
+      figure.classList.add("folio-motion");
+      figure.dataset.display = "player";
+      figure.dataset.print = "trails";
+      figure.dataset.diagramFlow = flowId;
+      holder.classList.add("motion-view");
+      holder.innerHTML = playerSvg(data, style);
+      const pstat = document.createElement("div");
+      pstat.className = "motion-print-static";
+      pstat.innerHTML = trailsSvg(data, style);
+      figure.appendChild(pstat);
+      this.motionStop(figure);
+      this.showMotionFrame(figure, 0);
+      this.motionPlay(figure);
     } catch (e) {
       if (figure.isConnected) {
         holder.textContent = `Diagram error: ${
@@ -8524,6 +8484,15 @@ export class FolioDoc extends HTMLElement {
       this.drawChart(cf);
     }
     // Motion figures reading this dataset redraw in place.
+    // Flow diagrams (mermaid block with flow=@table) redraw too.
+    for (const df of Array.from(
+      host?.querySelectorAll<HTMLElement>(
+        "figure.folio-diagram[data-diagram-flow]",
+      ) ?? [],
+    )) {
+      if (df.dataset.diagramFlow !== tableId) continue;
+      void this.drawDiagram(df);
+    }
     for (const mf of Array.from(
       host?.querySelectorAll<HTMLElement>(
         "figure.folio-motion[data-motion-source]",

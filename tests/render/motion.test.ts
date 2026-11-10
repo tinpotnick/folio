@@ -203,12 +203,6 @@ source: @roads
 qty: cars
 print: flowmap
 :::
-
-::: motion {#lr-flow}
-type: flow
-source: @roads
-diagram: @net
-:::
 `;
     const doc = parseDoc(src);
     expect(serializeDoc(doc)).toBe(src);
@@ -238,17 +232,15 @@ diagram: @net
     ).toThrow(/type: swarm or flow/);
   });
 
-  it("diagram: parses; nodes: is gone - locations live in the diagram, not a table", () => {
-    const doc = parseDoc(
-      "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\ndiagram: @d\n:::\n",
-    );
-    const b = doc.blocks[1];
-    if (b?.kind !== "motion") throw new Error("not motion");
-    expect(b.motion.diagram).toBe("d");
-    expect("nodes" in b.motion).toBe(false);
+  it("layout keys on motion are gone - flow-in-diagram lives on the mermaid block (flow=@edges)", () => {
     expect(() =>
       parseDoc(
         "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\nnodes: @p\n:::\n",
+      ),
+    ).toThrow(/Unknown motion key/);
+    expect(() =>
+      parseDoc(
+        "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\ndiagram: @d\n:::\n",
       ),
     ).toThrow(/Unknown motion key/);
   });
