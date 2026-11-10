@@ -63,6 +63,17 @@
     <control>pointing</control>
   </supports>
   <releases>
+    <release version="0.3.0" date="2026-11-10">
+      <description>
+        <p>Real features: motion figures, tables that total themselves, and a tidier table UI.</p>
+        <ul>
+          <li>Motion figures: a murmuration or traffic flow plays in the document from plain table frames; print shows a designed still (filmstrip, trails, flow map); a mermaid diagram with flow=@edges animates inside the diagram itself</li>
+          <li>Table totals rows: a derived footer with per-column formulas (self.col.amount | sum()), currency-formatted, recomputed on every edit</li>
+          <li>Table context menu (Word/Excel-style) and spreadsheet-style inspector bars; hide/show columns; heatmap chart type; long chart axis labels rotate instead of merging</li>
+          <li>Import SQLite files; grouped chart queries; open .md files from the web in the app</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.2.2" date="2026-11-02">
       <description>
         <p>The presenter view works.</p>
