@@ -104,10 +104,16 @@ test.describe("table inspector", () => {
     await expect(pair.locator(".insp-chart")).toBeVisible();
     // Chart it carries its bar-chart icon.
     await expect(pair.locator(".insp-chart svg")).toBeVisible();
-    // Row 1 fits on ONE line at this page width (one 28px control).
+    // Row 1 fits on ONE line at this page width: its height matches a
+    // single control's, not a wrapped stack. Relative to the row's own
+    // control, so fallback fonts on CI runners (taller/wider metrics)
+    // do not flake it.
     const row1Box = await row1.boundingBox();
     expect(row1Box).not.toBeNull();
-    if (row1Box) expect(row1Box.height).toBeLessThanOrEqual(44);
+    const kindBox = await row1.locator(".insp-kind").boundingBox();
+    if (row1Box && kindBox) {
+      expect(row1Box.height).toBeLessThanOrEqual(kindBox.height * 1.6);
+    }
     // The caption spans the bar's full width on its own line.
     const capRow = bar.locator(".insp-cap-row");
     await expect(capRow).toBeVisible();

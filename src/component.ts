@@ -8401,7 +8401,9 @@ export class FolioDoc extends HTMLElement {
       foot.title = `Totals error: ${e instanceof Error ? e.message : String(e)}`;
       return;
     }
-    for (const td of Array.from(foot.querySelectorAll<HTMLTableCellElement>("td[data-col-index]"))) {
+    for (const td of Array.from(
+      foot.querySelectorAll<HTMLTableCellElement>("td[data-col-index]"),
+    )) {
       const ci = Number(td.dataset.colIndex ?? -1);
       const col = block.table.columns[ci];
       const tv = totals.get(ci);
