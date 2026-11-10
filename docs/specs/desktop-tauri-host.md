@@ -95,7 +95,10 @@ the named cases.
   (`packaging/linux/folio.desktop.hbs`) and the Flatpak's
   (`packaging/linux/io.github.tinpotnick.folio.desktop`) run
   `folio %F` with `MimeType=text/markdown;text/x-markdown;`; the
-  store listing `provides` the media type.
+  store listing `provides` the media type. The web version registers
+  the same association on an installed app via the manifest's
+  `file_handlers` (docs/specs/web-files.md, "Open with folio on the
+  web").
 - The shell keeps the first non-option argument as the launch file
   (`launch_file_from_args`, unit-tested; a `file://` prefix is
   dropped). The page asks for it once at boot (`launch_document`):
@@ -105,6 +108,19 @@ the named cases.
   (`RunEvent::Opened` → `folio-open-file`); the page opens each after
   the unsaved-changes check.
 - e2e: `tests/e2e/launch-file.spec.ts` (Tauri bridge stubbed).
+- On demand, not as a launch-time prompt (decision 2026-10-24: the
+  installers already put folio in "Open with", and Windows reserves
+  the default handler for the user in Settings, so a nag would ask
+  for something the app cannot deliver there): the palette entry
+  **Open .md files with folio by default** calls the shell's
+  `set_default_md_handler` - Linux `xdg-mime default` (through
+  `flatpak-spawn --host` inside the Flatpak), macOS
+  `LSSetDefaultRoleHandlerForContentType` for `public.markdown` /
+  `net.daringfireball.markdown`, Windows opens
+  `ms-settings:defaultapps` - and flashes the shell's answer.
+  In-app help: demo/help/opening-saving.md. e2e:
+  `tests/e2e/default-md.spec.ts` (bridge stubbed; entry absent on
+  web). Eval: `evals/desktop-default-md-first-contact.md`.
 
 ## Support link (2026-10-23)
 

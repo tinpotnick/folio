@@ -178,3 +178,18 @@ export async function onFileOpened(open: () => void): Promise<void> {
   const { listen } = await import("@tauri-apps/api/event");
   await listen("folio-open-file", open);
 }
+
+/** "Open .md files with folio by default" (command palette; spec:
+ * docs/specs/desktop-tauri-host.md, "Open with folio"): the shell's
+ * message on success - what the OS allowed (Linux: xdg-mime, macOS:
+ * LaunchServices, Windows: Settings opened) - or the error. Null on
+ * the web, where there is no OS association. */
+export async function setDefaultMdHandler(): Promise<string | null> {
+  if (!isDesktop()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    return await invoke<string>("set_default_md_handler");
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}

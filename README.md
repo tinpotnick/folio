@@ -159,7 +159,9 @@ Open any of these in the [web version](https://tinpotnick.github.io/folio/)
 ## Install
 
 **Try it first in your browser:** <https://tinpotnick.github.io/folio/> —
-open and save files on your own computer; nothing is uploaded.
+open and save files on your own computer; nothing is uploaded. Install
+it as an app (Chrome/Edge: ⋯ → **Install folio**) and .md files can open
+with folio straight from your file manager, like the desktop app.
 
 ### Linux
 
@@ -204,7 +206,10 @@ Download from the [latest release](https://github.com/tinpotnick/folio/releases/
 the `.msi` or `-setup.exe` for Windows, the `.dmg` for macOS (Apple
 silicon and Intel). The builds are not code-signed yet: on macOS,
 right-click the app and choose **Open** the first time; on Windows,
-choose **More info → Run anyway** if SmartScreen warns.
+choose **More info → Run anyway** if SmartScreen warns. Once installed,
+folio appears in **Open with** for `.md` files; to make it the default,
+run **Ctrl+K → Open .md files with folio by default** inside folio
+(on Windows that opens Settings → Default apps, where you choose).
 
 folio is young: expect rough edges, and please
 [report them](https://github.com/tinpotnick/folio/issues). Your

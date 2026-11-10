@@ -263,6 +263,147 @@ async fn save_document(
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// "Open .md files with folio by default" (command palette; spec:
+/// docs/specs/desktop-tauri-host.md, "Open with folio"). What making
+/// folio the default takes is per-platform: Linux writes the default
+/// with xdg-mime (through `flatpak-spawn --host` inside the Flatpak,
+/// whose sandbox cannot write the host's mimeapps.list); macOS asks
+/// LaunchServices; Windows reserves default apps for the user in
+/// Settings, so there we open Settings and say so. Ok carries the
+/// message to flash.
+#[tauri::command]
+fn set_default_md_handler() -> Result<String, String> {
+    set_default_md_handler_impl()
+}
+
+/// The desktop entry ids folio is installed under: the Flatpak's
+/// reverse-DNS id, the deb/rpm/AppImage product name.
+#[cfg(target_os = "linux")]
+const DESKTOP_IDS: [&str; 2] = ["io.github.tinpotnick.folio.desktop", "folio.desktop"];
+
+/// The XDG applications dirs, in lookup order, plus the Flatpak's own
+/// prefix (where its desktop entry lives inside the sandbox).
+#[cfg(target_os = "linux")]
+fn applications_dirs(
+    xdg_data_home: Option<String>,
+    home: Option<String>,
+    xdg_data_dirs: Option<String>,
+) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = xdg_data_home
+        .map(PathBuf::from)
+        .into_iter()
+        .chain(home.map(|h| PathBuf::from(h).join(".local/share")))
+        .collect();
+    if let Some(xdg) = xdg_data_dirs {
+        dirs.extend(xdg.split(':').filter(|d| !d.is_empty()).map(PathBuf::from));
+    }
+    dirs.push(PathBuf::from("/app/share"));
+    dirs
+}
+
+#[cfg(target_os = "linux")]
+fn set_default_md_handler_impl() -> Result<String, String> {
+    let dirs = applications_dirs(
+        std::env::var("XDG_DATA_HOME").ok(),
+        std::env::var("HOME").ok(),
+        std::env::var("XDG_DATA_DIRS").ok(),
+    );
+    // The installed entry first; if none is integrated yet, still
+    // write the preference for the product-name id.
+    let desktop = DESKTOP_IDS
+        .iter()
+        .find(|id| dirs.iter().any(|d| d.join("applications").join(id).is_file()))
+        .unwrap_or(&DESKTOP_IDS[1]);
+    let flatpak = Path::new("/.flatpak-info").exists();
+    let mut cmd = if flatpak {
+        let mut c = std::process::Command::new("flatpak-spawn");
+        c.arg("--host").arg("xdg-mime");
+        c
+    } else {
+        std::process::Command::new("xdg-mime")
+    };
+    let status = cmd
+        .args(["default", desktop, "text/markdown", "text/x-markdown"])
+        .status();
+    match status {
+        Ok(s) if s.success() => Ok(format!(
+            ".md and .markdown files will open with folio ({desktop})"
+        )),
+        Ok(s) => Err(format!("xdg-mime exited {s}")),
+        Err(e) => Err(format!("could not run xdg-mime: {e}")),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn set_default_md_handler_impl() -> Result<String, String> {
+    // LaunchServices' C API, declared here so no new crate is needed
+    // (ADR-0007): CFStringCreateWithCString + LSSetDefaultRoleHandlerForContentType.
+    // LaunchServices is a sub-framework of the CoreServices umbrella,
+    // so the link is CoreServices (a top-level LaunchServices.framework
+    // does not exist and the link fails).
+    type CFStringRef = *const std::ffi::c_void;
+    #[link(name = "CoreFoundation", kind = "framework")]
+    #[link(name = "CoreServices", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithCString(
+            alloc: *const std::ffi::c_void,
+            c_str: *const std::ffi::c_char,
+            encoding: u32,
+        ) -> CFStringRef;
+        fn CFRelease(cf: *const std::ffi::c_void);
+        fn LSSetDefaultRoleHandlerForContentType(
+            content_type: CFStringRef,
+            role: u32,
+            bundle_id: CFStringRef,
+        ) -> i32;
+    }
+    const KCF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
+    const LS_HANDLER_ROLE_ALL: u32 = 0xFFFF_FFFF;
+    let bundle_id = "io.github.tinpotnick.folio";
+    let mut failed = None;
+    for uti in ["public.markdown", "net.daringfireball.markdown"] {
+        // Safe: the C strings outlive the CFStrings, which are
+        // released before the loop iteration ends.
+        unsafe {
+            let c_uti = std::ffi::CString::new(uti).unwrap();
+            let c_bundle = std::ffi::CString::new(bundle_id).unwrap();
+            let uti_ref =
+                CFStringCreateWithCString(std::ptr::null(), c_uti.as_ptr(), KCF_STRING_ENCODING_UTF8);
+            let bundle_ref = CFStringCreateWithCString(
+                std::ptr::null(),
+                c_bundle.as_ptr(),
+                KCF_STRING_ENCODING_UTF8,
+            );
+            let status = LSSetDefaultRoleHandlerForContentType(uti_ref, LS_HANDLER_ROLE_ALL, bundle_ref);
+            CFRelease(uti_ref);
+            CFRelease(bundle_ref);
+            if status != 0 {
+                failed = Some(format!("{uti}: LaunchServices error {status}"));
+            }
+        }
+    }
+    match failed {
+        None => Ok(".md files will open with folio".into()),
+        Some(e) => Err(format!("could not set the default app: {e}")),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn set_default_md_handler_impl() -> Result<String, String> {
+    // Windows 8+ protects the default handler (the UserChoice hash):
+    // only the user can set it, in Settings > Default apps.
+    std::process::Command::new("explorer")
+        .arg("ms-settings:defaultapps")
+        .spawn()
+        .map_err(|e| format!("could not open Settings: {e}"))?;
+    Ok("Windows lets you choose default apps in Settings - opened it there; pick folio for .md".into())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn set_default_md_handler_impl() -> Result<String, String> {
+    Err("unsupported platform".into())
+}
+
 /// Web addresses a document may hand to the system: the web and
 /// e-mail, nothing that runs or reads anything locally (`file:`,
 /// `javascript:`, custom app schemes).
@@ -489,7 +630,8 @@ pub fn run() {
             open_presenter_window,
             export_pdf,
             launch_document,
-            fetch_url
+            fetch_url,
+            set_default_md_handler
         ])
         .build(tauri::generate_context!())
         .expect("error while building folio desktop")
@@ -513,6 +655,40 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{folder_hint, is_external_url, launch_file_from_args};
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn applications_dirs_are_in_lookup_order_with_the_flatpak_prefix_last() {
+        let dirs = super::applications_dirs(
+            Some("/xdg-home".into()),
+            Some("/home/n".into()),
+            Some("/usr/local/share:/usr/share".into()),
+        );
+        assert_eq!(
+            dirs,
+            vec![
+                std::path::PathBuf::from("/xdg-home"),
+                std::path::PathBuf::from("/home/n/.local/share"),
+                std::path::PathBuf::from("/usr/local/share"),
+                std::path::PathBuf::from("/usr/share"),
+                std::path::PathBuf::from("/app/share"),
+            ]
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn applications_dirs_skip_empty_xdg_data_dirs_entries() {
+        let dirs = super::applications_dirs(None, None, Some("/usr/share::/opt/share".into()));
+        assert_eq!(
+            dirs,
+            vec![
+                std::path::PathBuf::from("/usr/share"),
+                std::path::PathBuf::from("/opt/share"),
+                std::path::PathBuf::from("/app/share"),
+            ]
+        );
+    }
 
     /// Stamp a real WebKitGTK PDF: `FOLIO_PDF_SAMPLE=/path/to.pdf cargo test
     /// stamps_a_sample -- --ignored`, then read it with pdftotext.
