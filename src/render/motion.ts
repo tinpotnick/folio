@@ -369,9 +369,11 @@ function frameGroup(
           ? Math.atan2(dvy, dvx)
           : ((Number(p.id.replace(/\D/g, "")) || 0) % 628) / 100;
       const deg = (a * 180) / Math.PI;
-      // A swept-wing chevron reads as a bird.
+      // A swept-wing chevron reads as a bird. A paper-colored halo
+      // lifts the glyph off the (possibly fat) edge lines underneath,
+      // so moving packets read at a glance.
       const d = `M 0 0 L ${(-1.5 * r).toFixed(1)} ${(0.8 * r).toFixed(1)} L ${(-0.6 * r).toFixed(1)} 0 L ${(-1.5 * r).toFixed(1)} ${(-0.8 * r).toFixed(1)} Z`;
-      return `<path class="mpoint" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${deg.toFixed(1)})" d="${d}" fill="${fill}"><title>${esc(`${p.id} @ ${frame.label}`)}</title></path>`;
+      return `<path class="mpoint" transform="translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${deg.toFixed(1)})" d="${d}" fill="${fill}" stroke="${style.paper ?? "#ffffff"}" stroke-width="${(r * 0.28).toFixed(1)}" paint-order="stroke"><title>${esc(`${p.id} @ ${frame.label}`)}</title></path>`;
     })
     .join("");
   return `<g class="mframe" data-i="${String(i)}">${pts}</g>`;
@@ -409,7 +411,7 @@ export function playerSvg(data: MotionData, style: MotionStyle = {}): string {
         f,
         i,
         style,
-        data.edges ? 3 : 4.5,
+        data.edges ? 5 : 4.5,
         data.frames[(i + 1) % data.frames.length],
       ),
     )
@@ -519,7 +521,7 @@ export function frameSvg(
 ): string {
   const f = data.frames[n] ?? data.frames[0];
   if (!f) throw new Error("Motion figure: no frames");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" role="img" class="motion-frame">${frameGroup(f, n, style, data.edges ? 3 : 4.5, data.frames[n + 1])}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" role="img" class="motion-frame">${frameGroup(f, n, style, data.edges ? 5 : 4.5, data.frames[n + 1])}</svg>`;
 }
 
 /** Fit an external layout (e.g. mermaid's coordinate space) into the
