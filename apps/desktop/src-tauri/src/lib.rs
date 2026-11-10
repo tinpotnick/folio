@@ -338,9 +338,12 @@ fn set_default_md_handler_impl() -> Result<String, String> {
 fn set_default_md_handler_impl() -> Result<String, String> {
     // LaunchServices' C API, declared here so no new crate is needed
     // (ADR-0007): CFStringCreateWithCString + LSSetDefaultRoleHandlerForContentType.
+    // LaunchServices is a sub-framework of the CoreServices umbrella,
+    // so the link is CoreServices (a top-level LaunchServices.framework
+    // does not exist and the link fails).
     type CFStringRef = *const std::ffi::c_void;
     #[link(name = "CoreFoundation", kind = "framework")]
-    #[link(name = "LaunchServices", kind = "framework")]
+    #[link(name = "CoreServices", kind = "framework")]
     extern "C" {
         fn CFStringCreateWithCString(
             alloc: *const std::ffi::c_void,

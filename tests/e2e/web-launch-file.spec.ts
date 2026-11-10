@@ -32,15 +32,23 @@ async function webLaunchedWith(page: Page, file: string | null): Promise<void> {
       },
     });
     let consumer: ((p: { files: unknown[] }) => void) | null = null;
-    w.launchQueue = {
-      setConsumer: (cb: (p: { files: unknown[] }) => void) => {
-        consumer = cb;
-        if (launch !== null) {
-          const handle = makeHandle(launch);
-          queueMicrotask(() => consumer?.({ files: [handle] }));
-        }
+    // window.launchQueue is a read-only accessor in Chromium: a plain
+    // assignment silently fails and the stub never installs. Define an
+    // own property over it instead.
+    Object.defineProperty(window, "launchQueue", {
+      configurable: true,
+      value: {
+        setConsumer: (cb: (p: { files: unknown[] }) => void) => {
+          consumer = cb;
+          if (launch !== null) {
+            // The launch that started the app, delivered while the page
+            // boots (deterministically, before boot's next-tick settle).
+            cb({ files: [makeHandle(launch)] });
+          }
+        },
       },
-    };
+    });
+    // A launch on the RUNNING app, fired by the test.
     w.__launch = (text: string) => consumer?.({ files: [makeHandle(text)] });
   }, file);
 }
