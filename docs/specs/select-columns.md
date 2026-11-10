@@ -1,6 +1,6 @@
 # Select columns: enum chips in tables
 
-## Status: proposed (2026-11-10)
+## Status: accepted (2026-11-10) - implemented on vibe/spec-next-features
 
 ## Decision
 

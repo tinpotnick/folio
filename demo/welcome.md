@@ -122,6 +122,8 @@ later from the palette: Ctrl+K, then "example".
 - [A murmuration, simulated](demo/examples/swarm.md) — a swirling
 - [Invoice 2026-041](demo/examples/invoice.md) — line items with a
   formula column and a derived totals row at the bottom.
+- [Sprint plan](demo/examples/project-plan.md) — status chips,
+  date pickers, a totals row, and charts that cross-filter.
   swallow flock that plays in the document (frames from a Python
   block or the built-in sim) and prints as a filmstrip.
 - [Traffic on a small road network](demo/examples/flow.md) — vehicles

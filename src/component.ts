@@ -1520,6 +1520,27 @@ export class FolioDoc extends HTMLElement {
         // typed text; the inspector inputs are their own region.
         figure.contentEditable = "false";
         figure.appendChild(this.buildChartInspector(figure, block));
+        // Cross-filter chips (spec: docs/specs/cross-filtering.md):
+        // the active filters for this chart's source, one chip each.
+        const chips = document.createElement("div");
+        chips.className = "crossfilter-chips";
+        figure.appendChild(chips);
+        // Capture phase: a mark click selects and must NOT also open
+        // the inspector (plain figure clicks still do).
+        figure.addEventListener(
+          "click",
+          (ev) => {
+            const mark = (ev.target as Element).closest?.("[data-cat]");
+            if (!mark) return;
+            this.toggleCrossFilter(
+              block,
+              String(mark.getAttribute("data-cat") ?? ""),
+            );
+            ev.preventDefault();
+            ev.stopPropagation();
+          },
+          true,
+        );
         const holder = document.createElement("div");
         holder.className = "chart-holder";
         // A chart whose values can be read is reachable by Tab before it
@@ -4664,8 +4685,18 @@ export class FolioDoc extends HTMLElement {
           if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
             td.classList.add("date");
           }
+        } else if (col.type === "select") {
+          // Select chips (spec: select-columns.md): rendered content,
+          // dropdown opens on click - not free text.
+          td.classList.add("folio-control-cell");
+          this.renderControlCell(td, col, v);
+          td.contentEditable = "false";
+          td.tabIndex = -1;
+          td.addEventListener("click", () => {
+            if (!td.isConnected) return;
+            this.openCellControl(td, block, col);
+          });
         } else {
-          if (col.type === "date") td.classList.add("date");
           if (col.type === "number") {
             td.classList.add("num");
           }
@@ -4673,6 +4704,24 @@ export class FolioDoc extends HTMLElement {
           if (simpleAlign === "right") td.classList.add("num");
           if (simpleAlign === "center") td.classList.add("align-center");
           td.textContent = String(v ?? "");
+          if (col.type === "date" || col.type === "datetime") {
+            // Dates stay text-editable (type the ISO value); the
+            // calendar icon in the cell opens the picker (spec:
+            // date-column-controls.md).
+            td.classList.add("date");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "folio-date-btn";
+            btn.title =
+              col.type === "datetime" ? "Pick a date and time" : "Pick a date";
+            btn.innerHTML =
+              '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="2"/><path d="M2 6.5h12M5.5 2v3M10.5 2v3"/></svg>';
+            btn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (td.isConnected) this.openCellControl(td, block, col);
+            });
+            td.appendChild(btn);
+          }
           // Nested editable, focusable leaf: the cell (not the
           // article) holds focus while it is edited, so blur-based
           // commits and Tab/Enter navigation are real. Without
@@ -4994,14 +5043,21 @@ export class FolioDoc extends HTMLElement {
     const typeSel = document.createElement("select");
     typeSel.className = "insp-type";
     typeSel.title = "Column type";
-    for (const t of ["text", "number", "date", "formula"]) {
+    for (const t of [
+      "text",
+      "number",
+      "date",
+      "datetime",
+      "select",
+      "formula",
+    ]) {
       const o = document.createElement("option");
       o.value = t;
       o.textContent = t;
       typeSel.appendChild(o);
     }
     typeSel.addEventListener("change", () => {
-      const type = typeSel.value as "text" | "number" | "date" | "formula";
+      const type = typeSel.value as Table["columns"][number]["type"];
       const c = Math.max(colSel.selectedIndex, 0);
       // Dates are kept ISO: what reads as a date is rewritten so.
       if (type === "date") {
@@ -5016,8 +5072,46 @@ export class FolioDoc extends HTMLElement {
       if (type === "formula" && !block.table.columns[c]?.expr) {
         patch.expr = "0";
       }
+      // A fresh select column needs options (spec: select-columns.md).
+      if (type === "select" && !block.table.columns[c]?.options) {
+        patch.options = ["new"];
+      }
       this.patchColumn(figure, block, c, patch);
     });
+
+    // Select-column extras (options list + multi), shown in the column
+    // group only while the type is select.
+    const optWrap = document.createElement("span");
+    optWrap.className = "insp-select-opts";
+    const optInp = document.createElement("input");
+    optInp.className = "insp-options";
+    optInp.type = "text";
+    optInp.placeholder = "options: a, b, c";
+    optInp.title = "Comma-separated option list";
+    optInp.addEventListener("change", () => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      const options = optInp.value
+        .split(",")
+        .map((x) => x.trim())
+        .filter((x) => x !== "");
+      this.patchColumn(figure, block, c, {
+        options: options.length ? options : undefined,
+      });
+    });
+    optWrap.appendChild(optInp);
+    const multiLabel = document.createElement("label");
+    multiLabel.className = "insp-multi";
+    const multiCb = document.createElement("input");
+    multiCb.type = "checkbox";
+    multiCb.addEventListener("change", () => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      this.patchColumn(figure, block, c, {
+        multi: multiCb.checked || undefined,
+      });
+    });
+    multiLabel.appendChild(multiCb);
+    multiLabel.appendChild(document.createTextNode(" multi"));
+    optWrap.appendChild(multiLabel);
 
     const unitInp = document.createElement("input");
     unitInp.className = "insp-unit";
@@ -5187,7 +5281,7 @@ export class FolioDoc extends HTMLElement {
     const fmtGroup = document.createElement("div");
     fmtGroup.className = "insp-group";
     fmtGroup.setAttribute("role", "group");
-    fmtGroup.append(colSel, visLbl, typeSel, unitInp, fmtSel);
+    fmtGroup.append(colSel, visLbl, typeSel, unitInp, fmtSel, optWrap);
     // The bar is scoped rows, not a flat wrap (spec:
     // docs/specs/table-inspector.md, "Spreadsheet-style bar
     // layout"): row 1 is table-level controls in a fixed order -
@@ -5994,6 +6088,12 @@ export class FolioDoc extends HTMLElement {
     if (visBox) visBox.checked = !col.hidden;
     const typeSel = bar.querySelector<HTMLSelectElement>(".insp-type");
     if (typeSel) typeSel.value = col.type;
+    const optWrap = bar.querySelector<HTMLElement>(".insp-select-opts");
+    if (optWrap) optWrap.style.display = col.type === "select" ? "" : "none";
+    const optInp = bar.querySelector<HTMLInputElement>(".insp-options");
+    if (optInp) optInp.value = (col.options ?? []).join(", ");
+    const multiCb = bar.querySelector<HTMLInputElement>(".insp-multi input");
+    if (multiCb) multiCb.checked = col.multi === true;
     const unitInp = bar.querySelector<HTMLInputElement>(".insp-unit");
     if (unitInp) unitInp.value = col.unit ?? "";
     const fmtSel = bar.querySelector<HTMLSelectElement>(".insp-format");
@@ -6040,17 +6140,27 @@ export class FolioDoc extends HTMLElement {
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     c: number,
     patch: {
-      type?: "text" | "number" | "date" | "formula";
+      type?: Table["columns"][number]["type"];
       unit?: string | undefined;
       format?: "percent" | "currency" | undefined;
       expr?: string;
       hidden?: boolean | undefined;
+      options?: string[] | undefined;
+      multi?: boolean | undefined;
     },
   ): void {
     const col = block.table.columns[c];
     if (!col) return;
     // An undefined value removes the key so the default applies.
     if ("type" in patch) col.type = patch.type ?? col.type;
+    if ("options" in patch) {
+      if (patch.options) col.options = patch.options;
+      else delete col.options;
+    }
+    if ("multi" in patch) {
+      if (patch.multi) col.multi = true;
+      else delete col.multi;
+    }
     if ("unit" in patch) {
       if (patch.unit) col.unit = patch.unit;
       else delete col.unit;
@@ -7211,6 +7321,125 @@ export class FolioDoc extends HTMLElement {
     await this.restyled;
   }
 
+  /** Active cross-filter selections: source table id -> category
+   * column -> selected values (spec: docs/specs/cross-filtering.md).
+   * View-only state - never written to the document. */
+  private crossFilters = new Map<string, Map<string, Set<string>>>();
+
+  /** The category column a chart's marks filter on: the first group
+   * column, else the first selected column. */
+  private categoryColumn(chart: Chart): string | undefined {
+    return chart.query.group?.[0] ?? chart.query.select[0];
+  }
+
+  /** The chart with the active cross-filters for its source ANDed into
+   * its query filter (OR within a column, AND across columns). */
+  private crossFilteredChart(chart: Chart): Chart {
+    if (chart.crossfilter === false) return chart;
+    const cols = this.crossFilters.get(chart.source);
+    if (!cols || cols.size === 0) return chart;
+    const parts: string[] = [];
+    for (const [col, vals] of cols) {
+      if (vals.size === 0) continue;
+      const ors = [...vals]
+        .map((v) => `${col} == ${JSON.stringify(v)}`)
+        .join(" || ");
+      parts.push(`(${ors})`);
+    }
+    if (parts.length === 0) return chart;
+    const cross = parts.join(" && ");
+    const own = chart.query.filter;
+    let ownStr: string | undefined;
+    if (typeof own === "string") ownStr = own;
+    else if (own) {
+      const v =
+        typeof own.value === "string"
+          ? JSON.stringify(own.value)
+          : String(own.value);
+      ownStr = `${own.column} ${own.op === "eq" ? "==" : own.op} ${v}`;
+    }
+    const filter = ownStr ? `(${ownStr}) && ${cross}` : cross;
+    return { ...chart, query: { ...chart.query, filter } };
+  }
+
+  /** Toggle a category selection in one chart; redraw every linked
+   * chart over the same source. */
+  private toggleCrossFilter(
+    block: Extract<Doc["blocks"][number], { kind: "chart" }>,
+    value: string,
+  ): void {
+    const chart = block.chart;
+    if (chart.crossfilter === false) return;
+    const col = this.categoryColumn(chart);
+    if (!col) return;
+    let cols = this.crossFilters.get(chart.source);
+    if (!cols) {
+      cols = new Map();
+      this.crossFilters.set(chart.source, cols);
+    }
+    let vals = cols.get(col);
+    if (!vals) {
+      vals = new Set();
+      cols.set(col, vals);
+    }
+    if (vals.has(value)) vals.delete(value);
+    else vals.add(value);
+    if (vals.size === 0) cols.delete(col);
+    if (cols.size === 0) this.crossFilters.delete(chart.source);
+    this.redrawLinkedCharts(chart.source);
+  }
+
+  /** Redraw all charts over a source table (filters changed). */
+  private redrawLinkedCharts(sourceId: string): void {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    for (const cf of Array.from(
+      host?.querySelectorAll<HTMLElement>(
+        `figure[data-chart-source="${sourceId}"]`,
+      ) ?? [],
+    )) {
+      this.drawChart(cf);
+    }
+  }
+
+  /** The chip row above a linked chart: one chip per active filter. */
+  private renderCrossFilterChips(figure: HTMLElement, chart: Chart): void {
+    const box = figure.querySelector<HTMLElement>(".crossfilter-chips");
+    if (!box) return;
+    box.textContent = "";
+    const cols = this.crossFilters.get(chart.source);
+    const active =
+      chart.crossfilter !== false && cols !== undefined && cols.size > 0;
+    box.hidden = !active;
+    if (!active || !cols) return;
+    for (const [col, vals] of cols) {
+      for (const v of vals) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "xf-chip";
+        chip.textContent = `${col} = ${v} `;
+        const x = document.createElement("span");
+        x.className = "xf-x";
+        x.textContent = "×";
+        chip.appendChild(x);
+        chip.title = "Clear this filter";
+        chip.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const set = this.crossFilters.get(chart.source)?.get(col);
+          if (set) {
+            set.delete(v);
+            if (set.size === 0)
+              this.crossFilters.get(chart.source)?.delete(col);
+            if (this.crossFilters.get(chart.source)?.size === 0) {
+              this.crossFilters.delete(chart.source);
+            }
+          }
+          this.redrawLinkedCharts(chart.source);
+        });
+        box.appendChild(chip);
+      }
+    }
+  }
+
   private drawChart(figure: HTMLElement): void {
     if (!this.doc) return;
     // A chart figure is its BLOCK, not its source: several charts
@@ -7248,7 +7477,12 @@ export class FolioDoc extends HTMLElement {
         this.memo(),
       );
       const tableBlock2 = { table: sourceTable };
-      const result = executeQuery(sourceTable, block.chart);
+      // Cross-filtering (spec: cross-filtering.md): active selections
+      // on this source become an extra query filter (ANDed with the
+      // block's own). View-only - never written to the document.
+      const chart = this.crossFilteredChart(block.chart);
+      const result = executeQuery(sourceTable, chart);
+      this.renderCrossFilterChips(figure, block.chart);
       // Nothing to plot - every row filtered out, or every value blank
       // (a model outside its data): say so, not an empty frame.
       const plottable = result.rows.some((r) =>
@@ -7342,7 +7576,7 @@ export class FolioDoc extends HTMLElement {
         (block.chart.series !== undefined || select.length > 2) &&
         (t === "bar" || t === "line" || t === "area")
       ) {
-        const data = chartSeries(sourceTable, block.chart);
+        const data = chartSeries(sourceTable, chart);
         const multi = renderSeriesChart(data, t, block.chart.stack === true, {
           ...style,
           // Several value columns share no single name: the axis says
@@ -8351,6 +8585,206 @@ export class FolioDoc extends HTMLElement {
       this.updateRowCalculations(td.closest("figure"), block);
     }
     this.emitChange("cell");
+  }
+
+  /** Stable hue per option value, so a status is the same chip color
+   * in every table (spec: select-columns.md). */
+  private chipHue(value: string): number {
+    let h = 0;
+    for (let i = 0; i < value.length; i++) {
+      h = (h * 31 + value.charCodeAt(i)) >>> 0;
+    }
+    return h % 360;
+  }
+
+  /** Render a select/date/datetime cell's content (chips / ISO text). */
+  private renderControlCell(
+    td: HTMLTableCellElement,
+    col: Extract<Table["columns"][number], { type: string }>,
+    v: Cell | undefined,
+  ): void {
+    td.textContent = "";
+    if (col.type === "select") {
+      const raw = String(v ?? "");
+      const parts = col.multi
+        ? raw
+            .split(",")
+            .map((x) => x.trim())
+            .filter((x) => x !== "")
+        : raw === ""
+          ? []
+          : [raw];
+      for (const part of parts) {
+        const ok = col.options?.includes(part) ?? false;
+        const chip = document.createElement("span");
+        chip.className = "folio-chip" + (ok ? "" : " folio-chip-error");
+        chip.textContent = part;
+        chip.style.setProperty("--chip-hue", String(this.chipHue(part)));
+        chip.title = ok
+          ? part
+          : `'${part}' is not in options: [${(col.options ?? []).join(", ")}]`;
+        td.appendChild(chip);
+        if (col.multi && parts.indexOf(part) < parts.length - 1) {
+          td.appendChild(document.createTextNode(", "));
+        }
+      }
+      if (parts.length === 0) td.textContent = "";
+    } else {
+      // date / datetime: ISO text in the doc, as today.
+      td.textContent = String(v ?? "");
+    }
+  }
+
+  /** Write a control-chosen value into the model (same path as a
+   * typed cell commit). */
+  private commitCellValue(
+    td: HTMLTableCellElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    value: Cell,
+  ): void {
+    const r = Number(td.dataset.rowIndex);
+    const c = Number(td.dataset.colIndex);
+    const row = block.table.rows[r];
+    const col = block.table.columns[c];
+    if (!row || !col) return;
+    if (row[c] === value) return;
+    row[c] = value;
+    this.updateRowCalculations(td.closest("figure"), block);
+    this.emitChange("cell");
+    // Re-render this cell's content (chips / date text).
+    const recalced = recalcTable(block.table, this.tablePool(), this.memo());
+    this.renderControlCell(td, col, recalced.rows[r]?.[c]);
+  }
+
+  /** Open the in-cell control for a select/date/datetime cell:
+   * dropdown (single select), checkable list (multi), date or
+   * datetime-local picker. */
+  private openCellControl(
+    td: HTMLTableCellElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    col: Table["columns"][number],
+  ): void {
+    this.closeCellControl();
+    const r = Number(td.dataset.rowIndex);
+    const c = Number(td.dataset.colIndex);
+    const current = String(block.table.rows[r]?.[c] ?? "");
+    const pop = document.createElement("div");
+    pop.className = "folio-cell-pop";
+    td.style.position = "relative";
+    td.appendChild(pop);
+    this.activeCellPop = { pop, td };
+    const close = () => this.closeCellControl();
+
+    if (col.type === "date" || col.type === "datetime") {
+      const input = document.createElement("input");
+      input.type = col.type === "datetime" ? "datetime-local" : "date";
+      input.className = "folio-cell-input";
+      input.value =
+        col.type === "datetime" ? current.slice(0, 16) : current.slice(0, 10);
+      input.addEventListener("change", () => {
+        const v = input.value;
+        if (v) {
+          const iso =
+            col.type === "datetime"
+              ? v // datetime-local gives YYYY-MM-DDTHH:MM
+              : v; // date gives YYYY-MM-DD
+          this.commitCellValue(td, block, iso);
+        }
+        close();
+      });
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") close();
+        if (ev.key === "Enter") input.dispatchEvent(new Event("change"));
+        ev.stopPropagation();
+      });
+      pop.appendChild(input);
+      input.focus();
+      input.addEventListener("blur", () => {
+        // Commit on blur too (picking a date already fires change).
+        setTimeout(() => close(), 120);
+      });
+      return;
+    }
+
+    // select, single or multi
+    if (col.multi) {
+      const cur = new Set(
+        current
+          .split(",")
+          .map((x) => x.trim())
+          .filter((x) => x !== ""),
+      );
+      for (const opt of col.options ?? []) {
+        const label = document.createElement("label");
+        label.className = "folio-cell-opt";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = cur.has(opt);
+        cb.addEventListener("change", () => {
+          if (cb.checked) cur.add(opt);
+          else cur.delete(opt);
+        });
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(opt));
+        pop.appendChild(label);
+      }
+      const done = document.createElement("button");
+      done.type = "button";
+      done.className = "folio-cell-done";
+      done.textContent = "Done";
+      done.addEventListener("click", () => {
+        this.commitCellValue(td, block, [...cur].join(", "));
+        close();
+      });
+      pop.appendChild(done);
+      pop.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") close();
+        if (
+          ev.key === "Enter" &&
+          (ev.target as HTMLElement).tagName !== "INPUT"
+        ) {
+          this.commitCellValue(td, block, [...cur].join(", "));
+          close();
+        }
+        ev.stopPropagation();
+      });
+      (pop.querySelector("input") as HTMLElement | null)?.focus();
+      return;
+    }
+
+    const sel = document.createElement("select");
+    sel.className = "folio-cell-input folio-cell-select";
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "(blank)";
+    sel.appendChild(blank);
+    for (const opt of col.options ?? []) {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt;
+      sel.appendChild(o);
+    }
+    sel.value = col.options?.includes(current) ? current : "";
+    sel.addEventListener("change", () => {
+      this.commitCellValue(td, block, sel.value);
+      close();
+    });
+    sel.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") close();
+      ev.stopPropagation();
+    });
+    sel.addEventListener("blur", () => setTimeout(() => close(), 120));
+    pop.appendChild(sel);
+    sel.focus();
+  }
+
+  private activeCellPop: { pop: HTMLElement; td: HTMLElement } | null = null;
+
+  private closeCellControl(): void {
+    if (this.activeCellPop) {
+      this.activeCellPop.pop.remove();
+      this.activeCellPop = null;
+    }
   }
 
   /** Refresh the row's formula cells and dependent charts in place. */
@@ -9402,6 +9836,12 @@ export class FolioDoc extends HTMLElement {
   }
 
   private handleKeydown(ev: KeyboardEvent): void {
+    // Esc clears all cross-filter selections (spec: cross-filtering.md).
+    if (ev.key === "Escape" && this.crossFilters.size > 0) {
+      const sources = [...this.crossFilters.keys()];
+      this.crossFilters.clear();
+      for (const src of sources) this.redrawLinkedCharts(src);
+    }
     if (!this.doc) return;
     // The inspector's inputs own their keystrokes.
     if (ev.target instanceof Element && ev.target.closest(".folio-inspector")) {

@@ -78,7 +78,7 @@ export interface Doc {
 }
 
 const DIRECTIVE_RE =
-  /^::: (table|chart|image|audio|value|motion) \{#([^}]+)\}$/;
+  /^::: (table|chart|image|audio|value|motion) \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 const MERMAID_RE = /^::: mermaid \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 
 export class ParseError extends Error {
@@ -169,10 +169,18 @@ export function parseDoc(text: string): Doc {
     const m = DIRECTIVE_RE.exec(line);
     if (m) {
       const id = m[2] ?? "";
+      const attrs = (m[3] ?? "").trim();
+      if (attrs && m[1] !== "chart") {
+        throw new ParseError(
+          `Unknown ${m[1]} attribute: '${attrs.split(/\s+/)[0] ?? ""}'`,
+          0,
+        );
+      }
       const body = readDirectiveBody(lines, i, id);
       if (m[1] === "table") doc.blocks.push(parseTableDirective(body, id));
       else if (m[1] === "value") doc.blocks.push(parseValueDirective(body, id));
-      else if (m[1] === "chart") doc.blocks.push(parseChartDirective(body, id));
+      else if (m[1] === "chart")
+        doc.blocks.push(parseChartDirective(body, id, attrs));
       else if (m[1] === "motion")
         doc.blocks.push(parseMotionDirective(body, id));
       else if (m[1] === "audio") doc.blocks.push(parseAudioDirective(body, id));
@@ -418,9 +426,45 @@ function parseColumn(raw: string): Table["columns"][number] {
     if (idx < 0) throw new ParseError(`Bad column entry: '${part}'`, 0);
     col[part.slice(0, idx).trim()] = unquote(part.slice(idx + 1).trim());
   }
+  const type = (col["type"] ?? "text") as Table["columns"][number]["type"];
+  // Select columns (spec: docs/specs/select-columns.md): options is
+  // required for select, forbidden otherwise; multi only on select.
+  let options: string[] | undefined;
+  if (col["options"] !== undefined) {
+    if (type !== "select") {
+      throw new ParseError(
+        `Column '${col["name"] ?? ""}': options requires type: select`,
+        0,
+      );
+    }
+    options = col["options"]
+      .replace(/^\[|\]$/g, "")
+      .split(",")
+      .map((s) => unquote(s.trim()))
+      .filter((s) => s !== "");
+    if (options.length === 0) {
+      throw new ParseError(
+        `Column '${col["name"] ?? ""}': options list is empty`,
+        0,
+      );
+    }
+  }
+  if (type === "select" && options === undefined) {
+    throw new ParseError(
+      `Column '${col["name"] ?? ""}': type: select needs options: [...]`,
+      0,
+    );
+  }
+  const multi = col["multi"] === "true";
+  if (multi && type !== "select") {
+    throw new ParseError(
+      `Column '${col["name"] ?? ""}': multi requires type: select`,
+      0,
+    );
+  }
   return {
     name: col["name"] ?? "",
-    type: (col["type"] ?? "text") as Table["columns"][number]["type"],
+    type,
     ...(col["unit"] !== undefined ? { unit: col["unit"] } : {}),
     ...(col["format"] !== undefined
       ? { format: col["format"] as "percent" | "currency" }
@@ -432,6 +476,8 @@ function parseColumn(raw: string): Table["columns"][number] {
     ...(col["align"] !== undefined
       ? { align: col["align"] as "left" | "right" }
       : {}),
+    ...(options !== undefined ? { options } : {}),
+    ...(multi ? { multi: true } : {}),
     ...(col["hidden"] === "true" ? { hidden: true } : {}),
   };
 }
@@ -476,7 +522,14 @@ function parseRow(raw: string, columns?: Table["columns"]): Cell[] {
  * only NUMBER (and other non-text) columns coerce bare numerals.
  */
 function cellAt(s: string, col?: Table["columns"][number]): Cell {
-  if (col && (col.type === "text" || col.type === "date")) return unquote(s);
+  if (
+    col &&
+    (col.type === "text" ||
+      col.type === "date" ||
+      col.type === "datetime" ||
+      col.type === "select")
+  )
+    return unquote(s);
   return cell(s);
 }
 
@@ -485,7 +538,11 @@ function cell(s: string): Cell {
   return unquote(s);
 }
 
-function parseChartDirective(body: DirectiveBody, id: string): DocBlock {
+function parseChartDirective(
+  body: DirectiveBody,
+  id: string,
+  attrs = "",
+): DocBlock {
   const values: Record<string, string> = {};
   for (const [k, v] of body.entries) values[k] = v;
   if (!values["source"] || !values["query"] || !values["type"]) {
@@ -498,6 +555,10 @@ function parseChartDirective(body: DirectiveBody, id: string): DocBlock {
     type: values["type"] as Chart["type"],
     ...(values["series"] !== undefined ? { series: values["series"] } : {}),
     ...(values["stack"] === "true" ? { stack: true } : {}),
+    ...(/^crossfilter\s*[:=]\s*off$/.test(attrs) ||
+    values["crossfilter"] === "off"
+      ? { crossfilter: false }
+      : {}),
     ...(values["caption"] !== undefined
       ? { caption: unquote(values["caption"]) }
       : {}),
@@ -1138,6 +1199,12 @@ function serializeTable(table: Table): string {
     if (col.width !== undefined) entries.push(`width: ${col.width}`);
     if (col.expr !== undefined) entries.push(`expr: "${col.expr}"`);
     if (col.format !== undefined) entries.push(`format: ${col.format}`);
+    if (col.options !== undefined) {
+      entries.push(
+        `options: [${col.options.map((o) => (o.includes(",") || o.includes(" ") ? `"${o}"` : o)).join(", ")}]`,
+      );
+    }
+    if (col.multi) entries.push("multi: true");
     if (col.hidden) entries.push("hidden: true");
     lines.push(`  - {${entries.join(", ")}}`);
   }
@@ -1156,7 +1223,9 @@ function serializeTable(table: Table): string {
 }
 
 function serializeChart(chart: Chart): string {
-  const lines = [`::: chart {#${chart.id ?? `chart-${chart.source}`}}`];
+  const lines = [
+    `::: chart {#${chart.id ?? `chart-${chart.source}`}}${chart.crossfilter === false ? " crossfilter: off" : ""}`,
+  ];
   lines.push(`source: @${chart.source}`);
   const q: string[] = [];
   if (chart.query.group?.length) {
@@ -1198,5 +1267,7 @@ function serializeChart(chart: Chart): string {
 function formatCell(c: Cell): string {
   if (typeof c === "number") return String(c);
   if (/^[A-Za-z0-9£$%-]+$/.test(c)) return c;
+  // ISO dates/datetimes (date and datetime columns) stay bare.
+  if (/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(c)) return c;
   return `"${c}"`;
 }

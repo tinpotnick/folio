@@ -1406,6 +1406,101 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-top: 2px solid var(--folio-table-rule, currentColor);
       font-weight: 600;
     }
+    /* Select-column chips and the in-cell control pop (specs:
+       select-columns.md, date-column-controls.md). */
+    table.folio-table td.folio-control-cell { white-space: nowrap; }
+    .folio-chip {
+      display: inline-block;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 0.85em;
+      line-height: 1.6;
+      color: color-mix(in srgb, hsl(var(--chip-hue) 65% 45%) 55%, var(--folio-ink, #1f2328));
+      background: color-mix(in srgb, hsl(var(--chip-hue) 70% 55%) 22%, var(--folio-paper, #ffffff));
+      border: 1px solid color-mix(in srgb, hsl(var(--chip-hue) 70% 55%) 45%, transparent);
+    }
+    .folio-chip-error {
+      color: var(--folio-error, #b42318);
+      background: color-mix(in srgb, var(--folio-error, #b42318) 14%, var(--folio-paper, #ffffff));
+      border-color: var(--folio-error, #b42318);
+    }
+    .folio-cell-pop {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 60;
+      min-width: 150px;
+      padding: 6px;
+      border-radius: 8px;
+      background: var(--folio-paper, #ffffff);
+      border: 1px solid var(--folio-rule-strong, currentColor);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .folio-cell-input {
+      font: inherit;
+      color: var(--folio-ink, #1f2328);
+      background: var(--folio-paper, #ffffff);
+      border: 1px solid var(--folio-rule, #d0d4da);
+      border-radius: 6px;
+      padding: 2px 6px;
+      width: 100%;
+    }
+    .folio-cell-opt {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .folio-cell-opt:hover { background: var(--folio-tint, #f0f2f5); }
+    .folio-cell-done {
+      margin-top: 4px;
+      align-self: flex-end;
+    }
+    /* The calendar button inside date/datetime cells (spec:
+       date-column-controls.md): quiet until the cell is hovered. */
+    table.folio-table td .folio-date-btn {
+      visibility: hidden;
+      border: none;
+      background: none;
+      padding: 0 2px;
+      margin-left: 2px;
+      cursor: pointer;
+      color: var(--folio-ink-muted, #57606a);
+      vertical-align: baseline;
+    }
+    table.folio-table td:hover .folio-date-btn,
+    table.folio-table td:focus-within .folio-date-btn {
+      visibility: visible;
+    }
+    /* Cross-filter chips above linked charts (spec:
+       docs/specs/cross-filtering.md). */
+    .crossfilter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 2px 0;
+    }
+    .crossfilter-chips[hidden] { display: none; }
+    .xf-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 6px 0 10px;
+      border-radius: 999px;
+      font-size: 0.8em;
+      line-height: 1.7;
+      color: var(--folio-ink, #1f2328);
+      background: var(--folio-tint, #eef0f3);
+      border: 1px solid var(--folio-rule, #d0d4da);
+      cursor: pointer;
+    }
+    .xf-chip:hover { border-color: var(--folio-accent, #2b5d94); }
+    .xf-x { font-weight: 700; }
     table.folio-table tfoot tr.folio-totals td.folio-total-label {
       color: var(--folio-ink-muted);
       font-weight: 600;
@@ -2771,6 +2866,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .readout-guide { stroke: var(--folio-ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
     .readout-dot { stroke: var(--folio-paper); stroke-width: 2; }
     .readout-band { fill: var(--folio-ink); opacity: 0.06; }
+    /* The readout layer is a hover highlight, not a click target:
+       marks underneath must receive clicks (cross-filtering). */
+    .readout-layer { pointer-events: none; }
     .chart-readout.compact { font-size: 11px; padding: 4px 7px; max-width: 100%; white-space: normal; }
     .chart-readout {
       position: absolute;

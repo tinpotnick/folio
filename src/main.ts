@@ -3335,6 +3335,13 @@ helpDoc.addEventListener("folio-link", (ev) => {
 
 const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
   {
+    id: "project-plan",
+    title: "Sprint plan: chips, date pickers, totals, cross-filtering",
+    file: "demo/examples/project-plan.md",
+    blurb:
+      "project plan select chips dropdown status date picker totals cross-filter charts",
+  },
+  {
     id: "invoice",
     title: "Invoice 2026-041",
     file: "demo/examples/invoice.md",
