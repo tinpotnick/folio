@@ -5,11 +5,11 @@ theme: technical
 # Traffic on a small road network
 
 *A flow figure plays packets travelling an edge list. The edges are
-an ordinary dataset - edit a quantity and the flow follows. In
+an ordinary dataset - edit a quantity and the flow follows. With
+`diagram: @net` the figure animates inside the mermaid diagram itself:
+the diagram's own SVG is the base and the packets move through it. In
 print/PDF the default rendition is a static flow map: one map, edge
-widths proportional to total flow. Node geometry comes from a nodes
-table (`nodes: @places`) or from a mermaid diagram (`diagram: @net`);
-without either, nodes sit on a circle.*
+widths proportional to total flow.*
 
 ::: table {#roads}
 caption: "Edges of a little road network (qty = vehicles per edge, speed = relative pace: an edge is crossed in 30/speed ticks)"
@@ -31,30 +31,8 @@ data:
   - [Park, Docks, 3, 0.9]
 :::
 
-::: table {#places}
-caption: "Node positions for the map layout (viewBox units, 640x360)"
-columns:
-  - {name: id, type: text}
-  - {name: x, type: number, align: right}
-  - {name: y, type: number, align: right}
-data:
-  - [Market, 150, 90]
-  - [Square, 330, 110]
-  - [Station, 500, 100]
-  - [Park, 200, 260]
-  - [Docks, 470, 270]
-:::
-
-::: motion {#traffic}
-type: flow
-source: @roads
-nodes: @places
-frames: 48
-caption: "Vehicles per tick moving along the edges, laid out as a map from @places"
-:::
-
-The same edge list with a mermaid diagram as the layout engine -
-mermaid places the nodes (`graph LR`), the table still owns the data:
+The network as a diagram - mermaid lays the nodes out, and the figure
+below animates inside that very diagram:
 
 ::: mermaid {#net}
 graph LR
@@ -70,12 +48,12 @@ graph LR
   Park --> Docks
 :::
 
-::: motion {#traffic-lr}
+::: motion {#traffic}
 type: flow
 source: @roads
 diagram: @net
 frames: 48
-caption: "The same traffic, nodes laid out by the mermaid diagram above"
+caption: "Vehicles per tick moving through the network diagram above"
 :::
 
 ::: chart {#busiest}
@@ -85,7 +63,8 @@ type: bar
 caption: "Busiest origins by total flow"
 :::
 
-Print this document (or export PDF) and a flow figure becomes the
+Print this document (or export PDF) and the flow figure becomes the
 flow map - `print: filmstrip` would give the frames as thumbnails
-instead, `print: trails` each packet's path, and `display: flowmap`
-shows the static map in the document itself.
+instead, `print: trails` each packet's path over the diagram, and
+`display: flowmap` shows the static map in the document itself. A flow
+figure without `diagram:` lays its nodes out on a circle.

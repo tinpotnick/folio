@@ -4,7 +4,6 @@ import type { Motion, Table } from "@folio/engine";
 import {
   murmurationSim,
   filmstripSvg,
-  fitNodeLayout,
   flowFromTable,
   flowmapSvg,
   frameSvg,
@@ -205,12 +204,6 @@ qty: cars
 print: flowmap
 :::
 
-::: motion {#map-flow}
-type: flow
-source: @roads
-nodes: @places
-:::
-
 ::: motion {#lr-flow}
 type: flow
 source: @roads
@@ -245,19 +238,19 @@ diagram: @net
     ).toThrow(/type: swarm or flow/);
   });
 
-  it("nodes:/diagram: parse, and both together are a parse error", () => {
+  it("diagram: parses; nodes: is gone - locations live in the diagram, not a table", () => {
     const doc = parseDoc(
-      "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\nnodes: @p\n:::\n",
+      "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\ndiagram: @d\n:::\n",
     );
     const b = doc.blocks[1];
     if (b?.kind !== "motion") throw new Error("not motion");
-    expect(b.motion.nodes).toBe("p");
-    expect(b.motion.diagram).toBeUndefined();
+    expect(b.motion.diagram).toBe("d");
+    expect("nodes" in b.motion).toBe(false);
     expect(() =>
       parseDoc(
-        "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\nnodes: @p\ndiagram: @d\n:::\n",
+        "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\nnodes: @p\n:::\n",
       ),
-    ).toThrow(/mutually exclusive/);
+    ).toThrow(/Unknown motion key/);
   });
 
   it("flowFromTable takes a nodes layout: raw positions, edgeless nodes kept, unknown edge endpoints are an error", () => {
@@ -295,24 +288,68 @@ diagram: @net
     expect(circ.nodes).toHaveLength(2);
   });
 
-  it("fitNodeLayout rescales a foreign coordinate space into the viewBox, preserving aspect", () => {
-    const fitted = fitNodeLayout(
-      [
-        { id: "A", x: 0, y: 0 },
-        { id: "B", x: 1000, y: 500 },
+  it("qty scales visibly: 9 vs 90 vehicles differ in packet count and edge width", () => {
+    const edges: Table = {
+      id: "roads",
+      columns: [
+        { name: "from", type: "text" },
+        { name: "to", type: "text" },
+        { name: "qty", type: "number" },
       ],
-      640,
-      360,
+      rows: [["A", "B", 9]],
+    };
+    const flow9 = flowFromTable(edges, { type: "flow", source: "roads" });
+    const flow90 = flowFromTable(
+      { ...edges, rows: [["A", "B", 90]] },
+      { type: "flow", source: "roads" },
     );
-    const xs = fitted.map((n) => n.x);
-    const ys = fitted.map((n) => n.y);
-    // spans the padded viewBox, not beyond it
-    expect(Math.min(...xs)).toBeGreaterThanOrEqual(24);
-    expect(Math.max(...xs)).toBeLessThanOrEqual(640 - 24);
-    expect(Math.max(...ys)).toBeLessThanOrEqual(360 - 24);
-    // aspect preserved: 1000:500 = 2:1 span ratio
-    const spanX = Math.max(...xs) - Math.min(...xs);
-    const spanY = Math.max(...ys) - Math.min(...ys);
-    expect(spanX / spanY).toBeCloseTo(2, 1);
+    const packets = (d: typeof flow9) => d.frames[0]?.points.length ?? 0;
+    expect(packets(flow9)).toBe(9);
+    expect(packets(flow90)).toBe(16); // capped, but visibly more
+    const width = (d: typeof flow9) =>
+      Number(/stroke-width="([\d.]+)"/.exec(playerSvg(d, {}))?.[1] ?? 0);
+    expect(width(flow90)).toBeGreaterThan(width(flow9));
+    expect(width(flow90)).toBeLessThanOrEqual(16); // capped, not swallowed
+  });
+
+  it("with baseSvg, the frames play inside the diagram's own SVG", () => {
+    const base = `<svg id="folio-layout-net" viewBox="0 0 1016 116" xmlns="http://www.w3.org/2000/svg"><g class="node" id="folio-layout-net-flowchart-Market-0"><rect width="10" height="10"/></g></svg>`;
+    const edges: Table = {
+      id: "roads",
+      columns: [
+        { name: "from", type: "text" },
+        { name: "to", type: "text" },
+        { name: "qty", type: "number" },
+      ],
+      rows: [["A", "B", 4]],
+    };
+    const data = flowFromTable(edges, { type: "flow", source: "roads" }, [
+      { id: "A", x: 10, y: 10 },
+      { id: "B", x: 100, y: 10 },
+    ]);
+    data.baseSvg = base;
+    const svg = playerSvg(data, {});
+    // the base svg is used, with frame groups injected before </svg>
+    expect(svg).toContain('id="folio-layout-net"');
+    expect(svg).toContain('class="node"');
+    expect(svg.indexOf('class="node"')).toBeLessThan(
+      svg.indexOf('class="mframe"'),
+    );
+    expect(svg.indexOf('class="mframe"')).toBeLessThan(
+      svg.lastIndexOf("</svg>"),
+    );
+    // filmstrip thumbs and single frames embed the base too (id
+    // stripped in thumbs to avoid duplicate ids)
+    const strip = filmstripSvg(data, {}, 12);
+    expect(strip).toContain("motion-thumb");
+    expect(strip).not.toContain('id="folio-layout-net"');
+    const one = frameSvg(data, 2);
+    expect(one).toContain("folio-layout-net");
+    expect(one).toContain('data-i="2"');
+    // trails draw over the base, without a second graph underlay
+    const tr = trailsSvg(data, {});
+    expect(tr).toContain("folio-layout-net");
+    expect((tr.match(/<line/g) ?? []).length).toBe(0); // no own edge lines
+    expect(tr).toContain('class="mtrail"');
   });
 });

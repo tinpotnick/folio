@@ -84,7 +84,6 @@ import {
 import { chartSeries } from "@folio/engine/series";
 import {
   filmstripSvg,
-  fitNodeLayout,
   flowmapSvg,
   frameSvg,
   motionData,
@@ -94,6 +93,7 @@ import {
   type Rendition,
 } from "./render/motion.js";
 import {
+  mermaidViewBox,
   nodeCentersFromMermaidSvg,
   type NodePos,
 } from "./render/mermaid-layout.js";
@@ -7369,7 +7369,6 @@ export class FolioDoc extends HTMLElement {
     const motion = block.motion;
     if (motion.id) figure.dataset.motionId = motion.id;
     if (motion.source) figure.dataset.motionSource = motion.source;
-    if (motion.nodes) figure.dataset.motionNodes = motion.nodes;
     if (motion.diagram) figure.dataset.motionDiagram = motion.diagram;
     figure.contentEditable = "false";
     const stage = document.createElement("div");
@@ -7392,13 +7391,14 @@ export class FolioDoc extends HTMLElement {
         }
         table = recalcTable(tb.table, this.tablePool(), this.memo());
       }
-      // Flow layout (spec: docs/specs/flow-geometry.md): a nodes table
-      // (sync) or a mermaid diagram's rendered positions (async -
-      // the figure first shows a placeholder, then redraws in place).
+      // Flow layout (spec: docs/specs/flow-geometry.md): with
+      // `diagram: @net`, the mermaid diagram's own SVG is the figure's
+      // base and the packets animate inside it (async - the figure
+      // first shows a placeholder, then redraws in place). Without it,
+      // nodes sit on a circle.
       let nodesLayout: NodePos[] | undefined;
-      if (motion.nodes) {
-        nodesLayout = this.nodesLayoutOf(motion.nodes);
-      } else if (motion.diagram) {
+      let baseSvg: string | undefined;
+      if (motion.diagram) {
         const db = this.doc?.blocks.find(
           (b) => b.kind === "diagram" && b.diagram.id === motion.diagram,
         );
@@ -7412,11 +7412,8 @@ export class FolioDoc extends HTMLElement {
               `no flowchart/graph nodes found in @${motion.diagram} - the layout needs a mermaid graph`,
             );
           }
-          nodesLayout = fitNodeLayout(
-            cached.nodes,
-            motion.width ?? 640,
-            motion.height ?? 360,
-          );
+          nodesLayout = cached.nodes;
+          baseSvg = cached.svg;
         } else {
           stage.textContent = `Laying out from @${motion.diagram}…`;
           void this.loadMermaidLayout(motion.diagram).then(() =>
@@ -7425,7 +7422,14 @@ export class FolioDoc extends HTMLElement {
           return figure;
         }
       }
-      const data = motionData(motion, table, nodesLayout);
+      // The diagram's viewBox becomes the figure's coordinate space.
+      const vb = baseSvg ? mermaidViewBox(baseSvg) : null;
+      const data = motionData(
+        vb ? { ...motion, width: vb.w, height: vb.h } : motion,
+        table,
+        nodesLayout,
+      );
+      if (baseSvg) data.baseSvg = baseSvg;
       const theme = this.doc ? themeFromDoc(this.doc) : presetTheme(undefined);
       const ink = theme.colors[this.mode()];
       const style = {
@@ -7981,40 +7985,21 @@ export class FolioDoc extends HTMLElement {
 
   /** Mermaid layouts by diagram id, keyed to the diagram's text so
    * an edit invalidates the cache (spec: flow-geometry.md). */
+  /** Mermaid layouts by diagram id (rendered SVG + node positions),
+   * keyed to the diagram's text so an edit invalidates the cache
+   * (spec: flow-geometry.md). */
   private mermaidLayouts = new Map<
     string,
-    { text: string; nodes: NodePos[] }
+    { text: string; nodes: NodePos[]; svg: string }
   >();
 
-  /** Node layout from a nodes table: @id with id/x/y columns. */
-  private nodesLayoutOf(tableId: string): NodePos[] {
-    const tb = this.doc?.blocks.find(
-      (b) => b.kind === "table" && b.table.id === tableId,
-    );
-    if (!tb || tb.kind !== "table") {
-      throw new Error(`motion nodes table '@${tableId}' not found`);
-    }
-    const t = tb.table;
-    const idC = t.columns.findIndex((c) => c.name === "id");
-    const xC = t.columns.findIndex((c) => c.name === "x");
-    const yC = t.columns.findIndex((c) => c.name === "y");
-    if (idC < 0 || xC < 0 || yC < 0) {
-      throw new Error(`nodes table '@${tableId}' needs id, x and y columns`);
-    }
-    return t.rows.map((r) => ({
-      id: String(r[idC] ?? ""),
-      x: Number(r[xC] ?? 0) || 0,
-      y: Number(r[yC] ?? 0) || 0,
-    }));
-  }
-
-  /** Render a mermaid diagram block and cache its node positions. */
+  /** Render a mermaid diagram block and cache its SVG + node positions. */
   private async loadMermaidLayout(diagramId: string): Promise<void> {
     const db = this.doc?.blocks.find(
       (b) => b.kind === "diagram" && b.diagram.id === diagramId,
     );
     if (!db || db.kind !== "diagram") {
-      this.mermaidLayouts.set(diagramId, { text: "", nodes: [] });
+      this.mermaidLayouts.set(diagramId, { text: "", nodes: [], svg: "" });
       return;
     }
     try {
@@ -8026,9 +8011,14 @@ export class FolioDoc extends HTMLElement {
       this.mermaidLayouts.set(diagramId, {
         text: db.diagram.text,
         nodes: nodeCentersFromMermaidSvg(svg),
+        svg,
       });
     } catch {
-      this.mermaidLayouts.set(diagramId, { text: db.diagram.text, nodes: [] });
+      this.mermaidLayouts.set(diagramId, {
+        text: db.diagram.text,
+        nodes: [],
+        svg: "",
+      });
     }
   }
 
@@ -8533,19 +8523,13 @@ export class FolioDoc extends HTMLElement {
     )) {
       this.drawChart(cf);
     }
-    // Motion figures reading this dataset redraw in place - as do
-    // flow figures taking their node layout from it (nodes: @table).
+    // Motion figures reading this dataset redraw in place.
     for (const mf of Array.from(
       host?.querySelectorAll<HTMLElement>(
-        "figure.folio-motion[data-motion-source], figure.folio-motion[data-motion-nodes]",
+        "figure.folio-motion[data-motion-source]",
       ) ?? [],
     )) {
-      if (
-        mf.dataset.motionSource !== tableId &&
-        mf.dataset.motionNodes !== tableId
-      ) {
-        continue;
-      }
+      if (mf.dataset.motionSource !== tableId) continue;
       const idx = Number(mf.dataset.blockIndex ?? -1);
       const b = this.doc?.blocks[idx];
       if (b?.kind === "motion" && mf.parentElement) {

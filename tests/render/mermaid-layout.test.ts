@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { nodeCentersFromMermaidSvg } from "@folio/render/mermaid-layout";
+import {
+  mermaidViewBox,
+  nodeCentersFromMermaidSvg,
+} from "@folio/render/mermaid-layout";
 
 /** A trimmed mermaid 12 flowchart SVG: node group ids carry the
  * render id prefix ("folio-layout-net-flowchart-Market-0"), and
@@ -51,5 +54,14 @@ describe("mermaid layout extraction", () => {
 
   it("unparseable SVG throws", () => {
     expect(() => nodeCentersFromMermaidSvg("<svg><g")).toThrow(/did not parse/);
+  });
+
+  it("mermaidViewBox reads the diagram's coordinate space", () => {
+    expect(mermaidViewBox(FIXTURE)).toEqual({ w: 300, h: 120 });
+    expect(mermaidViewBox(`<svg viewBox="4 4 1016 116"/>`)).toEqual({
+      w: 1016,
+      h: 116,
+    });
+    expect(() => mermaidViewBox("<svg/>")).toThrow(/no viewBox/);
   });
 });

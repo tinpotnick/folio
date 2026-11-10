@@ -465,7 +465,6 @@ function parseChartDirective(body: DirectiveBody, id: string): DocBlock {
 const MOTION_KEYS = new Set([
   "type",
   "source",
-  "nodes",
   "diagram",
   "time",
   "id",
@@ -498,12 +497,7 @@ function parseMotionDirective(body: DirectiveBody, id: string): DocBlock {
   if (values["type"] !== "swarm" && values["type"] !== "flow") {
     throw new ParseError("Motion directive needs type: swarm or flow", 0);
   }
-  if (values["nodes"] !== undefined && values["diagram"] !== undefined) {
-    throw new ParseError(
-      "Motion directive: nodes: and diagram: are mutually exclusive",
-      0,
-    );
-  }
+
   const num = (k: string): number | undefined =>
     values[k] === undefined ? undefined : Number(values[k]);
   const seed = num("seed");
@@ -516,9 +510,6 @@ function parseMotionDirective(body: DirectiveBody, id: string): DocBlock {
     type: values["type"] as Motion["type"],
     ...(values["source"] !== undefined
       ? { source: values["source"].replace(/^@/, "") }
-      : {}),
-    ...(values["nodes"] !== undefined
-      ? { nodes: values["nodes"].replace(/^@/, "") }
       : {}),
     ...(values["diagram"] !== undefined
       ? { diagram: values["diagram"].replace(/^@/, "") }
@@ -1031,7 +1022,6 @@ function serializeMotion(m: Motion): string {
   const lines = [`::: motion {#${m.id ?? "motion"}}`];
   lines.push(`type: ${m.type}`);
   if (m.source !== undefined) lines.push(`source: @${m.source}`);
-  if (m.nodes !== undefined) lines.push(`nodes: @${m.nodes}`);
   if (m.diagram !== undefined) lines.push(`diagram: @${m.diagram}`);
   if (m.time !== undefined) lines.push(`time: ${m.time}`);
   if (m.idCol !== undefined) lines.push(`id: ${m.idCol}`);

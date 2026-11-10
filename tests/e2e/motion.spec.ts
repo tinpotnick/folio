@@ -18,14 +18,16 @@ test.describe("motion figures", () => {
     await expect(page.locator("#the-doc h1").first()).toBeVisible();
     const fig = page.locator('#the-doc figure[data-motion-id="traffic"]');
     await fig.scrollIntoViewIfNeeded();
-    // 48 frames as groups; the player shows exactly one - and it
-    // advances on its own, no Play button.
-    await expect(fig.locator(".motion-view .mframe")).toHaveCount(48);
-    // nodes: @places - raw viewBox coordinates from the nodes table.
-    const firstNode = fig.locator(".motion-view svg > circle").first();
-    await expect(firstNode).toHaveAttribute("cx", "150.0");
-    await expect(firstNode).toHaveAttribute("cy", "90.0");
-    await expect(fig.locator(".motion-view svg > circle")).toHaveCount(5);
+    // diagram: @net - mermaid renders async, then the frames play
+    // INSIDE the diagram's own SVG (the base carries class flowchart).
+    await expect(fig.locator(".motion-view svg.flowchart .mframe")).toHaveCount(
+      48,
+      { timeout: 20000 },
+    );
+    // the mermaid nodes are the underlay: 5 node groups from the diagram
+    await expect(fig.locator(".motion-view svg.flowchart g.node")).toHaveCount(
+      5,
+    );
     await expect(fig).toHaveAttribute("data-playing", "1");
     await expect(fig.locator(".motion-view .mframe:visible")).toHaveCount(1);
     const f0 = await fig.getAttribute("data-frame");
@@ -72,11 +74,11 @@ test.describe("motion figures", () => {
     );
     await bar.locator(".insp-display").selectOption("");
     await expect(fig.locator(".motion-view")).toBeVisible();
-    // Print can be trails too: one path per packet over the graph.
+    // Print can be trails too: packet paths drawn over the diagram base.
     await bar.locator(".insp-print").selectOption("trails");
     await page.emulateMedia({ media: "print" });
     await expect(
-      fig.locator(".motion-print-static svg.motion-trails"),
+      fig.locator(".motion-print-static svg.flowchart .mtrail").first(),
     ).toBeVisible();
     await expect(
       fig.locator(".motion-print-static .mtrail").first(),
@@ -189,7 +191,7 @@ test.describe("motion figures", () => {
     await page.locator("#palette-input").fill("insert a swarm figure");
     await page.keyboard.press("Enter");
     const figs = page.locator("#the-doc figure.folio-motion");
-    await expect(figs).toHaveCount(3);
+    await expect(figs).toHaveCount(2);
     // The inserted swarm is the figure without a source.
     const swarm = page.locator(
       "#the-doc figure.folio-motion:not([data-motion-source])",
@@ -229,7 +231,7 @@ test.describe("motion figures", () => {
     await page.keyboard.press("Control+k");
     await page.locator("#palette-input").fill("insert a swarm figure");
     await page.keyboard.press("Enter");
-    await expect(page.locator("#the-doc figure.folio-motion")).toHaveCount(3);
+    await expect(page.locator("#the-doc figure.folio-motion")).toHaveCount(2);
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();
     const swarmId = /::: motion \{#([\w-]+)\}\s*\ntype: swarm/.exec(md)?.[1];
@@ -248,32 +250,43 @@ test.describe("motion figures", () => {
     await expect(swarm.locator(".motion-view")).toHaveCount(0);
   });
 
-  test("diagram: @net lays a flow figure out with mermaid", async ({
+  test("qty visibly scales the flow: 9 vs 90 vehicles differ in packets and edge width", async ({
     page,
   }) => {
     await page.goto("/?doc=demo/examples/flow.md");
     await expect(page.locator("#the-doc h1").first()).toBeVisible();
-    const fig = page.locator('#the-doc figure[data-motion-id="traffic-lr"]');
+    const fig = page.locator('#the-doc figure[data-motion-id="traffic"]');
     await fig.scrollIntoViewIfNeeded();
-    // Mermaid renders async: the figure fills in once the layout lands.
-    await expect(fig.locator(".motion-view .mframe")).toHaveCount(48, {
-      timeout: 20000,
-    });
-    // Five nodes from the mermaid graph, packets on the edges (the
-    // player autoplays, so assert on the visible frame, not frame 0).
-    await expect(fig.locator(".motion-view svg > circle")).toHaveCount(5);
-    await expect(
-      fig.locator(".motion-view .mframe:visible .mpoint").first(),
-    ).toBeVisible();
-    // Same edge table as #traffic, different geometry: not the map's
-    // raw (150, 90) and not the circle fallback.
-    const firstNode = fig.locator(".motion-view svg > circle").first();
-    await expect(firstNode).not.toHaveAttribute("cx", "150");
-    // Print still shows the flow map on the mermaid geometry.
-    await page.emulateMedia({ media: "print" });
-    await expect(
-      fig.locator(".motion-print-static svg.motion-flowmap"),
-    ).toBeVisible();
-    await page.emulateMedia({ media: "screen" });
+    await expect(fig.locator(".motion-view svg.flowchart .mframe")).toHaveCount(
+      48,
+      { timeout: 20000 },
+    );
+    const counts = () =>
+      fig.evaluate((f) => {
+        const g = f.querySelector(".motion-view .mframe");
+        // our qty-weighted overlay line (a direct child of the base svg;
+        // the diagram's own edges are hidden in the player)
+        const edge0 = f.querySelector(".motion-view svg.flowchart > line");
+        return {
+          packets: g?.querySelectorAll(".mpoint").length ?? 0,
+          edgeWidth: Number(edge0?.getAttribute("stroke-width") ?? 0),
+        };
+      });
+    const before = await counts();
+    // Market -> Square qty 9 -> 90 in the edge table
+    await page
+      .locator(
+        '#the-doc figure[data-table-id="roads"] td[data-row-index="0"][data-col-index="2"]',
+      )
+      .click();
+    await page.keyboard.press("Control+a");
+    await page.keyboard.type("90");
+    await page.keyboard.press("Tab");
+    await expect
+      .poll(async () => (await counts()).packets)
+      .toBeGreaterThan(before.packets);
+    await expect
+      .poll(async () => (await counts()).edgeWidth)
+      .toBeGreaterThan(before.edgeWidth);
   });
 });
