@@ -66,6 +66,9 @@ await page.mouse.move(900, 300);
 await pause(1500);
 
 // Edit the first post's score: every chart over @posts recomputes.
+const bar = page.locator(
+  '#the-doc figure[data-table-id="posts"] .folio-inspector',
+);
 await scrollTo(page.locator('#the-doc figure[data-table-id="posts"]'));
 await pause(900);
 const cell = page.locator(
@@ -76,6 +79,13 @@ await page.keyboard.press("Control+a");
 await pause(250);
 await page.keyboard.type("9999", { delay: 160 });
 await page.keyboard.press("Tab");
+await pause(900);
+
+// Open the dataset browser (the spreadsheet view), hold, close with
+// Esc - the same beat as the original video.
+await clickOn(bar.locator(".insp-dataset"));
+await pause(2600);
+await page.keyboard.press("Escape");
 await pause(900);
 
 // Slow scroll through the figures, holding on the heatmap.
