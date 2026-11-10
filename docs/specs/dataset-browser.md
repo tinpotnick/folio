@@ -71,7 +71,12 @@ chrome would put a widget inside a document.
   carries the edit. Enter commits, Escape reverts, Tab commits
   and moves to the next editable cell. Formula columns are
   read-only (computed, muted); percent formats render as in
-  flow.
+  flow. Typed cells (select, date, datetime) get the same
+  controls as the in-document table (select-columns.md,
+  date-column-controls.md): select cells render as chips and
+  open their dropdown on click/Enter, date/datetime cells show
+  the calendar icon on hover opening the picker, and the cell
+  body stays text-editable.
 - **Engine primitives**: `filterIndexes(table, expr)` and
   `sortIndexes(table, by, order)` (src/engine/query.ts) return
   MODEL row indexes so the browser can map displayed rows back

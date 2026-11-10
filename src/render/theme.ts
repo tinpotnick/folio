@@ -1461,9 +1461,11 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       margin-top: 4px;
       align-self: flex-end;
     }
-    /* The calendar button inside date/datetime cells (spec:
+    /* The calendar button inside date/datetime cells - in the
+       document table and in the dataset browser sheet (spec:
        date-column-controls.md): quiet until the cell is hovered. */
-    table.folio-table td .folio-date-btn {
+    table.folio-table td .folio-date-btn,
+    .folio-ds-cell .folio-date-btn {
       visibility: hidden;
       border: none;
       background: none;
@@ -1474,7 +1476,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       vertical-align: baseline;
     }
     table.folio-table td:hover .folio-date-btn,
-    table.folio-table td:focus-within .folio-date-btn {
+    table.folio-table td:focus-within .folio-date-btn,
+    .folio-ds-cell:hover .folio-date-btn,
+    .folio-ds-cell:focus-within .folio-date-btn {
       visibility: visible;
     }
     /* Cross-filter chips above linked charts (spec:
@@ -2122,6 +2126,10 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .folio-ds-cell:not(.computed):not(.selected):hover {
       background: var(--folio-hover, #f3f4f6);
       cursor: text;
+    }
+    /* Select-chip cells open a dropdown, they are not typed into. */
+    .folio-ds-cell.folio-control-cell:not(.selected):hover {
+      cursor: pointer;
     }
     .folio-ds-cell.computed { color: var(--folio-ink-muted, #57606a); }
     .folio-ds-edit {

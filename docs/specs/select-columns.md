@@ -43,6 +43,10 @@ data:
   commits (model write, like typing); Esc cancels. Keyboard: Enter
   opens, arrows choose, Enter commits. Multi: checkbox list, tick
   toggles a value in/out, Close/Enter commits the ticked set.
+  The dataset browser (spreadsheet view) has the same controls:
+  select cells render as chips there too, and click/Enter opens the
+  same in-cell dropdown; the commit is one model write, so the
+  in-document figure and the sheet both refresh.
 - A value not in `options` (typed in Markdown by hand) is a visible
   cell error (chip drawn in the error style with the message in the
   title; for multi, each offending part flagged) - consistent with

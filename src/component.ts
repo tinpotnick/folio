@@ -6757,8 +6757,14 @@ export class FolioDoc extends HTMLElement {
             rowEl &&
             cellEl &&
             !cellEl.classList.contains("computed")
-          )
-            this.openDatasetCellEditor(rowEl, cellEl, modelRow, col, block);
+          ) {
+            const cdef = block.table.columns[col];
+            // Select cells open their dropdown on Enter, like a click.
+            if (cdef?.type === "select")
+              this.openDatasetCellControl(display, col, block);
+            else
+              this.openDatasetCellEditor(rowEl, cellEl, modelRow, col, block);
+          }
           return;
         }
         default:
@@ -6989,6 +6995,9 @@ export class FolioDoc extends HTMLElement {
       return; // the head already shows the guarded error line
     }
     const { indexes } = this.datasetDisplayIndexes();
+    // Re-drawing the window drops the cells a control pop is anchored
+    // to; close it first (scrolling closes an open dropdown).
+    this.closeCellControl();
     const first = Math.max(0, Math.floor(grid.scrollTop / DS_ROW_H) - 2);
     const count = Math.ceil(grid.clientHeight / DS_ROW_H) + 4;
     const slice = indexes.slice(first, first + count);
@@ -7016,6 +7025,9 @@ export class FolioDoc extends HTMLElement {
         const cell = document.createElement("div");
         cell.className = "folio-ds-cell";
         cell.dataset.col = String(c);
+        // The shared cell-control helpers read rowIndex/colIndex.
+        cell.dataset.rowIndex = String(modelRow);
+        cell.dataset.colIndex = String(c);
         if (
           this.dsState.selected !== null &&
           this.dsState.selected.display === display &&
@@ -7027,6 +7039,12 @@ export class FolioDoc extends HTMLElement {
           const active =
             canvas.querySelector<HTMLInputElement>(".folio-ds-edit");
           if (active !== null) return; // one editor at a time
+          if (col.type === "select") {
+            // Chips open their dropdown on click - not free text
+            // (spec: select-columns.md, same as in the document).
+            this.openDatasetCellControl(display, c, block);
+            return;
+          }
           this.dsState.selected = { display, col: c };
           if (col.type === "formula") {
             // Computed cells are read-only: selecting one shows its
@@ -7043,15 +7061,66 @@ export class FolioDoc extends HTMLElement {
           cell.classList.add("computed");
           cell.textContent = formatComputed(v, col.format);
           if (typeof v === "number") cell.classList.add("num");
+        } else if (col.type === "select") {
+          // Select chips in the sheet too (spec: select-columns.md).
+          cell.classList.add("folio-control-cell");
+          this.renderControlCell(cell, col, v);
         } else {
           if (typeof v === "number") cell.classList.add("num");
           cell.textContent = String(v ?? "");
+          if (col.type === "date" || col.type === "datetime") {
+            // The calendar icon opens the picker (spec:
+            // date-column-controls.md); the cell body stays
+            // text-editable - type the ISO value - as in the document.
+            cell.classList.add("date");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "folio-date-btn";
+            btn.title =
+              col.type === "datetime" ? "Pick a date and time" : "Pick a date";
+            btn.innerHTML =
+              '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="2"/><path d="M2 6.5h12M5.5 2v3M10.5 2v3"/></svg>';
+            btn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (cell.isConnected)
+                this.openDatasetCellControl(display, c, block);
+            });
+            cell.appendChild(btn);
+          }
         }
         row.appendChild(cell);
       });
       canvas.appendChild(row);
     });
     this.updateDatasetFormulaBar();
+  }
+
+  /**
+   * Open the in-cell control (select dropdown, multi check-list, or
+   * date/datetime picker) on a dataset browser cell: re-draw the
+   * window so the selection ring shows, then pop the control on the
+   * freshly drawn cell.
+   */
+  private openDatasetCellControl(
+    display: number,
+    col: number,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    const cdef = block.table.columns[col];
+    if (!cdef) return;
+    this.dsState.selected = { display, col };
+    this.renderDatasetRows(); // also refreshes the formula bar
+    const canvas =
+      this.dsBrowser?.querySelector<HTMLElement>(".folio-ds-canvas");
+    const rowEl = canvas?.querySelector<HTMLElement>(
+      `.folio-ds-row[data-display="${String(display)}"]`,
+    );
+    // +1: the gutter cell is the row's first child.
+    const cellEl = rowEl?.children[col + 1] as HTMLElement | undefined;
+    if (cellEl) this.openCellControl(cellEl, block, cdef);
+    this.dsBrowser
+      ?.querySelector<HTMLElement>(".folio-ds-grid")
+      ?.focus({ preventScroll: true });
   }
 
   /**
@@ -8597,9 +8666,11 @@ export class FolioDoc extends HTMLElement {
     return h % 360;
   }
 
-  /** Render a select/date/datetime cell's content (chips / ISO text). */
+  /** Render a select/date/datetime cell's content (chips / ISO text).
+   * Works on any cell host: a table `td` in the document, or a
+   * `.folio-ds-cell` div in the dataset browser. */
   private renderControlCell(
-    td: HTMLTableCellElement,
+    td: HTMLElement,
     col: Extract<Table["columns"][number], { type: string }>,
     v: Cell | undefined,
   ): void {
@@ -8630,15 +8701,19 @@ export class FolioDoc extends HTMLElement {
       }
       if (parts.length === 0) td.textContent = "";
     } else {
-      // date / datetime: ISO text in the doc, as today.
+      // date / datetime: ISO text in the doc, as today. Keep the
+      // calendar button when re-rendering after a picker commit.
+      const btn = td.querySelector(".folio-date-btn");
       td.textContent = String(v ?? "");
+      if (btn) td.appendChild(btn);
     }
   }
 
   /** Write a control-chosen value into the model (same path as a
-   * typed cell commit). */
+   * typed cell commit). The cell may live in the document's table
+   * figure or in the dataset browser. */
   private commitCellValue(
-    td: HTMLTableCellElement,
+    td: HTMLElement,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     value: Cell,
   ): void {
@@ -8649,18 +8724,36 @@ export class FolioDoc extends HTMLElement {
     if (!row || !col) return;
     if (row[c] === value) return;
     row[c] = value;
-    this.updateRowCalculations(td.closest("figure"), block);
+    // The owning figure: the cell's own figure in the document, or -
+    // for a cell in the dataset browser - the table's figure there.
+    const figure = (td.closest("figure") ??
+      this.shadowRoot?.querySelector(
+        `figure[data-table-id="${block.table.id}"]`,
+      )) as HTMLElement | null;
+    this.updateRowCalculations(figure, block);
     this.emitChange("cell");
-    // Re-render this cell's content (chips / date text).
     const recalced = recalcTable(block.table, this.tablePool(), this.memo());
+    if (td.closest(".folio-ds-overlay") !== null) {
+      // A sheet edit: the in-flow figure's cell must not go stale
+      // (the browser's edit is not its DOM), then redraw the sheet
+      // so chips, dates, and formula cells all refresh.
+      const ftd = figure?.querySelector<HTMLElement>(
+        `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
+      );
+      if (ftd) this.renderControlCell(ftd, col, recalced.rows[r]?.[c]);
+      this.refreshDatasetBrowser();
+      return;
+    }
+    // Re-render this cell's content (chips / date text).
     this.renderControlCell(td, col, recalced.rows[r]?.[c]);
   }
 
   /** Open the in-cell control for a select/date/datetime cell:
    * dropdown (single select), checkable list (multi), date or
-   * datetime-local picker. */
+   * datetime-local picker. The cell may be a `td` in the document's
+   * table or a `.folio-ds-cell` in the dataset browser. */
   private openCellControl(
-    td: HTMLTableCellElement,
+    td: HTMLElement,
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     col: Table["columns"][number],
   ): void {
@@ -8670,14 +8763,21 @@ export class FolioDoc extends HTMLElement {
     const current = String(block.table.rows[r]?.[c] ?? "");
     const pop = document.createElement("div");
     pop.className = "folio-cell-pop";
+    // The sheet's cells clip (overflow: hidden); lift the clip while
+    // the pop is open so it is not cut off.
+    const overflow = td.style.overflow;
     td.style.position = "relative";
+    td.style.overflow = "visible";
     td.appendChild(pop);
-    this.activeCellPop = { pop, td };
+    this.activeCellPop = { pop, td, overflow };
     const close = () => this.closeCellControl();
     // The pop closes on a click OUTSIDE it (never on blur: the
-    // dropdown/picker itself takes focus when clicked).
+    // dropdown/picker itself takes focus when clicked). composedPath
+    // sees through the shadow boundary, so a click inside the pop -
+    // retargeted to the host at the document listener - still counts
+    // as inside.
     this.cellPopOutside = (ev: MouseEvent) => {
-      if (!pop.contains(ev.target as Node)) close();
+      if (!ev.composedPath().includes(pop)) close();
     };
     document.addEventListener("mousedown", this.cellPopOutside, true);
 
@@ -8779,7 +8879,11 @@ export class FolioDoc extends HTMLElement {
     sel.focus();
   }
 
-  private activeCellPop: { pop: HTMLElement; td: HTMLElement } | null = null;
+  private activeCellPop: {
+    pop: HTMLElement;
+    td: HTMLElement;
+    overflow: string;
+  } | null = null;
 
   private cellPopOutside: ((ev: MouseEvent) => void) | null = null;
 
@@ -8790,6 +8894,7 @@ export class FolioDoc extends HTMLElement {
     }
     if (this.activeCellPop) {
       this.activeCellPop.pop.remove();
+      this.activeCellPop.td.style.overflow = this.activeCellPop.overflow;
       this.activeCellPop = null;
     }
   }
