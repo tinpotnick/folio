@@ -42,6 +42,15 @@ export interface MotionData {
   /** Flow only: the static graph the packets travel. */
   edges?: MotionEdge[];
   nodes?: { id: string; x: number; y: number }[];
+  /** Diagram-laid-out flow only: the base SVG (e.g. the mermaid
+   * diagram) that frame groups are injected into - the movement plays
+   * inside the diagram itself, in its own coordinate space. */
+  baseSvg?: string;
+}
+
+/** Inject inner SVG content before the base svg's closing tag. */
+function intoBase(baseSvg: string, inner: string): string {
+  return baseSvg.replace("</svg>", `${inner}</svg>`);
 }
 
 export interface MotionStyle {
@@ -261,7 +270,8 @@ export function flowFromTable(
   for (let f = 0; f < F; f++) {
     const points: MotionPoint[] = [];
     edges.forEach((e, ei) => {
-      const n = Math.min(8, Math.max(1, Math.round(e.qty)));
+      // qty = vehicles per edge: up to 16 packets, so 9 vs 90 differs.
+      const n = Math.min(16, Math.max(1, Math.round(e.qty)));
       for (let k = 0; k < n; k++) {
         // A packet crosses an edge in 30/speed ticks (2 s at 15 fps
         // for speed 1) - fast enough to read as movement, and longer
@@ -379,31 +389,42 @@ function frameGroup(
   return `<g class="mframe" data-i="${String(i)}">${pts}</g>`;
 }
 
-/** The flow graph underlay (edges + labeled nodes), shared by the
- * player and the trails rendition. */
-function graphSvg(data: MotionData, style: MotionStyle): string {
-  const ink = style.ink ?? "#1f2328";
-  const edges =
+/** Flow edge lines, width growing (log) with qty. */
+function edgesSvg(data: MotionData, style: MotionStyle): string {
+  return (
     data.edges
       ?.map((e) => {
-        const w = Math.min(6, 0.8 + e.qty * 0.8);
-        return `<line x1="${e.x1.toFixed(1)}" y1="${e.y1.toFixed(1)}" x2="${e.x2.toFixed(1)}" y2="${e.y2.toFixed(1)}" stroke="${style.muted ?? "#8b949e"}" stroke-width="${w.toFixed(1)}" stroke-linecap="round"/>`;
+        // Width grows logarithmically with qty, so 9 vs 90 vehicles
+        // is visibly different without one edge swallowing the map.
+        const w = Math.max(1, Math.min(16, 0.8 + Math.log2(1 + e.qty) * 1.8));
+        return `<line x1="${e.x1.toFixed(1)}" y1="${e.y1.toFixed(1)}" x2="${e.x2.toFixed(1)}" y2="${e.y2.toFixed(1)}" stroke="${style.accent ?? "#2b5d94"}" stroke-opacity="0.45" stroke-width="${w.toFixed(1)}" stroke-linecap="round"/>`;
       })
-      .join("") ?? "";
-  const nodes =
+      .join("") ?? ""
+  );
+}
+
+/** Flow node dots + labels. */
+function nodesSvg(data: MotionData, style: MotionStyle): string {
+  const ink = style.ink ?? "#1f2328";
+  return (
     data.nodes
       ?.map(
         (n) =>
           `<circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="4" fill="${ink}"/><text x="${(n.x + 8).toFixed(1)}" y="${(n.y + 4).toFixed(1)}" font-size="11" fill="${style.muted ?? "#57606a"}">${esc(n.id)}</text>`,
       )
-      .join("") ?? "";
-  return edges + nodes;
+      .join("") ?? ""
+  );
+}
+
+/** The flow graph underlay (edges + labeled nodes), shared by the
+ * player and the trails rendition. */
+function graphSvg(data: MotionData, style: MotionStyle): string {
+  return edgesSvg(data, style) + nodesSvg(data, style);
 }
 
 /** The player SVG: one viewBox, every frame as a group (the host shows
  * one at a time; print renditions use the same frames). */
 export function playerSvg(data: MotionData, style: MotionStyle = {}): string {
-  const graph = graphSvg(data, style);
   const frames = data.frames
     // The last frame orients toward the first, matching the loop.
     .map((f, i) =>
@@ -416,6 +437,17 @@ export function playerSvg(data: MotionData, style: MotionStyle = {}): string {
       ),
     )
     .join("");
+  // Diagram layout: the diagram's own SVG is the base; the frames play
+  // inside it, in its coordinate space. The diagram's own edges are
+  // hidden and redrawn with qty-weighted widths, so quantity reads in
+  // the animated diagram too.
+  if (data.baseSvg) {
+    return intoBase(
+      data.baseSvg,
+      `<style>.edgePaths,.edgeLabels{display:none}</style>${edgesSvg(data, style)}${frames}`,
+    );
+  }
+  const graph = graphSvg(data, style);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" role="img" class="motion-player">${graph}${frames}</svg>`;
 }
 
@@ -434,7 +466,8 @@ export function trailsSvg(data: MotionData, style: MotionStyle = {}): string {
       byId.set(p.id, arr);
     }
   });
-  const parts: string[] = [graphSvg(data, style)];
+  // Over a diagram base, the diagram itself is the underlay.
+  const parts: string[] = data.baseSvg ? [] : [graphSvg(data, style)];
   for (const [id, pts] of byId) {
     pts.sort((a, b) => a.f - b.f);
     const d = pts
@@ -459,6 +492,7 @@ export function trailsSvg(data: MotionData, style: MotionStyle = {}): string {
       );
     }
   }
+  if (data.baseSvg) return intoBase(data.baseSvg, parts.join(""));
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" role="img" class="motion-trails">${parts.join("")}</svg>`;
 }
 
@@ -474,7 +508,14 @@ export function filmstripSvg(
     const f = data.frames[i];
     if (!f) continue;
     thumbs.push(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" class="motion-thumb">${frameGroup(f, i, style, 6, data.frames[i + 1])}</svg>`,
+      data.baseSvg
+        ? intoBase(data.baseSvg, frameGroup(f, i, style, 6, data.frames[i + 1]))
+            .replace(/<svg id="[^"]*"/, "<svg")
+            .replace(
+              "<svg ",
+              `<svg class="motion-thumb" data-thumb="${String(i)}" `,
+            )
+        : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" class="motion-thumb">${frameGroup(f, i, style, 6, data.frames[i + 1])}</svg>`,
     );
   }
   return thumbs.join("");
@@ -521,20 +562,15 @@ export function frameSvg(
 ): string {
   const f = data.frames[n] ?? data.frames[0];
   if (!f) throw new Error("Motion figure: no frames");
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" role="img" class="motion-frame">${frameGroup(f, n, style, data.edges ? 5 : 4.5, data.frames[n + 1])}</svg>`;
-}
-
-/** Fit an external layout (e.g. mermaid's coordinate space) into the
- * figure's viewBox, preserving aspect - unlike swarm data, flow nodes
- * from a table are used raw; only foreign coordinate spaces are
- * rescaled. */
-export function fitNodeLayout(
-  nodes: { id: string; x: number; y: number }[],
-  W: number,
-  H: number,
-): { id: string; x: number; y: number }[] {
-  const fit = fitBounds(nodes, W, H);
-  return nodes.map((n) => ({ id: n.id, x: fit.sx(n.x), y: fit.sy(n.y) }));
+  const inner = frameGroup(
+    f,
+    n,
+    style,
+    data.edges ? 5 : 4.5,
+    data.frames[n + 1],
+  );
+  if (data.baseSvg) return intoBase(data.baseSvg, inner);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${String(data.width)} ${String(data.height)}" role="img" class="motion-frame">${inner}</svg>`;
 }
 
 /** Build the frame data for a motion block: built-in sim when no

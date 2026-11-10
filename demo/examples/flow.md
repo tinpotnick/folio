@@ -4,12 +4,10 @@ theme: technical
 
 # Traffic on a small road network
 
-*A flow figure plays packets travelling an edge list. The edges are
-an ordinary dataset - edit a quantity and the flow follows. In
-print/PDF the default rendition is a static flow map: one map, edge
-widths proportional to total flow. Node geometry comes from a nodes
-table (`nodes: @places`) or from a mermaid diagram (`diagram: @net`);
-without either, nodes sit on a circle.*
+*A mermaid diagram with `flow=@roads` is also a flow figure: the
+packets play inside the diagram itself. The edges are an ordinary
+dataset - edit a quantity and the flow follows. In print/PDF the
+packets become trails over the diagram.*
 
 ::: table {#roads}
 caption: "Edges of a little road network (qty = vehicles per edge, speed = relative pace: an edge is crossed in 30/speed ticks)"
@@ -31,32 +29,10 @@ data:
   - [Park, Docks, 3, 0.9]
 :::
 
-::: table {#places}
-caption: "Node positions for the map layout (viewBox units, 640x360)"
-columns:
-  - {name: id, type: text}
-  - {name: x, type: number, align: right}
-  - {name: y, type: number, align: right}
-data:
-  - [Market, 150, 90]
-  - [Square, 330, 110]
-  - [Station, 500, 100]
-  - [Park, 200, 260]
-  - [Docks, 470, 270]
-:::
+The network as a diagram with traffic flowing through it - mermaid
+lays the nodes out, `flow=@roads` animates the vehicles inside it:
 
-::: motion {#traffic}
-type: flow
-source: @roads
-nodes: @places
-frames: 48
-caption: "Vehicles per tick moving along the edges, laid out as a map from @places"
-:::
-
-The same edge list with a mermaid diagram as the layout engine -
-mermaid places the nodes (`graph LR`), the table still owns the data:
-
-::: mermaid {#net}
+::: mermaid {#net} flow=@roads
 graph LR
   Market --> Square
   Square --> Market
@@ -70,14 +46,6 @@ graph LR
   Park --> Docks
 :::
 
-::: motion {#traffic-lr}
-type: flow
-source: @roads
-diagram: @net
-frames: 48
-caption: "The same traffic, nodes laid out by the mermaid diagram above"
-:::
-
 ::: chart {#busiest}
 source: @roads
 query: {group: [from], agg: {out: sum(qty)}, sort: {by: out, order: desc}, limit: 5}
@@ -85,7 +53,7 @@ type: bar
 caption: "Busiest origins by total flow"
 :::
 
-Print this document (or export PDF) and a flow figure becomes the
-flow map - `print: filmstrip` would give the frames as thumbnails
-instead, `print: trails` each packet's path, and `display: flowmap`
-shows the static map in the document itself.
+Print this document (or export PDF) and the vehicles become trails
+over the diagram. A flow figure in its own block
+(`::: motion` with `type: flow`) lays its nodes out on a circle and
+offers the filmstrip/flowmap/poster renditions instead.

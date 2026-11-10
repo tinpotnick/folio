@@ -61,3 +61,14 @@ export function nodeCentersFromMermaidSvg(svg: string): NodePos[] {
   }
   return out;
 }
+
+/** The viewBox size of a rendered mermaid SVG - diagram-laid-out flow
+ * figures adopt it as their own width/height, so frames, renditions
+ * and the base diagram share one coordinate space. */
+export function mermaidViewBox(svg: string): { w: number; h: number } {
+  const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+  const vb = doc.querySelector("svg")?.getAttribute("viewBox") ?? "";
+  const m = /(-?[\d.]+)\s+(-?[\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(vb);
+  if (!m) throw new Error("mermaid layout: rendered SVG has no viewBox");
+  return { w: Number(m[3]), h: Number(m[4]) };
+}

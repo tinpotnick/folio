@@ -20,10 +20,22 @@ The body is raw Mermaid text until the closing `:::`. No inline
 styling, no HTML in the body (Mermaid runs at securityLevel
 "strict").
 
+The opener may carry one attribute, `flow=@edges` (spec:
+flow-geometry.md): the diagram then also plays the edge table's
+packets inside its own SVG - an animated flow diagram:
+
+    ::: mermaid {#net} flow=@roads
+    graph LR
+      Market --> Square
+    :::
+
+Unknown attributes are a parse error; the directive round-trips
+byte-identically.
+
 ## Contract
 
 - **Engine** (`src/engine/doc.ts`): `kind: "diagram"`, `diagram:
-  { id, text }` - pure parse/serialize, unterminated diagrams are
+{ id, text }` - pure parse/serialize, unterminated diagrams are
   parse errors, round-trip identity holds.
 - **Selection & deletion**: diagram figures are selectable
   (`tabindex="-1"`, focus outline + solid border on selection);

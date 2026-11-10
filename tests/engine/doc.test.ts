@@ -266,6 +266,19 @@ describe("mermaid diagram blocks", () => {
   it("throws on an unterminated diagram", () => {
     expect(() => parseDoc("::: mermaid {#flow}\ngraph TD")).toThrow(ParseError);
   });
+
+  it("flow=@edges attribute parses and round-trips; unknown attributes error", () => {
+    const src = "::: mermaid {#net} flow=@roads\ngraph LR\n  A --> B\n:::\n";
+    const doc = parseDoc(src);
+    expect(doc.blocks[0]).toEqual({
+      kind: "diagram",
+      diagram: { id: "net", flow: "roads", text: "graph LR\n  A --> B" },
+    });
+    expect(serializeDoc(doc)).toBe(src);
+    expect(() =>
+      parseDoc("::: mermaid {#net} bogus=1\ngraph LR\n  A --> B\n:::\n"),
+    ).toThrow(/Unknown mermaid attribute/);
+  });
 });
 
 describe("image blocks", () => {

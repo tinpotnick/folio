@@ -17,16 +17,14 @@ Print and PDF show a static rendition of the same frames instead.
   example a table a Python compute block published.
 - **Flow** (`type: flow`): an edge list (`from`, `to`, `qty`,
   `speed` - rename with `from:`/`to:`/`qty:`/`speed:`) drawn as a
-  graph; per frame, `qty` packets travel each edge at `speed`
-  (relative pace - an edge is crossed in 30/speed ticks, so the
-  movement reads at the player's 15 fps). A
-  `time` column gives real time steps instead of synthetic ticks.
-  Node layout (spec: flow-geometry): `nodes: @places` takes positions
-  from a table with `id, x, y` columns (viewBox units - place the
-  map yourself); `diagram: @net` takes them from a `::: mermaid`
-  block's rendered nodes (mermaid is only the layout engine - the
-  edge table still owns the data); with neither, nodes sit on a
-  circle. `nodes:` and `diagram:` are mutually exclusive.
+  graph on a circle; per frame, up to 16 packets per edge travel at
+  `speed` (relative pace - an edge is crossed in 30/speed ticks, so
+  the movement reads at the player's 15 fps), and edge width grows
+  with `qty`. A `time` column gives real time steps instead of
+  synthetic ticks. To animate **inside a mermaid diagram**, put
+  `flow=@edges` on the `::: mermaid` block instead (spec:
+  flow-geometry.md): the packets then play within the diagram's own
+  SVG, and print shows their trails over it.
 - **Renditions**: `display:` picks what the open document shows
   (`player` - the default, `filmstrip`, `flowmap` for flow, `trails`,
   `poster`, `frame:N`); `print:` picks the PDF rendition (same words;

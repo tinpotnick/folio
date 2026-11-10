@@ -39,12 +39,13 @@ height:`), `display:`, `print:`, `caption:`. Unknown keys are a
   table with the frame/id/x/y columns (a Python compute block's
   published output included).
 - **Flow** (`type: flow`): edge list `from, to, qty, speed`; nodes
-  laid out deterministically (circle by first appearance; real
-  geometry can come later via a nodes table). Per frame, `qty`
-  packets (capped at 8/edge) travel each edge at `speed` (relative
-  pace: an edge is crossed in 30/speed ticks, so movement is visible
-  at the 15 fps player rate). A `time`
-  column gives real time steps instead of synthetic ticks.
+  laid out on a circle by first appearance. Per frame, up to 16
+  packets per edge (one per vehicle) travel each edge at `speed`
+  (relative pace: an edge is crossed in 30/speed ticks, so movement
+  is visible at the 15 fps player rate); edge width grows with `qty`
+  (log scale). A `time` column gives real time steps instead of
+  synthetic ticks. To animate inside a mermaid diagram instead, put
+  `flow=@edges` on the `::: mermaid` block (spec: flow-geometry.md).
 - **Renditions** (the `display:` / `print:` vocabulary, so nothing is
   locked out - a new rendition is one renderer plus one enum value):
   `player` (default display; plays in the open document),
