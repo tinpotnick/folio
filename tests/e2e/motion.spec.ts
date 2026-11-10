@@ -21,6 +21,11 @@ test.describe("motion figures", () => {
     // 48 frames as groups; the player shows exactly one - and it
     // advances on its own, no Play button.
     await expect(fig.locator(".motion-view .mframe")).toHaveCount(48);
+    // nodes: @places - raw viewBox coordinates from the nodes table.
+    const firstNode = fig.locator(".motion-view svg > circle").first();
+    await expect(firstNode).toHaveAttribute("cx", "150.0");
+    await expect(firstNode).toHaveAttribute("cy", "90.0");
+    await expect(fig.locator(".motion-view svg > circle")).toHaveCount(5);
     await expect(fig).toHaveAttribute("data-playing", "1");
     await expect(fig.locator(".motion-view .mframe:visible")).toHaveCount(1);
     const f0 = await fig.getAttribute("data-frame");
@@ -174,12 +179,15 @@ test.describe("motion figures", () => {
     await page.locator("#palette-input").fill("insert a swarm figure");
     await page.keyboard.press("Enter");
     const figs = page.locator("#the-doc figure.folio-motion");
-    await expect(figs).toHaveCount(2);
-    await expect(figs.last().locator(".motion-view")).toBeVisible();
-    await expect(
-      figs.last().locator(".motion-view .mframe:visible"),
-    ).toHaveCount(1);
-    await expect(figs.last()).toHaveAttribute("data-playing", "1");
+    await expect(figs).toHaveCount(3);
+    // The inserted swarm is the figure without a source.
+    const swarm = page.locator(
+      "#the-doc figure.folio-motion:not([data-motion-source])",
+    );
+    await expect(swarm).toHaveCount(1);
+    await expect(swarm.locator(".motion-view")).toBeVisible();
+    await expect(swarm.locator(".motion-view .mframe:visible")).toHaveCount(1);
+    await expect(swarm).toHaveAttribute("data-playing", "1");
     await page.locator("#btn-markdown").click();
     expect(await page.locator("#editor").inputValue()).toContain("type: swarm");
     // A bad rendition value is the figure's error text, not a crash.
@@ -211,7 +219,7 @@ test.describe("motion figures", () => {
     await page.keyboard.press("Control+k");
     await page.locator("#palette-input").fill("insert a swarm figure");
     await page.keyboard.press("Enter");
-    await expect(page.locator("#the-doc figure.folio-motion")).toHaveCount(2);
+    await expect(page.locator("#the-doc figure.folio-motion")).toHaveCount(3);
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();
     const swarmId = /::: motion \{#([\w-]+)\}\s*\ntype: swarm/.exec(md)?.[1];
@@ -228,5 +236,34 @@ test.describe("motion figures", () => {
     );
     // No blank player: the error replaces the stage content.
     await expect(swarm.locator(".motion-view")).toHaveCount(0);
+  });
+
+  test("diagram: @net lays a flow figure out with mermaid", async ({
+    page,
+  }) => {
+    await page.goto("/?doc=demo/examples/flow.md");
+    await expect(page.locator("#the-doc h1").first()).toBeVisible();
+    const fig = page.locator('#the-doc figure[data-motion-id="traffic-lr"]');
+    await fig.scrollIntoViewIfNeeded();
+    // Mermaid renders async: the figure fills in once the layout lands.
+    await expect(fig.locator(".motion-view .mframe")).toHaveCount(48, {
+      timeout: 20000,
+    });
+    // Five nodes from the mermaid graph, packets on the edges (the
+    // player autoplays, so assert on the visible frame, not frame 0).
+    await expect(fig.locator(".motion-view svg > circle")).toHaveCount(5);
+    await expect(
+      fig.locator(".motion-view .mframe:visible .mpoint").first(),
+    ).toBeVisible();
+    // Same edge table as #traffic, different geometry: not the map's
+    // raw (150, 90) and not the circle fallback.
+    const firstNode = fig.locator(".motion-view svg > circle").first();
+    await expect(firstNode).not.toHaveAttribute("cx", "150");
+    // Print still shows the flow map on the mermaid geometry.
+    await page.emulateMedia({ media: "print" });
+    await expect(
+      fig.locator(".motion-print-static svg.motion-flowmap"),
+    ).toBeVisible();
+    await page.emulateMedia({ media: "screen" });
   });
 });

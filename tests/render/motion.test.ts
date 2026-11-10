@@ -4,6 +4,7 @@ import type { Motion, Table } from "@folio/engine";
 import {
   murmurationSim,
   filmstripSvg,
+  fitNodeLayout,
   flowFromTable,
   flowmapSvg,
   frameSvg,
@@ -192,6 +193,18 @@ source: @roads
 qty: cars
 print: flowmap
 :::
+
+::: motion {#map-flow}
+type: flow
+source: @roads
+nodes: @places
+:::
+
+::: motion {#lr-flow}
+type: flow
+source: @roads
+diagram: @net
+:::
 `;
     const doc = parseDoc(src);
     expect(serializeDoc(doc)).toBe(src);
@@ -219,5 +232,76 @@ print: flowmap
     expect(() =>
       parseDoc("# T\n\n::: motion {#m}\ntype: vortex\n:::\n"),
     ).toThrow(/type: swarm or flow/);
+  });
+
+  it("nodes:/diagram: parse, and both together are a parse error", () => {
+    const doc = parseDoc(
+      "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\nnodes: @p\n:::\n",
+    );
+    const b = doc.blocks[1];
+    if (b?.kind !== "motion") throw new Error("not motion");
+    expect(b.motion.nodes).toBe("p");
+    expect(b.motion.diagram).toBeUndefined();
+    expect(() =>
+      parseDoc(
+        "# T\n\n::: motion {#m}\ntype: flow\nsource: @r\nnodes: @p\ndiagram: @d\n:::\n",
+      ),
+    ).toThrow(/mutually exclusive/);
+  });
+
+  it("flowFromTable takes a nodes layout: raw positions, edgeless nodes kept, unknown edge endpoints are an error", () => {
+    const edges: Table = {
+      id: "roads",
+      columns: [
+        { name: "from", type: "text" },
+        { name: "to", type: "text" },
+        { name: "qty", type: "number" },
+      ],
+      rows: [["A", "B", 4]],
+    };
+    const layout = [
+      { id: "A", x: 10, y: 20 },
+      { id: "B", x: 110, y: 20 },
+      { id: "C", x: 60, y: 300 }, // no edges - still drawn
+    ];
+    const data = flowFromTable(
+      edges,
+      { type: "flow", source: "roads" },
+      layout,
+    );
+    expect(data.nodes).toHaveLength(3);
+    expect(data.nodes?.[0]).toEqual({ id: "A", x: 10, y: 20 });
+    expect(data.edges?.[0]).toMatchObject({ x1: 10, y1: 20, x2: 110, y2: 20 });
+    expect(() =>
+      flowFromTable(
+        { ...edges, rows: [["A", "Z", 1]] },
+        { type: "flow", source: "roads" },
+        layout,
+      ),
+    ).toThrow(/no layout/);
+    // no layout -> circle fallback still works
+    const circ = flowFromTable(edges, { type: "flow", source: "roads" });
+    expect(circ.nodes).toHaveLength(2);
+  });
+
+  it("fitNodeLayout rescales a foreign coordinate space into the viewBox, preserving aspect", () => {
+    const fitted = fitNodeLayout(
+      [
+        { id: "A", x: 0, y: 0 },
+        { id: "B", x: 1000, y: 500 },
+      ],
+      640,
+      360,
+    );
+    const xs = fitted.map((n) => n.x);
+    const ys = fitted.map((n) => n.y);
+    // spans the padded viewBox, not beyond it
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(24);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(640 - 24);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(360 - 24);
+    // aspect preserved: 1000:500 = 2:1 span ratio
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+    expect(spanX / spanY).toBeCloseTo(2, 1);
   });
 });

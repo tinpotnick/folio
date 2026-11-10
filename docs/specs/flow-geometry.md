@@ -1,6 +1,6 @@
 # Flow-figure geometry: real layouts for flow figures
 
-## Status: proposed (2026-11-09)
+## Status: accepted (2026-11-09) - implemented on vibe/flow-geometry
 
 ## Alternatives considered
 
@@ -123,7 +123,9 @@ Same edge list, hand-placed towns - reads as a map:
 - Coordinates are in the figure's viewBox units (default 640x360).
   Unlike swarm (which normalizes data into the viewBox), flow does
   NOT auto-fit: the author places the map. Out-of-range coordinates
-  are clipped by the viewBox.
+  are clipped by the viewBox. (Mermaid layouts live in mermaid's own
+  coordinate space, so they are aspect-preservingly FITTED into the
+  viewBox - that is unit conversion, not data auto-fit.)
 - All renditions read the same `MotionData.nodes`: player, filmstrip,
   flowmap (print default), trails, poster, frame:N.
 - The motion block's `id:`/`x:`/`y:` keys stay swarm column renames;
