@@ -82,7 +82,11 @@ await page.keyboard.press("Tab");
 await pause(900);
 
 // Open the dataset browser (the spreadsheet view), hold, close with
-// Esc - the same beat as the original video.
+// Esc - the same beat as the original video. The bar sits above the
+// tall table and can be scrolled off-screen: bring it back into view
+// first, or the raw-mouse click lands off-viewport and misses.
+await bar.evaluate((el) => el.scrollIntoView({ block: "start" }));
+await pause(700);
 await clickOn(bar.locator(".insp-dataset"));
 await pause(2600);
 await page.keyboard.press("Escape");
