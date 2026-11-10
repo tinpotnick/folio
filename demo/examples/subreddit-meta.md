@@ -7,9 +7,12 @@ style:
 # r/datavisualization, visualized
 
 857 posts to the subreddit itself, 2026-02-01 to 2026-11-05, pulled from the
-public Arctic Shift archive of Reddit (removed and deleted posts excluded,
-author names omitted). Every figure below is a query over the table in
-@tbl:posts - edit a row and the charts move. No run button.
+public [Arctic Shift](https://arctic-shift.photon-reddit.com) archive of
+Reddit (the r/datavisualization submissions dataset; removed and deleted
+posts excluded, author names omitted; snapshot in
+`demo/data/r-datavisualization-2026.csv`). Every figure below is a query
+over the table in @tbl:posts - edit a row and the charts move. No run
+button.
 
 ## The dataset
 
