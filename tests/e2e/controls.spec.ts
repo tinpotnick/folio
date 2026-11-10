@@ -25,6 +25,10 @@ test.describe("cell controls and cross-filtering", () => {
     const pop = fig.locator(".folio-cell-pop select");
     await expect(pop).toBeVisible();
     await expect(pop.locator("option")).toHaveCount(4); // blank + 3 options
+    // The pop must survive the dropdown taking focus (blur): it
+    // closes on outside click, not blur.
+    await pop.evaluate((el) => (el as HTMLElement).blur());
+    await expect(pop).toBeVisible();
     await pop.selectOption("done");
     await expect(
       fig.locator(
@@ -53,6 +57,9 @@ test.describe("cell controls and cross-filtering", () => {
     await cell.hover();
     await cell.locator(".folio-date-btn").click();
     const input = fig.locator(".folio-cell-pop input[type='date']");
+    await expect(input).toBeVisible();
+    // Blur (the picker taking focus) must not close the pop.
+    await input.evaluate((el) => (el as HTMLElement).blur());
     await expect(input).toBeVisible();
     await input.fill("2026-11-20");
     await page.keyboard.press("Enter"); // commits via the change handler

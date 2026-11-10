@@ -8674,6 +8674,12 @@ export class FolioDoc extends HTMLElement {
     td.appendChild(pop);
     this.activeCellPop = { pop, td };
     const close = () => this.closeCellControl();
+    // The pop closes on a click OUTSIDE it (never on blur: the
+    // dropdown/picker itself takes focus when clicked).
+    this.cellPopOutside = (ev: MouseEvent) => {
+      if (!pop.contains(ev.target as Node)) close();
+    };
+    document.addEventListener("mousedown", this.cellPopOutside, true);
 
     if (col.type === "date" || col.type === "datetime") {
       const input = document.createElement("input");
@@ -8699,10 +8705,6 @@ export class FolioDoc extends HTMLElement {
       });
       pop.appendChild(input);
       input.focus();
-      input.addEventListener("blur", () => {
-        // Commit on blur too (picking a date already fires change).
-        setTimeout(() => close(), 120);
-      });
       return;
     }
 
@@ -8773,14 +8775,19 @@ export class FolioDoc extends HTMLElement {
       if (ev.key === "Escape") close();
       ev.stopPropagation();
     });
-    sel.addEventListener("blur", () => setTimeout(() => close(), 120));
     pop.appendChild(sel);
     sel.focus();
   }
 
   private activeCellPop: { pop: HTMLElement; td: HTMLElement } | null = null;
 
+  private cellPopOutside: ((ev: MouseEvent) => void) | null = null;
+
   private closeCellControl(): void {
+    if (this.cellPopOutside) {
+      document.removeEventListener("mousedown", this.cellPopOutside, true);
+      this.cellPopOutside = null;
+    }
     if (this.activeCellPop) {
       this.activeCellPop.pop.remove();
       this.activeCellPop = null;
