@@ -317,7 +317,26 @@ export function renderBarChart(
   // A blank is no bar and no label - never a zero.
   const values = result.rows.map((r) => cellNumber(r[1]));
   const present = values.filter((v) => Number.isFinite(v));
-  const padBottom = style.xTitle ? 52 : 40;
+  const innerW = W - (style.yTitle ? 78 : 60) - PAD.right;
+  const n = result.rows.length || 1;
+  const band = innerW / n;
+  // Category labels wider than their band (post titles, say) rotate
+  // -45° instead of merging into each other; the full label rides in
+  // a tooltip either way.
+  const labels = result.rows.map((r) => String(r[0] ?? ""));
+  const maxLabelPx = Math.max(0, ...labels.map((l) => l.length)) * 6.2;
+  const rotateX = maxLabelPx > band * 0.92;
+  let padBottom = style.xTitle ? 52 : 40;
+  // Rotated labels are truncated to what fits (the full label is in
+  // the tooltip), and the footer never eats the plot: capped.
+  let rotateChars = 0;
+  if (rotateX) {
+    padBottom = Math.min(
+      Math.max(padBottom, 16 + Math.ceil(maxLabelPx * 0.71) + 8),
+      100,
+    );
+    rotateChars = Math.max(8, Math.floor((padBottom - 24) / (6.2 * 0.71)));
+  }
   const innerH = H - PAD.top - padBottom;
   // A negative bar's label hangs under the bar's end: when that
   // would run into the x tick labels, the floor drops one step.
@@ -330,9 +349,6 @@ export function renderBarChart(
   const { gridMin, gridMax, span, ticks, step } = dom;
   const tickLabel = tickFormatter(step, style.valueFormat);
   const valueLabel = valueFormatter(style.valueFormat);
-  const innerW = W - (style.yTitle ? 78 : 60) - PAD.right;
-  const n = result.rows.length || 1;
-  const band = innerW / n;
   const barW = Math.min(band * 0.6, 80);
 
   const parts: string[] = [];
@@ -371,12 +387,21 @@ export function renderBarChart(
       );
     }
     if (xTickIndices(n).includes(i)) {
-      const lab = xLabel(
-        result.rows.map((r) => String(r[0] ?? "")),
-        i,
-      );
+      const lab = xLabel(labels, i);
+      const anchor = rotateX ? "end" : lab.anchor;
+      const tx = anchor === "end" ? x + barW : x + barW / 2;
+      const ty = H - padBottom + 16;
+      const rot = rotateX
+        ? ` transform="rotate(-45 ${String(tx)} ${String(ty)})"`
+        : "";
+      // Rotated labels truncate to the footer's room; the tooltip
+      // carries the full text.
+      let text = lab.text;
+      if (rotateX && text.length > rotateChars) {
+        text = `${text.slice(0, Math.max(1, rotateChars - 1))}…`;
+      }
       parts.push(
-        `<text class="x-tick" x="${lab.anchor === "end" ? x + barW : x + barW / 2}" y="${H - padBottom + 16}" text-anchor="${lab.anchor}" font-size="11" fill="${ink}">${lab.text}</text>`,
+        `<text class="x-tick" x="${tx}" y="${ty}" text-anchor="${anchor}" font-size="11" fill="${ink}"${rot}>${text}<title>${escapeXml(labels[i] ?? "")}</title></text>`,
       );
     }
     if (labelAt.includes(i)) {
