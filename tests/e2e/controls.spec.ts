@@ -56,13 +56,15 @@ test.describe("cell controls and cross-filtering", () => {
       "tbody td[data-row-index='0'][data-col-index='3']",
     );
     await expect(cell).toHaveText("2026-11-11");
-    // the calendar icon opens the picker; the cell itself stays
-    // text-editable (type the ISO value)
+    // the calendar icon goes straight to the picker: an invisible
+    // anchored input in the cell, no intermediate pop; the cell
+    // itself stays text-editable (type the ISO value)
     await cell.hover();
     await cell.locator(".folio-date-btn").click();
-    const input = fig.locator(".folio-cell-pop input[type='date']");
+    const input = cell.locator("input.folio-date-anchor[type='date']");
     await expect(input).toBeVisible();
-    // Blur (the picker taking focus) must not close the pop.
+    await expect(fig.locator(".folio-cell-pop")).toHaveCount(0);
+    // Blur (the picker taking focus) must not close the control.
     await input.evaluate((el) => (el as HTMLElement).blur());
     await expect(input).toBeVisible();
     await input.fill("2026-11-20");
@@ -117,8 +119,9 @@ test.describe("cell controls and cross-filtering", () => {
     await expect(dateCell).toContainText("2026-11-11");
     await dateCell.hover();
     await dateCell.locator(".folio-date-btn").click();
-    const input = sheet.locator(".folio-cell-pop input[type='date']");
+    const input = dateCell.locator("input.folio-date-anchor[type='date']");
     await expect(input).toBeVisible();
+    await expect(sheet.locator(".folio-cell-pop")).toHaveCount(0);
     await input.fill("2026-11-20");
     await page.keyboard.press("Enter"); // commits via the change handler
     await expect(

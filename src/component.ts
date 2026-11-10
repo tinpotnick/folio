@@ -8763,18 +8763,19 @@ export class FolioDoc extends HTMLElement {
     const r = Number(td.dataset.rowIndex);
     const c = Number(td.dataset.colIndex);
     const current = String(block.table.rows[r]?.[c] ?? "");
-    const pop = document.createElement("div");
-    pop.className = "folio-cell-pop";
     // The sheet's cells clip (overflow: hidden); lift the clip while
     // a pop is open so it is not cut off.
     const overflow = td.style.overflow;
     td.style.position = "relative";
     td.style.overflow = "visible";
     // The "anchor" is the element a click counts as inside: the pop
-    // box for pickers/lists, or the chip-turned-select for a single
-    // select (the chip itself is the dropdown).
-    let anchor: HTMLElement = pop;
-    const setAnchor = (el: HTMLElement, restore?: () => void): void => {
+    // box (multi list), the chip-turned-select (single select), or the
+    // invisible date input whose native calendar is open.
+    let anchor: HTMLElement | null = null;
+    const setAnchor = (
+      el: HTMLElement,
+      restore: (() => void) | undefined,
+    ): void => {
       anchor = el;
       this.activeCellPop = { pop: el, td, overflow, restore };
     };
@@ -8785,50 +8786,65 @@ export class FolioDoc extends HTMLElement {
     // retargeted to the host at the document listener - still counts
     // as inside.
     this.cellPopOutside = (ev: MouseEvent) => {
-      if (!ev.composedPath().includes(anchor)) close();
+      if (anchor !== null && !ev.composedPath().includes(anchor)) close();
     };
     document.addEventListener("mousedown", this.cellPopOutside, true);
-    td.appendChild(pop);
-    setAnchor(pop);
 
     if (col.type === "date" || col.type === "datetime") {
+      // STRAIGHT to the native calendar: an invisible input covering
+      // the cell is the picker's anchor, so showPicker opens the
+      // calendar right at the cell - no intermediate pop with
+      // segmented date fields. The cell's own content (ISO text +
+      // calendar icon) stays in place underneath; a typed ISO value
+      // still works via the cell's text editing.
       const input = document.createElement("input");
       input.type = col.type === "datetime" ? "datetime-local" : "date";
-      input.className = "folio-cell-input";
+      input.className = "folio-date-anchor";
+      input.setAttribute(
+        "aria-label",
+        col.type === "datetime" ? "Pick a date and time" : "Pick a date",
+      );
       input.value =
         col.type === "datetime" ? current.slice(0, 16) : current.slice(0, 10);
+      td.appendChild(input);
+      setAnchor(input, undefined);
       input.addEventListener("change", () => {
         const v = input.value;
-        if (v) {
-          const iso =
-            col.type === "datetime"
-              ? v // datetime-local gives YYYY-MM-DDTHH:MM
-              : v; // date gives YYYY-MM-DD
-          this.commitCellValue(td, block, iso);
-        }
+        if (v) this.commitCellValue(td, block, v);
         close();
       });
       input.addEventListener("keydown", (ev) => {
         if (ev.key === "Escape") close();
-        if (ev.key === "Enter") input.dispatchEvent(new Event("change"));
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          input.dispatchEvent(new Event("change"));
+        }
+        if (ev.key === "ArrowDown" || ev.key === " ") {
+          ev.preventDefault();
+          try {
+            input.showPicker();
+          } catch {
+            // unsupported - typing still works
+          }
+        }
         ev.stopPropagation();
       });
-      pop.appendChild(input);
       input.focus();
-      // Go straight to the calendar: open the native picker right
-      // away (we are inside the click/Enter gesture), instead of
-      // leaving the segmented MM/DD/YYYY fields to be clicked first.
       try {
         input.showPicker();
       } catch {
-        // no user activation / not supported: the segmented input
-        // (and its own calendar glyph) still works
+        // no activation / unsupported: re-clicking the calendar icon
+        // retries; the cell body still accepts a typed ISO value
       }
       return;
     }
 
     // select, single or multi
     if (col.multi) {
+      const pop = document.createElement("div");
+      pop.className = "folio-cell-pop";
+      td.appendChild(pop);
+      setAnchor(pop, undefined);
       const cur = new Set(
         current
           .split(",")

@@ -1466,6 +1466,21 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       flex-direction: column;
       gap: 2px;
     }
+    /* The date picker's anchor: an invisible input covering the cell,
+       so showPicker opens the native calendar right at the cell - no
+       intermediate pop with segmented date fields (spec:
+       date-column-controls.md). */
+    .folio-date-anchor {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      pointer-events: none;
+      border: none;
+      padding: 0;
+      margin: 0;
+    }
     .folio-cell-input {
       font: inherit;
       color: var(--folio-ink, #1f2328);
