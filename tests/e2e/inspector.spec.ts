@@ -108,10 +108,8 @@ test.describe("table inspector", () => {
     await expect(pair.locator(".insp-chart")).toBeVisible();
     // Chart it carries its bar-chart icon.
     await expect(pair.locator(".insp-chart svg")).toBeVisible();
-    // Row 1 fits on ONE line at this page width: its height matches a
-    // single control's, not a wrapped stack. Relative to the row's own
-    // control, so fallback fonts on CI runners (taller/wider metrics)
-    // do not flake it.
+    // Row 1 is one line tall, always (the bar row scrolls sideways
+    // instead of wrapping): its height matches a single control's.
     const row1Box = await row1.boundingBox();
     expect(row1Box).not.toBeNull();
     const kindBox = await row1.locator(".insp-kind").boundingBox();

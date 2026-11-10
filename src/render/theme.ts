@@ -1647,7 +1647,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .folio-inspector .insp-table-row {
       flex-basis: 100%;
       display: flex;
-      flex-wrap: wrap;
+      /* One line, always: the controls scroll sideways rather than
+         wrapping when the table (and so the bar) is narrow or the
+         platform's fonts run wide - a wrapped "Chart it" alone was
+         unreadable. */
+      flex-wrap: nowrap;
+      overflow-x: auto;
       align-items: center;
       gap: 6px;
     }
