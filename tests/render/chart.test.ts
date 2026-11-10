@@ -636,3 +636,43 @@ describe("blanks in charts (a gap, never a zero)", () => {
     expect((svg.match(/<rect /g) ?? []).length).toBe(2);
   });
 });
+
+describe("bar chart x labels", () => {
+  it("long category labels rotate -45° instead of merging, truncate to fit, and keep the full text in a tooltip", () => {
+    const titles = [
+      "everyone is talking about the new climate spiral chart",
+      "The NASA climate spiral visualization, explained",
+      "One meeting completely changed how I read dashboards",
+      "World Cup Favorites: an animated bracket explorer",
+      "Animating how phylogenetic trees are actually built",
+      "I found a web site which can transform data to video report",
+      "A tag team trolled my video upvote in my side project",
+      "Visualizing Shohei Ohtani's season with heatmaps",
+    ];
+    const svg = renderBarChart(
+      result(titles.map((t, i) => [t, 60 - i * 5])),
+    ).svg;
+    const ticks = [
+      ...svg.matchAll(/<text class="x-tick"[\s\S]*?<\/text>/g),
+    ].map((m) => m[0]);
+    expect(ticks.length).toBeGreaterThan(0);
+    for (const t of ticks) {
+      expect(t).toContain("rotate(-45");
+      expect(t).toContain("<title>"); // full label in the tooltip
+    }
+    // rotated labels are truncated with an ellipsis
+    expect(svg).toContain("…");
+  });
+
+  it("short labels stay horizontal", () => {
+    const svg = renderBarChart(
+      result([
+        ["a", 10],
+        ["b", 20],
+        ["c", 15],
+      ]),
+    ).svg;
+    expect(svg).not.toContain("rotate(-45");
+    expect(svg).toContain(">a<");
+  });
+});
