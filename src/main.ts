@@ -137,38 +137,6 @@ function bootPath(): string | null {
   return null;
 }
 
-/* --- Web "Open with folio" (File Handling API, docs/specs/web-files.md)
- * The installed web app declares .md in its manifest's file_handlers,
- * so the OS launches it with a file. The launch that started the app
- * settles `firstWebLaunch`; later launches on a running app go to
- * openLaunchedWebFiles (like the desktop's macOS event). --- */
-let settleFirstLaunch: ((files: FileSystemFileHandle[] | null) => void) | null =
-  null;
-const firstWebLaunch = new Promise<FileSystemFileHandle[] | null>((resolve) => {
-  settleFirstLaunch = resolve;
-});
-if (!isDesktop()) {
-  onWebLaunch((files) => {
-    if (PRESENTER) return;
-    if (settleFirstLaunch) {
-      const settle = settleFirstLaunch;
-      settleFirstLaunch = null;
-      settle(files);
-    } else {
-      void openLaunchedWebFiles(files);
-    }
-  });
-}
-// A launch that carries no files never reaches the consumer: settle
-// the first launch on the next tick either way.
-setTimeout(() => {
-  if (settleFirstLaunch) {
-    const settle = settleFirstLaunch;
-    settleFirstLaunch = null;
-    settle(null);
-  }
-}, 0);
-
 /**
  * Boot (spec: docs/specs/welcome-page.md): a `?doc=` link opens that
  * document; the very first launch opens the getting-started guide;
@@ -398,6 +366,40 @@ const PRESENTER =
   new URLSearchParams(window.location.search).get("presenter") === "1" ||
   isPresenterWindow();
 const slidesChannel = new BroadcastChannel("folio-slides");
+
+/* --- Web "Open with folio" (File Handling API, docs/specs/web-files.md)
+ * The installed web app declares .md in its manifest's file_handlers,
+ * so the OS launches it with a file. The launch that started the app
+ * settles `firstWebLaunch`; later launches on a running app go to
+ * openLaunchedWebFiles (like the desktop's macOS event). Placed after
+ * PRESENTER: the consumer may run while the module is still evaluating,
+ * and must not touch a not-yet-initialized binding. --- */
+let settleFirstLaunch: ((files: FileSystemFileHandle[] | null) => void) | null =
+  null;
+const firstWebLaunch = new Promise<FileSystemFileHandle[] | null>((resolve) => {
+  settleFirstLaunch = resolve;
+});
+if (!isDesktop()) {
+  onWebLaunch((files) => {
+    if (PRESENTER) return;
+    if (settleFirstLaunch) {
+      const settle = settleFirstLaunch;
+      settleFirstLaunch = null;
+      settle(files);
+    } else {
+      void openLaunchedWebFiles(files);
+    }
+  });
+}
+// A launch that carries no files never reaches the consumer: settle
+// the first launch on the next tick either way.
+setTimeout(() => {
+  if (settleFirstLaunch) {
+    const settle = settleFirstLaunch;
+    settleFirstLaunch = null;
+    settle(null);
+  }
+}, 0);
 
 /* Slides messaging between the main and presenter windows:
  * BroadcastChannel plus a localStorage mirror (WebKitGTK delivers
