@@ -1418,3 +1418,35 @@ test.describe("paste", () => {
     expect(styled).toBe(0);
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* Spell check                                                         */
+/* ------------------------------------------------------------------ */
+
+test.describe("spell check", () => {
+  test("native spell check is on by default; the host attribute toggles it", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const current = () =>
+      page.evaluate(
+        () =>
+          (
+            document
+              .querySelector("folio-doc")
+              ?.shadowRoot?.querySelector("article.folio-doc") as HTMLElement
+          )?.spellcheck,
+      );
+    // on by default (the browser draws the squiggles and offers
+    // suggestions on right-click in prose)
+    expect(await current()).toBe(true);
+    await page.evaluate(() =>
+      document.querySelector("folio-doc")?.setAttribute("spellcheck", "false"),
+    );
+    expect(await current()).toBe(false);
+    await page.evaluate(() =>
+      document.querySelector("folio-doc")?.removeAttribute("spellcheck"),
+    );
+    expect(await current()).toBe(true);
+  });
+});

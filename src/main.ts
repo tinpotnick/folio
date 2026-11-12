@@ -3505,6 +3505,17 @@ function paletteEntries(): PaletteEntry[] {
     action: () => (inMd ? btnView : btnMd).click(),
   });
   entries.push({
+    title: el.spellcheck ? "Turn spell check off" : "Turn spell check on",
+    group: "Command",
+    keywords:
+      "spellcheck spelling spell check squiggles underline misspelled misspelling words typing red",
+    action: () => {
+      if (el.spellcheck) el.setAttribute("spellcheck", "false");
+      else el.removeAttribute("spellcheck");
+      flash(el.spellcheck ? "Spell check on" : "Spell check off");
+    },
+  });
+  entries.push({
     title: playing ? "Stop slideshow" : "Play slideshow",
     group: "Command",
     keywords: playing

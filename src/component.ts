@@ -646,7 +646,7 @@ const DS_GUTTER = "44px";
 
 export class FolioDoc extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ["src", "mode", "slides", "slides-notes"];
+    return ["src", "mode", "slides", "slides-notes", "spellcheck"];
   }
 
   private doc: Doc | null = null;
@@ -899,6 +899,13 @@ export class FolioDoc extends HTMLElement {
       // but the CSS keys off a class on the ARTICLE - reflect it.
       const article = this.shadowRoot?.querySelector("article.folio-doc");
       if (article) article.classList.toggle("slides-notes", value !== null);
+    }
+    if (name === "spellcheck" && old !== value) {
+      // Native spell check on the editing article, host-toggleable
+      // (spec: docs/specs/spellcheck-grammar.md).
+      const article =
+        this.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
+      if (article) article.spellcheck = value !== "false";
     }
   }
 
@@ -1235,7 +1242,7 @@ export class FolioDoc extends HTMLElement {
     const host = document.createElement("article");
     host.className = "folio-doc";
     host.setAttribute("contenteditable", "true");
-    host.spellcheck = true;
+    host.spellcheck = this.spellcheck;
     host.addEventListener("keydown", this.handleKeydown);
     // Clicking a link FOLLOWS it - never places the caret for
     // editing. The host hears the composed event and opens the
@@ -7266,6 +7273,13 @@ export class FolioDoc extends HTMLElement {
   /** Whether slide rendering is on (the host sets `slides`). */
   get slides(): boolean {
     return this.hasAttribute("slides");
+  }
+
+  /** Native spell check on the document view (spec:
+   * docs/specs/spellcheck-grammar.md): on unless the host sets
+   * `spellcheck="false"` on the component. */
+  get spellcheck(): boolean {
+    return this.getAttribute("spellcheck") !== "false";
   }
 
   /**

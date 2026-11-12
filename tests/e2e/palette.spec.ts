@@ -442,3 +442,28 @@ test("help topics arriving late keep the row the arrow keys chose", async ({
     chosen ?? "",
   );
 });
+
+test("searching 'spell check' runs the toggle command", async ({ page }) => {
+  await waitForDocument(page);
+  const attr = () =>
+    page.evaluate(() =>
+      document.querySelector("folio-doc")?.getAttribute("spellcheck"),
+    );
+  expect(await attr()).toBeNull(); // default on
+  await openPalette(page);
+  await page.locator("#palette-input").fill("spell check");
+  await expect(
+    page.locator("#palette-list .palette-item").first(),
+  ).toContainText("Turn spell check off");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#palette-modal")).toBeHidden();
+  expect(await attr()).toBe("false");
+  // and back on
+  await openPalette(page);
+  await page.locator("#palette-input").fill("spell check");
+  await expect(
+    page.locator("#palette-list .palette-item").first(),
+  ).toContainText("Turn spell check on");
+  await page.keyboard.press("Enter");
+  expect(await attr()).toBeNull();
+});
