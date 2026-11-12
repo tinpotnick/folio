@@ -1,5 +1,13 @@
 # Headings and links
 
+- **Spell check** is your browser's (or the desktop app's webview's)
+  native spell check: misspelled words get red squiggles in the
+  document view, and right-clicking one in a paragraph offers
+  suggestions. Search **"spell check"** in the palette (Ctrl+K) to
+  turn it off or back on. In the desktop app it is full on Windows
+  (Chromium webview) and macOS (WebKit); on Linux it needs system
+  dictionaries. Right-clicking a word inside a table cell opens the
+  table's menu instead - the squiggles still show.
 - Headings come in three toolbar levels, H1-H3; H3's size is a
   document setting alongside H1 and H2.
 - **Links** are standard inline Markdown: `[label](url)` in a
