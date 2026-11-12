@@ -1369,3 +1369,52 @@ test.describe("empty blocks", () => {
     expect(await page.locator("#editor").inputValue()).toBe(first);
   });
 });
+
+/* ------------------------------------------------------------------ */
+/* Paste                                                               */
+/* ------------------------------------------------------------------ */
+
+test.describe("paste", () => {
+  test("pasting styled web text inserts plain text only - no styles reach the document", async ({
+    page,
+  }) => {
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    await waitForDocument(page);
+    // put rich HTML (with inline styles) AND plain text on the clipboard
+    await page.evaluate(() => {
+      const item = new ClipboardItem({
+        "text/html": new Blob(
+          [
+            '<span style="color: red; font-size: 32px"><b>Styled</b></span> from the web',
+          ],
+          { type: "text/html" },
+        ),
+        "text/plain": new Blob(["Plain from the web"], { type: "text/plain" }),
+      });
+      return navigator.clipboard.write([item]);
+    });
+    await caretInParagraph(page, "Revenue recovered", 7);
+    await page.keyboard.press("Control+V");
+    await page.waitForTimeout(200);
+    // the model got the plain-text flavor, not the styled HTML
+    const texts = await proseTexts(page);
+    expect(texts.some((t) => t.includes("Plain from the web"))).toBe(true);
+    const model = JSON.stringify(await getDoc(page));
+    expect(model).not.toContain("color: red");
+    expect(model).not.toContain("<span");
+    expect(model).not.toContain("font-size");
+    // and the rendered prose carries no style attribute (a styled
+    // paste would leave one on the inserted span inside the paragraph)
+    const styled = await page.evaluate(
+      () =>
+        document
+          .querySelector("folio-doc")
+          ?.shadowRoot?.querySelector("article.folio-doc")
+          ?.querySelectorAll("p [style], h1 [style], h2 [style], li [style]")
+          .length ?? -1,
+    );
+    expect(styled).toBe(0);
+  });
+});

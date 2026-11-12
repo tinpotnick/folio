@@ -10,13 +10,13 @@ GitHub renders natively, plus folio additions.
 
 ## Syntax
 
-| Format | Syntax | Renders | Source |
-|---|---|---|---|
-| Strong | `**text**` | `<strong>` | GFM |
-| Emphasis | `*text*` | `<em>` | GFM |
-| Strikethrough | `~~text~~` | `<del>` | GFM |
-| Underline | `++text++` | `<ins>` | markdown+ (GFM has no underline; `++` follows the markdown-it `ins` convention) |
-| Inline code | `` `text` `` | `<code>` | GFM |
+| Format        | Syntax       | Renders    | Source                                                                          |
+| ------------- | ------------ | ---------- | ------------------------------------------------------------------------------- |
+| Strong        | `**text**`   | `<strong>` | GFM                                                                             |
+| Emphasis      | `*text*`     | `<em>`     | GFM                                                                             |
+| Strikethrough | `~~text~~`   | `<del>`    | GFM                                                                             |
+| Underline     | `++text++`   | `<ins>`    | markdown+ (GFM has no underline; `++` follows the markdown-it `ins` convention) |
+| Inline code   | `` `text` `` | `<code>`   | GFM                                                                             |
 
 Document-view toolbar buttons apply formats with the Range API
 (`applyInlineFormat` on the component): `execCommand` cannot act on
@@ -63,5 +63,11 @@ views like the other inline formats.
 ## Non-goals
 
 - No style attributes ever travel in prose (AGENTS.md #1); the
-  formats are semantic, rendered through the theme.
+  formats are semantic, rendered through the theme. External pastes
+  into the visual editor insert the clipboard's `text/plain` only:
+  the article's `paste` handler prevents the default (which would
+  insert the clipboard's HTML with its inline styles) and inserts
+  plain text at the caret, so web styles never reach the DOM or the
+  Markdown source. Inspector inputs (options, caption, ...) are
+  outside that handler and paste natively.
 - HTML in documents is escaped, not interpreted.

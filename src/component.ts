@@ -1344,6 +1344,37 @@ export class FolioDoc extends HTMLElement {
     );
     host.addEventListener("input", this.handleInput);
     host.addEventListener("contextmenu", this.handleContextMenu);
+    // Pasting into the document inserts PLAIN TEXT only (AGENTS.md
+    // #1: no inline styling ever travels into a document). The
+    // browser's default paste inserts the clipboard's HTML with all
+    // its style attributes; intercept and insert the text/plain
+    // flavor at the caret instead (execCommand keeps the undo stack).
+    host.addEventListener("paste", (ev) => {
+      if (ev.defaultPrevented) return; // e.g. the BibTeX figure's own handler
+      const target = ev.target as Element | null;
+      // Inspector inputs (options, caption, ...) paste natively.
+      if (target?.closest?.(".folio-inspector")) return;
+      ev.preventDefault();
+      const text = ev.clipboardData?.getData("text/plain") ?? "";
+      if (text === "") return; // e.g. an image: nothing plain to insert
+      if (document.execCommand("insertText", false, text)) return;
+      // Fallback: insert at the selection range directly (execCommand
+      // unsupported), then sync like the input event would have.
+      const root = this.shadowRoot as
+        (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+      const sel = root?.getSelection?.() ?? window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const node = document.createTextNode(text);
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      this.syncFromDom();
+      this.emitChange();
+    });
 
     this.doc.blocks.forEach((block, idx) => {
       host.appendChild(this.renderBlock(block, idx));
