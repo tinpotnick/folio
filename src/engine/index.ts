@@ -6,7 +6,7 @@
 export const engineVersion = "0.0.1";
 
 export type ColumnType =
-  "text" | "number" | "date" | "select" | "formula" | "relation";
+  "text" | "number" | "date" | "datetime" | "select" | "formula" | "relation";
 
 export interface Column {
   name: string;
@@ -16,6 +16,14 @@ export interface Column {
   expr?: string;
   width?: number;
   align?: "left" | "right";
+  /**
+   * Select columns (spec: docs/specs/select-columns.md): the closed
+   * option list. Absent on other types.
+   */
+  options?: string[];
+  /** Select columns only: multi-select (cell holds a comma-separated
+   * list of options, rendered as one chip per value). */
+  multi?: boolean;
   /**
    * Render-time only (spec: docs/specs/table-inspector.md): a hidden
    * column is not drawn in the table figure, but stays in the
@@ -149,6 +157,9 @@ export interface Chart {
     limit?: number;
   };
   type: "bar" | "line" | "area" | "pie" | "donut" | "scatter" | "heatmap";
+  /** Cross-filtering (spec: docs/specs/cross-filtering.md): charts
+   * sharing a source are linked unless this is false. */
+  crossfilter?: boolean;
   /** Split the value into one series per distinct value of this
    * column (long tables). */
   series?: string;

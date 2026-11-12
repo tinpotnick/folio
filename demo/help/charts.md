@@ -84,3 +84,10 @@ has a matching set for dark mode.
   filter that matches nothing, an empty table) or every value is
   blank. Check the filter in its inspector bar, or the table it reads -
   in a model, an assumption outside its data often blanks every row.
+- **Cross-filtering** (spec: cross-filtering.md): charts that share a
+  `source:` are linked. Click a bar, pie slice or heatmap cell to
+  filter every chart over that table to it; click again to clear. A
+  chip above each chart shows the active filter (`status = done ×`);
+  click × to clear one, Esc to clear all. Filters are view-only -
+  never written to the document, and print always shows the unfiltered
+  data. Opt a chart out with `crossfilter: off` on its opener.

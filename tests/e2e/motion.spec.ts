@@ -267,3 +267,15 @@ test.describe("motion figures", () => {
       .toBeGreaterThan(before.edgeWidth);
   });
 });
+
+test("motion figures play while their slide is up", async ({ page }) => {
+  await page.goto("/?doc=demo/examples/swarm.md");
+  await expect(page.locator("#the-doc h1").first()).toBeVisible();
+  const fig = page.locator('#the-doc figure[data-motion-id="birds"]');
+  await expect(fig.locator(".motion-view .mframe")).toHaveCount(18);
+  await page.locator("#btn-play").click();
+  await page.locator("#mi-play").click();
+  await expect(page.locator("#btn-play")).toHaveClass(/active/);
+  const f0 = await fig.getAttribute("data-frame");
+  await expect.poll(() => fig.getAttribute("data-frame")).not.toBe(f0 ?? "");
+});

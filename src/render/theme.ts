@@ -1406,6 +1406,200 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-top: 2px solid var(--folio-table-rule, currentColor);
       font-weight: 600;
     }
+    /* Select-column chips and the in-cell control pop (specs:
+       select-columns.md, date-column-controls.md). */
+    table.folio-table td.folio-control-cell { white-space: nowrap; }
+    .folio-chip {
+      display: inline-block;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 0.85em;
+      line-height: 1.6;
+      color: color-mix(in srgb, hsl(var(--chip-hue) 65% 45%) 55%, var(--folio-ink, #1f2328));
+      background: color-mix(in srgb, hsl(var(--chip-hue) 70% 55%) 22%, var(--folio-paper, #ffffff));
+      border: 1px solid color-mix(in srgb, hsl(var(--chip-hue) 70% 55%) 45%, transparent);
+    }
+    .folio-chip-error {
+      color: var(--folio-error, #b42318);
+      background: color-mix(in srgb, var(--folio-error, #b42318) 14%, var(--folio-paper, #ffffff));
+      border-color: var(--folio-error, #b42318);
+    }
+    /* A single-select chip mid-edit IS the dropdown: a <select>
+       wearing the chip's own pill and hue, with a caret (spec:
+       select-columns.md) - not a detached list below the cell. */
+    .folio-chip-open {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+    }
+    select.folio-chip.folio-chip-select {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+      padding-right: 18px;
+      max-width: 100%;
+      font-family: inherit;
+      font-weight: inherit;
+      height: auto;
+      min-height: 0;
+    }
+    .folio-chip-caret {
+      position: absolute;
+      right: 6px;
+      pointer-events: none;
+      font-size: 0.7em;
+      opacity: 0.75;
+    }
+    .folio-cell-pop,
+    .folio-cal-pop {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 60;
+      min-width: 150px;
+      padding: 6px;
+      border-radius: 8px;
+      background: var(--folio-paper, #ffffff);
+      border: 1px solid var(--folio-rule-strong, currentColor);
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    /* The in-cell calendar (spec: date-column-controls.md): a
+       month grid pop at the cell - today ringed, the current value
+       filled. Own calendar, so it looks and behaves the same in every
+       browser (the native showPicker is not reliable everywhere). */
+    .folio-cal-pop { min-width: 224px; user-select: none; }
+    .folio-cal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+      margin-bottom: 4px;
+    }
+    .folio-cal-title {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-cal-nav {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 3px 8px;
+      border-radius: 6px;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-cal-nav:hover { background: var(--folio-tint, #f0f2f5); }
+    .folio-cal-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+    }
+    .folio-cal-wd {
+      font-size: 10px;
+      color: var(--folio-ink-muted, #57606a);
+      text-align: center;
+      padding: 2px 0;
+    }
+    .folio-cal-day {
+      border: none;
+      background: none;
+      cursor: pointer;
+      border-radius: 6px;
+      padding: 4px 0;
+      font-size: 12px;
+      text-align: center;
+      color: var(--folio-ink, #1f2328);
+    }
+    .folio-cal-day:hover { background: var(--folio-tint, #f0f2f5); }
+    .folio-cal-day:focus-visible {
+      outline: 2px solid var(--folio-focus, #1f3fbf);
+      outline-offset: -1px;
+    }
+    .folio-cal-day.today {
+      box-shadow: inset 0 0 0 1px var(--folio-accent, #1f3fbf);
+    }
+    .folio-cal-day.selected {
+      background: var(--folio-accent, #1f3fbf);
+      color: #ffffff;
+    }
+    .folio-cal-time {
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .folio-cell-input {
+      font: inherit;
+      color: var(--folio-ink, #1f2328);
+      background: var(--folio-paper, #ffffff);
+      border: 1px solid var(--folio-rule, #d0d4da);
+      border-radius: 6px;
+      padding: 2px 6px;
+      width: 100%;
+    }
+    .folio-cell-opt {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .folio-cell-opt:hover { background: var(--folio-tint, #f0f2f5); }
+    .folio-cell-done {
+      margin-top: 4px;
+      align-self: flex-end;
+    }
+    /* The calendar button inside date/datetime cells - in the
+       document table and in the dataset browser sheet (spec:
+       date-column-controls.md): quiet until the cell is hovered. */
+    table.folio-table td .folio-date-btn,
+    .folio-ds-cell .folio-date-btn {
+      visibility: hidden;
+      border: none;
+      background: none;
+      padding: 0 2px;
+      margin-left: 2px;
+      cursor: pointer;
+      color: var(--folio-ink-muted, #57606a);
+      vertical-align: baseline;
+    }
+    table.folio-table td:hover .folio-date-btn,
+    table.folio-table td:focus-within .folio-date-btn,
+    .folio-ds-cell:hover .folio-date-btn,
+    .folio-ds-cell:focus-within .folio-date-btn {
+      visibility: visible;
+    }
+    /* Cross-filter chips above linked charts (spec:
+       docs/specs/cross-filtering.md). */
+    .crossfilter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 2px 0;
+    }
+    .crossfilter-chips[hidden] { display: none; }
+    .xf-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 6px 0 10px;
+      border-radius: 999px;
+      font-size: 0.8em;
+      line-height: 1.7;
+      color: var(--folio-ink, #1f2328);
+      background: var(--folio-tint, #eef0f3);
+      border: 1px solid var(--folio-rule, #d0d4da);
+      cursor: pointer;
+    }
+    .xf-chip:hover { border-color: var(--folio-accent, #2b5d94); }
+    .xf-x { font-weight: 700; }
     table.folio-table tfoot tr.folio-totals td.folio-total-label {
       color: var(--folio-ink-muted);
       font-weight: 600;
@@ -1617,6 +1811,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       border-left: 3px solid var(--folio-accent, #1f3fbf);
       border-radius: 8px;
       background: var(--folio-input-bg, #ffffff);
+      /* The group must never push the bar (or the page) wider than
+         the figure: shrink below min-content and wrap the column
+         controls inside the box instead of overflowing. */
+      min-width: 0;
+      flex-wrap: wrap;
+      row-gap: 4px;
     }
     /* The picker at the group's left edge is the "name box": bold,
        borderless on the group's own background. */
@@ -1646,6 +1846,10 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
        sit in a pair that wraps as one unit - never "Chart it" alone. */
     .folio-inspector .insp-table-row {
       flex-basis: 100%;
+      /* min-width: 0 lets the row shrink to the bar's width so its
+         own overflow-x scroll works - otherwise the nowrap row's
+         min-content width pushes the whole bar (and figure) wide. */
+      min-width: 0;
       display: flex;
       /* One line, always: the controls scroll sideways rather than
          wrapping when the table (and so the bar) is narrow or the
@@ -1761,6 +1965,27 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .folio-inspector .insp-unit {
       font-style: italic;
       width: 5em;
+    }
+    /* The select-column extras (options list + multi checkbox) sit
+       inline in the column group; the options input is a compact
+       field that can shrink inside a narrow bar. */
+    .folio-inspector .insp-select-opts {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-width: 0;
+    }
+    .folio-inspector .insp-options {
+      width: 12ch;
+      min-width: 0;
+    }
+    .folio-inspector .insp-multi {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--folio-ink, #1f2328);
     }
     .folio-inspector .insp-source-text {
       flex: 1;
@@ -2027,6 +2252,10 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .folio-ds-cell:not(.computed):not(.selected):hover {
       background: var(--folio-hover, #f3f4f6);
       cursor: text;
+    }
+    /* Select-chip cells open a dropdown, they are not typed into. */
+    .folio-ds-cell.folio-control-cell:not(.selected):hover {
+      cursor: pointer;
     }
     .folio-ds-cell.computed { color: var(--folio-ink-muted, #57606a); }
     .folio-ds-edit {
@@ -2771,6 +3000,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     .readout-guide { stroke: var(--folio-ink-muted); stroke-width: 1; stroke-dasharray: 3 3; }
     .readout-dot { stroke: var(--folio-paper); stroke-width: 2; }
     .readout-band { fill: var(--folio-ink); opacity: 0.06; }
+    /* The readout layer is a hover highlight, not a click target:
+       marks underneath must receive clicks (cross-filtering). */
+    .readout-layer { pointer-events: none; }
     .chart-readout.compact { font-size: 11px; padding: 4px 7px; max-width: 100%; white-space: normal; }
     .chart-readout {
       position: absolute;

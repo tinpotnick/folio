@@ -1344,6 +1344,37 @@ export class FolioDoc extends HTMLElement {
     );
     host.addEventListener("input", this.handleInput);
     host.addEventListener("contextmenu", this.handleContextMenu);
+    // Pasting into the document inserts PLAIN TEXT only (AGENTS.md
+    // #1: no inline styling ever travels into a document). The
+    // browser's default paste inserts the clipboard's HTML with all
+    // its style attributes; intercept and insert the text/plain
+    // flavor at the caret instead (execCommand keeps the undo stack).
+    host.addEventListener("paste", (ev) => {
+      if (ev.defaultPrevented) return; // e.g. the BibTeX figure's own handler
+      const target = ev.target as Element | null;
+      // Inspector inputs (options, caption, ...) paste natively.
+      if (target?.closest?.(".folio-inspector")) return;
+      ev.preventDefault();
+      const text = ev.clipboardData?.getData("text/plain") ?? "";
+      if (text === "") return; // e.g. an image: nothing plain to insert
+      if (document.execCommand("insertText", false, text)) return;
+      // Fallback: insert at the selection range directly (execCommand
+      // unsupported), then sync like the input event would have.
+      const root = this.shadowRoot as
+        (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+      const sel = root?.getSelection?.() ?? window.getSelection();
+      if (!sel || sel.rangeCount === 0) return;
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      const node = document.createTextNode(text);
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      this.syncFromDom();
+      this.emitChange();
+    });
 
     this.doc.blocks.forEach((block, idx) => {
       host.appendChild(this.renderBlock(block, idx));
@@ -1520,6 +1551,27 @@ export class FolioDoc extends HTMLElement {
         // typed text; the inspector inputs are their own region.
         figure.contentEditable = "false";
         figure.appendChild(this.buildChartInspector(figure, block));
+        // Cross-filter chips (spec: docs/specs/cross-filtering.md):
+        // the active filters for this chart's source, one chip each.
+        const chips = document.createElement("div");
+        chips.className = "crossfilter-chips";
+        figure.appendChild(chips);
+        // Capture phase: a mark click selects and must NOT also open
+        // the inspector (plain figure clicks still do).
+        figure.addEventListener(
+          "click",
+          (ev) => {
+            const mark = (ev.target as Element).closest?.("[data-cat]");
+            if (!mark) return;
+            this.toggleCrossFilter(
+              block,
+              String(mark.getAttribute("data-cat") ?? ""),
+            );
+            ev.preventDefault();
+            ev.stopPropagation();
+          },
+          true,
+        );
         const holder = document.createElement("div");
         holder.className = "chart-holder";
         // A chart whose values can be read is reachable by Tab before it
@@ -4664,8 +4716,18 @@ export class FolioDoc extends HTMLElement {
           if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
             td.classList.add("date");
           }
+        } else if (col.type === "select") {
+          // Select chips (spec: select-columns.md): rendered content,
+          // dropdown opens on click - not free text.
+          td.classList.add("folio-control-cell");
+          this.renderControlCell(td, col, v);
+          td.contentEditable = "false";
+          td.tabIndex = -1;
+          td.addEventListener("click", () => {
+            if (!td.isConnected) return;
+            this.openCellControl(td, block, col);
+          });
         } else {
-          if (col.type === "date") td.classList.add("date");
           if (col.type === "number") {
             td.classList.add("num");
           }
@@ -4673,6 +4735,37 @@ export class FolioDoc extends HTMLElement {
           if (simpleAlign === "right") td.classList.add("num");
           if (simpleAlign === "center") td.classList.add("align-center");
           td.textContent = String(v ?? "");
+          if (col.type === "date" || col.type === "datetime") {
+            // Dates stay text-editable (type the ISO value); the
+            // calendar icon in the cell opens the picker (spec:
+            // date-column-controls.md).
+            td.classList.add("date");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "folio-date-btn";
+            btn.title =
+              col.type === "datetime" ? "Pick a date and time" : "Pick a date";
+            btn.innerHTML =
+              '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="2"/><path d="M2 6.5h12M5.5 2v3M10.5 2v3"/></svg>';
+            // Open on MOUSEDOWN, not click: the click's mousedown
+            // reveals the inspector bar, the table shifts, and the
+            // click then lands off the small icon. preventDefault
+            // keeps the article from stealing focus.
+            btn.addEventListener("mousedown", (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (td.isConnected) this.openCellControl(td, block, col);
+            });
+            // Keyboard activation (Enter/Space on the button fires
+            // click without a mousedown-open): open only if the
+            // mousedown path did not already open it.
+            btn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (td.isConnected && this.activeCellPop?.td !== td)
+                this.openCellControl(td, block, col);
+            });
+            td.appendChild(btn);
+          }
           // Nested editable, focusable leaf: the cell (not the
           // article) holds focus while it is edited, so blur-based
           // commits and Tab/Enter navigation are real. Without
@@ -4994,14 +5087,21 @@ export class FolioDoc extends HTMLElement {
     const typeSel = document.createElement("select");
     typeSel.className = "insp-type";
     typeSel.title = "Column type";
-    for (const t of ["text", "number", "date", "formula"]) {
+    for (const t of [
+      "text",
+      "number",
+      "date",
+      "datetime",
+      "select",
+      "formula",
+    ]) {
       const o = document.createElement("option");
       o.value = t;
       o.textContent = t;
       typeSel.appendChild(o);
     }
     typeSel.addEventListener("change", () => {
-      const type = typeSel.value as "text" | "number" | "date" | "formula";
+      const type = typeSel.value as Table["columns"][number]["type"];
       const c = Math.max(colSel.selectedIndex, 0);
       // Dates are kept ISO: what reads as a date is rewritten so.
       if (type === "date") {
@@ -5016,8 +5116,46 @@ export class FolioDoc extends HTMLElement {
       if (type === "formula" && !block.table.columns[c]?.expr) {
         patch.expr = "0";
       }
+      // A fresh select column needs options (spec: select-columns.md).
+      if (type === "select" && !block.table.columns[c]?.options) {
+        patch.options = ["new"];
+      }
       this.patchColumn(figure, block, c, patch);
     });
+
+    // Select-column extras (options list + multi), shown in the column
+    // group only while the type is select.
+    const optWrap = document.createElement("span");
+    optWrap.className = "insp-select-opts";
+    const optInp = document.createElement("input");
+    optInp.className = "insp-options";
+    optInp.type = "text";
+    optInp.placeholder = "options: a, b, c";
+    optInp.title = "Comma-separated option list";
+    optInp.addEventListener("change", () => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      const options = optInp.value
+        .split(",")
+        .map((x) => x.trim())
+        .filter((x) => x !== "");
+      this.patchColumn(figure, block, c, {
+        options: options.length ? options : undefined,
+      });
+    });
+    optWrap.appendChild(optInp);
+    const multiLabel = document.createElement("label");
+    multiLabel.className = "insp-multi";
+    const multiCb = document.createElement("input");
+    multiCb.type = "checkbox";
+    multiCb.addEventListener("change", () => {
+      const c = Math.max(colSel.selectedIndex, 0);
+      this.patchColumn(figure, block, c, {
+        multi: multiCb.checked || undefined,
+      });
+    });
+    multiLabel.appendChild(multiCb);
+    multiLabel.appendChild(document.createTextNode(" multi"));
+    optWrap.appendChild(multiLabel);
 
     const unitInp = document.createElement("input");
     unitInp.className = "insp-unit";
@@ -5187,7 +5325,7 @@ export class FolioDoc extends HTMLElement {
     const fmtGroup = document.createElement("div");
     fmtGroup.className = "insp-group";
     fmtGroup.setAttribute("role", "group");
-    fmtGroup.append(colSel, visLbl, typeSel, unitInp, fmtSel);
+    fmtGroup.append(colSel, visLbl, typeSel, unitInp, fmtSel, optWrap);
     // The bar is scoped rows, not a flat wrap (spec:
     // docs/specs/table-inspector.md, "Spreadsheet-style bar
     // layout"): row 1 is table-level controls in a fixed order -
@@ -5994,6 +6132,12 @@ export class FolioDoc extends HTMLElement {
     if (visBox) visBox.checked = !col.hidden;
     const typeSel = bar.querySelector<HTMLSelectElement>(".insp-type");
     if (typeSel) typeSel.value = col.type;
+    const optWrap = bar.querySelector<HTMLElement>(".insp-select-opts");
+    if (optWrap) optWrap.style.display = col.type === "select" ? "" : "none";
+    const optInp = bar.querySelector<HTMLInputElement>(".insp-options");
+    if (optInp) optInp.value = (col.options ?? []).join(", ");
+    const multiCb = bar.querySelector<HTMLInputElement>(".insp-multi input");
+    if (multiCb) multiCb.checked = col.multi === true;
     const unitInp = bar.querySelector<HTMLInputElement>(".insp-unit");
     if (unitInp) unitInp.value = col.unit ?? "";
     const fmtSel = bar.querySelector<HTMLSelectElement>(".insp-format");
@@ -6040,17 +6184,27 @@ export class FolioDoc extends HTMLElement {
     block: Extract<Doc["blocks"][number], { kind: "table" }>,
     c: number,
     patch: {
-      type?: "text" | "number" | "date" | "formula";
+      type?: Table["columns"][number]["type"];
       unit?: string | undefined;
       format?: "percent" | "currency" | undefined;
       expr?: string;
       hidden?: boolean | undefined;
+      options?: string[] | undefined;
+      multi?: boolean | undefined;
     },
   ): void {
     const col = block.table.columns[c];
     if (!col) return;
     // An undefined value removes the key so the default applies.
     if ("type" in patch) col.type = patch.type ?? col.type;
+    if ("options" in patch) {
+      if (patch.options) col.options = patch.options;
+      else delete col.options;
+    }
+    if ("multi" in patch) {
+      if (patch.multi) col.multi = true;
+      else delete col.multi;
+    }
     if ("unit" in patch) {
       if (patch.unit) col.unit = patch.unit;
       else delete col.unit;
@@ -6647,8 +6801,14 @@ export class FolioDoc extends HTMLElement {
             rowEl &&
             cellEl &&
             !cellEl.classList.contains("computed")
-          )
-            this.openDatasetCellEditor(rowEl, cellEl, modelRow, col, block);
+          ) {
+            const cdef = block.table.columns[col];
+            // Select cells open their dropdown on Enter, like a click.
+            if (cdef?.type === "select")
+              this.openDatasetCellControl(display, col, block);
+            else
+              this.openDatasetCellEditor(rowEl, cellEl, modelRow, col, block);
+          }
           return;
         }
         default:
@@ -6879,6 +7039,9 @@ export class FolioDoc extends HTMLElement {
       return; // the head already shows the guarded error line
     }
     const { indexes } = this.datasetDisplayIndexes();
+    // Re-drawing the window drops the cells a control pop is anchored
+    // to; close it first (scrolling closes an open dropdown).
+    this.closeCellControl();
     const first = Math.max(0, Math.floor(grid.scrollTop / DS_ROW_H) - 2);
     const count = Math.ceil(grid.clientHeight / DS_ROW_H) + 4;
     const slice = indexes.slice(first, first + count);
@@ -6906,6 +7069,9 @@ export class FolioDoc extends HTMLElement {
         const cell = document.createElement("div");
         cell.className = "folio-ds-cell";
         cell.dataset.col = String(c);
+        // The shared cell-control helpers read rowIndex/colIndex.
+        cell.dataset.rowIndex = String(modelRow);
+        cell.dataset.colIndex = String(c);
         if (
           this.dsState.selected !== null &&
           this.dsState.selected.display === display &&
@@ -6917,6 +7083,12 @@ export class FolioDoc extends HTMLElement {
           const active =
             canvas.querySelector<HTMLInputElement>(".folio-ds-edit");
           if (active !== null) return; // one editor at a time
+          if (col.type === "select") {
+            // Chips open their dropdown on click - not free text
+            // (spec: select-columns.md, same as in the document).
+            this.openDatasetCellControl(display, c, block);
+            return;
+          }
           this.dsState.selected = { display, col: c };
           if (col.type === "formula") {
             // Computed cells are read-only: selecting one shows its
@@ -6933,15 +7105,76 @@ export class FolioDoc extends HTMLElement {
           cell.classList.add("computed");
           cell.textContent = formatComputed(v, col.format);
           if (typeof v === "number") cell.classList.add("num");
+        } else if (col.type === "select") {
+          // Select chips in the sheet too (spec: select-columns.md).
+          cell.classList.add("folio-control-cell");
+          this.renderControlCell(cell, col, v);
         } else {
           if (typeof v === "number") cell.classList.add("num");
           cell.textContent = String(v ?? "");
+          if (col.type === "date" || col.type === "datetime") {
+            // The calendar icon opens the picker (spec:
+            // date-column-controls.md); the cell body stays
+            // text-editable - type the ISO value - as in the document.
+            cell.classList.add("date");
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "folio-date-btn";
+            btn.title =
+              col.type === "datetime" ? "Pick a date and time" : "Pick a date";
+            btn.innerHTML =
+              '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2" y="3.5" width="12" height="10.5" rx="2"/><path d="M2 6.5h12M5.5 2v3M10.5 2v3"/></svg>';
+            // Open on mousedown (see the document table's date-btn):
+            // a click can land off the icon after layout shifts.
+            btn.addEventListener("mousedown", (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (cell.isConnected)
+                this.openDatasetCellControl(display, c, block);
+            });
+            btn.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (cell.isConnected && this.activeCellPop?.td !== cell)
+                this.openDatasetCellControl(display, c, block);
+            });
+            cell.appendChild(btn);
+          }
         }
         row.appendChild(cell);
       });
       canvas.appendChild(row);
     });
     this.updateDatasetFormulaBar();
+  }
+
+  /**
+   * Open the in-cell control (select dropdown, multi check-list, or
+   * date/datetime picker) on a dataset browser cell: re-draw the
+   * window so the selection ring shows, then pop the control on the
+   * freshly drawn cell.
+   */
+  private openDatasetCellControl(
+    display: number,
+    col: number,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+  ): void {
+    const cdef = block.table.columns[col];
+    if (!cdef) return;
+    this.dsState.selected = { display, col };
+    this.renderDatasetRows(); // also refreshes the formula bar
+    // Focus the grid BEFORE opening the control: the control's own
+    // select/input takes focus itself (and may open its native list).
+    this.dsBrowser
+      ?.querySelector<HTMLElement>(".folio-ds-grid")
+      ?.focus({ preventScroll: true });
+    const canvas =
+      this.dsBrowser?.querySelector<HTMLElement>(".folio-ds-canvas");
+    const rowEl = canvas?.querySelector<HTMLElement>(
+      `.folio-ds-row[data-display="${String(display)}"]`,
+    );
+    // +1: the gutter cell is the row's first child.
+    const cellEl = rowEl?.children[col + 1] as HTMLElement | undefined;
+    if (cellEl) this.openCellControl(cellEl, block, cdef);
   }
 
   /**
@@ -7211,6 +7444,125 @@ export class FolioDoc extends HTMLElement {
     await this.restyled;
   }
 
+  /** Active cross-filter selections: source table id -> category
+   * column -> selected values (spec: docs/specs/cross-filtering.md).
+   * View-only state - never written to the document. */
+  private crossFilters = new Map<string, Map<string, Set<string>>>();
+
+  /** The category column a chart's marks filter on: the first group
+   * column, else the first selected column. */
+  private categoryColumn(chart: Chart): string | undefined {
+    return chart.query.group?.[0] ?? chart.query.select[0];
+  }
+
+  /** The chart with the active cross-filters for its source ANDed into
+   * its query filter (OR within a column, AND across columns). */
+  private crossFilteredChart(chart: Chart): Chart {
+    if (chart.crossfilter === false) return chart;
+    const cols = this.crossFilters.get(chart.source);
+    if (!cols || cols.size === 0) return chart;
+    const parts: string[] = [];
+    for (const [col, vals] of cols) {
+      if (vals.size === 0) continue;
+      const ors = [...vals]
+        .map((v) => `${col} == ${JSON.stringify(v)}`)
+        .join(" || ");
+      parts.push(`(${ors})`);
+    }
+    if (parts.length === 0) return chart;
+    const cross = parts.join(" && ");
+    const own = chart.query.filter;
+    let ownStr: string | undefined;
+    if (typeof own === "string") ownStr = own;
+    else if (own) {
+      const v =
+        typeof own.value === "string"
+          ? JSON.stringify(own.value)
+          : String(own.value);
+      ownStr = `${own.column} ${own.op === "eq" ? "==" : own.op} ${v}`;
+    }
+    const filter = ownStr ? `(${ownStr}) && ${cross}` : cross;
+    return { ...chart, query: { ...chart.query, filter } };
+  }
+
+  /** Toggle a category selection in one chart; redraw every linked
+   * chart over the same source. */
+  private toggleCrossFilter(
+    block: Extract<Doc["blocks"][number], { kind: "chart" }>,
+    value: string,
+  ): void {
+    const chart = block.chart;
+    if (chart.crossfilter === false) return;
+    const col = this.categoryColumn(chart);
+    if (!col) return;
+    let cols = this.crossFilters.get(chart.source);
+    if (!cols) {
+      cols = new Map();
+      this.crossFilters.set(chart.source, cols);
+    }
+    let vals = cols.get(col);
+    if (!vals) {
+      vals = new Set();
+      cols.set(col, vals);
+    }
+    if (vals.has(value)) vals.delete(value);
+    else vals.add(value);
+    if (vals.size === 0) cols.delete(col);
+    if (cols.size === 0) this.crossFilters.delete(chart.source);
+    this.redrawLinkedCharts(chart.source);
+  }
+
+  /** Redraw all charts over a source table (filters changed). */
+  private redrawLinkedCharts(sourceId: string): void {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    for (const cf of Array.from(
+      host?.querySelectorAll<HTMLElement>(
+        `figure[data-chart-source="${sourceId}"]`,
+      ) ?? [],
+    )) {
+      this.drawChart(cf);
+    }
+  }
+
+  /** The chip row above a linked chart: one chip per active filter. */
+  private renderCrossFilterChips(figure: HTMLElement, chart: Chart): void {
+    const box = figure.querySelector<HTMLElement>(".crossfilter-chips");
+    if (!box) return;
+    box.textContent = "";
+    const cols = this.crossFilters.get(chart.source);
+    const active =
+      chart.crossfilter !== false && cols !== undefined && cols.size > 0;
+    box.hidden = !active;
+    if (!active || !cols) return;
+    for (const [col, vals] of cols) {
+      for (const v of vals) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "xf-chip";
+        chip.textContent = `${col} = ${v} `;
+        const x = document.createElement("span");
+        x.className = "xf-x";
+        x.textContent = "×";
+        chip.appendChild(x);
+        chip.title = "Clear this filter";
+        chip.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          const set = this.crossFilters.get(chart.source)?.get(col);
+          if (set) {
+            set.delete(v);
+            if (set.size === 0)
+              this.crossFilters.get(chart.source)?.delete(col);
+            if (this.crossFilters.get(chart.source)?.size === 0) {
+              this.crossFilters.delete(chart.source);
+            }
+          }
+          this.redrawLinkedCharts(chart.source);
+        });
+        box.appendChild(chip);
+      }
+    }
+  }
+
   private drawChart(figure: HTMLElement): void {
     if (!this.doc) return;
     // A chart figure is its BLOCK, not its source: several charts
@@ -7248,7 +7600,12 @@ export class FolioDoc extends HTMLElement {
         this.memo(),
       );
       const tableBlock2 = { table: sourceTable };
-      const result = executeQuery(sourceTable, block.chart);
+      // Cross-filtering (spec: cross-filtering.md): active selections
+      // on this source become an extra query filter (ANDed with the
+      // block's own). View-only - never written to the document.
+      const chart = this.crossFilteredChart(block.chart);
+      const result = executeQuery(sourceTable, chart);
+      this.renderCrossFilterChips(figure, block.chart);
       // Nothing to plot - every row filtered out, or every value blank
       // (a model outside its data): say so, not an empty frame.
       const plottable = result.rows.some((r) =>
@@ -7342,7 +7699,7 @@ export class FolioDoc extends HTMLElement {
         (block.chart.series !== undefined || select.length > 2) &&
         (t === "bar" || t === "line" || t === "area")
       ) {
-        const data = chartSeries(sourceTable, block.chart);
+        const data = chartSeries(sourceTable, chart);
         const multi = renderSeriesChart(data, t, block.chart.stack === true, {
           ...style,
           // Several value columns share no single name: the axis says
@@ -8351,6 +8708,458 @@ export class FolioDoc extends HTMLElement {
       this.updateRowCalculations(td.closest("figure"), block);
     }
     this.emitChange("cell");
+  }
+
+  /** Stable hue per option value, so a status is the same chip color
+   * in every table (spec: select-columns.md). */
+  private chipHue(value: string): number {
+    let h = 0;
+    for (let i = 0; i < value.length; i++) {
+      h = (h * 31 + value.charCodeAt(i)) >>> 0;
+    }
+    return h % 360;
+  }
+
+  /** Render a select/date/datetime cell's content (chips / ISO text).
+   * Works on any cell host: a table `td` in the document, or a
+   * `.folio-ds-cell` div in the dataset browser. */
+  private renderControlCell(
+    td: HTMLElement,
+    col: Extract<Table["columns"][number], { type: string }>,
+    v: Cell | undefined,
+  ): void {
+    td.textContent = "";
+    if (col.type === "select") {
+      const raw = String(v ?? "");
+      const parts = col.multi
+        ? raw
+            .split(",")
+            .map((x) => x.trim())
+            .filter((x) => x !== "")
+        : raw === ""
+          ? []
+          : [raw];
+      for (const part of parts) {
+        const ok = col.options?.includes(part) ?? false;
+        const chip = document.createElement("span");
+        chip.className = "folio-chip" + (ok ? "" : " folio-chip-error");
+        chip.textContent = part;
+        chip.style.setProperty("--chip-hue", String(this.chipHue(part)));
+        chip.title = ok
+          ? part
+          : `'${part}' is not in options: [${(col.options ?? []).join(", ")}]`;
+        td.appendChild(chip);
+        if (col.multi && parts.indexOf(part) < parts.length - 1) {
+          td.appendChild(document.createTextNode(", "));
+        }
+      }
+      if (parts.length === 0) td.textContent = "";
+    } else {
+      // date / datetime: ISO text in the doc, as today. Keep the
+      // calendar button when re-rendering after a picker commit.
+      const btn = td.querySelector(".folio-date-btn");
+      td.textContent = String(v ?? "");
+      if (btn) td.appendChild(btn);
+    }
+  }
+
+  /** Write a control-chosen value into the model (same path as a
+   * typed cell commit). The cell may live in the document's table
+   * figure or in the dataset browser. */
+  private commitCellValue(
+    td: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    value: Cell,
+  ): void {
+    const r = Number(td.dataset.rowIndex);
+    const c = Number(td.dataset.colIndex);
+    const row = block.table.rows[r];
+    const col = block.table.columns[c];
+    if (!row || !col) return;
+    if (row[c] === value) return;
+    row[c] = value;
+    // The owning figure: the cell's own figure in the document, or -
+    // for a cell in the dataset browser - the table's figure there.
+    const figure = (td.closest("figure") ??
+      this.shadowRoot?.querySelector(
+        `figure[data-table-id="${block.table.id}"]`,
+      )) as HTMLElement | null;
+    this.updateRowCalculations(figure, block);
+    this.emitChange("cell");
+    const recalced = recalcTable(block.table, this.tablePool(), this.memo());
+    if (td.closest(".folio-ds-overlay") !== null) {
+      // A sheet edit: the in-flow figure's cell must not go stale
+      // (the browser's edit is not its DOM), then redraw the sheet
+      // so chips, dates, and formula cells all refresh.
+      const ftd = figure?.querySelector<HTMLElement>(
+        `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
+      );
+      if (ftd) this.renderControlCell(ftd, col, recalced.rows[r]?.[c]);
+      this.refreshDatasetBrowser();
+      return;
+    }
+    // Re-render this cell's content (chips / date text).
+    this.renderControlCell(td, col, recalced.rows[r]?.[c]);
+  }
+
+  /** Open the in-cell control for a select/date/datetime cell:
+   * dropdown (single select), checkable list (multi), date or
+   * datetime-local picker. The cell may be a `td` in the document's
+   * table or a `.folio-ds-cell` in the dataset browser. */
+  private openCellControl(
+    td: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    col: Table["columns"][number],
+  ): void {
+    this.closeCellControl();
+    const r = Number(td.dataset.rowIndex);
+    const c = Number(td.dataset.colIndex);
+    const current = String(block.table.rows[r]?.[c] ?? "");
+    // The sheet's cells clip (overflow: hidden); lift the clip while
+    // a pop is open so it is not cut off.
+    const overflow = td.style.overflow;
+    td.style.position = "relative";
+    td.style.overflow = "visible";
+    // The "anchor" is the element a click counts as inside: the pop
+    // box (multi list), the chip-turned-select (single select), or the
+    // invisible date input whose native calendar is open.
+    let anchor: HTMLElement | null = null;
+    const setAnchor = (
+      el: HTMLElement,
+      restore: (() => void) | undefined,
+    ): void => {
+      anchor = el;
+      // A mousedown inside the control must not reach the table's
+      // handler: revealing the inspector bar shifts the table (and
+      // the pop with it) mid-click, and the click then lands off the
+      // control's button.
+      el.addEventListener("mousedown", (ev) => ev.stopPropagation());
+      this.activeCellPop = { pop: el, td, overflow, restore };
+    };
+    const close = () => this.closeCellControl();
+    // The control closes on a click OUTSIDE it (never on blur: the
+    // dropdown/picker itself takes focus when clicked). composedPath
+    // sees through the shadow boundary, so a click inside the anchor -
+    // retargeted to the host at the document listener - still counts
+    // as inside.
+    this.cellPopOutside = (ev: MouseEvent) => {
+      if (anchor !== null && !ev.composedPath().includes(anchor)) close();
+    };
+    document.addEventListener("mousedown", this.cellPopOutside, true);
+
+    if (col.type === "date" || col.type === "datetime") {
+      // The in-cell calendar: a month-grid pop right at the cell.
+      // Own calendar, not the native picker - showPicker is not
+      // reliable cross-browser and an invisible anchor gives no
+      // fallback. The cell's own content (ISO text + calendar icon)
+      // stays in place underneath; a typed ISO value still works via
+      // the cell's text editing.
+      const calPop = this.openDatePicker(td, block, col, current, close);
+      setAnchor(calPop, undefined);
+      return;
+    }
+
+    // select, single or multi
+    if (col.multi) {
+      const pop = document.createElement("div");
+      pop.className = "folio-cell-pop";
+      td.appendChild(pop);
+      setAnchor(pop, undefined);
+      const cur = new Set(
+        current
+          .split(",")
+          .map((x) => x.trim())
+          .filter((x) => x !== ""),
+      );
+      for (const opt of col.options ?? []) {
+        const label = document.createElement("label");
+        label.className = "folio-cell-opt";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = cur.has(opt);
+        cb.addEventListener("change", () => {
+          if (cb.checked) cur.add(opt);
+          else cur.delete(opt);
+        });
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(opt));
+        pop.appendChild(label);
+      }
+      const done = document.createElement("button");
+      done.type = "button";
+      done.className = "folio-cell-done";
+      done.textContent = "Done";
+      done.addEventListener("click", () => {
+        this.commitCellValue(td, block, [...cur].join(", "));
+        close();
+      });
+      pop.appendChild(done);
+      pop.addEventListener("keydown", (ev) => {
+        if (ev.key === "Escape") close();
+        if (
+          ev.key === "Enter" &&
+          (ev.target as HTMLElement).tagName !== "INPUT"
+        ) {
+          this.commitCellValue(td, block, [...cur].join(", "));
+          close();
+        }
+        ev.stopPropagation();
+      });
+      (pop.querySelector("input") as HTMLElement | null)?.focus();
+      return;
+    }
+
+    // Single select: the CHIP itself becomes the dropdown - a styled
+    // <select> in the chip's place (same pill, same hue, a caret), not
+    // a detached list spaced below the cell (spec: select-columns.md).
+    const wrap = document.createElement("span");
+    wrap.className = "folio-chip-open";
+    const sel = document.createElement("select");
+    sel.className = "folio-chip folio-chip-select";
+    sel.title = "Choose a value";
+    sel.setAttribute("aria-label", col.name);
+    sel.style.setProperty("--chip-hue", String(this.chipHue(current)));
+    const blank = document.createElement("option");
+    blank.value = "";
+    blank.textContent = "(blank)";
+    sel.appendChild(blank);
+    for (const opt of col.options ?? []) {
+      const o = document.createElement("option");
+      o.value = opt;
+      o.textContent = opt;
+      sel.appendChild(o);
+    }
+    sel.value = col.options?.includes(current) ? current : "";
+    const caret = document.createElement("span");
+    caret.className = "folio-chip-caret";
+    caret.textContent = "▾";
+    wrap.append(sel, caret);
+    td.textContent = "";
+    td.appendChild(wrap);
+    setAnchor(wrap, () => {
+      // Re-draw the chip on close: a commit already re-rendered the
+      // cell; Esc / an outside click lands here unchanged.
+      const rr = Number(td.dataset.rowIndex);
+      const cc = Number(td.dataset.colIndex);
+      const recalced = recalcTable(block.table, this.tablePool(), this.memo());
+      this.renderControlCell(td, col, recalced.rows[rr]?.[cc]);
+    });
+    sel.addEventListener("change", () => {
+      this.commitCellValue(td, block, sel.value);
+      close();
+    });
+    sel.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") close();
+      ev.stopPropagation();
+    });
+    sel.focus();
+    // Open the native list right away where supported, so the chip
+    // literally turns into the dropdown (we are inside the click /
+    // Enter gesture here).
+    try {
+      sel.showPicker();
+    } catch {
+      // not supported - the styled select still shows in place
+    }
+  }
+
+  /** The in-cell calendar (spec: date-column-controls.md): a
+   * month-grid pop anchored at the cell - prev/next month, today
+   * ringed, the current value filled. Clicking a day commits the ISO
+   * value (plus the time field's HH:MM for datetime columns) and
+   * closes. Returns the pop element (the outside-click anchor). */
+  private openDatePicker(
+    td: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "table" }>,
+    col: Table["columns"][number],
+    current: string,
+    close: () => void,
+  ): HTMLElement {
+    const pop = document.createElement("div");
+    pop.className = "folio-cal-pop";
+    pop.contentEditable = "false";
+    td.appendChild(pop);
+    const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(current);
+    const now = new Date();
+    let vy = m ? Number(m[1]) : now.getFullYear();
+    let vm = m ? Number(m[2]) - 1 : now.getMonth();
+    const pad = (n: number): string => String(n).padStart(2, "0");
+    const monthFmt = new Intl.DateTimeFormat(undefined, {
+      month: "long",
+      year: "numeric",
+    });
+    const wdFmt = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+    // 2026-11-02 is a Monday: weekday labels, Monday-first grid.
+    const weekdays = Array.from({ length: 7 }, (_, i) =>
+      wdFmt.format(new Date(2026, 10, 2 + i)),
+    );
+    let timeInput: HTMLInputElement | null = null;
+
+    // Keep the pop inside the viewport: flip above the cell when
+    // there is no room below, align right edges when there is no room
+    // to the right, clamp to the left edge as a last resort.
+    const place = (): void => {
+      pop.style.top = "";
+      pop.style.bottom = "";
+      pop.style.left = "";
+      pop.style.right = "";
+      const cellRect = td.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const margin = 8;
+      let r = pop.getBoundingClientRect();
+      if (r.bottom > vh - margin && cellRect.top > r.height + margin) {
+        pop.style.top = "auto";
+        pop.style.bottom = "100%"; // open upward
+        r = pop.getBoundingClientRect();
+      }
+      if (r.right > vw - margin) {
+        pop.style.left = "auto";
+        pop.style.right = "0"; // pop's right edge on the cell's
+        r = pop.getBoundingClientRect();
+      }
+      if (r.left < margin) {
+        pop.style.right = "auto";
+        pop.style.left = `${Math.round(margin - r.left)}px`;
+      }
+    };
+
+    const render = (): void => {
+      pop.textContent = "";
+      const head = document.createElement("div");
+      head.className = "folio-cal-head";
+      const prev = document.createElement("button");
+      prev.type = "button";
+      prev.className = "folio-cal-nav";
+      prev.textContent = "‹";
+      prev.title = "Previous month";
+      prev.setAttribute("aria-label", "Previous month");
+      const next = document.createElement("button");
+      next.type = "button";
+      next.className = "folio-cal-nav";
+      next.textContent = "›";
+      next.title = "Next month";
+      next.setAttribute("aria-label", "Next month");
+      const title = document.createElement("span");
+      title.className = "folio-cal-title";
+      title.textContent = monthFmt.format(new Date(vy, vm, 1));
+      prev.addEventListener("click", () => {
+        vm -= 1;
+        if (vm < 0) {
+          vm = 11;
+          vy -= 1;
+        }
+        render();
+      });
+      next.addEventListener("click", () => {
+        vm += 1;
+        if (vm > 11) {
+          vm = 0;
+          vy += 1;
+        }
+        render();
+      });
+      head.append(prev, title, next);
+      pop.appendChild(head);
+
+      const grid = document.createElement("div");
+      grid.className = "folio-cal-grid";
+      for (const wd of weekdays) {
+        const el = document.createElement("span");
+        el.className = "folio-cal-wd";
+        el.textContent = wd;
+        grid.appendChild(el);
+      }
+      const firstOffset = (new Date(vy, vm, 1).getDay() + 6) % 7;
+      const daysInMonth = new Date(vy, vm + 1, 0).getDate();
+      for (let i = 0; i < firstOffset; i++)
+        grid.appendChild(document.createElement("span"));
+      for (let d = 1; d <= daysInMonth; d++) {
+        const day = document.createElement("button");
+        day.type = "button";
+        day.className = "folio-cal-day";
+        day.textContent = String(d);
+        if (
+          vy === now.getFullYear() &&
+          vm === now.getMonth() &&
+          d === now.getDate()
+        )
+          day.classList.add("today");
+        if (
+          m &&
+          vy === Number(m[1]) &&
+          vm === Number(m[2]) - 1 &&
+          d === Number(m[3])
+        )
+          day.classList.add("selected");
+        day.addEventListener("click", () => {
+          const iso = `${String(vy)}-${pad(vm + 1)}-${pad(d)}`;
+          const value =
+            col.type === "datetime"
+              ? `${iso}T${timeInput?.value || "09:00"}`
+              : iso;
+          this.commitCellValue(td, block, value);
+          close();
+        });
+        grid.appendChild(day);
+      }
+      pop.appendChild(grid);
+
+      if (col.type === "datetime") {
+        const row = document.createElement("div");
+        row.className = "folio-cal-time";
+        timeInput = document.createElement("input");
+        timeInput.type = "time";
+        timeInput.className = "folio-cell-input";
+        timeInput.value = m?.[4] ? `${m[4]}:${m[5]}` : "09:00";
+        timeInput.setAttribute("aria-label", "Time");
+        timeInput.addEventListener("change", () => {
+          if (!timeInput?.value) return;
+          const datePart = m
+            ? `${m[1]}-${m[2]}-${m[3]}`
+            : `${String(now.getFullYear())}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+          this.commitCellValue(td, block, `${datePart}T${timeInput.value}`);
+          close();
+        });
+        row.appendChild(timeInput);
+        pop.appendChild(row);
+      }
+      // Keyboard: focus the selected day, else today, else the 1st.
+      const focusSel =
+        pop.querySelector<HTMLElement>(".folio-cal-day.selected") ??
+        pop.querySelector<HTMLElement>(".folio-cal-day.today") ??
+        pop.querySelector<HTMLElement>(".folio-cal-day");
+      focusSel?.focus();
+      place();
+    };
+    pop.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") close();
+      ev.stopPropagation();
+    });
+    render();
+    return pop;
+  }
+
+  private activeCellPop: {
+    pop: HTMLElement;
+    td: HTMLElement;
+    overflow: string;
+    restore: (() => void) | undefined;
+  } | null = null;
+
+  private cellPopOutside: ((ev: MouseEvent) => void) | null = null;
+
+  private closeCellControl(): void {
+    if (this.cellPopOutside) {
+      document.removeEventListener("mousedown", this.cellPopOutside, true);
+      this.cellPopOutside = null;
+    }
+    if (this.activeCellPop) {
+      this.activeCellPop.pop.remove();
+      this.activeCellPop.td.style.overflow = this.activeCellPop.overflow;
+      this.activeCellPop.restore?.();
+      this.activeCellPop = null;
+    }
   }
 
   /** Refresh the row's formula cells and dependent charts in place. */
@@ -9402,6 +10211,12 @@ export class FolioDoc extends HTMLElement {
   }
 
   private handleKeydown(ev: KeyboardEvent): void {
+    // Esc clears all cross-filter selections (spec: cross-filtering.md).
+    if (ev.key === "Escape" && this.crossFilters.size > 0) {
+      const sources = [...this.crossFilters.keys()];
+      this.crossFilters.clear();
+      for (const src of sources) this.redrawLinkedCharts(src);
+    }
     if (!this.doc) return;
     // The inspector's inputs own their keystrokes.
     if (ev.target instanceof Element && ev.target.closest(".folio-inspector")) {

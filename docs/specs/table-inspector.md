@@ -130,6 +130,13 @@ it. Its rows are scoped, not accidental wraps:
 - **Row 4 - the column's formula row**: directly under the group,
   same accent left edge, so rows 3-4 read as one column-editor block
   nearest the table (like Excel's formula bar above the grid).
+- **The bar never overflows the page**: every full-width row
+  (`insp-table-row`, `insp-group`, `insp-cap-row`, `insp-fx-row`)
+  carries `min-width: 0`, so a wide row shrinks to the bar and
+  scrolls/wraps inside itself instead of pushing the figure (and
+  the page) wider. The column group wraps its controls (type, unit,
+  format, select options + multi) onto extra lines inside the box
+  when narrow; row 1 stays one line and scrolls sideways.
 - **The inspected column lights up in the table**: `showInspector`
   stamps `figure[data-insp-col="c"]`; while the bar is visible
   (CSS `:has(> .folio-inspector:not([hidden]))`), that column's

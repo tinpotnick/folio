@@ -742,3 +742,59 @@ describe("table totals rows", () => {
     ).toThrow(/needs col and expr/);
   });
 });
+
+describe("select columns and crossfilter keys", () => {
+  it("select column with options/multi round-trips; misuse is a parse error", () => {
+    const src =
+      "::: table {#p}\n" +
+      "columns:\n" +
+      "  - {name: status, type: select, options: [todo, doing, done]}\n" +
+      '  - {name: tags, type: select, options: [a, "b c"], multi: true}\n' +
+      "  - {name: n, type: number}\n" +
+      "data:\n" +
+      '  - [done, "a, b c", 1]\n' +
+      ":::\n";
+    const doc = parseDoc(src);
+    expect(serializeDoc(doc)).toBe(src);
+    const b = doc.blocks[0];
+    if (b?.kind !== "table") throw new Error("not a table");
+    expect(b.table.columns[0]?.options).toEqual(["todo", "doing", "done"]);
+    expect(b.table.columns[1]?.multi).toBe(true);
+    expect(() =>
+      parseDoc(
+        "::: table {#t}\ncolumns:\n  - {name: a, type: text, options: [x]}\ndata:\n  - [1]\n:::\n",
+      ),
+    ).toThrow(/options requires type: select/);
+    expect(() =>
+      parseDoc(
+        "::: table {#t}\ncolumns:\n  - {name: a, type: select}\ndata:\n  - [1]\n:::\n",
+      ),
+    ).toThrow(/needs options/);
+    expect(() =>
+      parseDoc(
+        "::: table {#t}\ncolumns:\n  - {name: a, type: number, multi: true}\ndata:\n  - [1]\n:::\n",
+      ),
+    ).toThrow(/multi requires type: select/);
+  });
+
+  it("datetime column type and crossfilter: off round-trip", () => {
+    const src =
+      "::: table {#p}\n" +
+      "columns:\n" +
+      "  - {name: when, type: datetime}\n" +
+      "data:\n" +
+      "  - [2026-11-12T14:30]\n" +
+      ":::\n" +
+      "\n" +
+      "::: chart {#c} crossfilter: off\n" +
+      "source: @p\n" +
+      "query: {select: [when]}\n" +
+      "type: bar\n" +
+      ":::\n";
+    const doc = parseDoc(src);
+    expect(serializeDoc(doc)).toBe(src);
+    const c = doc.blocks[1];
+    if (c?.kind !== "chart") throw new Error("not a chart");
+    expect(c.chart.crossfilter).toBe(false);
+  });
+});

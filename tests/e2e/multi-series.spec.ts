@@ -33,7 +33,7 @@ test.describe("charts with several series", () => {
       fig.locator(".chart-holder svg rect:not(.readout-band)"),
     ).toHaveCount(6);
     // The bar's Stack box writes `stack: true`.
-    await fig.click();
+    await fig.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     await fig.getByLabel("Stack").check();
     await expect(
       fig.locator("svg text.v-label", { hasText: "913" }),
@@ -49,7 +49,7 @@ test.describe("charts with several series", () => {
     const fig = page.locator("#the-doc figure[data-chart-source]", {
       has: page.locator("figcaption", { hasText: "North region revenue" }),
     });
-    await fig.click();
+    await fig.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     await fig.getByLabel("Split by").selectOption("region");
     await expect(fig.locator(".legend-item")).toHaveCount(1); // filtered: North only
     await page.locator("#btn-markdown").click();

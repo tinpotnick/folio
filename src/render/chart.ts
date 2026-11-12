@@ -383,7 +383,7 @@ export function renderBarChart(
     );
     if (!blank) {
       parts.push(
-        `<rect x="${x}" y="${y}" width="${barW}" height="${height}" fill="${color}" rx="2" />`,
+        `<rect x="${x}" y="${y}" width="${barW}" height="${height}" fill="${color}" rx="2" data-cat="${escapeXml(String(result.rows[i]?.[0] ?? ""))}" />`,
       );
     }
     if (xTickIndices(n).includes(i)) {
@@ -831,7 +831,7 @@ export function renderHeatmap(
     const t = tOf(c.v);
     const label = valFmt(c.v);
     parts.push(
-      `<rect class="heat-cell" x="${xOf(xi).toFixed(2)}" y="${yOf(yi).toFixed(2)}" width="${cellW.toFixed(2)}" height="${cellH.toFixed(2)}" fill="${ramp(t)}" stroke="${paper}" stroke-width="1">` +
+      `<rect class="heat-cell" x="${xOf(xi).toFixed(2)}" y="${yOf(yi).toFixed(2)}" width="${cellW.toFixed(2)}" height="${cellH.toFixed(2)}" fill="${ramp(t)}" stroke="${paper}" stroke-width="1" data-cat="${escapeXml(String(c.x))}">` +
         `<title>${escapeXml(`${c.x}, ${c.y}: ${label}`)}</title></rect>`,
     );
     if (labelCells) {
@@ -924,7 +924,7 @@ export function renderPieChart(
     const y2 = cy + r * Math.sin(angle + sweep);
     const large = sweep > Math.PI ? 1 : 0;
     parts.push(
-      `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${color}" stroke="${style.paper ?? "#ffffff"}" stroke-width="1.5"><title>${escapeXml(`${row.label}: ${valueFormatter(style.valueFormat)(row.value)} (${String(Math.round((row.value / total) * 100))}%)`)}</title></path>`,
+      `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${color}" stroke="${style.paper ?? "#ffffff"}" stroke-width="1.5" data-cat="${escapeXml(String(row.label))}"><title>${escapeXml(`${row.label}: ${valueFormatter(style.valueFormat)(row.value)} (${String(Math.round((row.value / total) * 100))}%)`)}</title></path>`,
     );
     const pct = Math.round((row.value / total) * 100);
     const lx = cx + (r + 22) * Math.cos(mid);
@@ -1059,7 +1059,7 @@ export function renderSeriesChart(
         const y = v >= 0 ? yOf(v) : zeroY;
         const h = Math.abs(yOf(v) - zeroY);
         parts.push(
-          `<rect class="series-${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW - 1.5).toFixed(1)}" height="${h.toFixed(1)}" fill="${colorOf(i)}" rx="1.5" />`,
+          `<rect class="series-${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(barW - 1.5).toFixed(1)}" height="${h.toFixed(1)}" fill="${colorOf(i)}" rx="1.5" data-cat="${escapeXml(String(data.categories[c] ?? ""))}" />`,
         );
         if (labels) {
           const ly = v >= 0 ? y - 4 : y + h + 12;
@@ -1087,7 +1087,7 @@ export function renderSeriesChart(
         const y = Math.min(yOf(from), yOf(to));
         const h = Math.abs(yOf(to) - yOf(from));
         parts.push(
-          `<rect class="series-${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${colorOf(i)}" />`,
+          `<rect class="series-${i}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${colorOf(i)}" data-cat="${escapeXml(String(data.categories[c] ?? ""))}" />`,
         );
       });
       if (n <= 12) {

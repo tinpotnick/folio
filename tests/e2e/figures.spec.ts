@@ -109,7 +109,7 @@ test.describe("chart inspector", () => {
     const figure = page.locator(
       '#the-doc figure[data-chart-source="regional-data"]',
     );
-    await figure.locator(".chart-holder").click();
+    await figure.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     const insp = figure.locator(".folio-inspector");
     await expect(insp).toBeVisible();
     await insp.locator(".insp-type button[data-type='line']").click();
@@ -125,7 +125,7 @@ test.describe("chart inspector", () => {
     const figure = page.locator(
       '#the-doc figure[data-chart-source="regional-data"]',
     );
-    await figure.locator(".chart-holder").click();
+    await figure.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     const insp = figure.locator(".folio-inspector");
     await insp.locator(".insp-filter").fill("q2 > 400");
     await insp.locator(".insp-filter").press("Enter");
@@ -164,7 +164,7 @@ test.describe("math and diagram inspectors", () => {
     const figure = page.locator(
       '#the-doc figure[data-chart-source="regional-data"]',
     );
-    await figure.locator(".chart-holder").click();
+    await figure.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     const insp = figure.locator(".folio-inspector");
     await expect(insp).toBeVisible();
     // No close button: the outside click IS the dismissal, and
@@ -174,7 +174,7 @@ test.describe("math and diagram inspectors", () => {
     await expect(insp).toBeHidden();
     // Esc inside the bar dismisses early, exactly like the table
     // inspector's bar.
-    await figure.locator(".chart-holder").click();
+    await figure.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     await expect(insp).toBeVisible();
     await insp.locator(".insp-source").press("Escape");
     await expect(insp).toBeHidden();
@@ -258,7 +258,7 @@ type: pie
     const figure = page.locator(
       '#the-doc figure[data-chart-source="regional-data"]',
     );
-    await figure.locator(".chart-holder").click();
+    await figure.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     const insp = figure.locator(".folio-inspector");
     const types = insp.locator(".insp-type button");
     await expect(types).toHaveCount(7);

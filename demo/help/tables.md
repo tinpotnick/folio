@@ -95,3 +95,10 @@ totals:
   move the selection, Enter edits). **✕** (or Esc) closes it and
   returns to the table; the table bar's **Open dataset** button and
   the context menu's top item open it too.
+- **Chips and pickers** (specs: select-columns.md,
+  date-column-controls.md): a column of `type: select` with
+  `options: [todo, doing, done]` renders its cells as chips and edits
+  via a dropdown on click (`multi: true` makes it multi-select - one
+  chip per value, checkable list). `type: date` / `type: datetime`
+  columns open a calendar / date-time picker on click. Values are
+  validated against the options; a bad value shows as an error chip.

@@ -108,7 +108,7 @@ test.describe("heatmap charts", () => {
     const fig = page.locator(
       '#the-doc figure[data-chart-source="regional-data"]',
     );
-    await fig.locator(".chart-holder").click();
+    await fig.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     const insp = fig.locator(".folio-inspector");
     await expect(insp).toBeVisible();
     // Seven type icons; the active one is marked.
@@ -128,7 +128,7 @@ test.describe("heatmap charts", () => {
     const md = await source(page);
     expect(md).toContain("type: heatmap");
     // And back to bar: no heat cells remain, bars draw again.
-    await fig.locator(".chart-holder").click();
+    await fig.locator(".chart-holder").click({ position: { x: 6, y: 6 } });
     await insp.locator('.insp-type button[data-type="bar"]').click();
     await expect(fig.locator("rect.heat-cell")).toHaveCount(0);
     await expect(fig.locator(".chart-holder svg rect").first()).toBeVisible();
