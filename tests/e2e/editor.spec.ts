@@ -1210,6 +1210,43 @@ test.describe("caret movement", () => {
     );
     await expect(page.locator("#status")).not.toContainText("Parse error");
   });
+
+  test("Enter at the end of the h1 opens a new paragraph after it", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("#the-doc h1").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    const doc = await getDoc(page);
+    expect(doc.blocks[0]?.kind).toBe("heading");
+    expect(doc.blocks[1]).toMatchObject({ kind: "prose", text: "" });
+    // and typing lands in the new paragraph
+    await page.keyboard.type("after the title");
+    expect((await getDoc(page)).blocks[1]?.text).toBe("after the title");
+  });
+
+  test("Enter at a table's edge adds a paragraph AFTER the table", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const before = await getDoc(page);
+    // Click the table's caption: the caret resolves to the table
+    // block (figures are not editable) - Enter must open a line
+    // past the table, not be swallowed.
+    await page
+      .locator('#the-doc figure[data-table-id="regional-data"] figcaption')
+      .click();
+    await page.keyboard.press("Enter");
+    const after = await getDoc(page);
+    const t = after.blocks.findIndex((b) => b.kind === "table");
+    expect(t).toBeGreaterThan(-1);
+    expect(after.blocks.length).toBe(before.blocks.length + 1);
+    expect(after.blocks[t + 1]).toMatchObject({ kind: "prose", text: "" });
+    // typing goes into the new paragraph
+    await page.keyboard.type("past the table");
+    expect((await getDoc(page)).blocks[t + 1]?.text).toBe("past the table");
+  });
 });
 
 /* ------------------------------------------------------------------ */

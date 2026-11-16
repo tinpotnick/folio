@@ -10167,6 +10167,30 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
+   * Is the caret at the very END of block idx's content? Used for
+   * Enter: at a heading's end the key opens a paragraph after the
+   * block; mid-heading the engine's native split stays.
+   */
+  private caretAtBlockEnd(idx: number): boolean {
+    const at = this.caretPoint();
+    if (!at) return false;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const el = host?.children[idx] as HTMLElement | undefined;
+    if (!el) return false;
+    let n: Node | null = at.node;
+    while (n !== null && n !== el) n = n.parentNode;
+    if (n === null) return false; // the caret is not in this block
+    const end = document.createRange();
+    end.selectNodeContents(el);
+    end.collapse(false);
+    try {
+      return end.comparePoint(at.node, at.offset) >= 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Insert a SIMPLE table (a standard Markdown pipe table) after the
    * caret's block - what a Markdown user expects (spec: docs/specs/
    * simple-tables.md). `insertDataset` inserts a typed dataset.
@@ -10429,9 +10453,23 @@ export class FolioDoc extends HTMLElement {
     if (
       block.kind === "table" ||
       block.kind === "chart" ||
-      block.kind === "motion"
-    )
+      block.kind === "motion" ||
+      (block.kind === "heading" &&
+        (!this.caretPoint() || this.caretAtBlockEnd(idx)))
+    ) {
+      // Enter at a figure's edge (figures are not editable, so the
+      // caret can only sit at their boundary) or at the END of a
+      // heading: open a new empty paragraph AFTER the block. Without
+      // this there is no way to add a line past a table or the title
+      // without the Markdown view (WebKitGTK does nothing natively
+      // at a heading's end; Chromium splits only mid-heading).
+      ev.preventDefault();
+      this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: "" });
+      this.render();
+      this.focusBlockStart(idx + 1);
+      this.emitChange("insert");
       return;
+    }
     if (block.kind === "math") {
       // Math blocks are generated output; never split into one.
       if (

@@ -66,3 +66,14 @@ Chart:
    formula and chart with no user action.
 4. **Theme closure:** a document + any conformant theme renders;
    documents contain zero style literals.
+
+## Enter at block edges
+
+Enter mid-prose splits the paragraph natively (every engine). At a
+block's edge the component inserts instead: **Enter with the caret at
+the end of a heading, or at a non-editable figure's edge (table,
+chart, motion), opens a new empty paragraph AFTER that block** and
+focuses it - there is otherwise no way to add a line past the title
+or a trailing table without the Markdown view (WebKitGTK does nothing
+natively at a heading's end). Enter inside a table cell navigates
+cells instead (docs/specs/table-keyboard.md).
