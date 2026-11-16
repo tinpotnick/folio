@@ -35,6 +35,14 @@ affordances, ever.
 - Behavior changed? The corresponding doc (spec/README/help) is
   updated in the SAME commit — doc drift makes the change incomplete
 - Every bug fix adds a test that fails before the fix
+- Engine matrix: any change touching caret, selection, focus,
+  keyboard or clipboard handling is verified in BOTH engines —
+  Chromium e2e (tests/e2e) AND the real WebKitGTK harness
+  (`just test-webkitgtk`, tests/webkitgtk/) with a native case for
+  the changed behavior. Chromium-only verification is how
+  desktop-only bugs ship: `ShadowRoot.getSelection` does not exist
+  and `document.caretRangeFromPoint` does not pierce the shadow
+  root on WebKitGTK, and the two engines disagree exactly there.
 - If stuck after 3 attempts: STOP. Write docs/blockers/<task>.md with
   the exact failure and what you tried. Do not thrash.
 
