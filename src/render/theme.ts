@@ -1451,6 +1451,28 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-size: 0.7em;
       opacity: 0.75;
     }
+    /* Bundled proofing marks (spec: docs/specs/spellcheck-grammar.md):
+       the spans the spell/grammar passes wrap around flagged words.
+       They never reach the model (unknown spans unwrap on sync) and
+       never print. */
+    .folio-misspelled {
+      text-decoration-line: underline;
+      text-decoration-style: wavy;
+      text-decoration-color: var(--folio-error, #b42318);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+    .folio-grammar {
+      text-decoration-line: underline;
+      text-decoration-style: wavy;
+      text-decoration-color: var(--folio-accent, #1f3fbf);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
+    @media print {
+      .folio-misspelled,
+      .folio-grammar { text-decoration: none; }
+    }
     .folio-cell-pop,
     .folio-cal-pop {
       position: absolute;

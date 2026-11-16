@@ -43,10 +43,12 @@
     "@tauri-apps/api": "^2",
     "@viz-js/viz": "^3.31.0",
     "abcjs": "^6.7.2",
+    "harper.js": "^3.0.0",
     "highlight.js": "^11.12.0",
     "jexl": "^2.3.0",
     "katex": "^0.19.0",
     "mermaid": "^12.2.0",
+    "nspell": "^2.1.5",
     "pyodide": "^314.0.7",
     "vega": "^6.4.0",
     "vega-lite": "^6.5.0"

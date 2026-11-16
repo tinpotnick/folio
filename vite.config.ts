@@ -105,7 +105,14 @@ export default defineConfig({
   // the compute worker), re-optimized and RELOADED the page, so the
   // first compute test on a fresh CI runner timed out.
   optimizeDeps: {
-    exclude: ["pyodide"],
+    exclude: [
+      "pyodide",
+      // The grammar engine (ADR-0033) resolves its .wasm relative to
+      // import.meta.url; pre-bundling rewrites that URL into the deps
+      // dir, where the dev server cannot serve the wasm. Served raw,
+      // the relative URL hits node_modules with the right MIME type.
+      "harper.js",
+    ],
     // Imported only by the JSCAD worker, so the startup scan missed
     // it: the first 3D model on a cold server re-optimized and
     // RELOADED every open page - a flaky smoke test in CI.

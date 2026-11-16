@@ -1,13 +1,14 @@
 # Headings and links
 
-- **Spell check** is your browser's (or the desktop app's webview's)
-  native spell check: misspelled words get red squiggles in the
-  document view, and right-clicking one in a paragraph offers
-  suggestions. Search **"spell check"** in the palette (Ctrl+K) to
-  turn it off or back on. In the desktop app it is full on Windows
-  (Chromium webview) and macOS (WebKit); on Linux it needs system
-  dictionaries. Right-clicking a word inside a table cell opens the
-  table's menu instead - the squiggles still show.
+- **Spell check** is bundled with folio (works offline, also on Linux and
+  inside table cells): misspelled words get red squiggles in prose, in
+  table cells, and in the Markdown source view (where code, fences and
+  directive blocks stay clean), and right-clicking one offers suggestions
+  or "Add to dictionary". Search **"spell check"** in the palette (Ctrl+K)
+  to turn it off or back on. **Grammar check** with Harper is a separate,
+  opt-in command in the palette - **"Check grammar with Harper"** - which
+  downloads its engine once (~8 MB, then offline) and underlines grammar
+  issues; right-click a marked passage for suggestions.
 - Headings come in three toolbar levels, H1-H3; H3's size is a
   document setting alongside H1 and H2.
 - **Links** are standard inline Markdown: `[label](url)` in a

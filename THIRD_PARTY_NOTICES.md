@@ -4,15 +4,18 @@ folio is MIT-licensed (see `LICENSE`). Its builds include the
 following third-party components under their own licences, all of
 which permit redistribution in an MIT-licensed application.
 
-| What | Licence | Notes |
-| --- | --- | --- |
-| npm runtime packages (Mermaid, Vega/Vega-Lite, KaTeX, highlight.js, JSCAD, abcjs, jexl, Viz.js, ...) and their dependencies | MIT, ISC, BSD-2/3-Clause, Apache-2.0, 0BSD, Unlicense | Each package's licence travels with it in its own files. |
-| DOMPurify | MPL-2.0 OR Apache-2.0 | Used under Apache-2.0. |
-| elkjs (Mermaid layout) | EPL-2.0 | Unmodified; source at https://github.com/kieler/elkjs |
-| Graphviz, compiled to WebAssembly in Viz.js | EPL-1.0 (Graphviz), MIT (Viz.js) | Unmodified; source at https://gitlab.com/graphviz/graphviz |
-| Fonts: EB Garamond, Fraunces, IBM Plex Sans, Inter, JetBrains Mono, Libre Franklin, Literata, Playfair Display, Source Serif 4, Space Grotesk | SIL Open Font License 1.1 | Bundled via Fontsource; licence files in each font package. |
-| Drum kit samples (`src/audio/drums/`) | CC0 1.0 | From Sonic Pi's sample set; provenance in that folder's README. |
-| Desktop app: Tauri and its Rust crates | MIT and/or Apache-2.0 (a few MPL-2.0, Unicode-3.0) | Listed in `apps/desktop/src-tauri/Cargo.lock`. |
+| What                                                                                                                                          | Licence                                                                             | Notes                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| npm runtime packages (Mermaid, Vega/Vega-Lite, KaTeX, highlight.js, JSCAD, abcjs, jexl, Viz.js, ...) and their dependencies                   | MIT, ISC, BSD-2/3-Clause, Apache-2.0, 0BSD, Unlicense                               | Each package's licence travels with it in its own files.                                      |
+| DOMPurify                                                                                                                                     | MPL-2.0 OR Apache-2.0                                                               | Used under Apache-2.0.                                                                        |
+| elkjs (Mermaid layout)                                                                                                                        | EPL-2.0                                                                             | Unmodified; source at https://github.com/kieler/elkjs                                         |
+| Graphviz, compiled to WebAssembly in Viz.js                                                                                                   | EPL-1.0 (Graphviz), MIT (Viz.js)                                                    | Unmodified; source at https://gitlab.com/graphviz/graphviz                                    |
+| Fonts: EB Garamond, Fraunces, IBM Plex Sans, Inter, JetBrains Mono, Libre Franklin, Literata, Playfair Display, Source Serif 4, Space Grotesk | SIL Open Font License 1.1                                                           | Bundled via Fontsource; licence files in each font package.                                   |
+| Drum kit samples (`src/audio/drums/`)                                                                                                         | CC0 1.0                                                                             | From Sonic Pi's sample set; provenance in that folder's README.                               |
+| nspell (spell checker, `src/spell/check.ts`)                                                                                                  | MIT                                                                                 | https://github.com/wooorm/nspell                                                              |
+| Hunspell en_US dictionary (`src/assets/dict/en_US.{aff,dic}`)                                                                                 | BSD-style permissive (SCOWL/wordlist, Kevin Atkinson; aff file BSD, Geoff Kuenning) | From LibreOffice/dictionaries; notice in `src/assets/dict/LICENSE.en_US.txt`.                 |
+| harper.js (grammar checker, lazy chunk, `src/spell/grammar.ts`)                                                                               | Apache-2.0                                                                          | https://github.com/Automattic/harper — WASM binary loaded only when grammar check is enabled. |
+| Desktop app: Tauri and its Rust crates                                                                                                        | MIT and/or Apache-2.0 (a few MPL-2.0, Unicode-3.0)                                  | Listed in `apps/desktop/src-tauri/Cargo.lock`.                                                |
 
 ## Not included: the Strudel player
 

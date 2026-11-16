@@ -224,9 +224,15 @@ test.describe("citations", () => {
       md.replace("Keeping the data", "Xy Keeping the data"),
     );
     const para = page.locator("#the-doc p", { hasText: "Keeping the data" });
-    // Caret between "Xy" and "Keeping".
+    // Caret between "Xy" and "Keeping". The bundled spell checker may
+    // wrap "Xy" in a squiggle span (it is not a word), so find the text
+    // node by content rather than assuming p.firstChild.
     await para.evaluate((p) => {
-      const t = p.firstChild as Text;
+      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      let t = walker.nextNode() as Text | null;
+      while (t && !(t.textContent ?? "").startsWith("Xy"))
+        t = walker.nextNode() as Text | null;
+      if (!t) return;
       const r = document.createRange();
       r.setStart(t, 2);
       r.collapse(true);

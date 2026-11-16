@@ -1529,29 +1529,31 @@ test.describe("paste", () => {
 /* ------------------------------------------------------------------ */
 
 test.describe("spell check", () => {
-  test("native spell check is on by default; the host attribute toggles it", async ({
+  test("bundled checker owns the marks: native spellcheck stays off on the article; the host attribute toggles the bundled checker", async ({
     page,
   }) => {
     await waitForDocument(page);
-    const current = () =>
-      page.evaluate(
-        () =>
-          (
-            document
-              .querySelector("folio-doc")
-              ?.shadowRoot?.querySelector("article.folio-doc") as HTMLElement
-          )?.spellcheck,
-      );
-    // on by default (the browser draws the squiggles and offers
-    // suggestions on right-click in prose)
-    expect(await current()).toBe(true);
+    const state = () =>
+      page.evaluate(() => {
+        const el = document.querySelector("folio-doc") as unknown as {
+          shadowRoot: ShadowRoot | null;
+          spellcheck: boolean;
+        } | null;
+        const article = el?.shadowRoot?.querySelector(
+          "article.folio-doc",
+        ) as HTMLElement;
+        return { native: article?.spellcheck, bundled: el?.spellcheck };
+      });
+    // the browser never draws its own squiggles - the bundled checker
+    // (docs/specs/spellcheck-grammar.md) wraps misspellings itself
+    expect(await state()).toEqual({ native: false, bundled: true });
     await page.evaluate(() =>
       document.querySelector("folio-doc")?.setAttribute("spellcheck", "false"),
     );
-    expect(await current()).toBe(false);
+    expect(await state()).toEqual({ native: false, bundled: false });
     await page.evaluate(() =>
       document.querySelector("folio-doc")?.removeAttribute("spellcheck"),
     );
-    expect(await current()).toBe(true);
+    expect(await state()).toEqual({ native: false, bundled: true });
   });
 });
