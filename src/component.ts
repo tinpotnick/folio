@@ -4925,38 +4925,12 @@ export class FolioDoc extends HTMLElement {
             ) as HTMLElement | null;
             if (nameSpan) {
               nameSpan.focus();
-              const sel = window.getSelection();
-              // The heading cell is wider than its name: a click in
-              // the padding (or at the very right edge of the text)
-              // resolves outside the name or at its start. Put the
-              // caret at the END of the name then, so clicking past a
-              // short default heading lands where the eye says.
-              const textRect = document.createRange();
-              textRect.selectNodeContents(nameSpan);
-              const rect = textRect.getBoundingClientRect();
-              const atEnd = ev.clientX >= rect.right - 1;
-              const range = document.caretRangeFromPoint(
-                ev.clientX,
-                ev.clientY,
-              );
-              if (!atEnd && range && nameSpan.contains(range.startContainer)) {
-                sel?.setBaseAndExtent(
-                  range.startContainer,
-                  range.startOffset,
-                  range.startContainer,
-                  range.startOffset,
-                );
-              } else {
-                const walker = document.createTreeWalker(
-                  nameSpan,
-                  NodeFilter.SHOW_TEXT,
-                );
-                const node = atEnd ? walker.lastChild() : walker.firstChild();
-                if (node) {
-                  const off = atEnd ? (node.textContent?.length ?? 0) : 0;
-                  sel?.setBaseAndExtent(node, off, node, off);
-                }
-              }
+              // Caret at the click position - including past the end
+              // of the name (the th is wider than its text) and on
+              // engines whose caretRangeFromPoint does not pierce the
+              // shadow root.
+              const at = this.caretNearPoint(nameSpan, ev.clientX, ev.clientY);
+              if (at) this.setCaret(at.node, at.offset);
             }
           }
           this.showInspector(figure, block, Number(th.dataset.colIndex));
@@ -4979,16 +4953,10 @@ export class FolioDoc extends HTMLElement {
           Math.hypot(ev.clientX - pending.x, ev.clientY - pending.y) > 3;
         pending.cell.focus();
         if (!dragged) {
-          const range = document.caretRangeFromPoint(pending.x, pending.y);
-          if (range && pending.cell.contains(range.startContainer)) {
-            const sel = window.getSelection();
-            sel?.setBaseAndExtent(
-              range.startContainer,
-              range.startOffset,
-              range.startContainer,
-              range.startOffset,
-            );
-          }
+          // Caret at the click position on every engine (WebKitGTK's
+          // caretRangeFromPoint does not pierce the shadow root).
+          const at = this.caretNearPoint(pending.cell, pending.x, pending.y);
+          if (at) this.setCaret(at.node, at.offset);
         }
       }
     });
@@ -9663,6 +9631,40 @@ export class FolioDoc extends HTMLElement {
     // setBaseAndExtent, not addRange: WebKit silently IGNORES
     // addRange() for a range inside a shadow root.
     sel.setBaseAndExtent(node, at, node, at);
+  }
+
+  /**
+   * The caret position nearest the pointer inside `el`. Uses
+   * document.caretRangeFromPoint where it pierces the shadow root
+   * (Chromium); where it does not (WebKitGTK returns the shadow host),
+   * scans el's text boundaries for the one whose caret rect is nearest
+   * the click - so clicking mid-text, or past the end of a short
+   * label like a new column's default heading, lands where the eye
+   * says on every engine.
+   */
+  private caretNearPoint(
+    el: HTMLElement,
+    x: number,
+    y: number,
+  ): { node: Node; offset: number } | null {
+    const range = document.caretRangeFromPoint(x, y);
+    if (range && el.contains(range.startContainer)) {
+      return { node: range.startContainer, offset: range.startOffset };
+    }
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let best: { node: Node; offset: number; d: number } | null = null;
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      const len = t.textContent?.length ?? 0;
+      for (let i = 0; i <= len; i++) {
+        const r = document.createRange();
+        r.setStart(t, i);
+        r.collapse(true);
+        const rect = r.getBoundingClientRect();
+        const d = Math.hypot(rect.left - x, rect.top + rect.height / 2 - y);
+        if (!best || d < best.d) best = { node: t, offset: i, d };
+      }
+    }
+    return best ? { node: best.node, offset: best.offset } : null;
   }
 
   /** The caret as it was when the host's UI took focus. */

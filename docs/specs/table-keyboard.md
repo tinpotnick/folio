@@ -20,7 +20,11 @@ table at the edges.
 - **Click-to-focus**: browsers hand click focus to the article (the
   outer editing host), so the component focuses the clicked cell
   itself (mousedown record, mouseup focus, caret restored at the
-  click position via `caretRangeFromPoint` where it pierces).
+  click position via `caretRangeFromPoint` where it pierces the
+  shadow root; where it does not (WebKitGTK returns the host), via
+  `caretNearPoint`, which scans the cell's text boundaries for the
+  nearest caret rect - clicking mid-text or past the end of a short
+  label lands where the eye says on every engine).
 - **Commits**: on blur and before navigation. Idempotent, and
   surgical: only the row's formula cells and dependent charts are
   refreshed in place — never a table re-render while editing (that

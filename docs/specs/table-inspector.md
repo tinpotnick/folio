@@ -62,10 +62,12 @@ see.
   edited the th is all name: the unit hides and the span fills
   the cell (`.editing`), so renaming feels like editing any
   other cell - and any click in the th except on the unit starts
-  the rename. The caret follows the click position: a click at or
-  past the right edge of the name text (the heading cell is wider
-  than its name, e.g. a new column's short default) lands at the
-  END of the name, not its start. It is the
+  the rename. The caret follows the click position (via
+  `caretNearPoint`, so a click past the right edge of the name text
+  - the heading cell is wider than its name, e.g. a new column's
+  short default - lands at the END of the name, not its start, also
+  on WebKitGTK where `caretRangeFromPoint` does not pierce the shadow
+  root). It is the
   document-view counterpart of editing the column name in the
   YAML: commit on Enter/Tab/blur writes
   `columns[c].name`, updates the inspector's column dropdown,
