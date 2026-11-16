@@ -13,6 +13,7 @@ import {
 import "./component.js";
 import { MAX_EMBED_BYTES } from "./component.js";
 import type { FolioDoc } from "./component.js";
+import { grammarEnabled } from "./spell/grammar.js";
 import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
   importedTable,
@@ -49,6 +50,14 @@ import {
 } from "./engine/catalog.js";
 import type { Table } from "./engine/index.js";
 import { highlightMarkdown } from "./render/highlight.js";
+import {
+  addCustomWord,
+  isMisspelled,
+  spellNow,
+  suggestions,
+} from "./spell/check.js";
+import { applyHit, type GrammarHit } from "./spell/grammar.js";
+import { computeSourceMarks, type SourceMark } from "./spell/source.js";
 import {
   PALETTES,
   PAGE_SIZES,
@@ -315,7 +324,232 @@ function renderHighlight(): void {
   lines.forEach((_, i) => {
     mdGutter.appendChild(document.createTextNode(`${String(i + 1)}\n`));
   });
+  scheduleSourceMarks();
 }
+
+/* --- Proofing marks in the Markdown source view (spec:
+ * docs/specs/spellcheck-grammar.md): the bundled checkers also mark the
+ * highlight overlay (prose tokens only - never code, fences, math,
+ * frontmatter or ::: directives). The overlay is pure view; the
+ * textarea's value never contains marks, and its native spellcheck
+ * stays off so squiggles never double up. */
+
+let srcMarkTimer: ReturnType<typeof setTimeout> | null = null;
+let srcMarksBusy = false;
+let srcMarksPending = false;
+let srcMarks: SourceMark[] = [];
+let srcHits: GrammarHit[] = [];
+
+function scheduleSourceMarks(): void {
+  if (mdWrap.hidden) return;
+  if (srcMarksBusy) {
+    srcMarksPending = true;
+    return;
+  }
+  if (srcMarkTimer !== null) clearTimeout(srcMarkTimer);
+  srcMarkTimer = setTimeout(() => {
+    srcMarkTimer = null;
+    void applySourceMarks();
+  }, 300);
+}
+
+async function applySourceMarks(): Promise<void> {
+  if (srcMarksBusy) {
+    srcMarksPending = true;
+    return;
+  }
+  srcMarksBusy = true;
+  try {
+    await runSourceMarks();
+  } finally {
+    srcMarksBusy = false;
+    if (srcMarksPending) {
+      srcMarksPending = false;
+      scheduleSourceMarks();
+    }
+  }
+}
+
+async function runSourceMarks(): Promise<void> {
+  const src = editor.value;
+  // unwrap old marks, then recompute (the overlay was rebuilt by
+  // renderHighlight, so marks must be re-applied after every render)
+  for (const m of Array.from(
+    mdView.querySelectorAll(".folio-misspelled, .folio-grammar"),
+  )) {
+    m.replaceWith(...Array.from(m.childNodes));
+  }
+  srcMarks = [];
+  srcHits = [];
+  if (mdWrap.hidden || !el.spellcheck) return;
+  const { marks, hits } = await computeSourceMarks(
+    src,
+    highlightMarkdown(src),
+    el.spellcheck,
+  );
+  // the source changed while the checkers loaded - the input handler
+  // already scheduled a fresh pass; drop this stale one
+  if (editor.value !== src) return;
+  srcMarks = marks;
+  srcHits = hits;
+  // Apply per token: each token span holds exactly one text node, so
+  // rebuild its children from the sorted marks (wrapping via Range one
+  // mark at a time splits the text node and corrupts the next offset).
+  const byToken = new Map<string, SourceMark[]>();
+  for (const m of marks) {
+    const key = `${String(m.line)}:${String(m.token)}`;
+    const arr = byToken.get(key) ?? [];
+    arr.push(m);
+    byToken.set(key, arr);
+  }
+  for (const [key, ms] of byToken) {
+    const [li, ti] = key.split(":").map(Number);
+    if (li === undefined || ti === undefined) continue;
+    const lineEl = mdView.children[li] as HTMLElement | undefined;
+    const tokEl = lineEl?.children[ti] as HTMLElement | undefined;
+    if (!tokEl) continue;
+    const text = tokEl.textContent ?? "";
+    ms.sort((a, b) => a.start - b.start);
+    tokEl.textContent = "";
+    let pos = 0;
+    for (const m of ms) {
+      if (m.start < pos || m.end > text.length) continue; // overlap - skip
+      if (m.start > pos)
+        tokEl.appendChild(document.createTextNode(text.slice(pos, m.start)));
+      const span = document.createElement("span");
+      span.className =
+        m.kind === "spell" ? "folio-misspelled" : "folio-grammar";
+      span.spellcheck = false;
+      span.textContent = text.slice(m.start, m.end);
+      tokEl.appendChild(span);
+      pos = m.end;
+    }
+    if (pos < text.length)
+      tokEl.appendChild(document.createTextNode(text.slice(pos)));
+  }
+}
+
+/** Right-click a marked word in the source view: a small menu with the
+ * same suggestions as the document view (the textarea has no native
+ * spell menu - its spellcheck is off). */
+let srcMenu: HTMLElement | null = null;
+
+function closeSrcMenu(): void {
+  srcMenu?.remove();
+  srcMenu = null;
+  document.removeEventListener("pointerdown", srcMenuCloser, true);
+  document.removeEventListener("keydown", srcMenuKeys);
+}
+
+function srcMenuCloser(ev: Event): void {
+  if (srcMenu && !srcMenu.contains(ev.target as Node)) closeSrcMenu();
+}
+
+function srcMenuKeys(ev: KeyboardEvent): void {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeSrcMenu();
+  }
+}
+
+function openSrcMenu(
+  x: number,
+  y: number,
+  label: string,
+  items: { label: string; title?: string; run: () => void }[],
+): void {
+  closeSrcMenu();
+  const menu = document.createElement("div");
+  menu.className = "proof-menu";
+  menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-label", label);
+  for (const item of items) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.setAttribute("role", "menuitem");
+    btn.textContent = item.label;
+    btn.title = item.title ?? item.label;
+    btn.addEventListener("mousedown", (ev) => ev.preventDefault());
+    btn.addEventListener("click", () => {
+      closeSrcMenu();
+      item.run();
+    });
+    menu.appendChild(btn);
+  }
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${String(Math.max(8, Math.min(x, window.innerWidth - rect.width - 8)))}px`;
+  menu.style.top = `${String(Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)))}px`;
+  srcMenu = menu;
+  setTimeout(() => {
+    document.addEventListener("pointerdown", srcMenuCloser, true);
+    document.addEventListener("keydown", srcMenuKeys);
+  });
+}
+
+/** Replace [from,to) in the source with `text` and re-highlight (the
+ * model follows when the view is switched back, like any source edit). */
+function replaceInSource(from: number, to: number, text: string): void {
+  const v = editor.value;
+  editor.value = v.slice(0, from) + text + v.slice(to);
+  editor.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+editor.addEventListener("contextmenu", (ev) => {
+  if (mdWrap.hidden || !el.spellcheck) return;
+  const v = editor.value;
+  const pos = editor.selectionStart ?? 0;
+  const [ws, we] = wordRangeAt(v, pos);
+  if (ws === we) return;
+  const word = v.slice(ws, we);
+  const mark = srcMarks.find(
+    (m) => m.abs <= ws && we <= m.abs + (m.end - m.start),
+  );
+  if (!mark) return;
+  ev.preventDefault();
+  if (mark.kind === "grammar") {
+    const hit = srcHits[mark.hit ?? -1];
+    if (!hit) return;
+    const items = hit.suggestions.length
+      ? hit.suggestions.map((s) => ({
+          label: s.text === "" ? "(remove)" : s.text,
+          title: `${hit.kind}: ${hit.message}`,
+          run: () => {
+            void applyHit(v, hit, s.suggestion).then((next) =>
+              replaceInSource(0, v.length, next),
+            );
+          },
+        }))
+      : [{ label: hit.message, title: hit.kind, run: () => {} }];
+    openSrcMenu(ev.clientX, ev.clientY, "Grammar", items);
+    return;
+  }
+  const s = spellNow();
+  if (!s || !isMisspelled(s, word)) return;
+  const items = [
+    ...suggestions(s, word).map((sug) => ({
+      label: sug,
+      run: () => replaceInSource(ws, we, sug),
+    })),
+    {
+      label: `Add “${word}” to dictionary`,
+      run: () => {
+        addCustomWord(word);
+        scheduleSourceMarks();
+      },
+    },
+  ];
+  openSrcMenu(ev.clientX, ev.clientY, "Spelling", items);
+});
+
+// The spellcheck toggle governs both views: re-mark the source when the
+// component's attribute flips.
+new MutationObserver(() => scheduleSourceMarks()).observe(el, {
+  attributes: true,
+  attributeFilter: ["spellcheck"],
+});
 
 btnView.addEventListener("click", () => {
   // Document view while presenting stops the show (play = slides,
@@ -3519,6 +3753,23 @@ function paletteEntries(): PaletteEntry[] {
       if (el.spellcheck) el.setAttribute("spellcheck", "false");
       else el.removeAttribute("spellcheck");
       flash(el.spellcheck ? "Spell check on" : "Spell check off");
+    },
+  });
+  entries.push({
+    title: grammarEnabled()
+      ? "Turn grammar check off (Harper)"
+      : "Check grammar with Harper (offline; downloads ~8 MB once)",
+    group: "Command",
+    keywords:
+      "grammar check harper lint style suggestions writing offline proofread proofing",
+    action: () => {
+      el.setGrammar(!grammarEnabled());
+      scheduleSourceMarks();
+      flash(
+        grammarEnabled()
+          ? "Grammar check on (Harper, fully offline)"
+          : "Grammar check off",
+      );
     },
   });
   entries.push({

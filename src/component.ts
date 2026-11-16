@@ -105,6 +105,21 @@ import {
 import { parseBibtex, type Bibliography } from "./engine/bibtex.js";
 import { toIso } from "./engine/dates.js";
 import {
+  WORD_RE,
+  addCustomWord,
+  isMisspelled,
+  spellNow,
+  spellReady,
+  suggestions,
+  type SpellChecker,
+} from "./spell/check.js";
+import {
+  grammarEnabled,
+  lintText,
+  setGrammarEnabled,
+  type GrammarHit,
+} from "./spell/grammar.js";
+import {
   citedKeys,
   formatBibliography,
   formatCitation,
@@ -552,6 +567,21 @@ function iconSvg(inner: string): SVGSVGElement {
   return svg;
 }
 
+/** caretPositionFromPoint throws on non-finite coordinates (synthetic
+ * events); swallow that and report "no caret". */
+function safeCaretPosition(
+  fn: (x: number, y: number) => { offsetNode: Node; offset: number } | null,
+  doc: Document,
+  x: number,
+  y: number,
+): { offsetNode: Node; offset: number } | null {
+  try {
+    return fn.call(doc, x, y);
+  } catch {
+    return null;
+  }
+}
+
 /** Icons for the table context menu (spec:
  * docs/specs/table-context-menu.md), 16x16 stroke. */
 const MENU_ICONS = {
@@ -923,11 +953,9 @@ export class FolioDoc extends HTMLElement {
       if (article) article.classList.toggle("slides-notes", value !== null);
     }
     if (name === "spellcheck" && old !== value) {
-      // Native spell check on the editing article, host-toggleable
-      // (spec: docs/specs/spellcheck-grammar.md).
-      const article =
-        this.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
-      if (article) article.spellcheck = value !== "false";
+      // Bundled spell checker on/off (spec:
+      // docs/specs/spellcheck-grammar.md) - just re-mark.
+      this.scheduleMarks();
     }
   }
 
@@ -1264,7 +1292,10 @@ export class FolioDoc extends HTMLElement {
     const host = document.createElement("article");
     host.className = "folio-doc";
     host.setAttribute("contenteditable", "true");
-    host.spellcheck = this.spellcheck;
+    // The bundled spell checker owns the marks (spec:
+    // docs/specs/spellcheck-grammar.md): native spellcheck stays off
+    // on the article so squiggles never double up.
+    host.spellcheck = false;
     host.addEventListener("keydown", this.handleKeydown);
     // Clicking a link FOLLOWS it - never places the caret for
     // editing. The host hears the composed event and opens the
@@ -1459,6 +1490,7 @@ export class FolioDoc extends HTMLElement {
     this.renderCrossRefs(host);
     this.wrapSlides(host);
     this.refreshSlideState();
+    this.scheduleMarks();
   }
 
   /**
@@ -8663,6 +8695,7 @@ export class FolioDoc extends HTMLElement {
     this.autoformatList();
     this.commitCaretCell();
     this.freezeStrudelLights();
+    this.scheduleMarks();
     this.emitChange("type");
   }
 
@@ -11109,10 +11142,30 @@ export class FolioDoc extends HTMLElement {
   }
 
   private handleContextMenu(ev: MouseEvent): void {
+    // Proofing first: a grammar/spelling mark under the pointer gets
+    // its own menu (word-processor style); in a table cell the table
+    // menu keeps the right-click and carries the spelling group.
+    if (this.tryProofingMenu(ev)) return;
+    this.tableContextMenu(ev);
+  }
+
+  private tableContextMenu(
+    ev: MouseEvent,
+    spellAt?: { range: Range; word: string },
+  ): void {
     const cell = (ev.target as HTMLElement).closest(
       "td[data-row-index], th[data-col-index]",
     ) as HTMLElement | null;
-    if (!cell || !this.doc) return;
+    if (!cell) return;
+    this.openTableMenu(ev, cell, spellAt);
+  }
+
+  private openTableMenu(
+    ev: MouseEvent,
+    cell: HTMLElement,
+    spellAt?: { range: Range; word: string },
+  ): void {
+    if (!this.doc) return;
     ev.preventDefault();
     const figure = cell.closest("figure") as HTMLElement | null;
     if (!figure) return;
@@ -11130,7 +11183,609 @@ export class FolioDoc extends HTMLElement {
       colIndex,
       cell.tagName === "TH",
       figure,
+      spellAt,
     );
+  }
+
+  /* ---------------- Proofing: bundled spell + grammar marks -------- */
+
+  private marksTimer: number | null = null;
+  private marksBusy = false;
+  private marksPending = false;
+  private grammarHits: { block: number; hit: GrammarHit }[] = [];
+
+  /** Re-apply proofing marks, debounced (after render and input). */
+  private scheduleMarks(): void {
+    // A pass is async (it awaits the dictionary / the grammar wasm):
+    // while one is in flight, remember that another was asked for
+    // instead of starting a concurrent one - two passes unwrapping and
+    // rewrapping the same text interleave and nest the mark spans (and
+    // scramble grammarHits indices).
+    if (this.marksBusy) {
+      this.marksPending = true;
+      return;
+    }
+    if (this.marksTimer !== null) clearTimeout(this.marksTimer);
+    this.marksTimer = window.setTimeout(() => {
+      this.marksTimer = null;
+      void this.runMarks();
+    }, 300);
+  }
+
+  /** Run one mark pass, never concurrently with another. */
+  private async runMarks(): Promise<void> {
+    if (this.marksBusy) {
+      this.marksPending = true;
+      return;
+    }
+    this.marksBusy = true;
+    try {
+      await this.applyMarks();
+    } finally {
+      this.marksBusy = false;
+      if (this.marksPending) {
+        this.marksPending = false;
+        this.scheduleMarks();
+      }
+    }
+  }
+
+  /** The caret as (block index, text offset in the block, atStart),
+   * so a re-mark pass can restore it after rewrapping words.
+   * atStart disambiguates a boundary offset: block offset N can mean
+   * (nodeA, len) or (nodeB, 0) - the saved caret's own offset-0 tells
+   * restoreBlockCaret which side of the boundary to land on. */
+  private saveBlockCaret(): {
+    block: number;
+    offset: number;
+    atStart: boolean;
+  } | null {
+    // caretPoint, not window.getSelection(): on WebKitGTK the
+    // document selection does not pierce the shadow root (its anchor
+    // is the host), so the caret would look "not in a block" and the
+    // pass would skip save/restore, letting the rewrap drift it.
+    const at = this.caretPoint();
+    if (!at) return null;
+    const el = at.node instanceof Element ? at.node : at.node.parentElement;
+    // A caret inside a header's in-place rename (th .name) is owned by
+    // that span's focus/blur handlers - a mark pass must not save and
+    // restore it, or it steals focus and drops the "editing" state.
+    if (el?.closest("th")) return null;
+    const blockEl = el?.closest("[data-block-index]");
+    if (!blockEl) return null;
+    const range = document.createRange();
+    range.selectNodeContents(blockEl);
+    try {
+      range.setEnd(at.node, at.offset);
+    } catch {
+      return null;
+    }
+    return {
+      block: Number(blockEl.getAttribute("data-block-index") ?? -1),
+      offset: range.toString().length,
+      atStart: at.offset === 0,
+    };
+  }
+
+  private restoreBlockCaret(
+    saved: { block: number; offset: number; atStart: boolean } | null,
+  ): void {
+    if (!saved || saved.block < 0) return;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const blockEl = host?.querySelector<HTMLElement>(
+      `[data-block-index="${String(saved.block)}"]`,
+    );
+    if (!blockEl) return;
+    // Text nodes carry the offsets; element nodes are only a fallback
+    // target for a caret that lived on an element at a boundary (e.g.
+    // (li, 0) in an empty list item, whose block offset equals the end
+    // of the previous text node). The first such element wins - that is
+    // the shallowest, matching how the engine placed the caret.
+    const walker = document.createTreeWalker(
+      blockEl,
+      NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
+    );
+    let remaining = saved.offset;
+    let node = walker.nextNode();
+    let target: { node: Node; offset: number } | null = null;
+    let elementAtStart: Element | null = null;
+    while (node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        if (
+          node !== blockEl &&
+          saved.atStart &&
+          remaining === 0 &&
+          !elementAtStart
+        ) {
+          elementAtStart = node as Element;
+        }
+      } else {
+        const len = node.textContent?.length ?? 0;
+        if (remaining < len) {
+          target = { node, offset: remaining };
+          break;
+        }
+        if (remaining === len && !saved.atStart) {
+          target = { node, offset: len };
+          break;
+        }
+        remaining -= len;
+      }
+      node = walker.nextNode();
+    }
+    if (!target && elementAtStart) target = { node: elementAtStart, offset: 0 };
+    if (!target) return;
+    this.setCaret(target.node, target.offset);
+  }
+
+  /** Unwrap old marks, then re-apply spell (and grammar, if on). */
+  private async applyMarks(): Promise<void> {
+    const host =
+      this.shadowRoot?.querySelector<HTMLElement>("article.folio-doc");
+    if (!host) return;
+    const caret = this.saveBlockCaret();
+    for (const el of Array.from(
+      host.querySelectorAll(".folio-misspelled, .folio-grammar"),
+    )) {
+      el.replaceWith(...Array.from(el.childNodes));
+    }
+    this.grammarHits = [];
+    if (this.spellcheck) {
+      const s = await spellReady();
+      if (s) this.markMisspellings(host, s);
+    }
+    if (grammarEnabled()) await this.markGrammar(host);
+    // No marks applied: leave the caret alone entirely. A save/restore
+    // with zero marks is not a no-op - the block offset is ambiguous at
+    // text-node boundaries, so a caret at (node2, 0) would restore to
+    // (node1, len) and visibly jump (e.g. arrow keys in a list).
+    if (!host.querySelector(".folio-misspelled, .folio-grammar")) return;
+    // Only restore the caret if the user is still in the same block -
+    // a pending pass must not yank focus back after Tab moved to
+    // another cell.
+    const stillThere = this.currentBlockIndex();
+    if (caret && (stillThere === null || stillThere === caret.block)) {
+      this.restoreBlockCaret(caret);
+    }
+  }
+
+  /** The data-block-index of the block holding the current selection,
+   * or null when the selection is outside the document. Uses
+   * caretPoint(): on WebKitGTK the document selection does not pierce
+   * the shadow root, so the old window.getSelection() always resolved
+   * to the host and returned null. */
+  private currentBlockIndex(): number | null {
+    const at = this.caretPoint();
+    if (!at) return null;
+    const el = at.node instanceof Element ? at.node : at.node.parentElement;
+    const blockEl = el?.closest("[data-block-index]");
+    return blockEl
+      ? Number(blockEl.getAttribute("data-block-index") ?? -1)
+      : null;
+  }
+
+  /** Wrap every misspelled word in prose/cells in a squiggle span.
+   * The model never sees the spans: htmlToInlineMarkdown unwraps
+   * unknown spans on sync. */
+  private markMisspellings(host: HTMLElement, spell: SpellChecker): void {
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        const el = (node as Text).parentElement;
+        if (!el) return NodeFilter.FILTER_REJECT;
+        if (
+          el.closest(
+            ".folio-inspector, pre, code, .folio-menu, script, style, th .name",
+          )
+        )
+          // (th .name is the in-place column-rename control: a mark
+          // pass rewrapping inside it blurs the rename and drops the
+          // th's "editing" state - column names are identifiers, not
+          // prose, so they carry no squiggle; right-click still offers
+          // suggestions there via wordAtPoint.)
+          return NodeFilter.FILTER_REJECT;
+        // The nearest contenteditable boundary decides: tables set
+        // contenteditable=false on the <table> but true on each cell.
+        const ce = el.closest("[contenteditable]");
+        if (ce && ce.getAttribute("contenteditable") === "false")
+          return NodeFilter.FILTER_REJECT;
+        if (!el.closest("p, h1, h2, h3, h4, h5, h6, li, td, th"))
+          return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+    const targets: { node: Text; start: number; end: number }[] = [];
+    let n = walker.nextNode();
+    while (n) {
+      const text = (n as Text).textContent ?? "";
+      WORD_RE.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = WORD_RE.exec(text)) !== null) {
+        if (isMisspelled(spell, m[0]))
+          targets.push({
+            node: n as Text,
+            start: m.index,
+            end: m.index + m[0].length,
+          });
+      }
+      n = walker.nextNode();
+    }
+    // Wrap from the end of each text node backwards so offsets stay valid.
+    const byNode = new Map<Text, typeof targets>();
+    for (const t of targets) {
+      const arr = byNode.get(t.node) ?? [];
+      arr.push(t);
+      byNode.set(t.node, arr);
+    }
+    for (const [node, arr] of byNode) {
+      arr.sort((a, b) => b.start - a.start);
+      for (const t of arr) {
+        const range = document.createRange();
+        range.setStart(node, t.start);
+        range.setEnd(node, t.end);
+        const span = document.createElement("span");
+        span.className = "folio-misspelled";
+        span.spellcheck = false;
+        try {
+          range.surroundContents(span);
+        } catch {
+          // range crosses an element boundary - leave it unmarked
+        }
+      }
+    }
+  }
+
+  /** Lint prose/heading blocks with Harper and wrap the hits in
+   * grammar spans (opt-in; the WASM is lazy-loaded on first use). */
+  private async markGrammar(host: HTMLElement): Promise<void> {
+    const blocks = Array.from(
+      host.querySelectorAll<HTMLElement>(
+        "p[data-block-index], h1[data-block-index], h2[data-block-index], h3[data-block-index]",
+      ),
+    );
+    for (const el of blocks) {
+      const text = el.textContent ?? "";
+      if (!text.trim() || text.length > 20000) continue;
+      const hits = await lintText(text);
+      if (hits.length === 0) continue;
+      const block = Number(el.getAttribute("data-block-index") ?? -1);
+      // Wrap from the last hit backwards so offsets stay valid.
+      for (const hit of [...hits].sort((a, b) => b.start - a.start)) {
+        const wrapped = this.wrapOffsets(el, hit.start, hit.end);
+        if (wrapped) {
+          wrapped.classList.add("folio-grammar");
+          wrapped.spellcheck = false;
+          wrapped.dataset.hit = String(this.grammarHits.length);
+          this.grammarHits.push({ block, hit });
+        }
+      }
+    }
+  }
+
+  /** Wrap the [start, end) char range of a block element's text in a
+   * span (when both ends land in the same text node). */
+  private wrapOffsets(
+    el: HTMLElement,
+    start: number,
+    end: number,
+  ): HTMLElement | null {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let acc = 0;
+    let node = walker.nextNode();
+    let sNode: Text | null = null;
+    let sOff = 0;
+    let eNode: Text | null = null;
+    let eOff = 0;
+    while (node) {
+      const len = (node as Text).textContent?.length ?? 0;
+      if (!sNode && start <= acc + len) {
+        sNode = node as Text;
+        sOff = start - acc;
+      }
+      if (!eNode && end <= acc + len) {
+        eNode = node as Text;
+        eOff = end - acc;
+      }
+      acc += len;
+      node = walker.nextNode();
+    }
+    if (!sNode || !eNode || sNode !== eNode) return null;
+    const range = document.createRange();
+    range.setStart(sNode, sOff);
+    range.setEnd(eNode, eOff);
+    const span = document.createElement("span");
+    try {
+      range.surroundContents(span);
+    } catch {
+      return null;
+    }
+    return span;
+  }
+
+  /** The word at a pointer position (prose or table cell), or null.
+   * caretRangeFromPoint does not pierce the shadow root, so try the
+   * standard caretPositionFromPoint first, then scan the editable
+   * blocks directly. */
+  private wordAtPoint(
+    x: number,
+    y: number,
+  ): { range: Range; word: string; node: Node } | null {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    let node: Node | null = null;
+    let offset = 0;
+    // Synthetic contextmenu events (tests, Shift+F10) can carry
+    // non-finite coordinates - the caret APIs throw on those.
+    const finite = Number.isFinite(x) && Number.isFinite(y);
+    const posFn = (
+      document as Document & {
+        caretPositionFromPoint?: (
+          x: number,
+          y: number,
+        ) => { offsetNode: Node; offset: number } | null;
+      }
+    ).caretPositionFromPoint;
+    const pos =
+      finite && posFn ? safeCaretPosition(posFn, document, x, y) : null;
+    if (pos && pos.offsetNode.nodeType === Node.TEXT_NODE) {
+      node = pos.offsetNode;
+      offset = pos.offset;
+    } else if (finite) {
+      let pierced: Range | null = null;
+      try {
+        pierced = document.caretRangeFromPoint(x, y);
+      } catch {
+        pierced = null;
+      }
+      if (
+        pierced &&
+        pierced.startContainer.nodeType === Node.TEXT_NODE &&
+        host?.contains(pierced.startContainer)
+      ) {
+        node = pierced.startContainer;
+        offset = pierced.startOffset;
+      }
+    }
+    if (!node && host && finite) {
+      let best: { node: Node; offset: number; dist: number } | null = null;
+      for (const block of Array.from(
+        host.querySelectorAll<HTMLElement>("p[data-block-index], td"),
+      )) {
+        const c = this.caretFromPointIn(block, x, y);
+        if (c && (!best || c.dist < best.dist)) best = c;
+      }
+      if (best) {
+        node = best.node;
+        offset = best.offset;
+      }
+    }
+    if (!node || node.nodeType !== Node.TEXT_NODE) return null;
+    const text = node.textContent ?? "";
+    const isWordChar = (ch: string | undefined): boolean =>
+      ch !== undefined && /[\p{L}\p{N}'’]/u.test(ch);
+    if (!isWordChar(text[offset]) && !isWordChar(text[offset - 1])) return null;
+    let s = offset;
+    let e = offset;
+    while (s > 0 && isWordChar(text[s - 1])) s--;
+    while (e < text.length && isWordChar(text[e])) e++;
+    if (e <= s) return null;
+    const range = document.createRange();
+    range.setStart(node, s);
+    range.setEnd(node, e);
+    return { range, word: text.slice(s, e), node };
+  }
+
+  /** Spelling/grammar menu when the pointer is on a marked word. */
+  private tryProofingMenu(ev: MouseEvent): boolean {
+    const targetEl =
+      ev.target instanceof Element
+        ? ev.target
+        : ((ev.target as Node | null)?.parentElement ?? null);
+    // A right-click directly on a mark span always means that word -
+    // coordinates can be stale (the inspector bar's reveal scroll
+    // shifts what a real right-click lands on).
+    const grammarSpan = targetEl?.closest(
+      ".folio-grammar",
+    ) as HTMLElement | null;
+    if (grammarSpan) {
+      const entry = this.grammarHits[Number(grammarSpan.dataset.hit ?? -1)];
+      if (entry) {
+        ev.preventDefault();
+        this.showGrammarMenu(ev.clientX, ev.clientY, entry, grammarSpan);
+        return true;
+      }
+    }
+    if (this.spellcheck) {
+      const s = spellNow();
+      const mark = targetEl?.closest(".folio-misspelled") as HTMLElement | null;
+      if (mark && s) {
+        const word = mark.textContent ?? "";
+        if (word && isMisspelled(s, word)) {
+          const range = document.createRange();
+          range.selectNodeContents(mark);
+          const at = { range, word, node: mark };
+          // In a table cell the table menu owns the right-click; the
+          // spelling group is prepended to it there.
+          const cell = mark.closest(
+            "td[data-row-index], th[data-col-index]",
+          ) as HTMLElement | null;
+          if (cell) this.openTableMenu(ev, cell, at);
+          else {
+            ev.preventDefault();
+            this.showSpellMenu(ev.clientX, ev.clientY, at);
+          }
+          return true;
+        }
+      }
+    }
+    const at = this.wordAtPoint(ev.clientX, ev.clientY);
+    if (!at) return false;
+    const el = at.node instanceof Element ? at.node : at.node.parentElement;
+    const grammarSpan2 = el?.closest(".folio-grammar") as HTMLElement | null;
+    if (grammarSpan2) {
+      const entry = this.grammarHits[Number(grammarSpan2.dataset.hit ?? -1)];
+      if (entry) {
+        ev.preventDefault();
+        this.showGrammarMenu(ev.clientX, ev.clientY, entry, grammarSpan2);
+        return true;
+      }
+    }
+    if (this.spellcheck) {
+      const s = spellNow();
+      if (s && isMisspelled(s, at.word)) {
+        if (el?.closest("td[data-row-index], th[data-col-index]")) {
+          const cell = el.closest(
+            "td[data-row-index], th[data-col-index]",
+          ) as HTMLElement;
+          this.openTableMenu(ev, cell, at);
+        } else {
+          ev.preventDefault();
+          this.showSpellMenu(ev.clientX, ev.clientY, at);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private showSpellMenu(
+    x: number,
+    y: number,
+    at: { range: Range; word: string },
+  ): void {
+    const s = spellNow();
+    if (!s) return;
+    const groups: {
+      label: string;
+      title?: string;
+      run?: () => void;
+    }[][] = [];
+    const sugs = suggestions(s, at.word);
+    if (sugs.length > 0) {
+      groups.push(
+        sugs.map((sug) => ({
+          label: sug,
+          run: () => {
+            at.range.deleteContents();
+            at.range.insertNode(document.createTextNode(sug));
+            this.syncFromDom();
+            this.emitChange();
+            this.scheduleMarks();
+          },
+        })),
+      );
+    }
+    groups.push([
+      {
+        label: `Add “${at.word}” to dictionary`,
+        run: () => {
+          addCustomWord(at.word);
+          this.scheduleMarks();
+        },
+      },
+    ]);
+    this.openProofMenu(x, y, groups, "Spelling");
+  }
+
+  private showGrammarMenu(
+    x: number,
+    y: number,
+    entry: { block: number; hit: GrammarHit },
+    span: HTMLElement,
+  ): void {
+    const groups: {
+      label: string;
+      title?: string;
+      run?: () => void;
+    }[][] = [];
+    if (entry.hit.suggestions.length > 0) {
+      groups.push(
+        entry.hit.suggestions.map((s) => ({
+          label: s.text === "" ? "(remove)" : s.text,
+          title: `${entry.hit.kind}: ${entry.hit.message}`,
+          run: () => {
+            span.textContent = s.text;
+            this.syncFromDom();
+            this.emitChange();
+            this.scheduleMarks();
+          },
+        })),
+      );
+    } else {
+      groups.push([
+        {
+          label: entry.hit.message,
+          title: entry.hit.kind,
+        },
+      ]);
+    }
+    this.openProofMenu(x, y, groups, "Grammar");
+  }
+
+  /** A generic proofing menu (same chrome as the table menu). */
+  private openProofMenu(
+    x: number,
+    y: number,
+    groups: { label: string; title?: string; run?: () => void }[][],
+    label: string,
+  ): void {
+    this.closeMenu();
+    const root = this.shadowRoot;
+    if (!root) return;
+    const menu = document.createElement("div");
+    menu.className = "folio-menu folio-proof-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", label);
+    menu.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.closeMenu();
+      }
+    });
+    groups.forEach((group, gi) => {
+      if (gi > 0) {
+        const sep = document.createElement("div");
+        sep.className = "menu-sep";
+        sep.setAttribute("role", "separator");
+        menu.appendChild(sep);
+      }
+      for (const item of group) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.setAttribute("role", "menuitem");
+        const lbl = document.createElement("span");
+        lbl.className = "mi-label";
+        lbl.textContent = item.label;
+        btn.appendChild(lbl);
+        btn.title = item.title ?? item.label;
+        btn.addEventListener("mousedown", (ev) => ev.preventDefault());
+        btn.addEventListener("click", () => {
+          this.closeMenu();
+          item.run?.();
+        });
+        menu.appendChild(btn);
+      }
+    });
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    root.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${String(Math.max(8, Math.min(x, window.innerWidth - rect.width - 8)))}px`;
+    menu.style.top = `${String(Math.max(8, Math.min(y, window.innerHeight - rect.height - 8)))}px`;
+    this.menu = menu;
+    setTimeout(() => {
+      document.addEventListener("pointerdown", this.menuCloser, { once: true });
+      document.addEventListener("keydown", this.menuKeyCloser);
+    });
+  }
+
+  /** Palette/host API: turn the bundled grammar check on/off. */
+  get grammarOn(): boolean {
+    return grammarEnabled();
+  }
+
+  setGrammar(on: boolean): void {
+    setGrammarEnabled(on);
+    this.scheduleMarks();
   }
 
   /** One item of the table context menu (spec:
@@ -11143,6 +11798,7 @@ export class FolioDoc extends HTMLElement {
     c: number,
     header: boolean,
     figure: HTMLElement,
+    spellAt?: { range: Range; word: string },
   ): void {
     this.closeMenu();
     const root = this.shadowRoot;
@@ -11309,6 +11965,48 @@ export class FolioDoc extends HTMLElement {
           });
         }
       }
+    }
+    // A misspelled word under the pointer: its suggestions ride at the
+    // top of the table menu (word-processor style), not in a menu of
+    // their own.
+    const spell = spellAt ? spellNow() : null;
+    if (spellAt && spell) {
+      const spellGroup: (typeof groups)[number] = suggestions(
+        spell,
+        spellAt.word,
+      ).map((sug) => ({
+        label: sug,
+        action: "" as TableAction,
+        icon: "",
+        run: () => {
+          spellAt.range.deleteContents();
+          spellAt.range.insertNode(document.createTextNode(sug));
+          // Cells commit through the model (syncFromDom skips figures):
+          // data cells via commitCell, headers via commitHeaderRename.
+          const td = figure.querySelector<HTMLElement>(
+            `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
+          );
+          if (td && !header) {
+            this.commitCell(td as HTMLTableCellElement, block);
+          } else {
+            const span = figure.querySelector<HTMLElement>(
+              `th[data-col-index="${String(c)}"] span`,
+            );
+            if (span) this.commitHeaderRename(span, figure, block, c);
+          }
+          this.scheduleMarks();
+        },
+      }));
+      spellGroup.push({
+        label: `Add “${spellAt.word}” to dictionary`,
+        action: "" as TableAction,
+        icon: "",
+        run: () => {
+          addCustomWord(spellAt.word);
+          this.scheduleMarks();
+        },
+      });
+      groups.unshift(spellGroup);
     }
     const menu = document.createElement("div");
     menu.className = "folio-menu folio-table-menu";

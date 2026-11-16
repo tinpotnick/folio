@@ -1,0 +1,74 @@
+// @vitest-environment happy-dom
+import { describe, expect, it } from "vitest";
+import {
+  WORD_RE,
+  addCustomWord,
+  isMisspelled,
+  suggestions,
+  type SpellChecker,
+} from "../src/spell/check";
+import {
+  grammarEnabled,
+  lintText,
+  setGrammarEnabled,
+} from "../src/spell/grammar";
+
+/**
+ * Bundled proofing units (spec: docs/specs/spellcheck-grammar.md,
+ * ADR-0033). The dictionary itself is exercised end-to-end in
+ * tests/e2e/proofing.spec.ts - here we test the word logic against a
+ * stub checker so no assets are fetched.
+ */
+
+const stub = (known: string[]): SpellChecker =>
+  ({
+    correct: (w: string) => known.includes(w),
+    suggest: (w: string) => (w === "wordd" ? ["word", "words", "worded"] : []),
+    add: () => {},
+  }) as unknown as SpellChecker;
+
+describe("WORD_RE", () => {
+  it("extracts unicode words and keeps inner apostrophes", () => {
+    const words = [..."don't stop, naïve café 123".matchAll(WORD_RE)].map(
+      (m) => m[0],
+    );
+    expect(words).toEqual(["don't", "stop", "naïve", "café", "123"]);
+  });
+});
+
+describe("isMisspelled / suggestions", () => {
+  it("flags unknown words and offers suggestions, capped", () => {
+    const s = stub(["word", "this", "is"]);
+    expect(isMisspelled(s, "wordd")).toBe(true);
+    expect(isMisspelled(s, "word")).toBe(false);
+    expect(suggestions(s, "wordd")).toEqual(["word", "words", "worded"]);
+    expect(suggestions(s, "nope")).toEqual([]);
+  });
+
+  it("custom words are never misspelled and persist to localStorage", () => {
+    const s = stub(["word"]);
+    addCustomWord("teh");
+    expect(isMisspelled(s, "teh")).toBe(false);
+    expect(isMisspelled(s, "TEH")).toBe(false);
+    expect(
+      JSON.parse(localStorage.getItem("folio.spellcheck.custom.v1") ?? "[]"),
+    ).toContain("teh");
+  });
+});
+
+describe("grammar opt-in", () => {
+  it("is off by default and persists when toggled", () => {
+    expect(grammarEnabled()).toBe(false);
+    setGrammarEnabled(true);
+    expect(grammarEnabled()).toBe(true);
+    expect(localStorage.getItem("folio.grammar.v1")).toBe("1");
+    setGrammarEnabled(false);
+    expect(grammarEnabled()).toBe(false);
+    expect(localStorage.getItem("folio.grammar.v1")).toBeNull();
+  });
+
+  it("lintText returns nothing while disabled (never loads the wasm)", async () => {
+    setGrammarEnabled(false);
+    expect(await lintText("I saw the the dog.")).toEqual([]);
+  });
+});

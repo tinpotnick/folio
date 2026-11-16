@@ -844,6 +844,54 @@
         display: block;
         min-height: 1.6em;
       }
+      /* Bundled proofing marks in the source overlay (spec:
+         docs/specs/spellcheck-grammar.md): pure view-layer spans over
+         prose tokens; the textarea's text stays the model. Inline
+         spans cannot shift the overlay's alignment with the caret. */
+      .md-view .folio-misspelled {
+        text-decoration-line: underline;
+        text-decoration-style: wavy;
+        text-decoration-color: var(--rec-fg);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+      }
+      .md-view .folio-grammar {
+        text-decoration-line: underline;
+        text-decoration-style: wavy;
+        text-decoration-color: var(--accent-text);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+      }
+      /* Right-click menu on a marked word in the source view. */
+      .proof-menu {
+        position: fixed;
+        z-index: 60;
+        min-width: 180px;
+        padding: 4px;
+        background: var(--surface);
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        box-shadow: var(--page-shadow);
+        display: flex;
+        flex-direction: column;
+      }
+      .proof-menu button {
+        appearance: none;
+        border: none;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        padding: 6px 10px;
+        border-radius: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .proof-menu button:hover {
+        background: var(--accent-bg);
+        color: var(--accent-text);
+      }
       .tk-frontmatter-delim {
         color: var(--syntax-purple);
         font-weight: 600;

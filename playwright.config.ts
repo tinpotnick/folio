@@ -9,6 +9,14 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: true,
+  // Cap parallelism: the default (half the cores) spawned 7 headless
+  // Chromiums at once on a 14-core laptop, and each of them loads the
+  // app plus heavy assets (pyodide, the 20 MB grammar wasm, the spell
+  // dictionary) while hammering the dev server - that load storm
+  // crashed renderers and the dev server and froze the machine (two
+  // hard crashes on 2026-11-12; see docs/blockers/). 4 workers locally
+  // (override with PW_WORKERS), 2 on CI runners.
+  workers: Number(process.env.PW_WORKERS ?? (process.env.CI ? 2 : 4)),
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
