@@ -95,6 +95,33 @@ describe("spellMarksInLines", () => {
     }
   });
 
+  it("skips giant tokens whole - a pasted image's data: URL line", () => {
+    const big = "data:image/png;base64," + "A".repeat(200_000);
+    const doc = `# T\n\n::: image {#image-1}\nsrc: ${big}\nalt: "wordd photo"\n:::\n`;
+    const seen: string[] = [];
+    const recording = {
+      correct: (w: string) => {
+        seen.push(w);
+        return !MISSPELLED.test(w);
+      },
+      suggest: () => [],
+      add: () => {},
+    } as unknown as SpellChecker;
+    const lines = highlightMarkdown(doc);
+    const marks = spellMarksInLines(
+      lines,
+      recording,
+      lineStartsOf(doc),
+      frontmatterLines(doc),
+    );
+    // only the real prose word is marked; the base64 run is never
+    // even offered to the checker
+    expect(
+      marks.map((m) => doc.slice(m.abs, m.abs + (m.end - m.start))),
+    ).toEqual(["wordd"]);
+    expect(seen.some((w) => w.length > 4096)).toBe(false);
+  });
+
   it("carries line/token/start/end plus absolute offset", () => {
     const m = marks.find((x) => x.line === 7 && x.kind === "spell");
     expect(m).toBeDefined();

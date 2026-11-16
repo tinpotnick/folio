@@ -68,12 +68,20 @@ export function spellReady(): Promise<Spell | null> {
  * ("don't"), unicode-aware. */
 export const WORD_RE = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu;
 
+/** Words longer than this are not words - URLs, base64 blobs, hashes.
+ * Never send them to hunspell: on a megabyte-long "word" (a pasted
+ * image's data: URL in the source view) nspell allocates until the
+ * tab dies. No real word is anywhere near this long. */
+export const MAX_WORD_LEN = 64;
+
 export function isMisspelled(s: Spell, word: string): boolean {
+  if (word.length > MAX_WORD_LEN) return false;
   if (customWords.has(word.toLowerCase())) return false;
   return !s.correct(word);
 }
 
 export function suggestions(s: Spell, word: string): string[] {
+  if (word.length > MAX_WORD_LEN) return [];
   return s.suggest(word).slice(0, 8);
 }
 

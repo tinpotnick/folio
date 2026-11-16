@@ -29,6 +29,11 @@ const PROSE_KINDS: ReadonlySet<MdTokenKind> = new Set([
   "underline",
 ]);
 
+/** Prose tokens longer than this are not prose - they are data: URLs
+ * (pasted images) or pasted blobs. Scanning them is pure cost (and
+ * the base64 run inside is one giant "word"), so skip them whole. */
+const MAX_PROSE_TOKEN = 4096;
+
 /** Lines of the leading YAML frontmatter block (the highlighter emits
  * its values as plain "text" tokens, but frontmatter is metadata -
  * URLs and keys there are not prose). Empty when there is none. */
@@ -73,6 +78,7 @@ export function spellMarksInLines(
       const tStart = tokStart;
       tokStart += tok.text.length;
       if (!PROSE_KINDS.has(tok.kind)) return;
+      if (tok.text.length > MAX_PROSE_TOKEN) return;
       WORD_RE.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = WORD_RE.exec(tok.text)) !== null) {
@@ -123,7 +129,7 @@ export function grammarMarksInLines(
       if (!tok) continue;
       const tEnd = pos + tok.text.length;
       if (s >= pos && e <= tEnd) {
-        if (PROSE_KINDS.has(tok.kind)) {
+        if (PROSE_KINDS.has(tok.kind) && tok.text.length <= MAX_PROSE_TOKEN) {
           out.push({
             line: li,
             token: ti,

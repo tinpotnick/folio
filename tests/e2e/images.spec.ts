@@ -68,6 +68,43 @@ test.describe("image blocks", () => {
     expect(md).toContain('alt: "red dot"');
   });
 
+  test("a photo-sized image does not lock the markdown source view", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    // ~4 MB of high-entropy bytes, like a real photo: its base64 splits
+    // into >100k "words" at every +/= - spell-marking that line pegs
+    // the tab for minutes (it locked up before the token cap).
+    const photoBytes = Buffer.alloc(4_000_000);
+    for (let i = 0; i < photoBytes.length; i++) photoBytes[i] = i % 251;
+    const bigPng = Buffer.concat([RED_DOT_PNG, photoBytes]);
+    await page.locator("#image-file").setInputFiles({
+      name: "photo.png",
+      mimeType: "image/png",
+      buffer: bigPng,
+    });
+    const img = page.locator('#the-doc figure.folio-image img[alt="photo"]');
+    await expect(img).toHaveCount(1);
+    await page.locator("#btn-markdown").click();
+    await expect(page.locator("#md-wrap")).toBeVisible({ timeout: 10_000 });
+    const md = await page.locator("#editor").inputValue();
+    expect(md).toContain("src: data:image/png;base64,");
+    // the spell pass runs debounced after the switch - the page must
+    // still answer afterwards, and the image line must carry no marks
+    // (it locked up before the word/token caps)
+    await page.waitForTimeout(1500);
+    expect(await page.evaluate(() => 1 + 1)).toBe(2);
+    await expect(page.locator("#md-wrap")).toBeVisible();
+    const marksOnImageLine = await page.evaluate(() => {
+      const ln = Array.from(document.querySelectorAll("#md-view .ln")).find(
+        (l) => l.textContent?.includes("base64,"),
+      );
+      return ln ? ln.querySelectorAll(".folio-misspelled").length : -1;
+    });
+    expect(marksOnImageLine).toBe(0);
+  });
+
   test("a hand-typed Markdown image renders and canonicalizes", async ({
     page,
   }) => {
