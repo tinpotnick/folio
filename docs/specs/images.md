@@ -68,6 +68,13 @@ caption: "Q3 all-hands"
   bar contract (reveal inside the figure, hide on any outside
   click, Esc dismisses, no close button). Backspace/Delete on a
   selected image removes the block (the diagram affordance).
+- **A trailing figure never traps the caret**: when a non-editable
+  figure (image/audio/chart/diagram/math/motion) is the LAST block,
+  there is no caret target below it - so ArrowDown from the end of
+  the block above, ArrowDown on the selected figure, and clicking
+  the empty space below the figure each append a new empty
+  paragraph after it and focus it. No trip to the Markdown source
+  needed to add content below a trailing image.
 - **No float/wrap/resize** (ADR-0013 non-goals): layout is the
   renderer's. A semantic `width` key is a possible later
   addition; anchoring and text wrap are not.

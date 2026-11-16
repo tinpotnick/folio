@@ -225,6 +225,44 @@ test.describe("image blocks", () => {
     expect((src ?? "").length).toBeGreaterThan(bigB64.length - 64);
   });
 
+  test("content can be added below a trailing image without the source view", async ({
+    page,
+  }) => {
+    const TRAILING =
+      '# T\n\nPara text\n\n::: image {#image-1}\nsrc: https://example.com/x.png\nalt: "x"\n:::\n';
+    const md = () =>
+      page.evaluate(() => {
+        const el = document.querySelector("#the-doc") as unknown as {
+          getMarkdown: () => string | null;
+        };
+        return el.getMarkdown() ?? "";
+      });
+
+    // ArrowDown from the end of the paragraph above the trailing image
+    await loadDoc(page, TRAILING);
+    await page.locator("#the-doc p", { hasText: "Para text" }).click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.type("hello");
+    await expect.poll(async () => await md()).toContain(":::\n\nhello");
+
+    // ArrowDown while the image itself is selected
+    await loadDoc(page, TRAILING);
+    await page.locator("#the-doc figure.folio-image img").click();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.type("world");
+    await expect.poll(async () => await md()).toContain(":::\n\nworld");
+
+    // clicking the empty space below the trailing image
+    await loadDoc(page, TRAILING);
+    const art = await page.locator("#the-doc article").boundingBox();
+    const fig = await page.locator("#the-doc figure.folio-image").boundingBox();
+    if (!art || !fig) throw new Error("layout missing");
+    await page.mouse.click(art.x + art.width / 2, fig.y + fig.height + 60);
+    await page.keyboard.type("below");
+    await expect.poll(async () => await md()).toContain(":::\n\nbelow");
+  });
+
   test("a hand-typed Markdown image renders and canonicalizes", async ({
     page,
   }) => {
