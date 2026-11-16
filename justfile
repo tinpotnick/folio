@@ -43,6 +43,8 @@ test-webkitgtk *cases:
     python3 tests/webkitgtk/run.py {{cases}}
 
 # How folio is being found and installed: release downloads (including
-# Fedora dnf installs), 14-day traffic, stars.
+# Fedora dnf installs), per-day traffic for the last 14 days, stars.
+# The nightly stats page on the live site: scripts/stats-doc.sh +
+# .github/workflows/stats.yml (docs/specs/package-repos.md).
 stats:
     scripts/stats.sh

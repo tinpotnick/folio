@@ -3475,6 +3475,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb:
       "motion flow traffic road network edges packets animated diagram quantity speed vehicles filmstrip flowmap",
   },
+  {
+    id: "stats",
+    title: "folio's own numbers: traffic and downloads",
+    file: "demo/examples/stats.md",
+    blurb:
+      "stats github traffic page views clones downloads releases trend line chart nightly snapshot live numbers",
+  },
 ];
 
 interface PaletteEntry {

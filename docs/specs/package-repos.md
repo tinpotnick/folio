@@ -91,5 +91,17 @@ invisible - except Fedora's, by design:
 - Not counted: Flatpak and apt installs from the repositories (their
   formats cannot point at files elsewhere). Flathub, later, publishes
   install statistics. folio itself never reports home.
-- `just stats` (`scripts/stats.sh`): release downloads per file, 14-day
-  traffic and referrers, stars.
+- `just stats` (`scripts/stats.sh`): release downloads per file, per-day
+  page-view and clone trend for the last 14 days (all GitHub keeps),
+  top referrers, stars.
+- The live site also shows folio's own numbers as a folio document
+  (`demo/examples/stats.md` at tinpotnick.github.io/folio/). The
+  `stats` workflow (`.github/workflows/stats.yml`) runs nightly: it
+  appends the day's traffic to a CSV history kept on the `stats`
+  branch, regenerates the document with `scripts/stats-doc.sh`,
+  validates it (tests/engine/stats-demo.test.ts) and redeploys Pages.
+  main is never touched; the copy in main is the seed. The document is
+  a static snapshot, so it renders fully offline (ADR-0005), and
+  GitHub Pages keeps no logs, so reading it never moves its own
+  numbers. The seed in main is pinned by tests/engine/stats-demo.test.ts
+  and smoke-tested like every other example (tests/e2e/examples-smoke.spec.ts).
