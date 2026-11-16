@@ -10711,7 +10711,8 @@ export class FolioDoc extends HTMLElement {
   }
 
   private handleTableNav(ev: KeyboardEvent, td: HTMLTableCellElement): void {
-    if (!isTabKey(ev) && ev.key !== "Enter") return;
+    const isArrow = ev.key === "ArrowUp" || ev.key === "ArrowDown";
+    if (!isTabKey(ev) && ev.key !== "Enter" && !isArrow) return;
     const figure = td.closest("figure") as HTMLElement | null;
     if (!figure) return;
     const idx = Number(figure.dataset.blockIndex ?? -1);
@@ -10722,10 +10723,30 @@ export class FolioDoc extends HTMLElement {
       .map((c, i) => (c.type !== "formula" ? i : -1))
       .filter((i) => i >= 0);
     if (editable.length === 0) return;
-    ev.preventDefault();
-    this.commitCell(td, block);
     let r = Number(td.dataset.rowIndex);
     let c = Number(td.dataset.colIndex);
+    if (isArrow) {
+      // Arrows move one row up/down in the SAME column (the browser's
+      // native arrows move by visual x, which lands in a different
+      // column when columns differ in width). Arrows never grow the
+      // table; at the edge the key is left to the browser, which moves
+      // the caret out of the table.
+      const next = ev.key === "ArrowUp" ? r - 1 : r + 1;
+      if (next < 0 || next >= block.table.rows.length) return;
+      ev.preventDefault();
+      this.commitCell(td, block);
+      r = next;
+      if (cols[c]?.type === "formula") {
+        const right = editable.filter((i) => i > c);
+        const left = editable.filter((i) => i < c);
+        c = right[0] ?? left[left.length - 1] ?? c;
+      }
+      if (!this.caretFollowsFocus()) return;
+      this.focusCell(idx, r, c);
+      return;
+    }
+    ev.preventDefault();
+    this.commitCell(td, block);
     let needsRender = false;
     if (ev.key === "Enter") {
       if (ev.shiftKey) {
