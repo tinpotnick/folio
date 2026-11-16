@@ -10,7 +10,14 @@
   inspector bar; click it once and press Backspace or Delete to
   remove it. Files over 8 MB are refused (resize first); floating
   images and text wrap are deliberately not supported - layout
-  belongs to the theme, not the document.
+  belongs to the theme, not the document. Large pictures (over
+  400 KB) are downscaled on insert - longest edge 2048 px, re-encoded
+  to roughly 400 KB - because the embedded data URI is one huge line
+  in the Markdown source and laying it out is slow; the status bar
+  says "resized to fit" when that happens. To keep the original
+  bytes instead, search **"original image"** in the palette (Ctrl+K)
+  and run **"Keep original image quality"** - the 8 MB ceiling
+  applies either way.
 - **Audio** embeds like an image - a recorded sound is media, the
   temporal sibling of a picture. Pick a file with **+ Insert ›
   Audio clip** (or hand-type an `::: audio` directive with a `src`);

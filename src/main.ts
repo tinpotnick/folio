@@ -13,7 +13,11 @@ import {
 import "./component.js";
 import { MAX_EMBED_BYTES } from "./component.js";
 import type { FolioDoc } from "./component.js";
-import { shrinkImageFile } from "./image-shrink.js";
+import {
+  keepOriginals,
+  setKeepOriginals,
+  shrinkImageFile,
+} from "./image-shrink.js";
 import { grammarEnabled } from "./spell/grammar.js";
 import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
@@ -3776,6 +3780,22 @@ function paletteEntries(): PaletteEntry[] {
         grammarEnabled()
           ? "Grammar check on (Harper, fully offline)"
           : "Grammar check off",
+      );
+    },
+  });
+  entries.push({
+    title: keepOriginals()
+      ? "Downscale large images on insert (currently keeping originals)"
+      : "Keep original image quality (do not downscale)",
+    group: "Command",
+    keywords:
+      "image photo picture large resize downscale compress quality original embed bytes size insert paste",
+    action: () => {
+      setKeepOriginals(!keepOriginals());
+      flash(
+        keepOriginals()
+          ? "Keeping original image quality - no downscaling"
+          : "Large images will be downscaled on insert",
       );
     },
   });

@@ -46,7 +46,12 @@ caption: "Q3 all-hands"
   don't decode, the original is embedded as-is (and still subject
   to the 8 MB ceiling). Rationale: a raw multi-MB base64 is one huge
   line in the Markdown source view, and laying it out made switching
-  to that view take many seconds.
+  to that view take many seconds. The status bar says when a picture
+  was resized ("resized to fit"). **Opt-out**: the image is the
+  document, so downscaling must never be silent-only - the persisted
+  setting `folio.images.keep-originals.v1`, toggled by the palette
+  command "Keep original image quality", disables it entirely; the
+  8 MB ceiling applies either way.
 - **Paste**: a clipboard image with no plain-text flavor embeds as
   an image block at the caret. A file on the clipboard (screenshot,
   copied picture) becomes a data URI (downscaled as above), `alt`

@@ -166,6 +166,65 @@ test.describe("image blocks", () => {
     expect(md.length).toBeLessThan(bigB64.length / 2);
   });
 
+  test("'Keep original image quality' disables downscaling", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    await page.locator("folio-doc p", { hasText: "Revenue recovered" }).click();
+    // a photo-like JPEG over the 400 KB target
+    const bigB64 = await page.evaluate(async () => {
+      const c = document.createElement("canvas");
+      c.width = 3000;
+      c.height = 2200;
+      const ctx = c.getContext("2d");
+      if (!ctx) return "";
+      const img = ctx.createImageData(3000, 2200);
+      const d = img.data;
+      for (let y = 0; y < 2200; y++) {
+        for (let x = 0; x < 3000; x++) {
+          const i = (y * 3000 + x) * 4;
+          d[i] = (x / 16 + ((x * y) % 97)) % 256;
+          d[i + 1] = (y / 12 + ((x ^ y) % 89)) % 256;
+          d[i + 2] = ((x + y) % 211) % 256;
+          d[i + 3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      const blob = await new Promise<Blob | null>((r) =>
+        c.toBlob(r, "image/jpeg", 0.95),
+      );
+      if (!blob) return "";
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 8192) {
+        bin += String.fromCharCode(...buf.subarray(i, i + 8192));
+      }
+      return btoa(bin);
+    });
+    expect(bigB64.length).toBeGreaterThan(600_000); // over the 400 KB target
+    // toggle the opt-out via the palette
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("original image");
+    await expect(
+      page.locator("#palette-list .palette-item").first(),
+    ).toContainText("Keep original image quality");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#palette-modal")).toBeHidden();
+    await page.locator("#image-file").setInputFiles({
+      name: "big-photo.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from(bigB64, "base64"),
+    });
+    const img = page.locator(
+      '#the-doc figure.folio-image img[alt="big photo"]',
+    );
+    await expect(img).toHaveCount(1);
+    const src = await img.getAttribute("src", { timeout: 15_000 });
+    // original bytes embedded: the data URL is as long as the file,
+    // not shrunk
+    expect((src ?? "").length).toBeGreaterThan(bigB64.length - 64);
+  });
+
   test("a hand-typed Markdown image renders and canonicalizes", async ({
     page,
   }) => {

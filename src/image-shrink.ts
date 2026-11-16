@@ -14,6 +14,34 @@
 /** Files at or under this embed unchanged. */
 export const TARGET_EMBED_BYTES = 400_000;
 
+const KEEP_KEY = "folio.images.keep-originals.v1";
+
+let keepOriginalsState = ((): boolean => {
+  try {
+    return localStorage.getItem(KEEP_KEY) === "1";
+  } catch {
+    return false;
+  }
+})();
+
+/** "Keep original image quality": when on, files embed untouched
+ * (downscaling is the default because a multi-MB data URI is one huge
+ * source line; but the image is the document, so the user can opt out
+ * of any resizing). Persisted per origin. */
+export function keepOriginals(): boolean {
+  return keepOriginalsState;
+}
+
+export function setKeepOriginals(on: boolean): void {
+  keepOriginalsState = on;
+  try {
+    if (on) localStorage.setItem(KEEP_KEY, "1");
+    else localStorage.removeItem(KEEP_KEY);
+  } catch {
+    // private mode - session only
+  }
+}
+
 /** Longest edge after downscaling, in pixels. */
 export const MAX_IMAGE_DIM = 2048;
 
@@ -51,7 +79,9 @@ export interface ShrinkResult {
  * Never grows the file: if re-encoding doesn't help (or the image
  * can't be decoded), the original file is returned untouched. */
 export async function shrinkImageFile(file: File): Promise<ShrinkResult> {
-  if (file.size <= TARGET_EMBED_BYTES) return { file, resized: false };
+  if (keepOriginals() || file.size <= TARGET_EMBED_BYTES) {
+    return { file, resized: false };
+  }
   if (!/^image\//.test(file.type) || file.type === "image/svg+xml") {
     return { file, resized: false };
   }

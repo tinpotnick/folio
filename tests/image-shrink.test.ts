@@ -1,7 +1,10 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
   MAX_IMAGE_DIM,
   TARGET_EMBED_BYTES,
+  keepOriginals,
+  setKeepOriginals,
   shrinkPlan,
 } from "../src/image-shrink";
 
@@ -40,5 +43,17 @@ describe("shrinkPlan", () => {
   it("the embed target is a few hundred KB, not megabytes", () => {
     expect(TARGET_EMBED_BYTES).toBeLessThanOrEqual(500_000);
     expect(MAX_IMAGE_DIM).toBeLessThanOrEqual(2560);
+  });
+});
+
+describe("keepOriginals opt-out", () => {
+  it("defaults off and persists to localStorage", () => {
+    expect(keepOriginals()).toBe(false);
+    setKeepOriginals(true);
+    expect(keepOriginals()).toBe(true);
+    expect(localStorage.getItem("folio.images.keep-originals.v1")).toBe("1");
+    setKeepOriginals(false);
+    expect(keepOriginals()).toBe(false);
+    expect(localStorage.getItem("folio.images.keep-originals.v1")).toBeNull();
   });
 });
