@@ -23,6 +23,16 @@ it as a web asset. Hints pointing at folders that no longer
 exist are skipped; the resolution order and skip rules are
 unit-tested in `src-tauri/src/lib.rs` (`folder_hint`).
 
+Under the Flatpak the file chooser goes through the document
+portal, so paths arrive as ephemeral FUSE mounts
+(`/run/user/<uid>/doc/<id>/file.md`) — the "random id" folder a
+Save dialog used to show. The host reads the portal's
+`user.document-portal.host-path` custom attribute
+(`real_host_path`) and hints dialogs with the file's REAL folder;
+ephemeral portal dirs are never remembered in `last-folder`
+(`dir_to_remember`). Reading/writing still uses the portal path
+itself (the FUSE mount works fine for I/O).
+
 A bundled release carries the demo too: `vite build` copies `demo/`
 into `dist/demo/` (the `copyDemo` plugin in `vite.config.ts`), so
 the boot document, examples, help and imported data survive in the

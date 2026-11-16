@@ -281,7 +281,11 @@ mod tests {
     fn stamps_numbers_on_every_page_and_the_header_from_page_two() {
         let path = std::env::temp_dir().join("folio-furniture-a.pdf");
         two_pages(&path);
-        let f = Furniture { header: Some("Q3 Review".into()), numbers: true };
+        let f = Furniture {
+            header: Some("Q3 Review".into()),
+            numbers: true,
+            page_size: "a4".into(),
+        };
         stamp(&path, &f).unwrap();
         let pages = page_text(&path);
         assert!(pages[0].contains("(Page 1 of 2)") && !pages[0].contains("Q3 Review"));
@@ -295,7 +299,11 @@ mod tests {
     fn a_title_helvetica_cannot_spell_is_left_off() {
         let path = std::env::temp_dir().join("folio-furniture-b.pdf");
         two_pages(&path);
-        let f = Furniture { header: Some("季度报告".into()), numbers: true };
+        let f = Furniture {
+            header: Some("季度报告".into()),
+            numbers: true,
+            page_size: "a4".into(),
+        };
         stamp(&path, &f).unwrap();
         let pages = page_text(&path);
         assert!(pages[1].contains("(Page 2 of 2)") && !pages[1].contains("?"));

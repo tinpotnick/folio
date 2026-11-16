@@ -23,16 +23,82 @@ struct OpenedDocument {
     text: String,
 }
 
+/// A document-portal FUSE path (the Flatpak's file chooser hands out
+/// /run/user/<uid>/doc/<id>/... and /run/flatpak/doc/...): ephemeral,
+/// never a good dialog hint.
+fn is_portal_path(p: &Path) -> bool {
+    let s = p.to_string_lossy();
+    (s.starts_with("/run/user/") && s.contains("/doc/")) || s.starts_with("/run/flatpak/doc/")
+}
+
+/// The document portal's FUSE mount exposes the file's real host path
+/// in a custom attribute (user.document-portal.host-path); read it so
+/// dialogs start in the file's ACTUAL folder, not the random portal
+/// dir. None on plain paths and on portals that don't set it.
+#[cfg(target_os = "linux")]
+fn real_host_path(path: &Path) -> Option<PathBuf> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    extern "C" {
+        fn getxattr(
+            path: *const std::ffi::c_char,
+            name: *const std::ffi::c_char,
+            value: *mut std::ffi::c_void,
+            size: usize,
+        ) -> isize;
+    }
+    let c_path = CString::new(path.as_os_str().as_bytes()).ok()?;
+    let c_name = CString::new("user.document-portal.host-path").ok()?;
+    // SAFETY: both CStrings outlive the calls; buf stays valid for its
+    // length, and n is re-checked before use.
+    let n = unsafe { getxattr(c_path.as_ptr(), c_name.as_ptr(), std::ptr::null_mut(), 0) };
+    if n <= 0 {
+        return None;
+    }
+    let mut buf = vec![0u8; n as usize + 1];
+    let n = unsafe {
+        getxattr(
+            c_path.as_ptr(),
+            c_name.as_ptr(),
+            buf.as_mut_ptr().cast(),
+            buf.len(),
+        )
+    };
+    if n <= 0 {
+        return None;
+    }
+    buf.truncate(n as usize);
+    let s = String::from_utf8_lossy(&buf)
+        .trim_end_matches('\0')
+        .to_string();
+    let p = PathBuf::from(s);
+    p.is_absolute().then_some(p)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn real_host_path(_path: &Path) -> Option<PathBuf> {
+    None
+}
+
+/// The path to derive a dialog folder from: a portal path resolves to
+/// the real host path when it carries one, else it stays as-is.
+fn hint_path(path: &str) -> PathBuf {
+    let p = PathBuf::from(path);
+    real_host_path(&p).unwrap_or(p)
+}
+
 /// The folder a dialog starts in, in order: the open document's
-/// folder when it came from disk; otherwise the last folder the
-/// user opened from or saved to; otherwise — the true first run —
-/// the folder the DEFAULT document was loaded from (`tauri dev`
-/// serves `demo/` straight from the checkout, so the boot doc is
-/// a real file even though the host loaded it as a web asset).
-/// Folders that no longer exist are skipped.
+/// folder when it came from disk (portal paths resolve to the real
+/// folder); otherwise the last folder the user opened from or saved
+/// to; otherwise — the true first run — the folder the DEFAULT
+/// document was loaded from (`tauri dev` serves `demo/` straight
+/// from the checkout, so the boot doc is a real file even though the
+/// host loaded it as a web asset). Folders that no longer exist are
+/// skipped.
 fn folder_hint(current: Option<&str>, last: Option<&str>, demo: Option<&str>) -> Option<PathBuf> {
     if let Some(cur) = current {
-        if let Some(dir) = Path::new(cur).parent() {
+        let p = hint_path(cur);
+        if let Some(dir) = p.parent() {
             if dir.is_dir() {
                 return Some(dir.to_path_buf());
             }
@@ -40,8 +106,9 @@ fn folder_hint(current: Option<&str>, last: Option<&str>, demo: Option<&str>) ->
     }
     for candidate in [last, demo] {
         if let Some(dir) = candidate {
-            if Path::new(dir).is_dir() {
-                return Some(PathBuf::from(dir));
+            let p = hint_path(dir);
+            if p.is_dir() {
+                return Some(p);
             }
         }
     }
@@ -72,8 +139,19 @@ fn read_last_dir(app: &tauri::AppHandle) -> Option<String> {
         .filter(|s| !s.is_empty())
 }
 
+/// The folder worth remembering for the next dialog: the file's real
+/// host folder when the document portal exposes one; never an
+/// ephemeral portal dir.
+fn dir_to_remember(file: &Path) -> Option<PathBuf> {
+    match real_host_path(file) {
+        Some(p) => p.parent().map(|d| d.to_path_buf()),
+        None if is_portal_path(file) => None,
+        None => file.parent().map(|d| d.to_path_buf()),
+    }
+}
+
 fn remember_dir(app: &tauri::AppHandle, file: &Path) {
-    let Some(dir) = file.parent() else {
+    let Some(dir) = dir_to_remember(file) else {
         return;
     };
     let Some(dest) = last_dir_file(app) else {
@@ -654,7 +732,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{folder_hint, is_external_url, launch_file_from_args};
+    use super::{dir_to_remember, folder_hint, is_external_url, is_portal_path, launch_file_from_args};
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -740,7 +818,9 @@ mod tests {
 
     #[test]
     fn only_web_addresses_are_fetched() {
-        assert!(super::is_fetchable("https://www.ons.gov.uk/generator?format=csv"));
+        assert!(super::is_fetchable(
+            "https://www.ons.gov.uk/generator?format=csv"
+        ));
         assert!(super::is_fetchable("http://example.com/a.csv"));
         assert!(!super::is_fetchable("file:///etc/passwd"));
         assert!(!super::is_fetchable("ftp://example.com/a.csv"));
@@ -760,7 +840,7 @@ mod tests {
         assert!(!is_external_url("folio://x"));
         assert!(!is_external_url("/demo/examples/poem.md"));
     }
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     fn tempd(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("folio-hint-{name}-{}", std::process::id()));
@@ -790,7 +870,11 @@ mod tests {
         let last = tempd("only");
         let demo = tempd("demo");
         assert_eq!(
-            folder_hint(None, Some(last.to_str().unwrap()), Some(demo.to_str().unwrap())),
+            folder_hint(
+                None,
+                Some(last.to_str().unwrap()),
+                Some(demo.to_str().unwrap())
+            ),
             Some(last)
         );
     }
@@ -798,15 +882,82 @@ mod tests {
     #[test]
     fn first_run_uses_the_default_documents_folder() {
         let demo = tempd("boot");
-        assert_eq!(folder_hint(None, None, Some(demo.to_str().unwrap())), Some(demo));
+        assert_eq!(
+            folder_hint(None, None, Some(demo.to_str().unwrap())),
+            Some(demo)
+        );
     }
 
     #[test]
     fn missing_folders_get_no_hint() {
-        assert_eq!(folder_hint(None, Some("/definitely/not/here"), Some("/gone/too")), None);
+        assert_eq!(
+            folder_hint(None, Some("/definitely/not/here"), Some("/gone/too")),
+            None
+        );
         let gone = tempd("gone");
         std::fs::remove_dir_all(&gone).unwrap();
         let doc = gone.join("doc.md");
         assert_eq!(folder_hint(Some(doc.to_str().unwrap()), None, None), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn set_host_path_xattr(file: &Path, real: &Path) {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        extern "C" {
+            fn setxattr(
+                path: *const std::ffi::c_char,
+                name: *const std::ffi::c_char,
+                value: *const std::ffi::c_void,
+                size: usize,
+                flags: i32,
+            ) -> i32;
+        }
+        let c_path = CString::new(file.as_os_str().as_bytes()).unwrap();
+        let c_name = CString::new("user.document-portal.host-path").unwrap();
+        let val = real.as_os_str().as_bytes();
+        let rc = unsafe {
+            setxattr(
+                c_path.as_ptr(),
+                c_name.as_ptr(),
+                val.as_ptr().cast(),
+                val.len(),
+                0,
+            )
+        };
+        assert_eq!(rc, 0, "setxattr failed (user xattrs on this fs?)");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn portal_path_resolves_to_the_real_host_folder() {
+        // Stands in for /run/user/<uid>/doc/<id>/notes.md: a file whose
+        // host-path attribute names the real file.
+        let portal_dir = tempd("portal");
+        let portal_file = portal_dir.join("notes.md");
+        std::fs::write(&portal_file, b"").unwrap();
+        let real_dir = tempd("real");
+        let real_file = real_dir.join("notes.md");
+        set_host_path_xattr(&portal_file, &real_file);
+
+        assert_eq!(
+            folder_hint(Some(portal_file.to_str().unwrap()), None, None),
+            Some(real_dir.clone())
+        );
+        assert_eq!(dir_to_remember(&portal_file), Some(real_dir));
+    }
+
+    #[test]
+    fn portal_path_without_the_attribute_is_never_remembered() {
+        // A literal portal path (need not exist: the checks are pure).
+        let portal_file = Path::new("/run/user/1000/doc/abc123/notes.md");
+        assert!(is_portal_path(portal_file));
+        assert_eq!(dir_to_remember(portal_file), None);
+        // A plain path is remembered as-is.
+        let plain_dir = tempd("plain");
+        let plain_file = plain_dir.join("notes.md");
+        std::fs::write(&plain_file, b"").unwrap();
+        assert!(!is_portal_path(&plain_file));
+        assert_eq!(dir_to_remember(&plain_file), Some(plain_dir));
     }
 }
