@@ -20,7 +20,11 @@ product, not a collection of one-off widgets.
 4. **States**: every interactive element handles hover, focus,
    disabled, loading, empty, and error states consistently.
 5. **Keyboard and touch**: focus order, focus visibility, hit areas
-   (min 44px on touch targets), no keyboard traps.
+   (min 44px on touch targets), no keyboard traps. In tables the
+   arrow keys move by GRID cell (same column, row above/below), never
+   by visual position; mouse caret placement matches the visual
+   click position, including at/past the end of a short label (a new
+   column's default heading).
 6. **Document-first feel** (ADR-0005): no execution affordances
    anywhere: no run buttons, no cell chrome, no execution state.
 7. **Layer-1 discoverability** (ADR-0009): every feature usable with

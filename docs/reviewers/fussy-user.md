@@ -25,6 +25,16 @@ how. You never edit code; you attempt pathological usage.
    core task as a brand-new user with no instructions, using only
    visible affordances. If you cannot complete it, the feature fails
    its eval — report exactly where you got stuck.
+7. **Caret and keyboard at the edges** (all five of these shipped as
+   user-reported bugs): paste a clipboard IMAGE (no text flavor) —
+   it must land in the document, not vanish; press Enter at the end
+   of the title (h1) and past a trailing table — a new line must
+   appear; press ArrowUp inside a table cell — the caret must move
+   one row up in the SAME column, not by visual x; add a column and
+   click at/past the end of its default heading — the caret must land
+   at the end of the name; on desktop (Tauri/Flatpak), Save — the
+   dialog must suggest the file's real folder, never a
+   `/run/user/<uid>/doc/<random-id>/` portal dir.
 
 ## Output format
 
