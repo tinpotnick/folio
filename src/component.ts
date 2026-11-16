@@ -10846,8 +10846,17 @@ export class FolioDoc extends HTMLElement {
         const left = editable.filter((i) => i < c);
         c = right[0] ?? left[left.length - 1] ?? c;
       }
-      if (!this.caretFollowsFocus()) return;
-      this.focusCell(idx, r, c);
+      const target = this.focusCell(idx, r, c);
+      if (!this.caretFollowsFocus() && target) {
+        // WebKitGTK: focus alone does not carry the caret - place it
+        // at the start of the target cell through the document
+        // selection (setCaret's setBaseAndExtent, which WebKit accepts
+        // for shadow nodes), so Up/Down visibly move the caret.
+        const w = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+        const node = w.firstChild() ?? target;
+        this.setCaret(node, 0);
+        this.trackCaret();
+      }
       return;
     }
     ev.preventDefault();
@@ -10927,13 +10936,18 @@ export class FolioDoc extends HTMLElement {
     );
   }
 
-  private focusCell(idx: number, r: number, c: number): void {
+  private focusCell(
+    idx: number,
+    r: number,
+    c: number,
+  ): HTMLTableCellElement | null {
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     const figure = host?.children[idx] as HTMLElement | undefined;
     const cell = figure?.querySelector(
       `td[data-row-index="${String(r)}"][data-col-index="${String(c)}"]`,
     ) as HTMLTableCellElement | null;
     cell?.focus();
+    return cell;
   }
 
   /**
