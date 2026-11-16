@@ -23,6 +23,14 @@ coverage, not implementation style.
    Doc drift is a blocker — the docs are the spec agents implement
    from. Also check every user-visible feature has a first-contact
    eval in evals/.
+7. **Engine matrix** (AGENTS.md): UI/editor changes touching caret,
+   selection, focus, keyboard or clipboard must be tested in both
+   engines — Chromium e2e AND a `tests/webkitgtk/` native case run
+   via `just test-webkitgtk`. Flag any such change whose only test
+   is Chromium e2e: the engines disagree on exactly these APIs
+   (no `ShadowRoot.getSelection` on WebKitGTK;
+   `caretRangeFromPoint` does not pierce the shadow root there —
+   that is how click-caret and arrow-key bugs shipped desktop-only).
 
 ## Output format
 

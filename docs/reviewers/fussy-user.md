@@ -24,7 +24,12 @@ how. You never edit code; you attempt pathological usage.
 6. **First-contact evals** (ADR-0009): for each feature, attempt the
    core task as a brand-new user with no instructions, using only
    visible affordances. If you cannot complete it, the feature fails
-   its eval — report exactly where you got stuck.
+   its eval — report exactly where you got stuck. Run the attacks in
+   BOTH engines where they can differ: the web (Chromium) and the
+   desktop (WebKitGTK, `just test-webkitgtk`) — caret/selection/
+   clipboard APIs disagree between them, and engine-only bugs are
+   the ones users report as "works on the website, broken in the
+   app".
 7. **Caret and keyboard at the edges** (all five of these shipped as
    user-reported bugs): paste a clipboard IMAGE (no text flavor) —
    it must land in the document, not vanish; press Enter at the end
