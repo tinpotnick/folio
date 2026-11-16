@@ -13,6 +13,11 @@ import {
 import "./component.js";
 import { MAX_EMBED_BYTES } from "./component.js";
 import type { FolioDoc } from "./component.js";
+import {
+  keepOriginals,
+  setKeepOriginals,
+  shrinkImageFile,
+} from "./image-shrink.js";
 import { grammarEnabled } from "./spell/grammar.js";
 import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
@@ -1350,22 +1355,28 @@ imageFile.addEventListener("change", () => {
   const f = imageFile.files?.[0];
   imageFile.value = "";
   if (!f) return;
-  if (f.size > MAX_EMBED_BYTES) {
-    flash("Image too large (over 8 MB) - the document stays one file");
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = (): void => {
-    if (typeof reader.result !== "string") return;
-    // The file name is a better first alt than nothing.
-    const alt = f.name
-      .replace(/\.[^.]+$/, "")
-      .replace(/[-_]+/g, " ")
-      .trim();
-    el.insertImage(reader.result, alt === "" ? undefined : alt);
-    flash("Image inserted");
-  };
-  reader.readAsDataURL(f);
+  void (async () => {
+    // Downscale big photos on the way in - their base64 is one huge
+    // source line and laying it out made the Markdown view painful
+    // (images.md).
+    const { file: small, resized } = await shrinkImageFile(f);
+    if (small.size > MAX_EMBED_BYTES) {
+      flash("Image too large (over 8 MB) - the document stays one file");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (): void => {
+      if (typeof reader.result !== "string") return;
+      // The file name is a better first alt than nothing.
+      const alt = f.name
+        .replace(/\.[^.]+$/, "")
+        .replace(/[-_]+/g, " ")
+        .trim();
+      el.insertImage(reader.result, alt === "" ? undefined : alt);
+      flash(resized ? "Image inserted (resized to fit)" : "Image inserted");
+    };
+    reader.readAsDataURL(small);
+  })();
 });
 
 const btnAudio = requireEl<HTMLButtonElement>("#btn-audio");
@@ -3769,6 +3780,22 @@ function paletteEntries(): PaletteEntry[] {
         grammarEnabled()
           ? "Grammar check on (Harper, fully offline)"
           : "Grammar check off",
+      );
+    },
+  });
+  entries.push({
+    title: keepOriginals()
+      ? "Downscale large images on insert (currently keeping originals)"
+      : "Keep original image quality (do not downscale)",
+    group: "Command",
+    keywords:
+      "image photo picture large resize downscale compress quality original embed bytes size insert paste",
+    action: () => {
+      setKeepOriginals(!keepOriginals());
+      flash(
+        keepOriginals()
+          ? "Keeping original image quality - no downscaling"
+          : "Large images will be downscaled on insert",
       );
     },
   });

@@ -65,6 +65,21 @@ describe("highlightMarkdown", () => {
   it("keeps plain text untouched", () => {
     expect(texts("just words")).toEqual(["just words"]);
   });
+
+  it("emits a giant line (a data: URL) as one plain token, unscanned", () => {
+    // per-character inline scanning on a multi-MB line costs seconds
+    // on every keystroke in the source view - cap it
+    const big = "src: data:image/png;base64," + "A".repeat(200_000);
+    const line = highlightMarkdown(big)[0];
+    expect(line?.tokens).toHaveLength(1);
+    expect(line?.tokens[0]?.kind).toBe("text");
+    expect(line?.tokens[0]?.text).toBe(big);
+    // a bold marker inside the giant line is NOT picked up...
+    const big2 = "x".repeat(9000) + "**b**";
+    expect(highlightMarkdown(big2)[0]?.tokens).toHaveLength(1);
+    // ...but normal lines still get inline highlighting
+    expect(kinds("a **b** c")).toEqual(["text", "bold", "text"]);
+  });
 });
 
 describe("markdown+ token kinds", () => {

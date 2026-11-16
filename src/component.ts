@@ -104,6 +104,7 @@ import {
 } from "./render/inline.js";
 import { parseBibtex, type Bibliography } from "./engine/bibtex.js";
 import { toIso } from "./engine/dates.js";
+import { shrinkImageFile } from "./image-shrink.js";
 import {
   WORD_RE,
   addCustomWord,
@@ -1422,24 +1423,32 @@ export class FolioDoc extends HTMLElement {
         // caret, the same path as the insert button (images.md).
         const file = imageFileFromClipboard(ev.clipboardData);
         if (file) {
-          if (file.size > MAX_EMBED_BYTES) {
-            this.status(
-              "Image too large (over 8 MB) - the document stays one file",
-            );
-            return;
-          }
-          const reader = new FileReader();
-          reader.onload = (): void => {
-            if (typeof reader.result !== "string") return;
-            // The file name is a better first alt than nothing.
-            const alt = file.name
-              .replace(/\.[^.]+$/, "")
-              .replace(/[-_]+/g, " ")
-              .trim();
-            this.insertImage(reader.result, alt === "" ? undefined : alt);
-            this.status("Image pasted");
-          };
-          reader.readAsDataURL(file);
+          void (async () => {
+            // Downscale big photos on the way in: their base64 is one
+            // huge source line and laying it out is what made the
+            // Markdown view feel locked up (images.md).
+            const { file: small, resized } = await shrinkImageFile(file);
+            if (small.size > MAX_EMBED_BYTES) {
+              this.status(
+                "Image too large (over 8 MB) - the document stays one file",
+              );
+              return;
+            }
+            const reader = new FileReader();
+            reader.onload = (): void => {
+              if (typeof reader.result !== "string") return;
+              // The file name is a better first alt than nothing.
+              const alt = file.name
+                .replace(/\.[^.]+$/, "")
+                .replace(/[-_]+/g, " ")
+                .trim();
+              this.insertImage(reader.result, alt === "" ? undefined : alt);
+              this.status(
+                resized ? "Image pasted (resized to fit)" : "Image pasted",
+              );
+            };
+            reader.readAsDataURL(small);
+          })();
           return;
         }
         // An image copied from a WEB PAGE arrives as HTML
@@ -6423,15 +6432,18 @@ export class FolioDoc extends HTMLElement {
     fileInp.addEventListener("change", () => {
       const f = fileInp.files?.[0];
       if (!f) return;
-      const reader = new FileReader();
-      reader.onload = (): void => {
-        if (typeof reader.result !== "string") return;
-        image.src = reader.result;
-        const img = figure.querySelector("img");
-        if (img) img.src = image.src;
-        this.emitChange();
-      };
-      reader.readAsDataURL(f);
+      void (async () => {
+        const { file: small } = await shrinkImageFile(f);
+        const reader = new FileReader();
+        reader.onload = (): void => {
+          if (typeof reader.result !== "string") return;
+          image.src = reader.result;
+          const img = figure.querySelector("img");
+          if (img) img.src = image.src;
+          this.emitChange();
+        };
+        reader.readAsDataURL(small);
+      })();
       fileInp.value = "";
     });
 

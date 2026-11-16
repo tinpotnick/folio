@@ -11,6 +11,9 @@ steps:
   - Click the sample document's cover image, then use the bar's
     file control to replace it with another picture.
   - Click the image once and press Backspace.
+  - Press Ctrl+K, type "original image", press Enter (the
+    "Keep original image quality" command), then insert a photo
+    larger than 400 KB with the image button.
   - Switch to the Markdown source view.
 expected:
   - The picked picture appears in the document immediately after
@@ -26,4 +29,8 @@ expected:
     the document and the source.
   - Picking a huge file (over 8 MB) is refused with a visible
     message and the document is untouched.
+  - By default a photo over 400 KB is downscaled on insert (status
+    bar says "resized to fit"); with "Keep original image quality"
+    toggled on in the palette, the same photo embeds at its original
+    bytes - the source's data: URI is exactly as long as the file.
 ---

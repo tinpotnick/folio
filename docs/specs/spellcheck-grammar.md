@@ -74,8 +74,9 @@ of the earlier draft of this spec.
   `false` so squiggles never double up.
 - Only prose tokens are checked (`text`, headings, bold/italic/strike/
   underline). Code spans, fenced code, math, the YAML frontmatter block,
-  and `::: ` directive lines (table/chart/mermaid bodies) are markup, not
-  prose, and are never marked.
+  and the bodies of any `::: ` directive block (table/chart/mermaid/
+  image/audio - an image's `src: data:...` line included) are markup,
+  not prose, and are never marked.
 - Oversized text is never checked: words longer than 64 chars and prose
   tokens longer than 4096 chars are not words/prose (a pasted image's
   `data:` URL is one multi-megabyte line). Spell-marking it pegged the

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { highlightMarkdown } from "../src/render/highlight";
 import type { SpellChecker } from "../src/spell/check";
 import {
+  directiveBlockLines,
   frontmatterLines,
   grammarMarksInLines,
   lineStartsOf,
@@ -120,6 +121,25 @@ describe("spellMarksInLines", () => {
       marks.map((m) => doc.slice(m.abs, m.abs + (m.end - m.start))),
     ).toEqual(["wordd"]);
     expect(seen.some((w) => w.length > 4096)).toBe(false);
+  });
+
+  it("never marks inside any ::: block - an image src data: URL is markup", () => {
+    const doc = [
+      "::: image {#image-1}",
+      "src: data:image/png;base64,worddBLOBwordd",
+      'alt: "wordd photo"',
+      ":::",
+      "",
+      "wordd in prose",
+    ].join("\n");
+    const lines = highlightMarkdown(doc);
+    const skip = directiveBlockLines(doc);
+    // body + closing delimiter are directive lines; only prose marks
+    expect([...skip].sort((a, b) => a - b)).toEqual([1, 2, 3]);
+    const marks = spellMarksInLines(lines, stub, lineStartsOf(doc), skip);
+    expect(
+      marks.map((m) => doc.slice(m.abs, m.abs + (m.end - m.start))),
+    ).toEqual(["wordd"]);
   });
 
   it("carries line/token/start/end plus absolute offset", () => {
