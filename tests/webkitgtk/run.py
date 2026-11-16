@@ -214,7 +214,9 @@ def next_case(i=0):
     run_case(cases[i], done)
 
 
-GLib.timeout_add(120000, lambda: (print("TIMEOUT"), Gtk.main_quit()))
+# The suite includes one heavy case (an 8 MB pasted image in the source
+# view) that legitimately takes ~10 s; 120 s was no longer enough for all.
+GLib.timeout_add(300000, lambda: (print("TIMEOUT"), Gtk.main_quit()))
 next_case()
 Gtk.main()
 failed = 0

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import {
+  MAX_WORD_LEN,
   WORD_RE,
   addCustomWord,
   isMisspelled,
@@ -43,6 +44,31 @@ describe("isMisspelled / suggestions", () => {
     expect(isMisspelled(s, "word")).toBe(false);
     expect(suggestions(s, "wordd")).toEqual(["word", "words", "worded"]);
     expect(suggestions(s, "nope")).toEqual([]);
+  });
+
+  it("oversized words never reach the dictionary (hunspell dies on them)", () => {
+    // a pasted image's data: URL is one megabyte-scale "word" in the
+    // source view; nspell.correct on it allocates until the tab OOMs
+    const seen: string[] = [];
+    const s = {
+      correct: (w: string) => {
+        seen.push(w);
+        return false;
+      },
+      suggest: (w: string) => {
+        seen.push(w);
+        return [];
+      },
+      add: () => {},
+    } as unknown as SpellChecker;
+    expect(isMisspelled(s, "A".repeat(200_000))).toBe(false);
+    expect(suggestions(s, "A".repeat(200_000))).toEqual([]);
+    expect(seen).toEqual([]);
+    // at the cap the checker is still consulted, past it never
+    expect(isMisspelled(s, "x".repeat(MAX_WORD_LEN))).toBe(true);
+    expect(seen).toEqual(["x".repeat(MAX_WORD_LEN)]);
+    expect(isMisspelled(s, "x".repeat(MAX_WORD_LEN + 1))).toBe(false);
+    expect(seen).toHaveLength(1);
   });
 
   it("custom words are never misspelled and persist to localStorage", () => {

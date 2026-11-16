@@ -76,6 +76,11 @@ of the earlier draft of this spec.
   underline). Code spans, fenced code, math, the YAML frontmatter block,
   and `::: ` directive lines (table/chart/mermaid bodies) are markup, not
   prose, and are never marked.
+- Oversized text is never checked: words longer than 64 chars and prose
+  tokens longer than 4096 chars are not words/prose (a pasted image's
+  `data:` URL is one multi-megabyte line). Spell-marking it pegged the
+  engine for minutes - hunspell on a megabyte "word" allocates until the
+  tab dies, and high-entropy base64 splits into >100k "words".
 - Marks are re-applied (debounced 300 ms) after every source render, and
   passes are serialized like in the document view. The `spellcheck`
   attribute governs both views; the grammar toggle governs both too.
