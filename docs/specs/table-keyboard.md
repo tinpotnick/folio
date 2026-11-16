@@ -93,7 +93,12 @@ table at the edges.
     Tab/Enter commit the cell and keep the caret in place (the user
     clicks the next cell); moving focus without the caret would send
     typed text into the wrong cell or nowhere. Row growth and
-    recalculation behave the same.
+    recalculation behave the same. ArrowUp/ArrowDown are the
+    exception: they move focus AND place the caret at the start of
+    the target cell through the document selection (`setCaret`'s
+    setBaseAndExtent, which WebKit accepts for shadow nodes), so the
+    caret visibly moves a row up/down in the same column - verified
+    with real keypresses in `tests/webkitgtk/table-arrow-*-native.js`.
 
 ## Acceptance
 
