@@ -537,6 +537,41 @@ test.describe("table editing and keyboard navigation", () => {
     ).toHaveCount(before);
   });
 
+  test("clicking past the end of a column heading puts the caret at the end of its name", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    // The heading cell is much wider than its name: clicking at the
+    // right of the cell (where a new column's short default heading
+    // ends) must put the caret at the END of the name, not leave it
+    // at the start / outside the name.
+    const th = page.locator(
+      '#the-doc figure[data-table-id="regional-data"] thead th[data-col-index="0"]',
+    );
+    const box = await th.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.click(
+      (box as { x: number; y: number; width: number; height: number }).x +
+        (box as { width: number }).width -
+        3,
+      (box as { y: number; height: number }).y +
+        (box as { height: number }).height / 2,
+    );
+    const caret = await page.evaluate(() => {
+      const root = document.querySelector("folio-doc")?.shadowRoot as
+        (ShadowRoot & { getSelection?: () => Selection }) | undefined;
+      const sel = root?.getSelection?.() ?? window.getSelection();
+      const n = sel?.anchorNode;
+      const el = n instanceof Element ? n : n?.parentElement;
+      const span = el?.closest("thead th .name") as HTMLElement | null;
+      return span
+        ? `off=${String(sel?.anchorOffset)}/${span.textContent?.length ?? 0}`
+        : `outside:${n?.nodeName ?? "?"}`;
+    });
+    expect(caret).toBe("off=6/6"); // "region"
+  });
+
   const rows = (page: Page) =>
     page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr');
 

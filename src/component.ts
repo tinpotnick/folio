@@ -4925,18 +4925,37 @@ export class FolioDoc extends HTMLElement {
             ) as HTMLElement | null;
             if (nameSpan) {
               nameSpan.focus();
+              const sel = window.getSelection();
+              // The heading cell is wider than its name: a click in
+              // the padding (or at the very right edge of the text)
+              // resolves outside the name or at its start. Put the
+              // caret at the END of the name then, so clicking past a
+              // short default heading lands where the eye says.
+              const textRect = document.createRange();
+              textRect.selectNodeContents(nameSpan);
+              const rect = textRect.getBoundingClientRect();
+              const atEnd = ev.clientX >= rect.right - 1;
               const range = document.caretRangeFromPoint(
                 ev.clientX,
                 ev.clientY,
               );
-              if (range && nameSpan.contains(range.startContainer)) {
-                const sel = window.getSelection();
+              if (!atEnd && range && nameSpan.contains(range.startContainer)) {
                 sel?.setBaseAndExtent(
                   range.startContainer,
                   range.startOffset,
                   range.startContainer,
                   range.startOffset,
                 );
+              } else {
+                const walker = document.createTreeWalker(
+                  nameSpan,
+                  NodeFilter.SHOW_TEXT,
+                );
+                const node = atEnd ? walker.lastChild() : walker.firstChild();
+                if (node) {
+                  const off = atEnd ? (node.textContent?.length ?? 0) : 0;
+                  sel?.setBaseAndExtent(node, off, node, off);
+                }
               }
             }
           }
