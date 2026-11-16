@@ -11,6 +11,7 @@ import {
   pageSizeFor,
 } from "./render/page-furniture";
 import "./component.js";
+import { MAX_EMBED_BYTES } from "./component.js";
 import type { FolioDoc } from "./component.js";
 import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
@@ -1104,8 +1105,6 @@ const btnImage = requireEl<HTMLButtonElement>("#btn-image");
 const imageFile = requireEl<HTMLInputElement>("#image-file");
 // A folio document is ONE file (ADR-0005): images embed as data
 // URIs, so a sane ceiling keeps the Markdown source workable.
-const IMAGE_MAX_BYTES = 8 * 1024 * 1024;
-
 // mousedown (like the other insert buttons) so the press never
 // steals focus from the document before the action runs.
 btnImage.addEventListener("mousedown", (ev) => {
@@ -1117,7 +1116,7 @@ imageFile.addEventListener("change", () => {
   const f = imageFile.files?.[0];
   imageFile.value = "";
   if (!f) return;
-  if (f.size > IMAGE_MAX_BYTES) {
+  if (f.size > MAX_EMBED_BYTES) {
     flash("Image too large (over 8 MB) - the document stays one file");
     return;
   }
