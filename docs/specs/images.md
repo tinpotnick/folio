@@ -37,14 +37,25 @@ caption: "Q3 all-hands"
   `alt` from the file name. Files over 8 MB are refused with a
   visible message. The palette command "Insert an image" works
   without prior document focus (appends at the document end).
+- **Downscaling on embed** (paste, picker, inspector replace): the
+  document is one file, so a photo is shrunk on the way in - like
+  Word. Files over 400 KB are re-encoded: longest edge capped at
+  2048 px, JPEG (quality ladder 0.85/0.7/0.55 down to the 400 KB
+  target) unless the image has transparency, which stays PNG. The
+  file is never grown: if re-encoding doesn't win, or the bytes
+  don't decode, the original is embedded as-is (and still subject
+  to the 8 MB ceiling). Rationale: a raw multi-MB base64 is one huge
+  line in the Markdown source view, and laying it out made switching
+  to that view take many seconds.
 - **Paste**: a clipboard image with no plain-text flavor embeds as
   an image block at the caret. A file on the clipboard (screenshot,
-  copied picture) becomes a data URI, `alt` seeded from the file
-  name, over 8 MB refused with a status message. An image copied
-  from a web page (no file data - `text/html` with an `<img>`, or a
-  uri-list) embeds with that `src`: data URIs directly, remote URLs
-  opportunistically with the alt as fallback. Text paste stays plain
-  text only; a clipboard carrying both takes the text.
+  copied picture) becomes a data URI (downscaled as above), `alt`
+  seeded from the file name, over 8 MB refused with a status
+  message. An image copied from a web page (no file data -
+  `text/html` with an `<img>`, or a uri-list) embeds with that
+  `src`: data URIs directly, remote URLs opportunistically with
+  the alt as fallback. Text paste stays plain text only; a
+  clipboard carrying both takes the text.
 - **Figure, not an editing surface**: `figure.folio-image`
   (contenteditable=false) renders the img and an optional
   figcaption. Clicking the image reveals the image inspector -

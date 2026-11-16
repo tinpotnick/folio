@@ -48,6 +48,26 @@ export function frontmatterLines(src: string): Set<number> {
   return out;
 }
 
+/** Line indices inside any `::: name ...` ::: block (image, audio,
+ * table, chart, mermaid, custom). Directive bodies are markup, not
+ * prose: an image block's `src: data:...` line must never be
+ * spell-checked (its base64 is not words). Empty when there are none. */
+export function directiveBlockLines(src: string): Set<number> {
+  const out = new Set<number>();
+  const lines = src.split("\n");
+  let depth = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i]?.trim() ?? "";
+    if (depth === 0) {
+      if (/^:::\s*\S/.test(t)) depth = 1;
+    } else {
+      out.add(i);
+      if (t === ":::") depth = 0;
+    }
+  }
+  return out;
+}
+
 export interface SourceMark {
   /** Line index in the source. */
   line: number;
@@ -173,6 +193,7 @@ export async function computeSourceMarks(
 ): Promise<SourceMarksResult> {
   const lineStarts = lineStartsOf(src);
   const skip = frontmatterLines(src);
+  for (const li of directiveBlockLines(src)) skip.add(li);
   const marks: SourceMark[] = [];
   if (spellOn) {
     const s = await spellReady();

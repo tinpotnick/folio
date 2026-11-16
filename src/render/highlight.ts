@@ -137,7 +137,14 @@ function bulletLine(line: string): MdToken[] {
   return [{ kind: "bullet", text: m[1] ?? "" }, ...inlineTokens(m[2] ?? "")];
 }
 
+/** Lines longer than this are one plain token, no inline scanning:
+ * the per-character regexes below cost seconds on a multi-MB line (a
+ * data: URL), and that cost is paid on EVERY keystroke in the source
+ * view. No real prose line is anywhere near this long. */
+const MAX_INLINE_LINE = 8192;
+
 function inlineTokens(text: string): MdToken[] {
+  if (text.length > MAX_INLINE_LINE) return [{ kind: "text", text }];
   const out: MdToken[] = [];
   let cur = "";
   let i = 0;
