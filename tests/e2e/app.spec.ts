@@ -510,6 +510,33 @@ test.describe("table editing and keyboard navigation", () => {
     ).toHaveCount(before + 1);
   });
 
+  test("ArrowUp/ArrowDown move one row up/down in the SAME column", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+
+    // The browser's native arrows move by visual position, which
+    // lands in a different column when columns differ in width; the
+    // grid keys must keep the column.
+    await page.locator(td(1, 0)).click();
+    await page.keyboard.press("ArrowUp");
+    expect(await focusedCell(page)).toBe("0:0");
+    await page.keyboard.press("ArrowDown");
+    expect(await focusedCell(page)).toBe("1:0");
+    await page.keyboard.press("ArrowDown");
+    expect(await focusedCell(page)).toBe("2:0");
+
+    // Arrows never grow the table (Enter/Tab do): at the last row the
+    // key leaves the table to the browser instead.
+    const before = await page
+      .locator('#the-doc figure[data-table-id="regional-data"] tbody tr')
+      .count();
+    await page.keyboard.press("ArrowDown");
+    await expect(
+      page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr'),
+    ).toHaveCount(before);
+  });
+
   const rows = (page: Page) =>
     page.locator('#the-doc figure[data-table-id="regional-data"] tbody tr');
 

@@ -57,8 +57,13 @@ table at the edges.
   clears the stale cell.
 - **Navigation**: Tab/Shift+Tab move across editable cells (formula
   columns are skipped, wrapping across rows); Enter/Shift+Enter
-  move down/up a column. Tab or Enter past the last row appends a
-  row. The edited cell commits first.
+  move down/up a column; ArrowUp/ArrowDown move one row up/down in
+  the SAME column (the browser's native arrows move by visual
+  position, which lands in a different column when columns differ
+  in width). At the first/last row an arrow is left to the browser,
+  which moves the caret out of the table; arrows never append rows.
+  Tab or Enter past the last row appends a row. The edited cell
+  commits first.
 - **A new row left blank goes** (2026-10-28): the row Tab/Enter
   appended is provisional. Typing anything in it keeps it; leaving it
   with nothing typed - a press or focus anywhere outside it - removes
