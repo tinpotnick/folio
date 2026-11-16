@@ -208,6 +208,28 @@ function cloneBlocks(blocks: DocBlock[]): DocBlock[] {
 const NUMERIC_RE = /^-?(?:\d{1,3}(?:,\d{3})+|\d*)(?:\.\d+)?$/;
 
 /**
+ * Embedded files (images, audio) over this are refused: a folio
+ * document is one file (docs/specs/images.md), so an 8 MB ceiling
+ * keeps it sane. The host's file pickers use the same limit.
+ */
+export const MAX_EMBED_BYTES = 8 * 1024 * 1024;
+
+/** The image file on a clipboard, if any (screenshot, copied picture). */
+function imageFileFromClipboard(data: DataTransfer | null): File | null {
+  if (!data) return null;
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const f = item.getAsFile();
+      if (f) return f;
+    }
+  }
+  for (const f of Array.from(data.files ?? [])) {
+    if (f.type.startsWith("image/")) return f;
+  }
+  return null;
+}
+
+/**
  * Tab, however the engine names it: WebKitGTK reports Shift+Tab (GTK's
  * ISO_Left_Tab) as key "Unidentified" - only `code` says "Tab" - so a
  * key-only check made Shift+Tab dead in the desktop app.
@@ -1363,7 +1385,33 @@ export class FolioDoc extends HTMLElement {
       if (target?.closest?.(".folio-inspector")) return;
       ev.preventDefault();
       const text = ev.clipboardData?.getData("text/plain") ?? "";
-      if (text === "") return; // e.g. an image: nothing plain to insert
+      if (text === "") {
+        // Nothing plain to insert - maybe an image (screenshot,
+        // copied picture): embed it as a data-URI image block at the
+        // caret, the same path as the insert button (images.md).
+        const file = imageFileFromClipboard(ev.clipboardData);
+        if (file) {
+          if (file.size > MAX_EMBED_BYTES) {
+            this.status(
+              "Image too large (over 8 MB) - the document stays one file",
+            );
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = (): void => {
+            if (typeof reader.result !== "string") return;
+            // The file name is a better first alt than nothing.
+            const alt = file.name
+              .replace(/\.[^.]+$/, "")
+              .replace(/[-_]+/g, " ")
+              .trim();
+            this.insertImage(reader.result, alt === "" ? undefined : alt);
+            this.status("Image pasted");
+          };
+          reader.readAsDataURL(file);
+        }
+        return;
+      }
       if (document.execCommand("insertText", false, text)) return;
       // Fallback: insert at the selection range directly (execCommand
       // unsupported), then sync like the input event would have.

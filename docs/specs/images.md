@@ -37,6 +37,11 @@ caption: "Q3 all-hands"
   `alt` from the file name. Files over 8 MB are refused with a
   visible message. The palette command "Insert an image" works
   without prior document focus (appends at the document end).
+- **Paste**: a clipboard image with no plain-text flavor
+  (screenshot, copied picture) embeds as an image block at the
+  caret - data URI, `alt` seeded from the file name, over 8 MB
+  refused with a status message. Text paste stays plain text only;
+  a clipboard carrying both takes the text.
 - **Figure, not an editing surface**: `figure.folio-image`
   (contenteditable=false) renders the img and an optional
   figcaption. Clicking the image reveals the image inspector -

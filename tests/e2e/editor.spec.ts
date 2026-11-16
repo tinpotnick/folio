@@ -1417,6 +1417,44 @@ test.describe("paste", () => {
     );
     expect(styled).toBe(0);
   });
+
+  test("pasting an image embeds it as a data-URI image block at the caret", async ({
+    page,
+  }) => {
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    await waitForDocument(page);
+    // A 1x1 transparent PNG, image flavor only - no text/plain.
+    const b64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    await page.evaluate((data) => {
+      const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+      return navigator.clipboard.write([
+        new ClipboardItem({
+          "image/png": new Blob([bytes], { type: "image/png" }),
+        }),
+      ]);
+    }, b64);
+    await caretInParagraph(page, "Revenue recovered", 7);
+    await page.keyboard.press("Control+V");
+    await page.waitForTimeout(300);
+    const doc = await getDoc(page);
+    const caretBlock = doc.blocks.findIndex(
+      (b) => b.kind === "prose" && (b.text ?? "").includes("Revenue recovered"),
+    );
+    const img = doc.blocks[caretBlock + 1] as unknown as {
+      kind: string;
+      image?: { src: string; alt?: string };
+    };
+    expect(img?.kind).toBe("image");
+    expect(img?.image?.src.startsWith("data:image/png;base64,")).toBe(true);
+    // and it renders (the demo doc already has a cover image - scope
+    // to the pasted one)
+    await expect(
+      page.locator('#the-doc figure.folio-image img[alt="image"]'),
+    ).toBeVisible();
+  });
 });
 
 /* ------------------------------------------------------------------ */
