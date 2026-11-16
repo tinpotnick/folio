@@ -1,0 +1,91 @@
+name: stats
+
+# Nightly regeneration of the stats example on the live site
+# (https://tinpotnick.github.io/folio/, ?doc=demo/examples/stats.md):
+# append the day's traffic to the CSV history kept on the `stats`
+# branch, regenerate the document with scripts/stats-doc.sh, rebuild
+# the site with the refreshed doc and redeploy Pages. main is never
+# touched - see docs/specs/package-repos.md, "Counting downloads".
+
+on:
+  schedule:
+    # 06:00 UTC, after GitHub's daily traffic rollup.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the history CSV to the `stats` branch
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # folio's own package repositories, same as the pages workflow
+      # (docs/specs/package-repos.md), kept on the pkg-repo branch.
+      - name: Package repositories
+        run: |
+          if git ls-remote --exit-code --heads origin pkg-repo >/dev/null; then
+            git fetch --depth 1 origin pkg-repo
+            mkdir -p dist/repo
+            git archive FETCH_HEAD | tar -x -C dist/repo
+          fi
+      # The traffic history lives on the `stats` branch (created on the
+      # first run); the seed in demo/examples/stats.md covers the API's
+      # 14-day window until then.
+      - name: Fetch traffic history
+        run: |
+          touch /tmp/folio-traffic.csv
+          if git ls-remote --exit-code --heads origin stats >/dev/null; then
+            git fetch --depth 1 origin stats
+            git show FETCH_HEAD:traffic.csv > /tmp/folio-traffic.csv
+          fi
+      - name: Regenerate the stats example
+        run: scripts/stats-doc.sh /tmp/folio-traffic.csv dist/demo/examples/stats.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Fail the deploy if the fresh document does not parse, round-trip
+      # and run its chart queries (tests/engine/stats-demo.test.ts).
+      - name: Validate the generated document
+        run: STATS_DOC=dist/demo/examples/stats.md npx vitest run tests/engine/stats-demo.test.ts
+      - name: Push the history
+        run: |
+          rm -rf /tmp/stats-repo
+          if git ls-remote --exit-code --heads origin stats >/dev/null; then
+            git clone --depth 1 --branch stats "$(git remote get-url origin)" /tmp/stats-repo
+          else
+            git init /tmp/stats-repo
+            git -C /tmp/stats-repo remote add origin "$(git remote get-url origin)"
+          fi
+          cp /tmp/folio-traffic.csv /tmp/stats-repo/traffic.csv
+          git -C /tmp/stats-repo add traffic.csv
+          git -C /tmp/stats-repo \
+            -c user.name="github-actions[bot]" \
+            -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -m "stats: traffic through $(date -u +%F)" || echo "no change"
+          git -C /tmp/stats-repo push origin HEAD:stats
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
