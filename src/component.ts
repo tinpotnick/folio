@@ -1409,6 +1409,26 @@ export class FolioDoc extends HTMLElement {
             this.status("Image pasted");
           };
           reader.readAsDataURL(file);
+          return;
+        }
+        // An image copied from a WEB PAGE arrives as HTML
+        // (<img src="...">) or a uri-list, not as file data. Embed it
+        // as an image block with that src: data URIs embed directly;
+        // remote URLs render opportunistically with the alt as
+        // fallback (docs/specs/images.md - never a render dependency).
+        const html = ev.clipboardData?.getData("text/html") ?? "";
+        const imgTag = /<img[^>]*>/i.exec(html)?.[0] ?? "";
+        const src =
+          /src=["']([^"']+)["']/i.exec(imgTag)?.[1] ??
+          (ev.clipboardData?.getData("text/uri-list") ?? "")
+            .split("\n")
+            .map((l) => l.trim())
+            .find((l) => l !== "" && !l.startsWith("#")) ??
+          "";
+        if (src !== "" && /^(data:image\/|https?:\/\/)/i.test(src)) {
+          const alt = /alt=["']([^"']*)["']/i.exec(imgTag)?.[1]?.trim();
+          this.insertImage(src, alt ? alt : "Pasted image");
+          this.status("Image pasted");
         }
         return;
       }

@@ -1492,6 +1492,36 @@ test.describe("paste", () => {
       page.locator('#the-doc figure.folio-image img[alt="image"]'),
     ).toBeVisible();
   });
+
+  test("pasting an image copied from a web page (html img, no file/text) embeds it", async ({
+    page,
+  }) => {
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"]);
+    await waitForDocument(page);
+    // Copying an image on a web page puts text/html (an <img>) on the
+    // clipboard - often no file data and no plain text.
+    await page.evaluate(() => {
+      return navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob(
+            ['<img src="https://example.com/pic.png" alt="A pic">'],
+            { type: "text/html" },
+          ),
+        }),
+      ]);
+    });
+    await caretInParagraph(page, "Revenue recovered", 7);
+    await page.keyboard.press("Control+V");
+    await page.waitForTimeout(300);
+    const doc = await getDoc(page);
+    const img = doc.blocks.find((b) => b.kind === "image") as unknown as {
+      image?: { src: string; alt?: string };
+    };
+    expect(img?.image?.src).toBe("https://example.com/pic.png");
+    expect(img?.image?.alt).toBe("A pic");
+  });
 });
 
 /* ------------------------------------------------------------------ */
