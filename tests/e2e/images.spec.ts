@@ -354,6 +354,186 @@ test.describe("image blocks", () => {
     expect(md).toMatch(/!\[quads\]\(data:image\//);
   });
 
+  test("crop drag held at the stage edge auto-scrolls, extending the selection past the viewport", async ({
+    page,
+  }) => {
+    // a 2000x80 image - wider than the article, so the crop stage
+    // scrolls horizontally
+    const wideB64 = await page.evaluate(async () => {
+      const c = document.createElement("canvas");
+      c.width = 2000;
+      c.height = 80;
+      const ctx = c.getContext("2d");
+      if (!ctx) return "";
+      ctx.fillStyle = "#3366cc";
+      ctx.fillRect(0, 0, 2000, 80);
+      const blob = await new Promise<Blob | null>((r) =>
+        c.toBlob(r, "image/png"),
+      );
+      if (!blob) return "";
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 8192) {
+        bin += String.fromCharCode(...buf.subarray(i, i + 8192));
+      }
+      return btoa(bin);
+    });
+    await loadDoc(page, `# T\n\n![wide](data:image/png;base64,${wideB64})`);
+    const figure = page.locator("#the-doc figure.folio-image");
+    const img = figure.locator("img");
+    await expect
+      .poll(
+        async () =>
+          await img.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(2000);
+
+    await img.click();
+    const insp = figure.locator(".folio-inspector");
+    await insp.locator(".insp-crop").click();
+    const stage = figure.locator(".folio-crop-stage");
+    await expect(stage).toBeVisible();
+    const sb = await stage.boundingBox();
+    const ib = await img.boundingBox();
+    if (!sb || !ib) throw new Error("no boxes");
+    // the image is wider than the visible stage
+    expect(ib.width).toBeGreaterThan(sb.width + 200);
+
+    // drag from near the left edge and hold the pointer at the
+    // stage's right edge: the stage must auto-scroll and the
+    // selection must grow past the visible width
+    const y0 = ib.y + ib.height * 0.1;
+    const y1 = ib.y + ib.height * 0.9;
+    await page.mouse.move(sb.x + 40, y0);
+    await page.mouse.down();
+    await page.mouse.move(sb.x + sb.width - 4, y1, { steps: 5 });
+    await expect
+      .poll(async () => await stage.evaluate((el) => el.scrollLeft))
+      .toBeGreaterThan(50);
+    await expect
+      .poll(async () => {
+        const r = await figure
+          .locator(".folio-crop-rect")
+          .evaluate((el) => Number(el.style.width.replace("px", "")));
+        return r > sb.width;
+      })
+      .toBe(true);
+    await page.mouse.up();
+
+    // applying crops to the full dragged region - wider than the
+    // initially visible stage (poll: re-encode + re-render is async)
+    await insp.locator(".insp-apply").click();
+    await expect
+      .poll(async () => {
+        const w = await img.evaluate(
+          (el) => (el as HTMLImageElement).naturalWidth,
+        );
+        return w > sb.width && w < 2000; // past the viewport, not all
+      })
+      .toBe(true);
+  });
+
+  test("crop rect handles resize and move the selection; the bar wraps so Apply stays visible", async ({
+    page,
+  }) => {
+    const quadB64 = await page.evaluate(async () => {
+      const c = document.createElement("canvas");
+      c.width = 200;
+      c.height = 100;
+      const ctx = c.getContext("2d");
+      if (!ctx) return "";
+      ctx.fillStyle = "#3366cc";
+      ctx.fillRect(0, 0, 200, 100);
+      const blob = await new Promise<Blob | null>((r) =>
+        c.toBlob(r, "image/png"),
+      );
+      if (!blob) return "";
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 8192) {
+        bin += String.fromCharCode(...buf.subarray(i, i + 8192));
+      }
+      return btoa(bin);
+    });
+    await loadDoc(page, `# T\n\n![q](data:image/png;base64,${quadB64})`);
+    const figure = page.locator("#the-doc figure.folio-image");
+    const img = figure.locator("img");
+    await img.click();
+    const insp = figure.locator(".folio-inspector");
+    await insp.locator(".insp-crop").click();
+    await expect(figure.locator(".folio-crop-overlay")).toBeVisible();
+    // crop mode makes the bar wrap, so the appended controls stay inside it
+    await expect(insp).toHaveClass(/cropping/);
+
+    // draw a selection over fractions 0.2..0.6
+    const box = await img.boundingBox();
+    if (!box) throw new Error("no img box");
+    await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6, {
+      steps: 4,
+    });
+    await page.mouse.up();
+    const rect = figure.locator(".folio-crop-rect");
+    await expect(rect).toBeVisible();
+    // four corner handles plus a centre handle
+    await expect(rect.locator(".folio-crop-handle")).toHaveCount(5);
+    const r1 = await rect.boundingBox();
+    if (!r1) throw new Error("no rect box");
+
+    // grab the SE corner handle and drag it out to 0.9: the rect grows
+    const se = rect.locator(".folio-crop-h-se");
+    const sh = await se.boundingBox();
+    if (!sh) throw new Error("no handle box");
+    await page.mouse.move(sh.x + sh.width / 2, sh.y + sh.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.9, {
+      steps: 4,
+    });
+    await page.mouse.up();
+    const r2 = await rect.boundingBox();
+    if (!r2) throw new Error("no rect box");
+    expect(r2.width).toBeGreaterThan(r1.width + 20);
+    expect(r2.height).toBeGreaterThan(r1.height + 20);
+
+    // grab the centre handle and drag left/up: the rect moves, same size
+    const mv = rect.locator(".folio-crop-h-move");
+    const mh = await mv.boundingBox();
+    if (!mh) throw new Error("no move handle box");
+    await page.mouse.move(mh.x + mh.width / 2, mh.y + mh.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(mh.x - 30, mh.y - 20, { steps: 4 });
+    await page.mouse.up();
+    const r3 = await rect.boundingBox();
+    if (!r3) throw new Error("no rect box");
+    expect(r3.x).toBeLessThan(r2.x - 10);
+    expect(r3.y).toBeLessThan(r2.y - 5);
+    expect(r3.width).toBeCloseTo(r2.width, 0);
+
+    // Apply/Cancel sit inside the bar's visible box (the bar wrapped)
+    const barBox = await insp.boundingBox();
+    const applyBox = await insp.locator(".insp-apply").boundingBox();
+    const cancelBox = await insp.locator(".insp-cancel").boundingBox();
+    if (!barBox || !applyBox || !cancelBox) throw new Error("no bar boxes");
+    expect(applyBox.x + applyBox.width).toBeLessThanOrEqual(
+      barBox.x + barBox.width + 1,
+    );
+    expect(cancelBox.x + cancelBox.width).toBeLessThanOrEqual(
+      barBox.x + barBox.width + 1,
+    );
+
+    // applying crops to the handled region (smaller than the image)
+    await insp.locator(".insp-apply").click();
+    await expect
+      .poll(async () => {
+        const w = await img.evaluate(
+          (el) => (el as HTMLImageElement).naturalWidth,
+        );
+        return w > 60 && w < 200;
+      })
+      .toBe(true);
+  });
+
   test("a hand-typed Markdown image renders and stays standard in the source", async ({
     page,
   }) => {

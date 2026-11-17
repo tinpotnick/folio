@@ -6504,7 +6504,7 @@ export class FolioDoc extends HTMLElement {
     cropBtn.className = "insp-crop";
     cropBtn.textContent = "Crop / zoom";
     cropBtn.title =
-      "Select a region of the image to crop (drag on the image; zoom to place it precisely)";
+      "Select a region of the image to crop (drag on the image; corner handles resize, the centre handle moves; hold at an edge to scroll past the view; zoom to place it precisely)";
     cropBtn.addEventListener("click", () => {
       this.startCropMode(figure, block, bar);
     });
@@ -6533,18 +6533,35 @@ export class FolioDoc extends HTMLElement {
     const rect = document.createElement("div");
     rect.className = "folio-crop-rect";
     rect.style.display = "none";
+    // Grabable handles: corners resize, the centre moves the selection.
+    const handles: HTMLElement[] = [];
+    for (const c of ["nw", "ne", "sw", "se", "move"]) {
+      const h = document.createElement("div");
+      h.className = `folio-crop-handle folio-crop-h-${c}`;
+      h.dataset.handle = c;
+      rect.appendChild(h);
+      handles.push(h);
+    }
     ov.appendChild(rect);
     stage.appendChild(ov);
     figure.insertBefore(stage, next);
     stage.appendChild(img); // moves the img into the stage
     figure.classList.add("cropping");
+    bar.classList.add("cropping"); // let the crop controls wrap in the bar
     img.style.maxWidth = "none";
+    // left-align the img in the stage (the doc CSS centres it), so the
+    // overlay covers exactly the image and there is no dead margin
+    img.style.margin = "0";
 
     let sel: { x0: number; y0: number; x1: number; y1: number } | null = null;
     let baseW = 0;
-    let mode: "draw" | "move" | null = null;
+    let mode: "draw" | "move" | "resize" | null = null;
+    let corner = "";
     let grabDX = 0;
     let grabDY = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let tickId = 0;
 
     const frac = (ev: {
       clientX: number;
@@ -6560,7 +6577,10 @@ export class FolioDoc extends HTMLElement {
       };
     };
     const draw = (): void => {
-      const or_ = ov.getBoundingClientRect();
+      // the overlay sits exactly over the img (which may be offset
+      // inside the stage), so hit-testing and the rect line up
+      ov.style.left = `${String(img.offsetLeft)}px`;
+      ov.style.top = `${String(img.offsetTop)}px`;
       ov.style.width = `${String(img.offsetWidth)}px`;
       ov.style.height = `${String(img.offsetHeight)}px`;
       if (!sel) {
@@ -6569,39 +6589,107 @@ export class FolioDoc extends HTMLElement {
       }
       const ir = img.getBoundingClientRect();
       rect.style.display = "block";
-      rect.style.left = `${String(ir.left - or_.left + sel.x0 * ir.width)}px`;
-      rect.style.top = `${String(ir.top - or_.top + sel.y0 * ir.height)}px`;
+      rect.style.left = `${String(sel.x0 * ir.width)}px`;
+      rect.style.top = `${String(sel.y0 * ir.height)}px`;
       rect.style.width = `${String((sel.x1 - sel.x0) * ir.width)}px`;
       rect.style.height = `${String((sel.y1 - sel.y0) * ir.height)}px`;
     };
     // mouse events (not pointer*): synthetic dispatch in tests and in
     // the WebKitGTK harness only needs MouseEvent
-    const onMove = (ev: MouseEvent): void => {
+    const applyPointer = (clientX: number, clientY: number): void => {
       if (!mode || !sel) return;
-      const f = frac(ev);
+      const f = frac({ clientX, clientY });
       if (mode === "draw") {
         sel = {
           x0: Math.min(sel.x0, f.x),
           y0: Math.min(sel.y0, f.y),
-          x1: Math.max(sel.x0, f.x),
-          y1: Math.max(sel.y0, f.y),
+          x1: Math.max(sel.x1, f.x),
+          y1: Math.max(sel.y1, f.y),
         };
-      } else {
+      } else if (mode === "move") {
         const w = sel.x1 - sel.x0;
         const h = sel.y1 - sel.y0;
         const x0 = Math.min(1 - w, Math.max(0, f.x - grabDX));
         const y0 = Math.min(1 - h, Math.max(0, f.y - grabDY));
         sel = { x0, y0, x1: x0 + w, y1: y0 + h };
+      } else {
+        // resize: the corner opposite the grabbed one stays anchored
+        const ax = corner.includes("w") ? sel.x1 : sel.x0;
+        const ay = corner.startsWith("n") ? sel.y1 : sel.y0;
+        let x0 = Math.min(ax, f.x);
+        let x1 = Math.max(ax, f.x);
+        let y0 = Math.min(ay, f.y);
+        let y1 = Math.max(ay, f.y);
+        if (x1 - x0 < 0.01) {
+          if (corner.includes("w")) x0 = x1 - 0.01;
+          else x1 = x0 + 0.01;
+        }
+        if (y1 - y0 < 0.01) {
+          if (corner.startsWith("n")) y0 = y1 - 0.01;
+          else y1 = y0 + 0.01;
+        }
+        sel = {
+          x0: Math.max(0, x0),
+          y0: Math.max(0, y0),
+          x1: Math.min(1, x1),
+          y1: Math.min(1, y1),
+        };
       }
       draw();
     };
+    // While a drag is held at (or beyond) an edge of the stage's
+    // VISIBLE box, scroll the stage so the selection can extend past
+    // what is on screen; scrolling shifts the image under a
+    // stationary pointer, so re-apply the pointer each tick.
+    // (setInterval, not rAF: the WebKitGTK harness produces no frames
+    // for synthetic events, and the interval drives the scroll there.)
+    const EDGE = 28;
+    const STEP = 18;
+    const tick = (): void => {
+      if (!mode) return;
+      const sr = stage.getBoundingClientRect();
+      if (lastX < sr.left + EDGE) stage.scrollLeft -= STEP;
+      else if (lastX > sr.right - EDGE) stage.scrollLeft += STEP;
+      if (lastY < sr.top + EDGE) stage.scrollTop -= STEP;
+      else if (lastY > sr.bottom - EDGE) stage.scrollTop += STEP;
+      applyPointer(lastX, lastY);
+    };
+    const onMove = (ev: MouseEvent): void => {
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      applyPointer(ev.clientX, ev.clientY);
+    };
     const end = (): void => {
       mode = null;
+      clearInterval(tickId);
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", end);
     };
-    ov.addEventListener("mousedown", (ev) => {
+    const beginDrag = (
+      ev: MouseEvent,
+      m: "draw" | "move" | "resize",
+      c: string,
+    ): void => {
       ev.preventDefault();
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      mode = m;
+      corner = c;
+      if (sel) {
+        const f = frac(ev);
+        grabDX = f.x - sel.x0;
+        grabDY = f.y - sel.y0;
+      }
+      if (m === "draw" && sel === null) {
+        const f = frac(ev);
+        sel = { x0: f.x, y0: f.y, x1: f.x, y1: f.y };
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", end);
+      tickId = window.setInterval(tick, 50);
+      draw();
+    };
+    ov.addEventListener("mousedown", (ev) => {
       const f = frac(ev);
       if (
         sel &&
@@ -6610,17 +6698,21 @@ export class FolioDoc extends HTMLElement {
         f.y >= sel.y0 &&
         f.y <= sel.y1
       ) {
-        mode = "move";
-        grabDX = f.x - sel.x0;
-        grabDY = f.y - sel.y0;
+        beginDrag(ev, "move", "");
       } else {
-        mode = "draw";
-        sel = { x0: f.x, y0: f.y, x1: f.x, y1: f.y };
+        sel = null;
+        beginDrag(ev, "draw", "");
       }
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", end);
-      draw();
     });
+    // corner handles resize the selection, the centre handle moves it
+    for (const h of handles) {
+      h.addEventListener("mousedown", (ev) => {
+        ev.stopPropagation(); // the overlay must not start a draw
+        if (!sel) return;
+        const kind = h.dataset.handle ?? "";
+        beginDrag(ev, kind === "move" ? "move" : "resize", kind);
+      });
+    }
 
     // crop controls live in the inspector bar (outside the stage, so
     // they never scroll away): zoom slider + Apply + Cancel
@@ -6654,7 +6746,9 @@ export class FolioDoc extends HTMLElement {
       stage.remove();
       img.style.maxWidth = "";
       img.style.width = "";
+      img.style.margin = "";
       figure.classList.remove("cropping");
+      bar.classList.remove("cropping");
       figure.insertBefore(img, next);
       zoomInp.remove();
       applyBtn.remove();

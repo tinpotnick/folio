@@ -87,7 +87,13 @@ caption: "Q3 all-hands"
   re-encodes the region via canvas as the new src (PNG when it has
   alpha, else JPEG quality ladder; 8 MB ceiling applies). The
   selection is stored as fractions of the natural image, so zooming
-  never corrupts it. Cancel restores the original view untouched.
+  never corrupts it. The selection rect has grabable handles - the
+  four corners resize, the centre moves it (dragging inside also
+  moves, dragging outside starts a new selection). When the image is
+  bigger than the crop stage, holding a drag at an edge auto-scrolls
+  the stage, so the selection can extend past what is visible. In
+  crop mode the inspector bar wraps, so zoom/Apply/Cancel stay inside
+  it. Cancel restores the original view untouched.
 - **A trailing figure never traps the caret**: when a non-editable
   figure (image/audio/chart/diagram/math/motion) is the LAST block,
   there is no caret target below it - so ArrowDown from the end of
