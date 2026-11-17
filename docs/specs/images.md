@@ -5,9 +5,11 @@
 ## Decision
 
 Images are semantic figure blocks. A folio document is one file
-(ADR-0005), so images EMBED as data URIs in an image directive -
-the canonical form the insert button writes and the serializer
-emits:
+(ADR-0005), so images EMBED as data URIs - but a BASIC image (src +
+alt only) stays standard Markdown `![alt](src)` on its own line
+(amendment to ADR-0013, 2026-11-16): the file remains portable plain
+Markdown. The directive form is used only when the block needs more
+than src+alt:
 
 ```
 ::: image {#ops-cover}
@@ -19,11 +21,14 @@ caption: "Q3 all-hands"
 
 ## Contract
 
-- **Two syntaxes, one model**: the parser also accepts a
-  standard `![alt](src)` line as its own block; it canonicalizes
-  to the directive on the next save, with ids assigned per
-  document (`image-1`, `image-2`, ...). An image inline in a
-  prose line stays prose.
+- **Two syntaxes, one model**: a standard `![alt](src)` line as its
+  own block IS a basic image block - it round-trips unchanged (no
+  id, no canonicalization). The directive appears only once the
+  block needs a `caption:` or an anchor id: adding a caption in the
+  inspector upgrades the block (assigns `image-N`), one-way like a
+  simple table becoming a dataset. A parsed directive keeps its
+  form, so existing documents round-trip byte-identically. An image
+  inline in a prose line stays prose.
 - **Keys**: `src` (required, raw/unquoted - data URIs and URLs
   carry no spaces), `alt` (quoted, optional), `caption` (quoted,
   optional). Unknown keys are a parse error, like tables.
@@ -61,6 +66,13 @@ caption: "Q3 all-hands"
   `src`: data URIs directly, remote URLs opportunistically with
   the alt as fallback. Text paste stays plain text only; a
   clipboard carrying both takes the text.
+- **External images are never downloaded automatically** (ADR-0019
+  consent pattern): an `http(s)://` src renders opportunistically,
+  never a render dependency. Inlining happens only via the explicit
+  **"Download and embed"** action (image inspector button, or the
+  palette command) - one fetch on that click, then the embed
+  ceiling (8 MB) and downscaling rules apply; failures leave the
+  src untouched with a status message.
 - **Figure, not an editing surface**: `figure.folio-image`
   (contenteditable=false) renders the img and an optional
   figcaption. Clicking the image reveals the image inspector -

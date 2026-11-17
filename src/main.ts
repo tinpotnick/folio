@@ -3800,6 +3800,17 @@ function paletteEntries(): PaletteEntry[] {
     },
   });
   entries.push({
+    title: "Download and embed external image",
+    group: "Command",
+    keywords:
+      "image download embed fetch external remote url online http src inline data uri offline",
+    action: () => {
+      void el.embedExternalImage().then((msg) => {
+        flash(msg ?? "No external image at the caret");
+      });
+    },
+  });
+  entries.push({
     title: playing ? "Stop slideshow" : "Play slideshow",
     group: "Command",
     keywords: playing

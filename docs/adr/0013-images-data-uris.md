@@ -72,3 +72,31 @@ caption: "Q3 all-hands"
   in place; alt/caption/file replacement live in the image
   inspector (uniform bar contract); Backspace on a selected
   image removes the block (the diagram affordance).
+
+## Amendment 2026-11-16: basic images stay standard Markdown
+
+Status: accepted (amends the Decision above)
+
+The directive was made canonical so hand-typed `![alt](src)` lines
+would normalize to one model. That throws away the standard form's
+main advantage - a folio file with a basic image is also a plain,
+portable Markdown file (GitHub et al. render it). So, mirroring the
+simple-table rule (a pipe table stays a pipe table until typed
+features are needed):
+
+- A **basic** image - src + alt only, data URI or URL - is stored
+  and serialized as the standard `![alt](src)` on its own line. No
+  id. Insert/paste write this form.
+- The **directive** form appears only when the block needs more than
+  src+alt: a `caption:` (or an anchor id). Adding a caption in the
+  inspector upgrades the block (assigns `image-N`) - one-way, like a
+  simple table becoming a dataset. A parsed directive keeps its form,
+  so existing documents round-trip byte-identically.
+- An image inline inside a prose line stays prose (standard
+  Markdown semantics).
+- **External images are never downloaded automatically.** An
+  `http(s)://` src renders opportunistically (alt when unreachable),
+  never a render dependency. Inlining happens only via the explicit
+  "Download and embed" action (inspector button / palette command),
+  which fetches once, on that click - the ADR-0019 consent pattern -
+  then applies the embed ceiling and downscaling.

@@ -292,35 +292,32 @@ describe("image blocks", () => {
     expect(serializeDoc(parseDoc(md))).toBe(md);
   });
 
-  it("parses a standard Markdown image line and canonicalizes it", () => {
-    const doc = parseDoc("![A cat](https://example.com/cat.png)");
+  it("a standard Markdown image line IS the canonical form (round-trips as-is)", () => {
+    const md = "![A cat](https://example.com/cat.png)\n";
+    const doc = parseDoc(md);
     expect(doc.blocks[0]).toEqual({
       kind: "image",
       image: {
-        id: "image-1",
         src: "https://example.com/cat.png",
         alt: "A cat",
       },
     });
-    expect(serializeDoc(doc)).toBe(
-      "::: image {#image-1}\n" +
-        "src: https://example.com/cat.png\n" +
-        'alt: "A cat"\n' +
-        ":::\n",
-    );
+    expect(serializeDoc(doc)).toBe(md);
+  });
+
+  it("a basic image with a data URI serializes as standard Markdown", () => {
+    const doc = parseDoc("![](data:image/png;base64,iVBORw0KGgo=)");
+    expect(serializeDoc(doc)).toBe("![](data:image/png;base64,iVBORw0KGgo=)\n");
+  });
+
+  it("a captionless image directive keeps its directive form (round-trip)", () => {
+    const md = "::: image {#cover}\nsrc: https://example.com/x.png\n:::";
+    expect(serializeDoc(parseDoc(md))).toBe(md + "\n");
   });
 
   it("an image inside a prose line stays prose", () => {
     const doc = parseDoc("See ![a](b) for details.");
     expect(doc.blocks[0]?.kind).toBe("prose");
-  });
-
-  it("image ids count per document", () => {
-    const doc = parseDoc("![a](b)\n\n![c](d)");
-    const ids = doc.blocks
-      .filter((b) => b.kind === "image")
-      .map((b) => (b.kind === "image" ? b.image.id : ""));
-    expect(ids).toEqual(["image-1", "image-2"]);
   });
 
   it("rejects an image directive without src", () => {

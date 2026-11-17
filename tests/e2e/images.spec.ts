@@ -64,8 +64,10 @@ test.describe("image blocks", () => {
     expect(src).toMatch(/^data:image\/png;base64,/);
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();
-    expect(md).toContain("::: image {#image-");
-    expect(md).toContain('alt: "red dot"');
+    // a basic insert is standard Markdown, not a directive (the
+    // sample doc's own captioned image stays a directive)
+    expect(md).toContain("![red dot](data:image/png;base64,");
+    expect(md).not.toContain('alt: "red dot"');
   });
 
   test("a photo-sized image does not lock the markdown source view", async ({
@@ -91,7 +93,7 @@ test.describe("image blocks", () => {
     await page.locator("#btn-markdown").click();
     await expect(page.locator("#md-wrap")).toBeVisible({ timeout: 10_000 });
     const md = await page.locator("#editor").inputValue();
-    expect(md).toContain("src: data:image/png;base64,");
+    expect(md).toContain("](data:image/png;base64,");
     // the spell pass runs debounced after the switch - the page must
     // still answer afterwards, and the image line must carry no marks
     // (it locked up before the word/token caps)
@@ -162,7 +164,7 @@ test.describe("image blocks", () => {
     // and the markdown source holds the small line, not the photo
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();
-    expect(md).toContain("src: data:image/jpeg;base64,");
+    expect(md).toContain("](data:image/jpeg;base64,");
     expect(md.length).toBeLessThan(bigB64.length / 2);
   });
 
@@ -263,7 +265,7 @@ test.describe("image blocks", () => {
     await expect.poll(async () => await md()).toContain(":::\n\nbelow");
   });
 
-  test("a hand-typed Markdown image renders and canonicalizes", async ({
+  test("a hand-typed Markdown image renders and stays standard in the source", async ({
     page,
   }) => {
     await loadDoc(page, "# T\n\n![A cat](https://example.com/cat.png)");
@@ -275,8 +277,9 @@ test.describe("image blocks", () => {
     );
     await page.locator("#btn-markdown").click();
     const md = await page.locator("#editor").inputValue();
-    expect(md).toContain("::: image {#image-1}");
-    expect(md).toContain("src: https://example.com/cat.png");
+    // standard form round-trips unchanged - no directive upgrade
+    expect(md).toContain("![A cat](https://example.com/cat.png)");
+    expect(md).not.toContain("::: image");
   });
 
   test("the image inspector edits alt and caption in place", async ({
@@ -300,6 +303,60 @@ test.describe("image blocks", () => {
     const md = await page.locator("#editor").inputValue();
     expect(md).toContain('alt: "The all-hands cover"');
     expect(md).toContain('caption: "A new caption"');
+  });
+
+  test("adding a caption upgrades a standard image to the directive", async ({
+    page,
+  }) => {
+    await loadDoc(page, "# T\n\n![A cat](https://example.com/cat.png)");
+    await page.locator("#btn-markdown").click();
+    expect(await page.locator("#editor").inputValue()).toContain(
+      "![A cat](https://example.com/cat.png)",
+    );
+    await page.locator("#btn-view").click();
+    const figure = page.locator("#the-doc figure.folio-image");
+    await figure.locator("img").click();
+    const insp = figure.locator(".folio-inspector");
+    await insp.locator(".insp-caption").fill("My cat");
+    await insp.locator(".insp-caption").press("Enter");
+    await expect(figure.locator("figcaption")).toHaveText("My cat");
+    await page.locator("#btn-markdown").click();
+    const md = await page.locator("#editor").inputValue();
+    // caption needs the directive form: id assigned, directive emitted
+    expect(md).toContain("::: image {#image-1}");
+    expect(md).toContain("src: https://example.com/cat.png");
+    expect(md).toContain('caption: "My cat"');
+  });
+
+  test("'Download and embed' inlines an external image on explicit action", async ({
+    page,
+  }) => {
+    await page.route("https://example.com/pic.png", (route) =>
+      route.fulfill({ contentType: "image/png", body: RED_DOT_PNG }),
+    );
+    await loadDoc(page, "# T\n\n![A pic](https://example.com/pic.png)");
+    const figure = page.locator("#the-doc figure.folio-image");
+    await expect(figure.locator("img")).toHaveAttribute(
+      "src",
+      "https://example.com/pic.png",
+    );
+    // nothing is fetched until the user asks
+    await page.waitForTimeout(500);
+    await expect(figure.locator("img")).toHaveAttribute(
+      "src",
+      "https://example.com/pic.png",
+    );
+    await figure.locator("img").click();
+    const insp = figure.locator(".folio-inspector");
+    await expect(insp.locator(".insp-embed")).toBeVisible();
+    await insp.locator(".insp-embed").click();
+    await expect(figure.locator("img")).toHaveAttribute(
+      "src",
+      /^data:image\/png;base64,/,
+    );
+    await page.locator("#btn-markdown").click();
+    const md = await page.locator("#editor").inputValue();
+    expect(md).toContain("![A pic](data:image/png;base64,");
   });
 
   test("the inspector replaces the image file", async ({ page }) => {

@@ -3,9 +3,14 @@
 - **Images** embed in the document as data URIs - a folio document
   is one file that renders fully offline. Pick a picture with the
   **+ Insert › Image** (or the command palette); the file name seeds the
-  alt text. You can also hand-type the standard form
-  `![alt](https://example.com/cat.png)` on its own line - folio
-  upgrades it to an image directive on the next save. Click an
+  alt text. A basic image is stored as standard Markdown
+  `![alt](data:...)` on its own line - the file stays portable plain
+  Markdown; adding a caption in the inspector upgrades it to a
+  `::: image` directive (with an anchor id). You can also hand-type
+  `![alt](src)` on its own line. An external `http(s)://` image renders
+  when reachable (alt text otherwise) and is never fetched on its own -
+  use the inspector's **Download and embed** (or the palette command)
+  to inline it as a data URI. Click an
   image to edit its alt, caption, or replace the file from its
   inspector bar; click it once and press Backspace or Delete to
   remove it. Files over 8 MB are refused (resize first); floating

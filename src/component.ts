@@ -6362,7 +6362,7 @@ export class FolioDoc extends HTMLElement {
     const figure = document.createElement("figure");
     figure.className = "folio-image";
     figure.dataset.blockIndex = String(idx);
-    figure.dataset.imageId = block.image.id;
+    if (block.image.id !== undefined) figure.dataset.imageId = block.image.id;
     // Selectable (tabindex) so Backspace/Delete on a selected
     // image removes the block - the diagram affordance.
     figure.contentEditable = "false";
@@ -6421,8 +6421,13 @@ export class FolioDoc extends HTMLElement {
     capInp.title = "Figure caption (empty removes it)";
     const capPatch = (): void => {
       const v = capInp.value.trim();
-      if (v) image.caption = v;
-      else delete image.caption;
+      if (v) {
+        image.caption = v;
+        // A caption needs the directive form: upgrade the standard
+        // `![alt](src)` image by giving it an anchor id (one-way, like
+        // a simple table becoming a dataset).
+        if (image.id === undefined) image.id = this.nextImageId();
+      } else delete image.caption;
       const cap = figure.querySelector("figcaption");
       if (v && cap) cap.textContent = v;
       else if (v && !cap) {
@@ -6465,13 +6470,34 @@ export class FolioDoc extends HTMLElement {
       fileInp.value = "";
     });
 
+    // An external src offers an explicit "Download and embed" (the
+    // ADR-0019 consent pattern - never automatic): one fetch, now, on
+    // this click; the image then inlines as a data URI.
+    let embedBtn: HTMLButtonElement | null = null;
+    if (/^https?:\/\//i.test(image.src)) {
+      embedBtn = document.createElement("button");
+      embedBtn.type = "button";
+      embedBtn.className = "insp-embed";
+      embedBtn.textContent = "Download and embed";
+      embedBtn.title =
+        "Fetch this external image now and inline it as a data URI (contacts the server once; the document then needs no network)";
+      embedBtn.addEventListener("click", () => {
+        if (!embedBtn) return;
+        embedBtn.disabled = true;
+        void this.embedExternalImage(block).then((msg) => {
+          if (msg) this.status(msg);
+        });
+      });
+    }
+
     const show = (): void => {
       altInp.value = image.alt ?? "";
       capInp.value = image.caption ?? "";
       bar.hidden = false;
     };
     figure.addEventListener("mousedown", () => show());
-    bar.append(altInp, capInp, fileInp);
+    if (embedBtn) bar.append(altInp, capInp, fileInp, embedBtn);
+    else bar.append(altInp, capInp, fileInp);
     return bar;
   }
 
@@ -6707,18 +6733,76 @@ export class FolioDoc extends HTMLElement {
     if (!this.doc) return;
     const idx = this.blockIndexAtCaret();
     const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
-    let n = 0;
-    for (const b of this.doc.blocks) {
-      if (b.kind === "image") n += 1;
-    }
+    // A basic image is standard Markdown `![alt](src)` - no id, no
+    // directive (spec: docs/specs/images.md). The directive form
+    // appears only when a caption/anchor is added (see the inspector).
     const image: Image = {
-      id: `image-${n + 1}`,
       src,
       ...(alt ? { alt } : {}),
     };
     this.doc.blocks.splice(at, 0, { kind: "image", image });
     this.render();
     this.emitChange("insert");
+  }
+
+  /** The next free numeric image id (for the directive upgrade when a
+   * caption is added to a standard-form image): max existing numeric
+   * id + 1, so basic inserts (which carry no id) don't shift it. */
+  private nextImageId(): string {
+    let max = 0;
+    for (const b of this.doc?.blocks ?? []) {
+      if (b.kind === "image" && b.image.id !== undefined) {
+        const m = /^image-(\d+)$/.exec(b.image.id);
+        if (m) max = Math.max(max, Number(m[1]));
+      }
+    }
+    return `image-${String(max + 1)}`;
+  }
+
+  /** "Download and embed" an external image (the ADR-0019 consent
+   * pattern): the fetch happens only on this explicit action, never
+   * automatically. Targets `atBlock` (the inspector's figure) or the
+   * last caret/clicked block. Returns a status message, or null when
+   * there is no external image to embed. */
+  async embedExternalImage(
+    atBlock?: Doc["blocks"][number],
+  ): Promise<string | null> {
+    let block = atBlock;
+    if (!block) {
+      const el = this.lastBlock;
+      const idx = el ? Number(el.dataset.blockIndex ?? -1) : -1;
+      block = idx >= 0 ? this.doc?.blocks[idx] : undefined;
+    }
+    if (!block || block.kind !== "image") return null;
+    const src = block.image.src;
+    if (!/^https?:\/\//i.test(src)) return null;
+    try {
+      const res = await fetch(src);
+      if (!res.ok) return `Could not download (HTTP ${String(res.status)})`;
+      const blob = await res.blob();
+      let file = new File([blob], "embedded-image", {
+        type: blob.type || "image/png",
+      });
+      const { file: small, resized } = await shrinkImageFile(file);
+      if (small.size <= MAX_EMBED_BYTES) file = small;
+      if (file.size > MAX_EMBED_BYTES) {
+        return "Image too large (over 8 MB) - not embedded";
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = (): void => resolve(String(r.result));
+        r.onerror = (): void => reject(new Error("read failed"));
+        r.readAsDataURL(file);
+      });
+      block.image.src = dataUrl;
+      this.render();
+      this.emitChange();
+      return resized
+        ? "Image downloaded and embedded (resized to fit)"
+        : "Image downloaded and embedded";
+    } catch {
+      return "Could not download (offline, or the server refused)";
+    }
   }
 
   /**

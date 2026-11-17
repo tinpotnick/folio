@@ -94,7 +94,6 @@ export function parseDoc(text: string): Doc {
   const lines = text.split("\n");
   const doc: Doc = { frontmatter: { style: [] }, blocks: [] };
   let i = 0;
-  let imageCount = 0;
   let simpleCount = 0;
 
   if (lines[0] === "---") {
@@ -149,16 +148,16 @@ export function parseDoc(text: string): Doc {
       i = end + 1;
       continue;
     }
-    // A standard Markdown image on its own line - the hand-typed
-    // form. It canonicalizes to the image directive on the next
-    // serialization (ids are assigned per document).
+    // A standard Markdown image on its own line - the hand-typed AND
+    // the canonical form for a basic image (like a simple pipe
+    // table): it round-trips as-is, no id. The directive form appears
+    // only once the block needs more than src+alt (a caption, an
+    // anchor id) - the inspector upgrades to it then.
     const img = /^!\[([^\]]*)\]\(([^)]+)\)$/.exec(line.trim());
     if (img) {
-      imageCount += 1;
       doc.blocks.push({
         kind: "image",
         image: {
-          id: `image-${imageCount}`,
           src: img[2] ?? "",
           ...(img[1] ? { alt: img[1] } : {}),
         },
@@ -1143,7 +1142,14 @@ function serializeMotion(m: Motion): string {
 }
 
 function serializeImage(image: Image): string {
-  const lines = [`::: image {#${image.id}}`];
+  // A basic image (src + alt only) stays standard Markdown - the same
+  // rule as simple pipe tables. The directive form is emitted once the
+  // block carries a caption or an anchor id (captionless directives
+  // keep their id, so they round-trip too).
+  if (image.id === undefined && image.caption === undefined) {
+    return `![${image.alt ?? ""}](${image.src})`;
+  }
+  const lines = [`::: image {#${image.id ?? "image"}}`];
   // src stays raw (unquoted): data URIs and URLs carry no spaces.
   lines.push(`src: ${image.src}`);
   if (image.alt !== undefined) lines.push(`alt: "${image.alt}"`);
