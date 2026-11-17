@@ -54,6 +54,24 @@ export async function saveDocument(
   }
 }
 
+/** Save with no dialog: write straight back to the open document's
+ * path - "Save" once the app knows the file (the dialog above is
+ * Save As). Returns null on success, the error message when the
+ * write failed (file moved/deleted, ...) or not on desktop. */
+export async function writeDocument(
+  path: string,
+  text: string,
+): Promise<string | null> {
+  if (!isDesktop()) return "not desktop";
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    await invoke("write_document", { path, text });
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
 /** Save an exported text file (an STL model, ...) through a native
  * dialog. Returns the path, or null when cancelled / not desktop. */
 export async function saveTextFile(
