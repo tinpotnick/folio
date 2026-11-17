@@ -1747,6 +1747,12 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       align-items: flex-end;
       row-gap: 6px;
     }
+    /* Crop mode appends zoom + Apply + Cancel: let them wrap onto a
+       second row instead of overflowing the bar's right edge. */
+    .folio-inspector.cropping {
+      flex-wrap: wrap;
+      row-gap: 6px;
+    }
     .folio-inspector .insp-field {
       display: flex;
       flex-direction: column;
@@ -2293,6 +2299,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     figure.folio-image {
       margin: 1.2em 0;
       user-select: none;
+      position: relative;
     }
     figure.folio-image img {
       display: block;
@@ -2302,6 +2309,71 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     figure.folio-image:focus {
       outline: 2px solid var(--folio-focus, #1f3fbf);
+    }
+    figure.folio-image .folio-crop-stage {
+      overflow: auto;
+      max-height: 70vh;
+      position: relative;
+      border: 1px dashed var(--folio-focus, #1f3fbf);
+    }
+    figure.folio-image .folio-crop-overlay {
+      position: absolute;
+      left: 0;
+      top: 0;
+      cursor: crosshair;
+      background: rgba(0, 0, 0, 0.25);
+      touch-action: none;
+    }
+    figure.folio-image .folio-crop-rect {
+      position: absolute;
+      border: 2px solid var(--accent, #4c6ef5);
+      background: rgba(76, 110, 245, 0.15);
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+    /* Grabable handles on the crop rect: corners resize, centre moves.
+       The rect itself is pointer-events: none, so handles opt back in. */
+    figure.folio-image .folio-crop-rect .folio-crop-handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      box-sizing: border-box;
+      background: var(--folio-paper, #ffffff);
+      border: 2px solid var(--accent, #4c6ef5);
+      border-radius: 3px;
+      pointer-events: auto;
+    }
+    figure.folio-image .folio-crop-h-nw {
+      left: -6px;
+      top: -6px;
+      cursor: nwse-resize;
+    }
+    figure.folio-image .folio-crop-h-ne {
+      right: -6px;
+      top: -6px;
+      cursor: nesw-resize;
+    }
+    figure.folio-image .folio-crop-h-sw {
+      left: -6px;
+      bottom: -6px;
+      cursor: nesw-resize;
+    }
+    figure.folio-image .folio-crop-h-se {
+      right: -6px;
+      bottom: -6px;
+      cursor: nwse-resize;
+    }
+    figure.folio-image .folio-crop-h-move {
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      transform: translate(-50%, -50%);
+      border-radius: 50%;
+      cursor: move;
+    }
+    .folio-inspector .insp-zoom {
+      width: 90px;
     }
     figure.folio-audio {
       margin: 1.2em 0;

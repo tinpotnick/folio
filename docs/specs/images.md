@@ -76,10 +76,24 @@ caption: "Q3 all-hands"
 - **Figure, not an editing surface**: `figure.folio-image`
   (contenteditable=false) renders the img and an optional
   figcaption. Clicking the image reveals the image inspector -
-  alt text, caption, and a replace-file control - on the uniform
-  bar contract (reveal inside the figure, hide on any outside
-  click, Esc dismisses, no close button). Backspace/Delete on a
-  selected image removes the block (the diagram affordance).
+  alt text, caption, replace-file, download-and-embed (external
+  srcs), and a crop tool - on the uniform bar contract (reveal
+  inside the figure, hide on any outside click, Esc dismisses, no
+  close button). Backspace/Delete on a selected image removes the
+  block (the diagram affordance).
+- **Crop / zoom tool** (inspector "Crop / zoom" button, or the
+  palette command "Crop / zoom image"): drag on the image to select
+  a region, zoom slider (1-4x) to place it precisely, Apply
+  re-encodes the region via canvas as the new src (PNG when it has
+  alpha, else JPEG quality ladder; 8 MB ceiling applies). The
+  selection is stored as fractions of the natural image, so zooming
+  never corrupts it. The selection rect has grabable handles - the
+  four corners resize, the centre moves it (dragging inside also
+  moves, dragging outside starts a new selection). When the image is
+  bigger than the crop stage, holding a drag at an edge auto-scrolls
+  the stage, so the selection can extend past what is visible. In
+  crop mode the inspector bar wraps, so zoom/Apply/Cancel stay inside
+  it. Cancel restores the original view untouched.
 - **A trailing figure never traps the caret**: when a non-editable
   figure (image/audio/chart/diagram/math/motion) is the LAST block,
   there is no caret target below it - so ArrowDown from the end of

@@ -3811,6 +3811,17 @@ function paletteEntries(): PaletteEntry[] {
     },
   });
   entries.push({
+    title: "Crop / zoom image",
+    group: "Command",
+    keywords:
+      "image crop zoom cut trim region select resize picture photo inspector",
+    action: () => {
+      flash(
+        el.cropSelectedImage() ?? "No image selected - click an image first",
+      );
+    },
+  });
+  entries.push({
     title: playing ? "Stop slideshow" : "Play slideshow",
     group: "Command",
     keywords: playing

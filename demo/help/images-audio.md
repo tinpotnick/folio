@@ -12,8 +12,13 @@
   use the inspector's **Download and embed** (or the palette command)
   to inline it as a data URI. Click an
   image to edit its alt, caption, or replace the file from its
-  inspector bar; click it once and press Backspace or Delete to
-  remove it. Files over 8 MB are refused (resize first); floating
+  inspector bar - and **Crop / zoom** to cut a region out (drag on
+  the image - the corner handles resize the selection, the centre
+  handle moves it; zoom to place it precisely, Apply; if the image
+  is bigger than the view, hold the drag at an edge and the view
+  scrolls so you can select past it); an external image
+  shows **Download and embed** to inline it. Click the image once
+  and press Backspace or Delete to remove it. Files over 8 MB are refused (resize first); floating
   images and text wrap are deliberately not supported - layout
   belongs to the theme, not the document. Large pictures (over
   400 KB) are downscaled on insert - longest edge 2048 px, re-encoded

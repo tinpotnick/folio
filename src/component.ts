@@ -104,7 +104,7 @@ import {
 } from "./render/inline.js";
 import { parseBibtex, type Bibliography } from "./engine/bibtex.js";
 import { toIso } from "./engine/dates.js";
-import { shrinkImageFile } from "./image-shrink.js";
+import { encodeCanvasImage, shrinkImageFile } from "./image-shrink.js";
 import {
   WORD_RE,
   addCustomWord,
@@ -6498,7 +6498,340 @@ export class FolioDoc extends HTMLElement {
     figure.addEventListener("mousedown", () => show());
     if (embedBtn) bar.append(altInp, capInp, fileInp, embedBtn);
     else bar.append(altInp, capInp, fileInp);
+
+    const cropBtn = document.createElement("button");
+    cropBtn.type = "button";
+    cropBtn.className = "insp-crop";
+    cropBtn.textContent = "Crop / zoom";
+    cropBtn.title =
+      "Select a region of the image to crop (drag on the image; corner handles resize, the centre handle moves; hold at an edge to scroll past the view; zoom to place it precisely)";
+    cropBtn.addEventListener("click", () => {
+      this.startCropMode(figure, block, bar);
+    });
+    bar.appendChild(cropBtn);
     return bar;
+  }
+
+  /** Crop mode on an image figure (spec: docs/specs/images.md): the
+   * img moves into a scrollable stage, a drag on the overlay selects
+   * a region (stored as fractions of the natural image, so the zoom
+   * slider never corrupts it), Apply re-encodes the region as the new
+   * src. Cancel restores the original view. */
+  private startCropMode(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "image" }>,
+    bar: HTMLElement,
+  ): void {
+    if (figure.querySelector(".folio-crop-stage")) return; // already cropping
+    const img = figure.querySelector("img");
+    if (!img) return;
+    const next = img.nextSibling;
+    const stage = document.createElement("div");
+    stage.className = "folio-crop-stage";
+    const ov = document.createElement("div");
+    ov.className = "folio-crop-overlay";
+    const rect = document.createElement("div");
+    rect.className = "folio-crop-rect";
+    rect.style.display = "none";
+    // Grabable handles: corners resize, the centre moves the selection.
+    const handles: HTMLElement[] = [];
+    for (const c of ["nw", "ne", "sw", "se", "move"]) {
+      const h = document.createElement("div");
+      h.className = `folio-crop-handle folio-crop-h-${c}`;
+      h.dataset.handle = c;
+      rect.appendChild(h);
+      handles.push(h);
+    }
+    ov.appendChild(rect);
+    stage.appendChild(ov);
+    figure.insertBefore(stage, next);
+    stage.appendChild(img); // moves the img into the stage
+    figure.classList.add("cropping");
+    bar.classList.add("cropping"); // let the crop controls wrap in the bar
+    img.style.maxWidth = "none";
+    // left-align the img in the stage (the doc CSS centres it), so the
+    // overlay covers exactly the image and there is no dead margin
+    img.style.margin = "0";
+
+    let sel: { x0: number; y0: number; x1: number; y1: number } | null = null;
+    let baseW = 0;
+    let mode: "draw" | "move" | "resize" | null = null;
+    let corner = "";
+    let grabDX = 0;
+    let grabDY = 0;
+    let lastX = 0;
+    let lastY = 0;
+    let tickId = 0;
+
+    const frac = (ev: {
+      clientX: number;
+      clientY: number;
+    }): {
+      x: number;
+      y: number;
+    } => {
+      const ir = img.getBoundingClientRect();
+      return {
+        x: Math.min(1, Math.max(0, (ev.clientX - ir.left) / ir.width)),
+        y: Math.min(1, Math.max(0, (ev.clientY - ir.top) / ir.height)),
+      };
+    };
+    const draw = (): void => {
+      // the overlay sits exactly over the img (which may be offset
+      // inside the stage), so hit-testing and the rect line up
+      ov.style.left = `${String(img.offsetLeft)}px`;
+      ov.style.top = `${String(img.offsetTop)}px`;
+      ov.style.width = `${String(img.offsetWidth)}px`;
+      ov.style.height = `${String(img.offsetHeight)}px`;
+      if (!sel) {
+        rect.style.display = "none";
+        return;
+      }
+      const ir = img.getBoundingClientRect();
+      rect.style.display = "block";
+      rect.style.left = `${String(sel.x0 * ir.width)}px`;
+      rect.style.top = `${String(sel.y0 * ir.height)}px`;
+      rect.style.width = `${String((sel.x1 - sel.x0) * ir.width)}px`;
+      rect.style.height = `${String((sel.y1 - sel.y0) * ir.height)}px`;
+    };
+    // mouse events (not pointer*): synthetic dispatch in tests and in
+    // the WebKitGTK harness only needs MouseEvent
+    const applyPointer = (clientX: number, clientY: number): void => {
+      if (!mode || !sel) return;
+      const f = frac({ clientX, clientY });
+      if (mode === "draw") {
+        sel = {
+          x0: Math.min(sel.x0, f.x),
+          y0: Math.min(sel.y0, f.y),
+          x1: Math.max(sel.x1, f.x),
+          y1: Math.max(sel.y1, f.y),
+        };
+      } else if (mode === "move") {
+        const w = sel.x1 - sel.x0;
+        const h = sel.y1 - sel.y0;
+        const x0 = Math.min(1 - w, Math.max(0, f.x - grabDX));
+        const y0 = Math.min(1 - h, Math.max(0, f.y - grabDY));
+        sel = { x0, y0, x1: x0 + w, y1: y0 + h };
+      } else {
+        // resize: the corner opposite the grabbed one stays anchored
+        const ax = corner.includes("w") ? sel.x1 : sel.x0;
+        const ay = corner.startsWith("n") ? sel.y1 : sel.y0;
+        let x0 = Math.min(ax, f.x);
+        let x1 = Math.max(ax, f.x);
+        let y0 = Math.min(ay, f.y);
+        let y1 = Math.max(ay, f.y);
+        if (x1 - x0 < 0.01) {
+          if (corner.includes("w")) x0 = x1 - 0.01;
+          else x1 = x0 + 0.01;
+        }
+        if (y1 - y0 < 0.01) {
+          if (corner.startsWith("n")) y0 = y1 - 0.01;
+          else y1 = y0 + 0.01;
+        }
+        sel = {
+          x0: Math.max(0, x0),
+          y0: Math.max(0, y0),
+          x1: Math.min(1, x1),
+          y1: Math.min(1, y1),
+        };
+      }
+      draw();
+    };
+    // While a drag is held at (or beyond) an edge of the stage's
+    // VISIBLE box, scroll the stage so the selection can extend past
+    // what is on screen; scrolling shifts the image under a
+    // stationary pointer, so re-apply the pointer each tick.
+    // (setInterval, not rAF: the WebKitGTK harness produces no frames
+    // for synthetic events, and the interval drives the scroll there.)
+    const EDGE = 28;
+    const STEP = 18;
+    const tick = (): void => {
+      if (!mode) return;
+      const sr = stage.getBoundingClientRect();
+      if (lastX < sr.left + EDGE) stage.scrollLeft -= STEP;
+      else if (lastX > sr.right - EDGE) stage.scrollLeft += STEP;
+      if (lastY < sr.top + EDGE) stage.scrollTop -= STEP;
+      else if (lastY > sr.bottom - EDGE) stage.scrollTop += STEP;
+      applyPointer(lastX, lastY);
+    };
+    const onMove = (ev: MouseEvent): void => {
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      applyPointer(ev.clientX, ev.clientY);
+    };
+    const end = (): void => {
+      mode = null;
+      clearInterval(tickId);
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", end);
+    };
+    const beginDrag = (
+      ev: MouseEvent,
+      m: "draw" | "move" | "resize",
+      c: string,
+    ): void => {
+      ev.preventDefault();
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      mode = m;
+      corner = c;
+      if (sel) {
+        const f = frac(ev);
+        grabDX = f.x - sel.x0;
+        grabDY = f.y - sel.y0;
+      }
+      if (m === "draw" && sel === null) {
+        const f = frac(ev);
+        sel = { x0: f.x, y0: f.y, x1: f.x, y1: f.y };
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", end);
+      tickId = window.setInterval(tick, 50);
+      draw();
+    };
+    ov.addEventListener("mousedown", (ev) => {
+      const f = frac(ev);
+      if (
+        sel &&
+        f.x >= sel.x0 &&
+        f.x <= sel.x1 &&
+        f.y >= sel.y0 &&
+        f.y <= sel.y1
+      ) {
+        beginDrag(ev, "move", "");
+      } else {
+        sel = null;
+        beginDrag(ev, "draw", "");
+      }
+    });
+    // corner handles resize the selection, the centre handle moves it
+    for (const h of handles) {
+      h.addEventListener("mousedown", (ev) => {
+        ev.stopPropagation(); // the overlay must not start a draw
+        if (!sel) return;
+        const kind = h.dataset.handle ?? "";
+        beginDrag(ev, kind === "move" ? "move" : "resize", kind);
+      });
+    }
+
+    // crop controls live in the inspector bar (outside the stage, so
+    // they never scroll away): zoom slider + Apply + Cancel
+    const zoomInp = document.createElement("input");
+    zoomInp.type = "range";
+    zoomInp.min = "1";
+    zoomInp.max = "4";
+    zoomInp.step = "0.1";
+    zoomInp.value = "1";
+    zoomInp.className = "insp-zoom";
+    zoomInp.title = "Zoom the image (to place the crop precisely)";
+    zoomInp.addEventListener("input", () => {
+      if (!baseW) baseW = img.getBoundingClientRect().width;
+      img.style.width = `${String(baseW * Number(zoomInp.value))}px`;
+      draw();
+    });
+    const applyBtn = document.createElement("button");
+    applyBtn.type = "button";
+    applyBtn.className = "insp-apply";
+    applyBtn.textContent = "Apply crop";
+    applyBtn.addEventListener("click", () => {
+      void this.applyCrop(block, sel).then((ok) => {
+        if (ok) this.status("Image cropped");
+      });
+    });
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "insp-cancel";
+    cancelBtn.textContent = "Cancel";
+    const exit = (): void => {
+      stage.remove();
+      img.style.maxWidth = "";
+      img.style.width = "";
+      img.style.margin = "";
+      figure.classList.remove("cropping");
+      bar.classList.remove("cropping");
+      figure.insertBefore(img, next);
+      zoomInp.remove();
+      applyBtn.remove();
+      cancelBtn.remove();
+    };
+    cancelBtn.addEventListener("click", exit);
+    bar.append(zoomInp, applyBtn, cancelBtn);
+    draw();
+  }
+
+  /** Re-encode the selected region of an image block as its new src.
+   * Returns false when nothing was selected or encoding failed. */
+  private async applyCrop(
+    block: Extract<Doc["blocks"][number], { kind: "image" }>,
+    sel: { x0: number; y0: number; x1: number; y1: number } | null,
+  ): Promise<boolean> {
+    if (!sel || sel.x1 - sel.x0 < 0.01 || sel.y1 - sel.y0 < 0.01) {
+      this.status("Drag on the image to select a region first");
+      return false;
+    }
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const figure = host?.querySelector<HTMLElement>(
+      `figure.folio-image[data-block-index="${String(
+        this.doc?.blocks.indexOf(block) ?? -1,
+      )}"]`,
+    );
+    const img = figure?.querySelector("img");
+    if (!img) return false;
+    try {
+      const bmp = await createImageBitmap(img);
+      try {
+        const sx = Math.floor(sel.x0 * bmp.width);
+        const sy = Math.floor(sel.y0 * bmp.height);
+        const sw = Math.max(1, Math.floor((sel.x1 - sel.x0) * bmp.width));
+        const sh = Math.max(1, Math.floor((sel.y1 - sel.y0) * bmp.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = sw;
+        canvas.height = sh;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return false;
+        ctx.drawImage(bmp, sx, sy, sw, sh, 0, 0, sw, sh);
+        const { blob } = await encodeCanvasImage(canvas);
+        if (blob.size > MAX_EMBED_BYTES) {
+          this.status("Cropped image too large (over 8 MB) - not applied");
+          return false;
+        }
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = (): void => resolve(String(r.result));
+          r.onerror = (): void => reject(new Error("read failed"));
+          r.readAsDataURL(blob);
+        });
+        block.image.src = dataUrl;
+        this.render();
+        this.emitChange();
+        return true;
+      } finally {
+        bmp.close();
+      }
+    } catch {
+      this.status("Could not crop this image");
+      return false;
+    }
+  }
+
+  /** Palette entry point: start crop mode on the last clicked/caret
+   * image figure. Returns a status message or null when no image. */
+  cropSelectedImage(): string | null {
+    const el = this.lastBlock;
+    const idx = el ? Number(el.dataset.blockIndex ?? -1) : -1;
+    const block = idx >= 0 ? this.doc?.blocks[idx] : undefined;
+    if (
+      !block ||
+      block.kind !== "image" ||
+      !el?.matches("figure.folio-image")
+    ) {
+      return null;
+    }
+    const bar = el.querySelector<HTMLElement>(".folio-inspector");
+    if (!bar) return null;
+    bar.hidden = false;
+    this.startCropMode(el, block, bar);
+    return "Crop mode - drag on the image, then Apply crop";
   }
 
   /**

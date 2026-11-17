@@ -75,6 +75,41 @@ export interface ShrinkResult {
   resized: boolean;
 }
 
+/** Encode a canvas to the best small blob: PNG when the pixels have
+ * transparency, else a JPEG quality ladder down to the target. Used
+ * by shrinkImageFile and by the image inspector's crop tool. */
+export async function encodeCanvasImage(
+  canvas: HTMLCanvasElement,
+): Promise<{ blob: Blob; hasAlpha: boolean }> {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("no 2d context");
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  let hasAlpha = false;
+  for (let i = 3; i < data.length; i += 4) {
+    if (data[i] !== 255) {
+      hasAlpha = true;
+      break;
+    }
+  }
+  if (hasAlpha) {
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob(res, "image/png"),
+    );
+    if (blob) return { blob, hasAlpha };
+  }
+  let best: Blob | null = null;
+  for (const q of [JPEG_QUALITY, 0.7, 0.55]) {
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob(res, "image/jpeg", q),
+    );
+    if (!blob) continue;
+    if (!best || blob.size < best.size) best = blob;
+    if (blob.size <= TARGET_EMBED_BYTES) break;
+  }
+  if (!best) throw new Error("canvas encode failed");
+  return { blob: best, hasAlpha: false };
+}
+
 /** Downscale + re-encode an image file so its data URI stays small.
  * Never grows the file: if re-encoding doesn't help (or the image
  * can't be decoded), the original file is returned untouched. */

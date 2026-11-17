@@ -69,8 +69,9 @@ caption: "Q3 all-hands"
   section-windowing work (docs/specs/section-windowing.md);
   images raise the stakes for lazy figures, not the design.
 - The image is generated output like every figure: not editable
-  in place; alt/caption/file replacement live in the image
-  inspector (uniform bar contract); Backspace on a selected
+  in place; alt/caption/file replacement, download-and-embed, and
+  the crop/zoom tool live in the image inspector (uniform bar
+  contract); Backspace on a selected
   image removes the block (the diagram affordance).
 
 ## Amendment 2026-11-16: basic images stay standard Markdown
