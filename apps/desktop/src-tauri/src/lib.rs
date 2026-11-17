@@ -336,9 +336,25 @@ async fn save_document(
         .ok_or("cancelled")?
         .into_path()
         .map_err(|e| e.to_string())?;
+    write_back(&path, &text)?;
     remember_dir(&app, &path);
-    std::fs::write(&path, &text).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// Write the document's text verbatim - the Save path once the app
+/// knows the file (no dialog; `save_document` above is Save As).
+fn write_back(path: &Path, text: &str) -> Result<(), String> {
+    std::fs::write(path, text).map_err(|e| e.to_string())
+}
+
+/// Save with no dialog: write straight back to the open document's
+/// path. The folder is remembered as the next dialog's hint.
+#[tauri::command]
+async fn write_document(app: tauri::AppHandle, path: String, text: String) -> Result<(), String> {
+    let p = Path::new(&path);
+    write_back(p, &text)?;
+    remember_dir(&app, p);
+    Ok(())
 }
 
 /// "Open .md files with folio by default" (command palette; spec:
@@ -703,6 +719,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_document,
             save_document,
+            write_document,
             save_text_file,
             open_external,
             open_presenter_window,
@@ -732,7 +749,10 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{dir_to_remember, folder_hint, is_external_url, is_portal_path, launch_file_from_args};
+    use super::{
+        dir_to_remember, folder_hint, is_external_url, is_portal_path, launch_file_from_args,
+        write_back,
+    };
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -886,6 +906,20 @@ mod tests {
             folder_hint(None, None, Some(demo.to_str().unwrap())),
             Some(demo)
         );
+    }
+
+    #[test]
+    fn write_back_saves_the_text_verbatim() {
+        // "Save" with a known path writes the file as-is, no dialog
+        let d = tempd("write");
+        let f = d.join("doc.md");
+        write_back(&f, "# Hi\n\ntext\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "# Hi\n\ntext\n");
+        // overwrites in place (a second Save replaces the first)
+        write_back(&f, "# Bye\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&f).unwrap(), "# Bye\n");
+        // a vanished parent folder is an error, not a panic
+        assert!(write_back(&d.join("nope").join("doc.md"), "x").is_err());
     }
 
     #[test]
