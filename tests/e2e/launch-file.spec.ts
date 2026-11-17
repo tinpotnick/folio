@@ -25,8 +25,11 @@ async function desktopLaunchedWith(
           return once ? { path: "/home/n/notes.md", text: once } : null;
         }
         if (cmd === "save_document") {
-          saved.push(args);
+          saved.push({ cmd, ...args });
           return "/home/n/notes.md";
+        }
+        if (cmd === "write_document") {
+          saved.push({ cmd, ...args });
         }
         return null;
       },
@@ -48,16 +51,22 @@ test("launched with a file, folio opens it; Save writes back to it", async ({
   await expect
     .poll(() =>
       page.evaluate(
-        () => (window as unknown as { __saved: { current: string }[] }).__saved,
+        () => (window as unknown as { __saved: { cmd: string }[] }).__saved,
       ),
     )
     .toHaveLength(1);
   const saved = await page.evaluate(
     () =>
-      (window as unknown as { __saved: { current: string; text: string }[] })
-        .__saved[0],
+      (
+        window as unknown as {
+          __saved: { cmd: string; path: string; text: string }[];
+        }
+      ).__saved[0],
   );
-  expect(saved?.current).toBe("/home/n/notes.md");
+  // Save with a known file writes straight back (write_document, no
+  // dialog) - save_document would mean the Save As dialog appeared
+  expect(saved?.cmd).toBe("write_document");
+  expect(saved?.path).toBe("/home/n/notes.md");
   expect(saved?.text).toContain("From the file manager. Edited.");
 });
 

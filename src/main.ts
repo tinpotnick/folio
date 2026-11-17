@@ -87,6 +87,7 @@ import {
   saveDocument,
   saveTextFile,
   setDefaultMdHandler,
+  writeDocument,
 } from "./desktop.js";
 import { clearDraft, keepDraft, readDraft, type Draft } from "./drafts.js";
 import {
@@ -3165,11 +3166,13 @@ function suggestedName(ext: string): string {
 }
 
 /**
- * Save: the desktop's native dialog; on the web, back to the open file
- * where the browser allows real files, else a download. True when it
- * was written.
+ * Save: on the desktop, straight back to the open document's file when
+ * the app knows it (no dialog); otherwise - first save, in-memory doc,
+ * or `{ as: true }` - the native Save As dialog. On the web, back to
+ * the open file where the browser allows real files, else a download.
+ * True when it was written.
  */
-async function saveCurrent(): Promise<boolean> {
+async function saveCurrent(opts?: { as?: boolean }): Promise<boolean> {
   const raw = currentMarkdown();
   if (raw === null) return false;
   // Prettify on save: write the canonical serialization (folio owns
@@ -3182,7 +3185,22 @@ async function saveCurrent(): Promise<boolean> {
     // keep the raw text
   }
   if (isDesktop()) {
-    const path = await saveDocument(md, currentDocPath ?? undefined);
+    let path: string | null = null;
+    if (currentDocPath !== null && opts?.as !== true) {
+      // The app knows the file: write it directly, no dialog.
+      const err = await writeDocument(currentDocPath, md);
+      if (err === null) {
+        path = currentDocPath;
+      } else {
+        // The file may be gone or moved: ask where to save instead.
+        flash(
+          `Could not write ${currentDocPath} (${err}) - choosing a new location`,
+        );
+        path = await saveDocument(md, currentDocPath);
+      }
+    } else {
+      path = await saveDocument(md, currentDocPath ?? undefined);
+    }
     if (path === null) return false;
     currentDocPath = path;
     flash(`Saved ${path}`);
@@ -4425,6 +4443,17 @@ function paletteEntries(): PaletteEntry[] {
     keywords: "save write file document download markdown md",
     action: () => btnSave.click(),
   });
+  // Desktop only: Save writes straight back to the known file (no
+  // dialog); Save As is the one that picks a new location.
+  if (isDesktop()) {
+    entries.push({
+      title: "Save the document as...",
+      group: "Command",
+      keywords:
+        "save as copy write file document new name location folder choose markdown md",
+      action: () => void saveCurrent({ as: true }),
+    });
+  }
   // Desktop only: the web has no OS file association (install the app
   // for that - the help topic says so).
   if (isDesktop()) {

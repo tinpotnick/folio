@@ -2,7 +2,9 @@
 
 - **Open** (folder icon, **Ctrl+O**) loads a .md file; **Save**
   (**Ctrl+S**) writes the document to a file you choose, and after
-  that back to the same file.
+  that straight back to the same file - no dialog. To save somewhere
+  else (a copy, a new name), press **Ctrl+K** and run **Save the
+  document as...**.
 - **In the desktop app** you can also open a .md file straight from
   your file manager: double-click it, or choose **Open with → folio**.
   Save then writes back to that file. To make folio the default app
