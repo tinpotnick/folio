@@ -80,6 +80,19 @@ export interface Theme {
   pageSize: PageSize;
   /** Slide look, applied on top of any theme while playing (slides.md). */
   slide: SlideTheme;
+  /** Image figure layout, document-wide - theme-owned per ADR-0002;
+   *  never a per-image document key (docs/specs/images.md). */
+  figureImage: FigureImageTheme;
+}
+
+/** The figure.image.* style keys: closed, typed, theme-side only. */
+export interface FigureImageTheme {
+  /** block (default), or float so text wraps around the figure. */
+  layout: "block" | "float-left" | "float-right";
+  /** Horizontal placement of the figure box and its caption text. */
+  align: "left" | "center" | "right";
+  /** Figure box max width (CSS length or % of the measure). */
+  width: string;
 }
 
 /** Typed `page.size` values (docs/specs/slides.md). */
@@ -215,6 +228,7 @@ const DEFAULT_THEME: Theme = {
       dark: "rgba(20, 20, 24, 0.72)",
     },
   },
+  figureImage: { layout: "block", align: "center", width: "100%" },
 };
 
 function palette(name: string): Record<Mode, string[]> {
@@ -838,6 +852,35 @@ export function themeFromDoc(doc: Doc): Theme {
       ? (style.get("page.size") as PageSize)
       : base.pageSize,
     slide: slideFromStyle(base.slide, style),
+    figureImage: figureImageFromStyle(base.figureImage, style),
+  };
+}
+
+/** The figure.image.* style keys overlay the theme's figureImage
+ *  block. Width must be a plain CSS length/percentage - it lands in
+ *  the generated stylesheet. */
+function figureImageFromStyle(
+  base: FigureImageTheme,
+  style: Map<string, string>,
+): FigureImageTheme {
+  const layout = style.get("figure.image.layout");
+  const align = style.get("figure.image.align");
+  const width = style.get("figure.image.width");
+  return {
+    layout:
+      layout === "float-left" || layout === "float-right"
+        ? layout
+        : layout === "block"
+          ? "block"
+          : base.layout,
+    align:
+      align === "left" || align === "center" || align === "right"
+        ? align
+        : base.align,
+    width:
+      width !== undefined && /^[\d.]+(px|em|rem|%|ch|vw|vh)?$/i.test(width)
+        ? width
+        : base.width,
   };
 }
 
@@ -1263,6 +1306,43 @@ function headingCss(theme: Theme): string {
     }`;
 }
 
+/** Document-wide image figure layout (the figure.image.* style keys):
+ *  block with alignment, or float so text wraps around the figure.
+ *  Scoped to non-slide rendering - slides have their own placement
+ *  (slide.image.*). */
+function figureImageCss(fi: FigureImageTheme): string {
+  const capAlign =
+    fi.align === "center" ? "center" : fi.align === "right" ? "right" : "start";
+  if (fi.layout === "float-left" || fi.layout === "float-right") {
+    const side = fi.layout === "float-left" ? "left" : "right";
+    const margin =
+      side === "left" ? "0.3em 1.2em 0.6em 0" : "0.3em 0 0.6em 1.2em";
+    return `
+    article.folio-doc:not([slides]) figure.folio-image {
+      float: ${side};
+      max-width: ${fi.width};
+      margin: ${margin};
+    }
+    article.folio-doc:not([slides]) figure.folio-image figcaption {
+      text-align: ${capAlign};
+    }`;
+  }
+  const margin =
+    fi.align === "center"
+      ? "margin-left: auto; margin-right: auto;"
+      : fi.align === "left"
+        ? "margin-right: auto;"
+        : "margin-left: auto;";
+  return `
+    article.folio-doc:not([slides]) figure.folio-image {
+      max-width: ${fi.width};
+      ${margin}
+    }
+    article.folio-doc:not([slides]) figure.folio-image figcaption {
+      text-align: ${capAlign};
+    }`;
+}
+
 export function themeCss(theme: Theme, mode: Mode = "light"): string {
   return `
     :host {
@@ -1339,6 +1419,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     figure {
       margin: 1.6em 0;
     }
+    ${figureImageCss(theme.figureImage)}
     figcaption {
       font-size: 0.85em;
       color: var(--folio-ink-muted, #57606a);

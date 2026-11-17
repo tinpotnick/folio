@@ -63,6 +63,21 @@ written to documents):
 | `slide.image.width` | CSS length | contained image width on content slides |
 | `slide.scrim.light` / `.dark` | color+alpha | legibility scrim under background images |
 
+## Figure keys (`figure.image.*`, docs/specs/images.md)
+
+Document-wide layout for image figures, applied on top of ANY theme
+in the document view (slides keep their own `slide.image.*`
+placement, so these keys are inert while playing):
+
+| Key | Values | Meaning |
+|---|---|---|
+| `figure.image.layout` | `block` (default), `float-left`, `float-right` | block figure, or float so text wraps around it |
+| `figure.image.align` | `left`, `center` (default), `right` | block alignment (margins); caption text alignment when floated |
+| `figure.image.width` | CSS length (default `100%`) | figure max-width; validated (junk falls back to `100%`) |
+
+Nothing per-image is stored in the document (ADR-0013 non-goals
+stand); these keys style every image figure consistently.
+
 ## Table styles (`table.style`)
 
 | Style | Rendering |

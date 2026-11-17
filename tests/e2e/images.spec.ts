@@ -455,6 +455,7 @@ test.describe("image blocks", () => {
       }
       return btoa(bin);
     });
+
     await loadDoc(page, `# T\n\n![q](data:image/png;base64,${quadB64})`);
     const figure = page.locator("#the-doc figure.folio-image");
     const img = figure.locator("img");
@@ -532,6 +533,87 @@ test.describe("image blocks", () => {
         return w > 60 && w < 200;
       })
       .toBe(true);
+  });
+
+  test("theme figure.image.* keys lay out images document-wide (float wraps text)", async ({
+    page,
+  }) => {
+    // a 200x100 image so the figure has a real box
+
+    const quadB64 = await page.evaluate(async () => {
+      const c = document.createElement("canvas");
+      c.width = 200;
+      c.height = 100;
+      const ctx = c.getContext("2d");
+      if (!ctx) return "";
+      ctx.fillStyle = "#3366cc";
+      ctx.fillRect(0, 0, 200, 100);
+      const blob = await new Promise<Blob | null>((r) =>
+        c.toBlob(r, "image/png"),
+      );
+      if (!blob) return "";
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 8192) {
+        bin += String.fromCharCode(...buf.subarray(i, i + 8192));
+      }
+      return btoa(bin);
+    });
+
+    const md = [
+      "---",
+      "style:",
+      "  figure.image.layout: float-left",
+      "  figure.image.width: 40%",
+      "---",
+      "",
+      "# T",
+      "",
+      `![box](data:image/png;base64,${quadB64})`,
+      "",
+      "Wrap text ".repeat(60),
+    ].join("\n");
+    await loadDoc(page, md);
+    const figure = page.locator("#the-doc figure.folio-image");
+    const cs = await figure.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        float: s.cssFloat,
+        maxWidth: s.maxWidth,
+        marginTop: parseFloat(s.marginTop),
+      };
+    });
+    expect(cs.float).toBe("left");
+    // the paragraph flows BESIDE the floated figure, not below it
+    const fr = await figure.boundingBox();
+    const pr = await page.locator("#the-doc p").last().boundingBox();
+    if (!fr || !pr) throw new Error("no boxes");
+    expect(pr.y).toBeLessThan(fr.y + fr.height);
+    // starts at the float's top edge (boundingBox excludes the float's
+    // own top margin, which sits above it)
+    expect(pr.y).toBeGreaterThanOrEqual(fr.y - cs.marginTop - 2);
+
+    // block + align right instead: no float, auto left margin
+    const md2 = md
+      .replace("figure.image.layout: float-left", "figure.image.layout: block")
+      .replace(
+        "figure.image.width: 40%",
+        "figure.image.align: right\n  figure.image.width: 40%",
+      );
+    await loadDoc(page, md2);
+    const cs2 = await page
+      .locator("#the-doc figure.folio-image")
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        return {
+          float: s.cssFloat,
+          marginLeft: s.marginLeft,
+          marginRight: s.marginRight,
+        };
+      });
+    expect(cs2.float).toBe("none");
+    expect(cs2.marginLeft).not.toBe("0px");
+    expect(cs2.marginRight).toBe("0px");
   });
 
   test("a hand-typed Markdown image renders and stays standard in the source", async ({

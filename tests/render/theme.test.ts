@@ -88,6 +88,38 @@ describe("theme style keys", () => {
   it("an unknown theme name falls back to the default look", () => {
     expect(docTheme("---\ntheme: literary\n---\n\n")).toEqual(docTheme(""));
   });
+
+  it("figure.image.* keys set the document-wide image figure layout", () => {
+    const t = docTheme(
+      "---\nstyle:\n  figure.image.layout: float-right\n  figure.image.align: right\n  figure.image.width: 60%\n---\n\n",
+    );
+    expect(t.figureImage).toEqual({
+      layout: "float-right",
+      align: "right",
+      width: "60%",
+    });
+    const css = themeOf(
+      "---\nstyle:\n  figure.image.layout: float-right\n  figure.image.align: right\n  figure.image.width: 60%\n---\n\n",
+    );
+    expect(css).toContain("figure.folio-image");
+    expect(css).toContain("float: right");
+    expect(css).toContain("max-width: 60%");
+    // scoped away from slides, which have their own placement
+    expect(css).toContain("article.folio-doc:not([slides]) figure.folio-image");
+  });
+
+  it("figure.image.* defaults to block/center/100% and rejects junk", () => {
+    expect(docTheme("").figureImage).toEqual({
+      layout: "block",
+      align: "center",
+      width: "100%",
+    });
+    const t = docTheme(
+      "---\nstyle:\n  figure.image.layout: sideways\n  figure.image.width: 60%; background: red\n---\n\n",
+    );
+    expect(t.figureImage.layout).toBe("block");
+    expect(t.figureImage.width).toBe("100%"); // unsafe CSS rejected
+  });
 });
 
 describe("shipped themes", () => {
@@ -199,7 +231,18 @@ describe("slides (docs/specs/slides.md)", () => {
   it("slide rules are scoped to [slides] and never apply to the plain document", () => {
     const css = themeOf("");
     expect(css).toContain("article.folio-doc[slides]");
-    expect(css).not.toContain("article.folio-doc:not([slides])");
+    // Slide-only declarations must live only in [slides]-scoped rules.
+    // (Other rules MAY be scoped away from slides with :not([slides]) -
+    // e.g. figure.image.* layout, which slides replace with their own.)
+    const noComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const chunk of noComments.split("}")) {
+      if (!chunk.includes("--slide-h")) {
+        continue;
+      }
+      const parts = chunk.split("{");
+      const selector = parts.length > 1 ? parts[parts.length - 2] : chunk;
+      expect(selector).toContain("[slides]");
+    }
     expect(css).toContain("aspect-ratio: 16 / 9");
   });
 
