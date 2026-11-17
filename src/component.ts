@@ -1304,6 +1304,24 @@ export class FolioDoc extends HTMLElement {
     // a new tab). Editing lives on the toolbar's link button.
     host.addEventListener("click", (ev) => {
       if (this.handleFootnoteClick(ev)) return;
+      // Clicking the empty space below a TRAILING non-editable figure
+      // (image, chart, ...) must offer a place to type below it: append
+      // an empty paragraph and put the caret there. (When the last
+      // block is editable text the browser already lands the caret at
+      // its end - leave that alone.)
+      if (
+        ev.target === host &&
+        this.doc &&
+        this.isNonEditableFigure(this.doc.blocks[this.doc.blocks.length - 1])
+      ) {
+        const lastEl = host.lastElementChild as HTMLElement | null;
+        const rect = lastEl?.getBoundingClientRect();
+        if (rect && ev.clientY > rect.bottom) {
+          ev.preventDefault();
+          this.appendParagraphAtEnd();
+          return;
+        }
+      }
       const cite = (ev.target as Element).closest?.(
         "span.folio-cite",
       ) as HTMLElement | null;
@@ -10324,6 +10342,55 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
+  /** Block kinds that render as contenteditable=false figures: the
+   * caret can never sit inside them, so when one is the LAST block
+   * there is no caret target below it and typing has nowhere to go. */
+  private isNonEditableFigure(b: Doc["blocks"][number] | undefined): boolean {
+    return (
+      !!b &&
+      (b.kind === "image" ||
+        b.kind === "audio" ||
+        b.kind === "chart" ||
+        b.kind === "diagram" ||
+        b.kind === "math" ||
+        b.kind === "motion")
+    );
+  }
+
+  /** True when the caret sits at the very end of block idx's text.
+   * (caretAtBlockEnd's comparePoint misses the boundary case
+   * (lastTextNode, len) vs (block, childCount) - it returns -1 there -
+   * so measure the text up to the caret instead.) */
+  private caretAtTextEndOfBlock(
+    idx: number,
+    at: { node: Node; offset: number },
+  ): boolean {
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    const el = host?.children[idx] as HTMLElement | undefined;
+    if (!el) return false;
+    let n: Node | null = at.node;
+    while (n !== null && n !== el) n = n.parentNode;
+    if (n === null) return false; // the caret is not in this block
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    try {
+      r.setEnd(at.node, at.offset);
+    } catch {
+      return false;
+    }
+    return r.toString().length === (el.textContent ?? "").length;
+  }
+
+  /** Append an empty paragraph and focus it - the way to add content
+   * below a trailing non-editable figure (image, chart, ...). */
+  private appendParagraphAtEnd(): void {
+    if (!this.doc) return;
+    this.doc.blocks.push({ kind: "prose", text: "" });
+    this.render();
+    this.emitChange();
+    this.focusBlockStart(this.doc.blocks.length - 1);
+  }
+
   /**
    * Insert a SIMPLE table (a standard Markdown pipe table) after the
    * caret's block - what a Markdown user expects (spec: docs/specs/
@@ -10474,6 +10541,51 @@ export class FolioDoc extends HTMLElement {
         this.emitChange("delete");
       }
       return;
+    }
+    // ArrowDown onto or past a non-editable figure (image, chart,
+    // ...): the caret cannot enter it, so at the document's end there
+    // would be nowhere to type - append an empty paragraph below it.
+    if (
+      ev.key === "ArrowDown" &&
+      !ev.shiftKey &&
+      !ev.ctrlKey &&
+      !ev.metaKey &&
+      !ev.altKey &&
+      this.doc
+    ) {
+      // A selected figure owns the key event (its target is the figure)
+      const figTarget =
+        ev.target instanceof Element
+          ? (ev.target.closest("figure") as HTMLElement | null)
+          : null;
+      if (figTarget && figTarget.contentEditable === "false") {
+        const idx = Number(figTarget.dataset.blockIndex ?? -1);
+        if (idx >= 0) {
+          ev.preventDefault();
+          if (idx + 1 < this.doc.blocks.length) this.focusBlockStart(idx + 1);
+          else this.appendParagraphAtEnd();
+        }
+        return;
+      }
+      // Caret at the very end of a block directly above a TRAILING
+      // figure: the browser's ArrowDown has no editable target below,
+      // so offer the new paragraph ourselves.
+      const at = this.caretPoint();
+      const el =
+        at && (at.node instanceof Element ? at.node : at.node.parentElement);
+      const blk = el?.closest("[data-block-index]");
+      const idx = blk ? Number(blk.getAttribute("data-block-index") ?? -1) : -1;
+      if (
+        at &&
+        idx >= 0 &&
+        this.caretAtTextEndOfBlock(idx, at) &&
+        this.isNonEditableFigure(this.doc.blocks[idx + 1]) &&
+        idx + 2 >= this.doc.blocks.length
+      ) {
+        ev.preventDefault();
+        this.appendParagraphAtEnd();
+        return;
+      }
     }
     // Ctrl/Cmd+A in a code body selects the CODE, never the whole
     // document (where the next keystroke would replace everything).
