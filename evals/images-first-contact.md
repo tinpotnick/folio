@@ -18,8 +18,10 @@ steps:
 expected:
   - The picked picture appears in the document immediately after
     the clicked paragraph; the alt is seeded from the file name.
-  - The source shows an image directive (::: image {#image-...})
-    with the picture embedded as a data: URI - one file, offline.
+  - The source shows the picture as standard Markdown
+    ![alt](data:...) on its own line - a basic image stays standard;
+    one file, offline. After the caption edit, the source upgrades
+    to a ::: image {#image-...} directive carrying the caption.
   - The bar shows alt, caption, and a replace control; edits
     re-render the figure in place and reach the source; the bar
     hides on a click outside the figure (no close button).

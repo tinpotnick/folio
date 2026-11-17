@@ -110,9 +110,12 @@ export interface Block {
 }
 
 export interface Image {
-  id: string; // directive anchor, e.g. ops-photo
+  // Directive anchor, e.g. ops-photo - only the directive form carries
+  // one; a basic image is standard Markdown `![alt](src)` and has none.
+  id?: string;
   // A data URI (offline-safe, single file) or an external URL /
-  // path (rendered opportunistically - never a render dependency).
+  // path (rendered opportunistically - never a render dependency;
+  // embedded only via the explicit "Download and embed" action).
   src: string;
   alt?: string;
   caption?: string;
