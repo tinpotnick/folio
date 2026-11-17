@@ -95,9 +95,13 @@ caption: "Q3 all-hands"
   the empty space below the figure each append a new empty
   paragraph after it and focus it. No trip to the Markdown source
   needed to add content below a trailing image.
-- **No float/wrap/resize** (ADR-0013 non-goals): layout is the
-  renderer's. A semantic `width` key is a possible later
-  addition; anchoring and text wrap are not.
+- **No per-image float/wrap/resize in the document** (ADR-0013
+  non-goals stand): nothing layout-related is stored per image.
+  Document-WIDE image layout is theme-owned instead, via the
+  `figure.image.layout` / `.align` / `.width` style keys
+  (docs/specs/themes.md) - `float-left`/`float-right` wraps text
+  around every image figure, consistently, for both the standard
+  `![alt](src)` form and the `::: image` directive.
 
 ## Acceptance
 
