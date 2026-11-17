@@ -10,6 +10,9 @@ steps:
     alt text and press Enter, then the caption and press Enter.
   - Click the sample document's cover image, then use the bar's
     file control to replace it with another picture.
+  - With the image still selected, click **Crop / zoom** in its
+    bar, drag a rectangle over part of the picture, press
+    **Apply crop**, then **Cancel** on a second pass.
   - Click the image once and press Backspace.
   - Press Ctrl+K, type "original image", press Enter (the
     "Keep original image quality" command), then insert a photo
@@ -27,6 +30,10 @@ expected:
     hides on a click outside the figure (no close button).
   - Replacing the file swaps the picture; the source's src
     changes.
+  - Crop mode shows a draggable selection over the image (zoom
+    slider magnifies up to 4x); Apply replaces the picture with
+    just the selected region (a fresh data: URI in the source),
+    Cancel leaves it untouched.
   - Backspace on the selected image removes the whole block from
     the document and the source.
   - Picking a huge file (over 8 MB) is refused with a visible

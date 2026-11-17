@@ -265,6 +265,95 @@ test.describe("image blocks", () => {
     await expect.poll(async () => await md()).toContain(":::\n\nbelow");
   });
 
+  test("the inspector's crop tool crops the image (drag + zoom + apply)", async ({
+    page,
+  }) => {
+    // a 200x100 image with four distinct quadrants
+    const quadB64 = await page.evaluate(async () => {
+      const c = document.createElement("canvas");
+      c.width = 200;
+      c.height = 100;
+      const ctx = c.getContext("2d");
+      if (!ctx) return "";
+      ctx.fillStyle = "#ff0000";
+      ctx.fillRect(0, 0, 100, 50);
+      ctx.fillStyle = "#00ff00";
+      ctx.fillRect(100, 0, 100, 50);
+      ctx.fillStyle = "#0000ff";
+      ctx.fillRect(0, 50, 100, 50);
+      ctx.fillStyle = "#ffff00";
+      ctx.fillRect(100, 50, 100, 50);
+      const blob = await new Promise<Blob | null>((r) =>
+        c.toBlob(r, "image/png"),
+      );
+      if (!blob) return "";
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < buf.length; i += 8192) {
+        bin += String.fromCharCode(...buf.subarray(i, i + 8192));
+      }
+      return btoa(bin);
+    });
+    await loadDoc(page, `# T\n\n![quads](data:image/png;base64,${quadB64})`);
+    const figure = page.locator("#the-doc figure.folio-image");
+    const img = figure.locator("img");
+    await expect(img).toHaveAttribute("src", /^data:image\/png;base64,/);
+    await expect
+      .poll(
+        async () =>
+          await img.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(200);
+
+    await img.click();
+    const insp = figure.locator(".folio-inspector");
+    await expect(insp).toBeVisible();
+    await insp.locator(".insp-crop").click();
+    await expect(figure.locator(".folio-crop-overlay")).toBeVisible();
+
+    // zoom to 2x: the displayed image doubles
+    const w1 = await img.boundingBox();
+    await insp.locator(".insp-zoom").evaluate((el) => {
+      (el as HTMLInputElement).value = "2";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const w2 = await img.boundingBox();
+    if (!w1 || !w2) throw new Error("no img box");
+    expect(w2.width).toBeCloseTo(w1.width * 2, 0);
+
+    // drag a rect over the top-left quadrant (fractions 0.1..0.5)
+    const box = await img.boundingBox();
+    if (!box) throw new Error("no img box");
+    await page.mouse.move(box.x + box.width * 0.1, box.y + box.height * 0.1);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5, {
+      steps: 5,
+    });
+    await page.mouse.up();
+    await expect(figure.locator(".folio-crop-rect")).toBeVisible();
+
+    await insp.locator(".insp-apply").click();
+    // the crop applied: 40% of 200x100 at natural resolution
+    await expect
+      .poll(
+        async () =>
+          await img.evaluate((el) => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBe(80);
+    await expect
+      .poll(
+        async () =>
+          await img.evaluate((el) => (el as HTMLImageElement).naturalHeight),
+      )
+      .toBe(40);
+    await expect(img).toHaveAttribute("src", /^data:image\//);
+    // crop mode exited, source holds the cropped data URI
+    await expect(figure.locator(".folio-crop-overlay")).toHaveCount(0);
+    await page.locator("#btn-markdown").click();
+    const md = await page.locator("#editor").inputValue();
+    expect(md).toMatch(/!\[quads\]\(data:image\//);
+  });
+
   test("a hand-typed Markdown image renders and stays standard in the source", async ({
     page,
   }) => {

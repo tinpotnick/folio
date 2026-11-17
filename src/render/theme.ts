@@ -2293,6 +2293,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     figure.folio-image {
       margin: 1.2em 0;
       user-select: none;
+      position: relative;
     }
     figure.folio-image img {
       display: block;
@@ -2302,6 +2303,30 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     }
     figure.folio-image:focus {
       outline: 2px solid var(--folio-focus, #1f3fbf);
+    }
+    figure.folio-image .folio-crop-stage {
+      overflow: auto;
+      max-height: 70vh;
+      position: relative;
+      border: 1px dashed var(--folio-focus, #1f3fbf);
+    }
+    figure.folio-image .folio-crop-overlay {
+      position: absolute;
+      left: 0;
+      top: 0;
+      cursor: crosshair;
+      background: rgba(0, 0, 0, 0.25);
+      touch-action: none;
+    }
+    figure.folio-image .folio-crop-rect {
+      position: absolute;
+      border: 2px solid var(--accent, #4c6ef5);
+      background: rgba(76, 110, 245, 0.15);
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+    .folio-inspector .insp-zoom {
+      width: 90px;
     }
     figure.folio-audio {
       margin: 1.2em 0;
