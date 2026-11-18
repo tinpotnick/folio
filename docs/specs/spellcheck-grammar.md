@@ -90,6 +90,19 @@ of the earlier draft of this spec.
   menu); picking a suggestion rewrites the source in place, and the
   change lands in the model when the view switches back.
 
+## Known grammar-coverage gaps (2026-11-18)
+
+Verified against harper.js 3.0.0 (the pinned version) and 3.2.0 (latest),
+slim and full binaries, default and all-rules-on configs: Harper catches
+pronoun-verb agreement ("I has a dog"), "their/they're/there" confusions,
+repeated words ("the the") and misspellings, but does NOT flag
+article-before-verb ("The is a problems with this sentence.") or
+article + plural ("a problems") - so some obviously wrong sentences get
+no mark. That is an upstream rule-coverage gap, not a folio pipeline issue
+(the marks themselves are covered by tests/e2e/proofing.spec.ts and
+tests/webkitgtk/proofing-native.js). Upgrading harper.js is the lever if
+its rule set grows.
+
 ## Out of scope
 
 - Tauri per-engine native spellcheck as the primary mechanism. If a future

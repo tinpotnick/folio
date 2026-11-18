@@ -2,10 +2,12 @@
 name: proofing-first-contact
 feature: proofing (bundled spell + grammar, ADR-0033)
 steps:
-  - Start the demo host and open a document (or the welcome page),
-    then switch to the Markdown view and replace the body with a
-    paragraph containing "wordd" and "teh", back in the document
-    view.
+  - Start the demo host: read the welcome guide's Getting started
+    steps, and open Help (F1) and read its index - without searching,
+    just browsing.
+  - Then open a document, switch to the Markdown view and replace the
+    body with a paragraph containing "wordd" and "teh", back in the
+    document view.
   - Right-click the "wordd" squiggle in the paragraph.
   - In the menu, click the "word" suggestion.
   - Right-click the "teh" squiggle and click "Add ... to dictionary".
@@ -17,6 +19,11 @@ steps:
   - Switch to the Markdown source view (toolbar toggle) and observe the
     source; right-click the "teh" underline there and pick a suggestion.
 expected:
+  - Browsing alone surfaces proofing: the welcome guide's Getting
+    started has a "Proofread as you write" step, and the help index
+    lists "Headings, links and proofing" - both pointing at the
+    bundled spell check (on by default) and Ctrl+K "grammar" for the
+    opt-in grammar check.
   - Misspelled words in prose show a wavy red underline without the
     browser's own native squiggles (the bundled checker owns them);
     the Markdown source still contains the original misspelled words
