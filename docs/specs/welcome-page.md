@@ -8,11 +8,13 @@ The FRONT PAGE, `demo/welcome.md` ("Welcome to folio"), is a
 getting-started guide, not an arbitrary report. It sells folio
 honestly, by being a folio document:
 
-- **Getting started** (2026-10-21): five numbered steps - start a
+- **Getting started** (2026-10-21): six numbered steps - start a
   document (palette "new", Ctrl+N), add structure (toolbar headings
   and lists; everything else via Ctrl+K in the user's own words),
-  change the look ("theme"), open an example ("example"), and come
-  back to the guide ("guide").
+  proofread as you write (spell check on by default; Ctrl+K "grammar"
+  for the opt-in offline Harper grammar check), change the look
+  ("theme"), open an example ("example"), and come back to the guide
+  ("guide").
 - **What it is**: a document, not a notebook; plain Markdown
   underneath; style lives in themes; works offline.
 - **Proof on the page**: a live table (a formula column computing

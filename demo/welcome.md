@@ -25,11 +25,16 @@ opens on a new, blank document, ready to write in.
    numbered lists. **+ Insert** adds everything else — tables,
    charts, equations, images, diagrams, music. Or press **Ctrl+K**
    and say what you want, such as "table", "chart" or "equation".
-3. **Change the look.** Press Ctrl+K and type "theme". Ten themes,
+3. **Proofread as you write.** Spell check is on by default: misspelled
+   words get red squiggles, and right-click offers suggestions or "Add
+   to dictionary" — offline, also inside table cells. For grammar,
+   press **Ctrl+K** and type "grammar" to turn on the bundled Harper
+   check (it downloads its engine once, ~8 MB, then runs offline).
+4. **Change the look.** Press Ctrl+K and type "theme". Ten themes,
    each with a dark mode.
-4. **Open an example.** Press Ctrl+K and type "example", or pick one
+5. **Open an example.** Press Ctrl+K and type "example", or pick one
    from the list at the end of this page.
-5. **Come back to this guide.** Press Ctrl+K and type "guide".
+6. **Come back to this guide.** Press Ctrl+K and type "guide".
 
 ## Try it on this page
 

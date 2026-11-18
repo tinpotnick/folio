@@ -21,7 +21,7 @@ Ctrl+K from anywhere.
 
 ## Writing
 
-- [Headings and links](headings-links.md) - heading levels, adding and following links
+- [Headings, links and proofing](headings-links.md) - heading levels, links, and the bundled spell and grammar check (Ctrl+K, "grammar")
 - [Lists](lists.md) - bullets, numbers, nesting
 - [Footnotes](footnotes.md) - notes at the foot of the page
 - [Citations and references](citations.md) - citing sources, the bibliography, citation styles
