@@ -80,13 +80,19 @@ jobs:
       - name: Validate the generated document
         run: STATS_DOC=dist/demo/examples/stats.md npx vitest run tests/engine/stats-demo.test.ts
       - name: Push the history
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Auth via the token in the URL (same pattern as packages.yml):
+          # actions/checkout's credential header is local to the main
+          # checkout, so a fresh repo in /tmp has no credentials and the
+          # push would ask for a username and fail.
+          url="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
           rm -rf /tmp/stats-repo
           if git ls-remote --exit-code --heads origin stats >/dev/null; then
-            git clone --depth 1 --branch stats "$(git remote get-url origin)" /tmp/stats-repo
+            git clone --depth 1 --branch stats "$url" /tmp/stats-repo
           else
             git init /tmp/stats-repo
-            git -C /tmp/stats-repo remote add origin "$(git remote get-url origin)"
           fi
           cp /tmp/folio-traffic.csv /tmp/stats-repo/traffic.csv
           git -C /tmp/stats-repo add traffic.csv
@@ -94,7 +100,7 @@ jobs:
             -c user.name="github-actions[bot]" \
             -c user.email="github-actions[bot]@users.noreply.github.com" \
             commit -m "stats: traffic through $(date -u +%F)" || echo "no change"
-          git -C /tmp/stats-repo push origin HEAD:stats
+          git -C /tmp/stats-repo push "$url" HEAD:stats
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
