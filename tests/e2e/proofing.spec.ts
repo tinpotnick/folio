@@ -290,6 +290,40 @@ test.describe("bundled grammar check (Harper, opt-in)", () => {
     await expect(page.locator("#the-doc span.folio-grammar")).toHaveCount(0);
   });
 
+  test("a grammar mark survives a later mark pass (unwrap splits the text node; the re-wrap must not lose it)", async ({
+    page,
+  }) => {
+    // Regression: unwrapping a mark via replaceWith leaves the text
+    // split into adjacent text nodes, and wrapOffsets requires both
+    // range ends in ONE text node - so without host.normalize() after
+    // the unwrap, every pass after the first silently dropped the mark
+    // (WebKitGTK: enabling grammar on an open doc showed nothing).
+    await loadDoc(page, `# Proofing\n\nI has a dog.`);
+    await page.evaluate(() =>
+      (
+        document.querySelector("folio-doc") as unknown as {
+          setGrammar: (on: boolean) => void;
+        }
+      ).setGrammar(true),
+    );
+    const grammar = page.locator("#the-doc span.folio-grammar");
+    await expect(grammar).toHaveCount(1, { timeout: 90_000 });
+    await expect(grammar).toHaveText("has");
+
+    // force another mark pass (grammar off -> on): unwrap + re-wrap
+    await page.evaluate(() => {
+      const el = document.querySelector("folio-doc") as unknown as {
+        setGrammar: (on: boolean) => void;
+      };
+      el.setGrammar(false);
+      el.setGrammar(true);
+    });
+    await expect(grammar).toHaveCount(1, { timeout: 15_000 });
+    await expect(grammar).toHaveText("has");
+    // the model never saw the span
+    expect(await proseTexts(page)).toEqual(["I has a dog."]);
+  });
+
   test("edits landing while a grammar pass is in flight never nest marks or scramble hits", async ({
     page,
   }) => {

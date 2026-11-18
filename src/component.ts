@@ -11870,6 +11870,12 @@ export class FolioDoc extends HTMLElement {
     )) {
       el.replaceWith(...Array.from(el.childNodes));
     }
+    // replaceWith leaves the unwrapped text SPLIT into adjacent text
+    // nodes; without normalize(), a hit whose range crosses one of
+    // those seams (always, after a wrap+unwrap) fails wrapOffsets'
+    // sNode !== eNode check and the mark silently never comes back
+    // on re-passes (grammar marks vanished on the second pass).
+    host.normalize();
     this.grammarHits = [];
     if (this.spellcheck) {
       const s = await spellReady();

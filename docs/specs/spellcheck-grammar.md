@@ -37,6 +37,13 @@ of the earlier draft of this spec.
   suggestions via hit-testing, just without a squiggle).
 - Caret-safe: marks are applied with the caret saved/restored per block
   (text node + offset), so typing is not disturbed.
+- Re-pass-safe: each pass first unwraps old marks and then calls
+  `host.normalize()` - `replaceWith` leaves the unwrapped text split
+  into adjacent text nodes, and a hit crossing such a seam would fail
+  to re-wrap (both range ends must land in one text node), silently
+  dropping the mark on every pass after the first (2026-11-18 bug:
+  grammar marks vanished in WebKitGTK; regression case
+  tests/webkitgtk/proofing-grammar-native.js).
 - Passes are serialized: a mark pass is async (it awaits the dictionary /
   the grammar engine), and a pass requested while one is in flight runs
   only after it finishes — concurrent passes would interleave the
