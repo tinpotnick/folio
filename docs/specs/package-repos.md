@@ -105,3 +105,16 @@ invisible - except Fedora's, by design:
   GitHub Pages keeps no logs, so reading it never moves its own
   numbers. The seed in main is pinned by tests/engine/stats-demo.test.ts
   and smoke-tested like every other example (tests/e2e/examples-smoke.spec.ts).
+  **Read token:** the traffic API (`/traffic/views`, `/traffic/clones`)
+  requires the "Administration: read" repository permission, which the
+  workflow's GITHUB_TOKEN cannot be granted (no `administration` key
+  exists in a `permissions:` block - it 403s regardless). The read
+  step therefore authenticates as the repo secret **TRAFFIC_PAT**: a
+  fine-grained PAT scoped to tinpotnick/folio only, with
+  Administration: read + Contents: read (Settings > Secrets and
+  variables > Actions). The workflow fails fast with instructions when
+  the secret is missing; the GITHUB_TOKEN still pushes the `stats`
+  branch and deploys Pages. To backfill missed days, run
+  `scripts/stats-doc.sh /tmp/folio-traffic.csv /tmp/stats.md` locally
+  (any token with repo access) and commit the CSV to the `stats`
+  branch - the merge keeps API-window days and CSV days.

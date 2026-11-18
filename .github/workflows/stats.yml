@@ -6,6 +6,14 @@ name: stats
 # branch, regenerate the document with scripts/stats-doc.sh, rebuild
 # the site with the refreshed doc and redeploy Pages. main is never
 # touched - see docs/specs/package-repos.md, "Counting downloads".
+#
+# The traffic API (/traffic/views, /traffic/clones) needs the
+# "Administration: read" repository permission, which the workflow's
+# GITHUB_TOKEN cannot be granted (there is no `administration` key in
+# a permissions: block - it 403s regardless). So the read step uses a
+# fine-grained PAT stored as the repo secret TRAFFIC_PAT: scoped to
+# this one repository, with Administration: read + Contents: read.
+# The GITHUB_TOKEN still pushes the `stats` branch and deploys Pages.
 
 on:
   schedule:
@@ -52,10 +60,21 @@ jobs:
             git fetch --depth 1 origin stats
             git show FETCH_HEAD:traffic.csv > /tmp/folio-traffic.csv
           fi
+      - name: Check the traffic read token is configured
+        run: |
+          if [ -z "$TRAFFIC_PAT" ]; then
+            echo "Missing repo secret TRAFFIC_PAT: the traffic API needs Administration: read," >&2
+            echo "which GITHUB_TOKEN cannot be granted. Create a fine-grained PAT scoped to" >&2
+            echo "tinpotnick/folio with Administration: read + Contents: read, and add it as" >&2
+            echo "the repository secret TRAFFIC_PAT (Settings > Secrets and variables > Actions)." >&2
+            exit 1
+          fi
+        env:
+          TRAFFIC_PAT: ${{ secrets.TRAFFIC_PAT }}
       - name: Regenerate the stats example
         run: scripts/stats-doc.sh /tmp/folio-traffic.csv dist/demo/examples/stats.md
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.TRAFFIC_PAT }}
       # Fail the deploy if the fresh document does not parse, round-trip
       # and run its chart queries (tests/engine/stats-demo.test.ts).
       - name: Validate the generated document
