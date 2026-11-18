@@ -35,6 +35,12 @@ of the earlier draft of this spec.
   rewrapping inside the rename target would blur it and drop the
   header's "editing" state (right-click in a header still offers
   suggestions via hit-testing, just without a squiggle).
+- Not words, never checked: a token containing any digit
+  (`/\p{N}/u`) is not a word — numbers ("3", "3.14"), dates
+  ("2026-11-17" splits into digit runs), versions ("v0.2"), codes.
+  Spell-checking them just underlined every number in the document
+  red (2026-11-18 bug report); the dictionary is not even consulted
+  for them.
 - Caret-safe: marks are applied with the caret saved/restored per block
   (text node + offset), so typing is not disturbed.
 - Re-pass-safe: each pass first unwraps old marks and then calls
@@ -70,6 +76,40 @@ of the earlier draft of this spec.
   underline in `--folio-accent`), same view-layer rules as spell marks.
 - Context menu: right-click a grammar mark → its suggestions; clicking one
   replaces the span text and re-syncs.
+
+## Typed columns
+
+Table cells of a typed column hold data, not prose (2026-11-18 bug
+report: a date column's "2026-11-17" was underlined as misspelled
+digits, and numbers anywhere were squiggled):
+
+- Cells of `number`, `date`, `datetime`, `select`, `formula` and
+  `relation` columns are never spell-checked; only `text` columns are
+  (select/formula/relation cells are not free text anyway — they render
+  chips/computed values with `contenteditable="false"`).
+- Instead, a hand-edited typed cell whose text is NOT a valid value of
+  the column's type is wrapped in `<span class="folio-invalid">`: a
+  double underline in `--folio-error` (distinct from the wavy spelling
+  squiggle — a hard type error, not a maybe-misspelled word). Like the
+  other marks it is a pure view-layer span (unwrapped on sync, never in
+  `getDoc()`, suppressed in `@media print`).
+- Validation is a pure engine function — `isValidCellValue(col, value)`
+  and the `expectedFor(col)` hint in `src/engine/cellvalidate.ts` (zero
+  UI deps, unit-tested in `tests/engine/cellvalidate.test.ts`):
+  - empty is always valid; `text`, `formula`, `relation` accept anything;
+  - `number`: the same shape the engine's `cell()` coerces,
+    `-?digits(.digits)?`;
+  - `date` / `datetime`: anything `toIso()` reads (ISO plus the common
+    published shapes) — and `isoOf` rejects impossible calendar dates
+    ("2026-02-30", "2026-13-01");
+  - `select`: the value(s) must be in the column's `options`
+    (comma-split when `multi: true`).
+- Context menu: right-click a `.folio-invalid` mark → an informational
+  "Invalid value" menu naming what the column expects ("“day” expects
+  a date, e.g. 2026-11-17") — no corrections, the fix is to type a
+  valid value.
+- The Markdown source view needs no special case: directive bodies are
+  never marked there (see below), so table data is untouched in source.
 
 ## Markdown source view
 
@@ -125,6 +165,11 @@ its rule set grows.
   working suggestions and add-to-dictionary; palette toggles checking;
   `spellcheck="false"` clears marks; marks never enter `getDoc()` Markdown
   and never print.
+- Tokens containing digits (numbers, dates, versions) are never
+  spell-marked, in prose or in cells; typed-column cells are never
+  spell-checked, and a value the column's type rejects shows the
+  `.folio-invalid` underline with an "Invalid value" right-click menu
+  naming the expected shape.
 - Grammar is off until the palette command runs; then grammar marks appear
   with working suggestions; state persists across reloads.
 - Works with JavaScript-only environments (no network at check time after

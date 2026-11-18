@@ -1533,9 +1533,9 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       opacity: 0.75;
     }
     /* Bundled proofing marks (spec: docs/specs/spellcheck-grammar.md):
-       the spans the spell/grammar passes wrap around flagged words.
-       They never reach the model (unknown spans unwrap on sync) and
-       never print. */
+       the spans the spell/grammar/validation passes wrap around
+       flagged words. They never reach the model (unknown spans unwrap
+       on sync) and never print. */
     .folio-misspelled {
       text-decoration-line: underline;
       text-decoration-style: wavy;
@@ -1550,9 +1550,21 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       text-decoration-thickness: 1px;
       text-underline-offset: 2px;
     }
+    /* A typed table cell whose value the column's type rejects: a
+       double underline in the error colour - distinct from the wavy
+       spelling squiggle, since this is a hard type error, not a
+       maybe-misspelled word. */
+    .folio-invalid {
+      text-decoration-line: underline;
+      text-decoration-style: double;
+      text-decoration-color: var(--folio-error, #b42318);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 2px;
+    }
     @media print {
       .folio-misspelled,
-      .folio-grammar { text-decoration: none; }
+      .folio-grammar,
+      .folio-invalid { text-decoration: none; }
     }
     .folio-cell-pop,
     .folio-cal-pop {

@@ -30,7 +30,11 @@ Table:
   bindings: [Binding, ...]      # optional external sources
   Column:
     name: string
-    type: text | number | date | select | formula | relation
+    type: text | number | date | datetime | select | formula | relation
+    # typed (non-text) cells are validated against the type in the
+    # editor (src/engine/cellvalidate.ts): an invalid value is underlined
+    # in the error colour - see specs/spellcheck-grammar.md "Typed
+    # columns"; typed cells are never spell-checked (data, not prose).
     unit?: string
     format?: percent | currency | ...
     hidden?: true      # render-time only: not drawn, still in the data

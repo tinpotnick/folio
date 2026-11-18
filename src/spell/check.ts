@@ -74,14 +74,22 @@ export const WORD_RE = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu;
  * tab dies. No real word is anywhere near this long. */
 export const MAX_WORD_LEN = 64;
 
+/** Tokens containing a digit are not words either: numbers ("3",
+ * "3.14"), dates ("2026-11-17" splits into digit runs), versions
+ * ("v0.2"), codes. Spell-checking them just underlines every number
+ * in the document red (2026-11-18 bug report). */
+const HAS_DIGIT_RE = /\p{N}/u;
+
 export function isMisspelled(s: Spell, word: string): boolean {
   if (word.length > MAX_WORD_LEN) return false;
+  if (HAS_DIGIT_RE.test(word)) return false;
   if (customWords.has(word.toLowerCase())) return false;
   return !s.correct(word);
 }
 
 export function suggestions(s: Spell, word: string): string[] {
   if (word.length > MAX_WORD_LEN) return [];
+  if (HAS_DIGIT_RE.test(word)) return [];
   return s.suggest(word).slice(0, 8);
 }
 

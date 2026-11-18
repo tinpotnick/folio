@@ -25,10 +25,12 @@ import type {
   Audio,
   Cell,
   Chart,
+  Column,
   Image,
   Motion,
   Table,
 } from "@folio/engine/index.js";
+import { expectedFor, isValidCellValue } from "@folio/engine/cellvalidate";
 import {
   executeQuery,
   filterIndexes,
@@ -11866,7 +11868,9 @@ export class FolioDoc extends HTMLElement {
     if (!host) return;
     const caret = this.saveBlockCaret();
     for (const el of Array.from(
-      host.querySelectorAll(".folio-misspelled, .folio-grammar"),
+      host.querySelectorAll(
+        ".folio-misspelled, .folio-grammar, .folio-invalid",
+      ),
     )) {
       el.replaceWith(...Array.from(el.childNodes));
     }
@@ -11882,11 +11886,15 @@ export class FolioDoc extends HTMLElement {
       if (s) this.markMisspellings(host, s);
     }
     if (grammarEnabled()) await this.markGrammar(host);
+    this.markInvalidCells(host);
     // No marks applied: leave the caret alone entirely. A save/restore
     // with zero marks is not a no-op - the block offset is ambiguous at
     // text-node boundaries, so a caret at (node2, 0) would restore to
     // (node1, len) and visibly jump (e.g. arrow keys in a list).
-    if (!host.querySelector(".folio-misspelled, .folio-grammar")) return;
+    if (
+      !host.querySelector(".folio-misspelled, .folio-grammar, .folio-invalid")
+    )
+      return;
     // Only restore the caret if the user is still in the same block -
     // a pending pass must not yank focus back after Tab moved to
     // another cell.
@@ -11937,6 +11945,14 @@ export class FolioDoc extends HTMLElement {
           return NodeFilter.FILTER_REJECT;
         if (!el.closest("p, h1, h2, h3, h4, h5, h6, li, td, th"))
           return NodeFilter.FILTER_REJECT;
+        // Typed columns (number/date/datetime/...) hold data, not
+        // prose: their cells are never spell-checked. markInvalidCells
+        // underlines values the column's type does not accept instead.
+        const td = el.closest("td[data-col-index]");
+        if (td) {
+          const col = this.columnAt(td as HTMLElement);
+          if (col && col.type !== "text") return NodeFilter.FILTER_REJECT;
+        }
         return NodeFilter.FILTER_ACCEPT;
       },
     });
@@ -11977,6 +11993,58 @@ export class FolioDoc extends HTMLElement {
         } catch {
           // range crosses an element boundary - leave it unmarked
         }
+      }
+    }
+  }
+
+  /** The model column a rendered cell/header belongs to, or null when
+   * the element is not inside a table block. */
+  private columnAt(cell: HTMLElement): Column | null {
+    const ci = Number(cell.dataset.colIndex ?? -1);
+    if (ci < 0) return null;
+    const blockEl = cell.closest("[data-block-index]");
+    const bi = Number(blockEl?.getAttribute("data-block-index") ?? -1);
+    const block = bi >= 0 ? this.doc?.blocks[bi] : undefined;
+    if (!block || block.kind !== "table") return null;
+    return block.table.columns[ci] ?? null;
+  }
+
+  /** Wrap the text of a typed cell whose value the column's type does
+   * not accept in a .folio-invalid span (error-colour underline).
+   * Data is not spell-checked, but a value the type cannot hold is
+   * marked instead (spec: docs/specs/spellcheck-grammar.md, "Typed
+   * columns"). The span unwraps on sync like the other mark spans, so
+   * the model never sees it. */
+  private markInvalidCells(host: HTMLElement): void {
+    for (const td of Array.from(
+      host.querySelectorAll<HTMLElement>("td[data-row-index][data-col-index]"),
+    )) {
+      // select/formula/relation cells are not free text
+      if (td.getAttribute("contenteditable") === "false") continue;
+      const col = this.columnAt(td);
+      if (!col) continue;
+      if (
+        col.type !== "number" &&
+        col.type !== "date" &&
+        col.type !== "datetime"
+      )
+        continue;
+      if (isValidCellValue(col, td.textContent ?? "")) continue;
+      // Wrap the cell's text node(s) in place; the text node itself is
+      // moved into the span, so a saved caret (node + offset) stays valid.
+      const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+      const texts: Text[] = [];
+      let n = walker.nextNode();
+      while (n) {
+        if ((n as Text).textContent?.trim()) texts.push(n as Text);
+        n = walker.nextNode();
+      }
+      for (const node of texts) {
+        const span = document.createElement("span");
+        span.className = "folio-invalid";
+        span.spellcheck = false;
+        node.parentNode?.replaceChild(span, node);
+        span.appendChild(node);
       }
     }
   }
@@ -12137,6 +12205,35 @@ export class FolioDoc extends HTMLElement {
       if (entry) {
         ev.preventDefault();
         this.showGrammarMenu(ev.clientX, ev.clientY, entry, grammarSpan);
+        return true;
+      }
+    }
+    // A right-click on a typed-cell value the column cannot hold: an
+    // informational menu says what the column expects (no corrections -
+    // the fix is to type a valid value).
+    const invalidMark = targetEl?.closest(
+      ".folio-invalid",
+    ) as HTMLElement | null;
+    if (invalidMark) {
+      const cell = invalidMark.closest(
+        "td[data-col-index]",
+      ) as HTMLElement | null;
+      const col = cell ? this.columnAt(cell) : null;
+      if (cell && col) {
+        ev.preventDefault();
+        this.openProofMenu(
+          ev.clientX,
+          ev.clientY,
+          [
+            [
+              {
+                label: `“${col.name}” expects ${expectedFor(col)}`,
+                title: `Invalid ${col.type} value in column “${col.name}”`,
+              },
+            ],
+          ],
+          "Invalid value",
+        );
         return true;
       }
     }
