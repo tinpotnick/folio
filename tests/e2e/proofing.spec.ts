@@ -424,3 +424,85 @@ test.describe("bundled grammar check (Harper, opt-in)", () => {
     await expect(gram).toHaveCount(0);
   });
 });
+
+test.describe("numbers and typed table columns", () => {
+  // Regression (2026-11-18): numbers anywhere in the doc were underlined
+  // red as misspellings ("I have 3 dogs" squiggled the 3), and typed
+  // table cells (date columns etc.) were spell-checked as prose. Now:
+  // digit-bearing tokens are never spell-checked, typed cells are never
+  // spell-checked, and a typed cell whose value the column's type
+  // rejects gets a .folio-invalid underline instead (spec:
+  // docs/specs/spellcheck-grammar.md "Typed columns").
+  const invalid = (page: Page) => page.locator("#the-doc span.folio-invalid");
+
+  test("numbers in prose are not spell-marked (a real misspelling still is)", async ({
+    page,
+  }) => {
+    await loadDoc(
+      page,
+      `# Proofing\n\nI have 3 dogs and the wordd shipped in 2026, v0.2.`,
+    );
+    // exactly one mark: the pass ran, and 3 / 2026 / v0 / 2 were skipped
+    await expect(misspelled(page)).toHaveCount(1, { timeout: 15_000 });
+    await expect(misspelled(page).first()).toHaveText("wordd");
+    expect(await proseTexts(page)).toEqual([
+      "I have 3 dogs and the wordd shipped in 2026, v0.2.",
+    ]);
+  });
+
+  test("typed cells: valid values and their digits stay unmarked, invalid values get .folio-invalid, text columns still spell-checked, model stays clean", async ({
+    page,
+  }) => {
+    await loadDoc(
+      page,
+      `# Proofing\n\n::: table {#t}\ncaption: "T"\ncolumns:\n  - {name: note, type: text}\n  - {name: qty, type: number}\n  - {name: day, type: date}\n  - {name: status, type: select, options: [open, closed]}\ndata:\n  - [wordd here, 42, 2026-11-17, open]\n  - [fine, soon, tomorrow, closed]\n:::`,
+    );
+    // the text column is still spell-checked; the number/date cells
+    // are not (42 and 2026-11-17 carry no misspelled span)
+    const cellMark = page.locator("#the-doc td span.folio-misspelled");
+    await expect(cellMark).toHaveCount(1, { timeout: 15_000 });
+    await expect(cellMark).toHaveText("wordd");
+    // the invalid values in the typed columns get the error underline
+    await expect(invalid(page)).toHaveCount(2, { timeout: 15_000 });
+    const invalidTexts = await invalid(page).allTextContents();
+    expect(invalidTexts.sort()).toEqual(["soon", "tomorrow"]);
+    // marks are view spans: the model is untouched
+    const doc = await page.evaluate(() =>
+      (
+        document.querySelector("folio-doc") as unknown as {
+          getDoc: () => {
+            blocks: {
+              kind: string;
+              table?: { rows: unknown[][] };
+            }[];
+          };
+        }
+      ).getDoc(),
+    );
+    expect(JSON.stringify(doc)).not.toContain("folio-invalid");
+    const table = doc.blocks.find((b) => b.kind === "table");
+    expect(table?.table?.rows).toEqual([
+      ["wordd here", 42, "2026-11-17", "open"],
+      ["fine", "soon", "tomorrow", "closed"],
+    ]);
+
+    // right-click an invalid mark -> informational "Invalid value" menu
+    // (dispatch on the exact mark: the bar-reveal scroll shifts what a
+    // real right-click lands on)
+    const mark = invalid(page).filter({ hasText: "tomorrow" });
+    const box = await mark.boundingBox();
+    await mark.dispatchEvent("contextmenu", {
+      button: 2,
+      clientX: box ? box.x + box.width / 2 : 100,
+      clientY: box ? box.y + box.height / 2 : 100,
+    });
+    await expect(proofMenu(page)).toBeVisible();
+    await expect(proofMenu(page)).toHaveAttribute(
+      "aria-label",
+      "Invalid value",
+    );
+    await expect(proofMenu(page)).toContainText("expects a date");
+    await page.keyboard.press("Escape");
+    await expect(proofMenu(page)).toBeHidden();
+  });
+});

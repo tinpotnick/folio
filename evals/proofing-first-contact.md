@@ -18,6 +18,11 @@ steps:
   - Press Ctrl+K, type "spell check", press Enter.
   - Switch to the Markdown source view (toolbar toggle) and observe the
     source; right-click the "teh" underline there and pick a suggestion.
+  - Back in the document view, add a paragraph "I have 3 dogs in 2026."
+    and a small table with a text, a number and a date column; put
+    "wordd" in the text cell, 42 and 2026-11-17 in the typed cells of
+    one row, and "soon" / "tomorrow" in the typed cells of another.
+  - Right-click the "tomorrow" underline in the date column.
 expected:
   - Browsing alone surfaces proofing: the welcome guide's Getting
     started has a "Proofread as you write" step, and the help index
@@ -50,4 +55,13 @@ expected:
     marked word there opens the same "Spelling" menu, and picking a
     suggestion rewrites the source (it lands in the document when you
     switch back).
+  - The numbers in "I have 3 dogs in 2026." carry no squiggle - a token
+    with a digit is never spell-checked. The typed cells 42 and
+    2026-11-17 are clean too (typed cells are data, not prose; the text
+    cell's "wordd" is still squiggled).
+  - "soon" in the number column and "tomorrow" in the date column show
+    a double red underline (not the wavy spelling squiggle); right-
+    clicking "tomorrow" opens an "Invalid value" menu saying the date
+    column expects a date like 2026-11-17. The document's Markdown still
+    holds the raw values - the underline is view-only.
 ---

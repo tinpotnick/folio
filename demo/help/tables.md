@@ -102,3 +102,9 @@ totals:
   chip per value, checkable list). `type: date` / `type: datetime`
   columns open a calendar / date-time picker on click. Values are
   validated against the options; a bad value shows as an error chip.
+- **Typed cells are data, not prose** (spec: spellcheck-grammar.md
+  "Typed columns"): number/date/datetime cells are never spell-checked
+  (a "2026-11-17" is not a word - and neither is any number in your
+  prose), and a value the column's type cannot hold ("tomorrow" in a
+  date column, "soon" in a number column) is underlined with a double
+  red line. Right-click that underline to see what the column expects.

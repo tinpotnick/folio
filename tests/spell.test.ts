@@ -71,6 +71,33 @@ describe("isMisspelled / suggestions", () => {
     expect(seen).toHaveLength(1);
   });
 
+  it("tokens containing any digit are never spell-checked (numbers, dates, versions, codes)", () => {
+    // Regression (2026-11-18): every number in the document was
+    // underlined red as a misspelling ("I have 3 dogs" squiggled the
+    // 3; a date cell's digit runs were squiggled). The dictionary must
+    // not even be consulted for them.
+    const seen: string[] = [];
+    const s = {
+      correct: (w: string) => {
+        seen.push(w);
+        return false; // pretend everything is "unknown"
+      },
+      suggest: (w: string) => {
+        seen.push(w);
+        return ["x"];
+      },
+      add: () => {},
+    } as unknown as SpellChecker;
+    for (const tok of ["3", "2026", "17", "v0", "x1", "3a", "0.5"]) {
+      expect(isMisspelled(s, tok)).toBe(false);
+      expect(suggestions(s, tok)).toEqual([]);
+    }
+    expect(seen).toEqual([]);
+    // a pure-letter token is still checked
+    expect(isMisspelled(s, "wordd")).toBe(true);
+    expect(seen).toEqual(["wordd"]);
+  });
+
   it("custom words are never misspelled and persist to localStorage", () => {
     const s = stub(["word"]);
     addCustomWord("teh");
