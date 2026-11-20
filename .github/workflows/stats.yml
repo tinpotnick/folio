@@ -6,6 +6,9 @@ name: stats
 # branch, regenerate the document with scripts/stats-doc.sh, rebuild
 # the site with the refreshed doc and redeploy Pages. main is never
 # touched - see docs/specs/package-repos.md, "Counting downloads".
+# The pages workflow also re-emits the document from this branch's CSV
+# on every push to main (STATS_HISTORY_ONLY=1), so a merge cannot
+# clobber the live stats with main's stale seed copy.
 #
 # The traffic API (/traffic/views, /traffic/clones) needs the
 # "Administration: read" repository permission, which the workflow's

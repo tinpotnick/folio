@@ -3,6 +3,10 @@ name: pages
 # The live web version at https://tinpotnick.github.io/folio/ - the
 # same build as the desktop app's web layer (relative paths, so it
 # serves from the /folio/ subfolder). Deploys every push to main.
+# Every deploy also embeds the stats history from the `stats` branch
+# (see the "Embed the stats history" step): otherwise a push to main
+# would redeploy the stale seed copy of demo/examples/stats.md and wipe
+# the refreshed numbers the nightly stats workflow (stats.yml) put up.
 
 on:
   push:
@@ -37,6 +41,24 @@ jobs:
             git fetch --depth 1 origin pkg-repo
             mkdir -p dist/repo
             git archive FETCH_HEAD | tar -x -C dist/repo
+          fi
+      # Embed folio's own stats history (docs/specs/package-repos.md,
+      # "Counting downloads"): the nightly stats workflow keeps the CSV
+      # on the `stats` branch. Re-emit the document from it in history-
+      # only mode - the traffic API needs Administration: read, which
+      # this workflow's GITHUB_TOKEN cannot be granted, but the stored
+      # history is enough (the releases list is public). Without this
+      # step every push to main would deploy the stale seed and clobber
+      # the live stats page.
+      - name: Embed the stats history
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git ls-remote --exit-code --heads origin stats >/dev/null; then
+            git fetch --depth 1 origin stats
+            git show FETCH_HEAD:traffic.csv > /tmp/folio-traffic.csv
+            STATS_HISTORY_ONLY=1 scripts/stats-doc.sh /tmp/folio-traffic.csv dist/demo/examples/stats.md
+            STATS_DOC=dist/demo/examples/stats.md npx vitest run tests/engine/stats-demo.test.ts
           fi
       - uses: actions/upload-pages-artifact@v3
         with:
