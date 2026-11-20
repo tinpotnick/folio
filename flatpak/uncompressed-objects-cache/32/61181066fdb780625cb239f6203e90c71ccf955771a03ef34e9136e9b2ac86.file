@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<components version="0.8" origin="flatpak">
+  <component type="desktop-application">
+    <id>io.github.tinpotnick.folio</id>
+    <name>folio</name>
+    <summary>Documents with live data inside, beautiful by default</summary>
+    <project_license>MIT</project_license>
+    <description>
+      <p>
+      folio is the document Word should have been. Write reports where the
+      numbers live in the document and calculate as you type, the page looks
+      finished from the first word, and the file is plain Markdown that anyone
+      can read.
+    </p>
+      <ul>
+        <li>Tables are live datasets: typed columns, units, and formulas that recalculate as you edit</li>
+        <li>Charts are drawn from the document&apos;s own tables, so they never go out of date</li>
+        <li>Ten themes, each with a dark mode, restyle the whole document at once</li>
+        <li>Equations, code, diagrams, drawings, 3D models and sheet music in the page</li>
+        <li>Export to PDF that looks like a report, not a web page</li>
+        <li>Plain Markdown files: open them in any editor, keep them in Git, read them on GitHub</li>
+      </ul>
+      <p>
+      Everything works offline, with no account. folio is open source under the
+      MIT licence.
+    </p>
+    </description>
+    <developer id="io.github.tinpotnick">
+      <name>Nick Knight</name>
+    </developer>
+    <developer_name>Nick Knight</developer_name>
+    <requires>
+      <display_length>768</display_length>
+    </requires>
+    <supports>
+      <control>keyboard</control>
+      <control>pointing</control>
+    </supports>
+    <launchable type="desktop-id">io.github.tinpotnick.folio.desktop</launchable>
+    <icon type="cached" width="64" height="64">io.github.tinpotnick.folio.png</icon>
+    <icon type="cached" width="64" height="64" scale="2">io.github.tinpotnick.folio.png</icon>
+    <icon type="cached" width="128" height="128">io.github.tinpotnick.folio.png</icon>
+    <icon type="cached" width="128" height="128" scale="2">io.github.tinpotnick.folio.png</icon>
+    <icon type="stock">io.github.tinpotnick.folio</icon>
+    <url type="homepage">https://github.com/tinpotnick/folio</url>
+    <url type="bugtracker">https://github.com/tinpotnick/folio/issues</url>
+    <url type="donation">https://buymeacoffee.com/tinpotnick</url>
+    <url type="vcs-browser">https://github.com/tinpotnick/folio</url>
+    <categories>
+      <category>Office</category>
+      <category>WordProcessor</category>
+    </categories>
+    <provides>
+      <mediatype>text/markdown</mediatype>
+    </provides>
+    <screenshots>
+      <screenshot type="default">
+        <caption>A quarterly report with live tables and charts</caption>
+        <image type="source" width="1280" height="800">https://raw.githubusercontent.com/tinpotnick/folio/main/docs/media/screenshot-report.png</image>
+      </screenshot>
+      <screenshot>
+        <caption>The same report in four themes, light and dark</caption>
+        <image type="source" width="1400" height="1330">https://raw.githubusercontent.com/tinpotnick/folio/main/docs/media/themes.png</image>
+      </screenshot>
+      <screenshot>
+        <caption>Insert tables, charts, equations, diagrams and 3D models</caption>
+        <image type="source" width="1358" height="470">https://raw.githubusercontent.com/tinpotnick/folio/main/docs/media/features.png</image>
+      </screenshot>
+    </screenshots>
+    <keywords>
+      <keyword>document</keyword>
+      <keyword>report</keyword>
+      <keyword>markdown</keyword>
+      <keyword>table</keyword>
+      <keyword>chart</keyword>
+      <keyword>data</keyword>
+      <keyword>spreadsheet</keyword>
+      <keyword>word</keyword>
+    </keywords>
+    <branding>
+      <color type="primary" scheme_preference="light">#a7c0e3</color>
+      <color type="primary" scheme_preference="dark">#1a2f52</color>
+    </branding>
+    <releases>
+      <release type="stable" version="0.1.1" timestamp="1792713600">
+        <description>
+          <p>The first public release.</p>
+          <ul>
+            <li>Live tables, charts, equations, diagrams, 3D models and sheet music in plain Markdown documents</li>
+            <li>Ten themes, each with a dark mode</li>
+            <li>Export to PDF</li>
+            <li>Open Markdown files straight from the file manager</li>
+          </ul>
+        </description>
+      </release>
+    </releases>
+    <content_rating type="oars-1.1"/>
+    <bundle type="flatpak" runtime="org.gnome.Platform/x86_64/51" sdk="org.gnome.Sdk/x86_64/51">app/io.github.tinpotnick.folio/x86_64/master</bundle>
+  </component>
+</components>
