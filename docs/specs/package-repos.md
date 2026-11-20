@@ -100,7 +100,12 @@ invisible - except Fedora's, by design:
   appends the day's traffic to a CSV history kept on the `stats`
   branch, regenerates the document with `scripts/stats-doc.sh`,
   validates it (tests/engine/stats-demo.test.ts) and redeploys Pages.
-  main is never touched; the copy in main is the seed. The document is
+  The `pages` workflow re-emits the same document from that CSV
+  (`STATS_HISTORY_ONLY=1` - no traffic API call, which needs a
+  permission GITHUB_TOKEN cannot hold) on every push to main, so a
+  merge deploys the current history instead of clobbering the live
+  page with the stale seed. main is never touched; the copy in main
+  is the seed. The document is
   a static snapshot, so it renders fully offline (ADR-0005), and
   GitHub Pages keeps no logs, so reading it never moves its own
   numbers. The seed in main is pinned by tests/engine/stats-demo.test.ts
