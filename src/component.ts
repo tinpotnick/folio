@@ -5,7 +5,7 @@
  * during typing. Full re-render happens only on structural ops.
  * Row/column operations live in a context menu, not on the page.
  */
-import type { Footnote } from "./engine/doc.js";
+import type { Comment, Footnote } from "./engine/doc.js";
 import { headingSlug } from "./engine/outline.js";
 import {
   parseDoc,
@@ -706,6 +706,14 @@ export class FolioDoc extends HTMLElement {
 
   private doc: Doc | null = null;
   private listeners: ((doc: Doc) => void)[] = [];
+  /** The comment block last clicked (spec: docs/specs/comments.md) -
+   * the target of the palette's Resolve/Delete comment commands. */
+  private activeCommentId: string | null = null;
+  /** A non-collapsed selection stashed when a modal opened (opening
+   *  the palette clears the shadow selection) - the quote source for
+   *  Add a comment run from the palette. */
+  private stashedSelection: { anchorIdx: number | null; quote: string } | null =
+    null;
   private menu: HTMLElement | null = null;
   private lastCell: HTMLTableCellElement | null = null;
   /** The row Tab/Enter just grew a table by: kept once anything is
@@ -1517,6 +1525,7 @@ export class FolioDoc extends HTMLElement {
     this.renderNotes(host, true);
     root.appendChild(host);
     this.renderCrossRefs(host);
+    this.renderCommentMarks(host);
     this.wrapSlides(host);
     this.refreshSlideState();
     this.scheduleMarks();
@@ -1737,6 +1746,70 @@ export class FolioDoc extends HTMLElement {
         this.lazyFigure(figure);
         return figure;
       }
+      case "comment": {
+        // A review comment (spec: docs/specs/comments.md): an aside,
+        // never editable prose - but its body is its own editable
+        // island so the comment text can be typed in place.
+        const c = block.comment;
+        const aside = document.createElement("aside");
+        aside.className = "folio-comment" + (c.resolved ? " resolved" : "");
+        aside.contentEditable = "false";
+        aside.dataset.blockIndex = String(idx);
+        aside.dataset.commentId = c.id;
+        aside.addEventListener("click", () => {
+          this.activeCommentId = c.id;
+        });
+        const head = document.createElement("div");
+        head.className = "folio-comment-head";
+        const who = document.createElement("span");
+        who.className = "folio-comment-author";
+        who.textContent = c.author ?? "";
+        head.appendChild(who);
+        if (c.created) {
+          const when = document.createElement("span");
+          when.className = "folio-comment-date";
+          when.textContent = c.created;
+          head.appendChild(when);
+        }
+        if (c.resolved) {
+          const badge = document.createElement("span");
+          badge.className = "folio-comment-badge";
+          badge.textContent = "resolved";
+          head.appendChild(badge);
+        }
+        const resolveBtn = document.createElement("button");
+        resolveBtn.type = "button";
+        resolveBtn.className = "folio-comment-resolve";
+        resolveBtn.textContent = c.resolved ? "Reopen" : "Resolve";
+        resolveBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          this.setCommentResolved(c.id, !c.resolved);
+        });
+        head.appendChild(resolveBtn);
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "folio-comment-delete";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          this.deleteComment(c.id);
+        });
+        head.appendChild(delBtn);
+        aside.appendChild(head);
+        if (c.quote) {
+          const q = document.createElement("div");
+          q.className = "folio-comment-quote";
+          q.textContent = c.quote;
+          aside.appendChild(q);
+        }
+        const body = document.createElement("div");
+        body.className = "folio-comment-body";
+        body.contentEditable = "true";
+        body.dataset.placeholder = "Type the comment…";
+        body.innerHTML = inlineMarkdownToHtml(c.text, this.inlineOpts());
+        aside.appendChild(body);
+        return aside;
+      }
       case "toc": {
         // Filled in by renderContents (it needs the whole document).
         const nav = document.createElement("nav");
@@ -1816,6 +1889,267 @@ export class FolioDoc extends HTMLElement {
       this.setCaret(text, 0);
     }
     return null;
+  }
+
+  /**
+   * The current selection as a Range inside the shadow root, or null.
+   * WebKitGTK has no ShadowRoot.getSelection, so fall back to composed
+   * ranges - the same rule as caretPoint (docs/specs/comments.md uses
+   * this for the quote).
+   */
+  private selectionRange(): Range | null {
+    const root = this.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+    if (!root) return null;
+    if (typeof root.getSelection === "function") {
+      const sel = root.getSelection();
+      return sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+    }
+    const ds = document.getSelection() as
+      | (Selection & { getComposedRanges?: (...a: unknown[]) => StaticRange[] })
+      | null;
+    if (!ds?.getComposedRanges) return null;
+    let ranges: StaticRange[] = [];
+    try {
+      ranges = ds.getComposedRanges({ shadowRoots: [root] });
+    } catch {
+      try {
+        ranges = ds.getComposedRanges(root);
+      } catch {
+        return null;
+      }
+    }
+    const r = ranges[0];
+    if (!r || !root.contains(r.startContainer)) return null;
+    const range = document.createRange();
+    range.setStart(r.startContainer, r.startOffset);
+    range.setEnd(r.endContainer, r.endOffset);
+    return range;
+  }
+
+  /** The block index a DOM node belongs to, or null. */
+  private blockIndexOf(node: Node | null): number | null {
+    const el = node instanceof Element ? node : node?.parentElement;
+    const holder = el?.closest?.("[data-block-index]");
+    if (!holder) return null;
+    const idx = Number((holder as HTMLElement).dataset.blockIndex);
+    return Number.isInteger(idx) ? idx : null;
+  }
+
+  /** The anchor id of a block: its directive id, or a heading's slug. */
+  private anchorOfBlock(block: Doc["blocks"][number]): string | undefined {
+    switch (block.kind) {
+      case "table":
+        return block.table.id;
+      case "chart":
+        return block.chart.id;
+      case "diagram":
+        return block.diagram.id;
+      case "image":
+        return block.image.id;
+      case "audio":
+        return block.audio.id;
+      case "motion":
+        return block.motion.id;
+      case "heading":
+        return headingSlug(block.text);
+      default:
+        return undefined;
+    }
+  }
+
+  private nextCommentId(): string {
+    let n = 0;
+    for (const b of this.doc?.blocks ?? []) {
+      if (b.kind === "comment") {
+        const m = /^c-(\d+)$/.exec(b.comment.id);
+        if (m) n = Math.max(n, Number(m[1] ?? 0));
+      }
+    }
+    return `c-${String(n + 1)}`;
+  }
+
+  /**
+   * Add a comment at the caret/selection (spec: docs/specs/comments.md):
+   * a selection becomes the quote and anchors to its block; no
+   * selection anchors to the current block with an empty quote. The
+   * comment block lands right after the anchor block (document-level
+   * comments at the end). Returns why it could not, or null.
+   */
+  /** Stash the current selection (call before opening a modal: that
+   *  clears the shadow selection). Collapsed clears any stash. */
+  stashSelection(): void {
+    const range = this.selectionRange();
+    if (!range || range.collapsed) {
+      this.stashedSelection = null;
+      return;
+    }
+    this.stashedSelection = {
+      anchorIdx: this.blockIndexOf(range.commonAncestorContainer),
+      quote: range.toString().replace(/\s+/g, " ").trim().slice(0, 200),
+    };
+  }
+
+  insertComment(author: string): string | null {
+    if (!this.doc) return "No document";
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (!host) return "No document";
+    const range = this.selectionRange();
+    const node =
+      range?.commonAncestorContainer ??
+      this.caretPoint()?.node ??
+      this.savedCaret?.node ??
+      null;
+    let idx = this.blockIndexOf(node);
+    let quote: string | undefined;
+    if (range && !range.collapsed) {
+      const q = range.toString().replace(/\s+/g, " ").trim().slice(0, 200);
+      if (q !== "") quote = q;
+    } else if (this.stashedSelection) {
+      // Run from the palette: the selection was stashed at open.
+      if (this.stashedSelection.anchorIdx !== null)
+        idx = this.stashedSelection.anchorIdx;
+      if (this.stashedSelection.quote !== "")
+        quote = this.stashedSelection.quote;
+      this.stashedSelection = null;
+    }
+    if (idx === null) return "Put the cursor in the document first";
+    const at = idx;
+    const block = this.doc.blocks[at];
+    if (!block) {
+      return "Put the cursor in the document first";
+    }
+    // Prose and lists have no id of their own: they anchor to the
+    // nearest preceding heading's slug, and the highlight searches
+    // that whole section (renderCommentMarks).
+    let anchor = this.anchorOfBlock(block);
+    if (anchor === undefined) {
+      for (let j = at; j >= 0; j--) {
+        const b = this.doc.blocks[j];
+        if (b?.kind === "heading") {
+          anchor = headingSlug(b.text);
+          break;
+        }
+      }
+    }
+    const comment: Comment = {
+      id: this.nextCommentId(),
+      ...(anchor !== undefined ? { anchor } : {}),
+      ...(quote !== undefined ? { quote } : {}),
+      author,
+      created: new Date().toISOString().slice(0, 10),
+      text: "",
+    };
+    this.doc.blocks.splice(at + 1, 0, { kind: "comment", comment });
+    this.activeCommentId = comment.id;
+    this.render();
+    this.emitChange("insert");
+    const body = this.shadowRoot?.querySelector<HTMLElement>(
+      `aside.folio-comment[data-comment-id="${CSS.escape(comment.id)}"] .folio-comment-body`,
+    );
+    if (body) this.setCaret(body, 0);
+    return null;
+  }
+
+  /** Resolve or reopen a comment block (spec: docs/specs/comments.md). */
+  setCommentResolved(id: string, resolved: boolean): string | null {
+    if (!this.doc) return "No document";
+    const b = this.doc.blocks.find(
+      (b) => b.kind === "comment" && b.comment.id === id,
+    );
+    if (!b || b.kind !== "comment") return "No such comment";
+    if (resolved) b.comment.resolved = true;
+    else delete b.comment.resolved;
+    this.render();
+    this.emitChange("comment");
+    return null;
+  }
+
+  /** Delete a comment block (spec: docs/specs/comments.md). */
+  deleteComment(id: string): string | null {
+    if (!this.doc) return "No document";
+    const at = this.doc.blocks.findIndex(
+      (b) => b.kind === "comment" && b.comment.id === id,
+    );
+    if (at < 0) return "No such comment";
+    this.doc.blocks.splice(at, 1);
+    if (this.activeCommentId === id) this.activeCommentId = null;
+    this.render();
+    this.emitChange("comment");
+    return null;
+  }
+
+  /** The comment the palette's Resolve/Delete comment commands act on. */
+  get activeComment(): string | null {
+    return this.activeCommentId;
+  }
+
+  /**
+   * Highlight each comment's quote inside its anchor block (spec:
+   * docs/specs/comments.md). Best effort: the quote is marked when it
+   * sits in a single text node; the comment's own quote chip always
+   * shows it. Runs on full renders only, never under the caret.
+   */
+  private renderCommentMarks(host: Element): void {
+    if (!this.doc) return;
+    for (const block of this.doc.blocks) {
+      if (block.kind !== "comment") continue;
+      const c = block.comment;
+      if (!c.anchor || !c.quote) continue;
+      const aIdx = this.doc.blocks.findIndex(
+        (b) => this.anchorOfBlock(b) === c.anchor,
+      );
+      if (aIdx < 0) continue;
+      const els = Array.from(
+        host.querySelectorAll<HTMLElement>(":scope > [data-block-index]"),
+      );
+      const startEl = els.find((e) => e.dataset.blockIndex === String(aIdx));
+      if (!startEl) continue;
+      // A heading anchor covers its whole section (up to the next
+      // heading); a directive anchor covers only its own figure.
+      let scope: HTMLElement[] = [startEl];
+      if (this.doc.blocks[aIdx]?.kind === "heading") {
+        const from = els.indexOf(startEl);
+        const rest = els.slice(from + 1);
+        const stop = rest.find((e) => /^H[1-6]$/.test(e.tagName));
+        scope = stop ? els.slice(from, els.indexOf(stop)) : els.slice(from);
+      }
+      const quote = c.quote.replace(/\s+/g, " ").trim();
+      if (!quote) continue;
+      let marked = false;
+      for (const el of scope) {
+        if (marked) break;
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode() as Text | null;
+        while (node) {
+          const raw = node.data ?? "";
+          const data = raw.replace(/\u00a0/g, " ");
+          const at = data.indexOf(quote);
+          // Apply only when normalization changed nothing, so offsets
+          // map 1:1 onto the original text node.
+          if (at >= 0 && data === raw) {
+            const mark = document.createElement("mark");
+            mark.className = "folio-comment-mark";
+            mark.dataset.commentId = c.id;
+            const range = document.createRange();
+            range.setStart(node, at);
+            range.setEnd(node, at + quote.length);
+            range.surroundContents(mark);
+            mark.addEventListener("click", () => {
+              this.activeCommentId = c.id;
+              this.shadowRoot
+                ?.querySelector(
+                  `aside.folio-comment[data-comment-id="${CSS.escape(c.id)}"]`,
+                )
+                ?.scrollIntoView({ behavior: "smooth", block: "center" });
+            });
+            marked = true;
+            break;
+          }
+          node = walker.nextNode() as Text | null;
+        }
+      }
+    }
   }
 
   /**
@@ -9025,7 +9359,8 @@ export class FolioDoc extends HTMLElement {
         b.kind === "image" ||
         b.kind === "audio" ||
         b.kind === "footnotes" ||
-        b.kind === "toc",
+        b.kind === "toc" ||
+        b.kind === "comment",
     );
     let gi = 0;
     const next: DocBlock[] = [];
@@ -9051,6 +9386,24 @@ export class FolioDoc extends HTMLElement {
       ) {
         const g = generated[gi];
         gi += 1;
+        if (g) next.push(g);
+        continue;
+      }
+      if (el.tagName === "ASIDE" && el.classList.contains("folio-comment")) {
+        // A comment block survives the sync like other generated
+        // blocks - but its body is an editable island, so the text
+        // is read back from the DOM (spec: docs/specs/comments.md).
+        const g = generated[gi];
+        gi += 1;
+        if (g?.kind === "comment") {
+          const bodyEl = el.querySelector(".folio-comment-body");
+          if (bodyEl) {
+            g.comment.text = htmlToInlineMarkdown(bodyEl.innerHTML).replace(
+              /\n+$/,
+              "",
+            );
+          }
+        }
         if (g) next.push(g);
         continue;
       }
@@ -9983,7 +10336,8 @@ export class FolioDoc extends HTMLElement {
       block.kind === "image" ||
       block.kind === "audio" ||
       block.kind === "footnotes" ||
-      block.kind === "toc"
+      block.kind === "toc" ||
+      block.kind === "comment"
     ) {
       return;
     }
@@ -10896,6 +11250,15 @@ export class FolioDoc extends HTMLElement {
         this.redo();
         return;
       }
+    }
+    // A comment body is its own editable island (spec:
+    // docs/specs/comments.md): the article's block handling must not
+    // see its keystrokes - only undo/redo above applies there.
+    if (
+      ev.target instanceof Element &&
+      ev.target.closest(".folio-comment-body")
+    ) {
+      return;
     }
     // The table context menu from the keyboard: Shift+F10 or the
     // Menu key opens it at the caret's cell (spec:

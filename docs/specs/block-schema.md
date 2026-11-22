@@ -20,9 +20,22 @@ Frontmatter:
   style: [key, value][]
 
 Block:
-  kind: prose | heading | table | chart | diagram | callout
+  kind: prose | heading | table | chart | diagram | callout | comment
   id: string           # stable, used by refs (@regional-data)
   data: Table | Chart | Diagram | ...
+
+Comment (spec: docs/specs/comments.md) - a review block, serialized as
+`::: comment {#c-1}` with known `key: value` header lines (anchor,
+quote, author, created, resolved, in-reply-to), then the free-text
+body until the closing `:::`:
+  id: string           # e.g. c-1; replies point at it (in-reply-to)
+  anchor?: string      # block id (or heading slug) commented on
+  quote?: string       # quoted text inside the anchor, for highlight
+  author?: string
+  created?: string     # ISO date
+  resolved?: boolean
+  replyTo?: string     # comment id this replies to
+  text: string         # the comment body
 
 Table:
   columns: [Column, ...]

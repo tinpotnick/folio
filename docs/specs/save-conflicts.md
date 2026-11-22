@@ -1,6 +1,6 @@
 # Save-time conflict detection (external changes to the file)
 
-## Status: proposed (2026-11-20) - spec only, no implementation yet
+## Status: accepted (2026-11-20) - implemented on vibe/comments-save-conflicts
 
 ## Decision
 

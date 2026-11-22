@@ -1,6 +1,6 @@
 # Comments (document review)
 
-## Status: proposed (2026-11-20) - spec only, no implementation yet
+## Status: accepted (2026-11-20) - implemented on vibe/comments-save-conflicts
 
 ## Decision
 
@@ -42,7 +42,14 @@ is drawn is the theme's job.
 - **Round-trip:** parse -> serialize is byte-identical;
   `tests/golden/comments.md` is a golden file (block-schema invariant
   2). The parser/serializer gain one `comment` branch each, mirroring
-  the `value` block.
+  the `value` block. The header/body separator blank is emitted only
+  when the body's first line could be mistaken for a header key, so
+  the canonical form stays tight.
+- **Anchoring prose:** prose and list blocks have no id of their own;
+  a comment on them anchors to the nearest preceding heading's slug,
+  and the quote highlight searches that whole section. The highlight
+  itself is best effort: the quote is marked when it sits in a single
+  text node; the comment's own quote chip always shows it.
 - **Render:** the quoted range inside the anchor block gets a
   theme-styled highlight; the comment itself renders as an aside at
   the anchor point (document-level comments at the end). Resolved

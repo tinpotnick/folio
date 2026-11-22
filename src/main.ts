@@ -21,6 +21,13 @@ import {
 import { grammarEnabled } from "./spell/grammar.js";
 import { canonicalMarkdown, parseDoc, serializeDoc } from "./engine/doc.js";
 import {
+  conflictsOf,
+  merge3,
+  mergeText,
+  type ConflictChunk,
+} from "./engine/merge.js";
+import { hashText, sourceFor, type SourceStat } from "./file-source.js";
+import {
   importedTable,
   importOrigin as originFor,
   isGzipFile,
@@ -276,6 +283,7 @@ async function openShipped(
   shownUrl = window.location.href;
   onGuide = path === WELCOME;
   markClean();
+  void noteSynced(text);
   reflectTitle();
   // A new document is for writing: the caret waits in its title.
   if (path === null) el.focusStart();
@@ -294,6 +302,24 @@ window.addEventListener("popstate", (ev) => {
 });
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** The name stamped on new comments (spec: docs/specs/comments.md):
+ *  asked once, then remembered - never invented silently. */
+function commentAuthor(): string {
+  const KEY = "folio-comment-author";
+  try {
+    const stored = localStorage.getItem(KEY);
+    if (stored) return stored;
+    const name = window.prompt("Name shown on your comments:", "");
+    if (name && name.trim() !== "") {
+      localStorage.setItem(KEY, name.trim());
+      return name.trim();
+    }
+  } catch {
+    // No storage (private window): the prompt still ran, or not.
+  }
+  return "anonymous";
+}
 
 function flash(msg: string): void {
   status.textContent = msg;
@@ -3099,6 +3125,26 @@ let webFile: WebFile | null = null;
  * differs from it (undoing back to it counts as clean). */
 let cleanMarkdown: string | null = null;
 
+/* --- Save-time conflict detection (spec: docs/specs/save-conflicts.md)
+ * The on-disk state behind the last load or save: stat for the cheap
+ * check, content hash for the authoritative one (stat alone lies on
+ * network shares: clock skew, coarse mtimes). Null when the document
+ * has no file source. */
+let syncedStat: SourceStat | null = null;
+let syncedHash: string | null = null;
+
+/** Remember the file state behind a load or a successful save. */
+async function noteSynced(fileText: string): Promise<void> {
+  const src = sourceFor(currentDocPath, webFile);
+  if (!src) {
+    syncedStat = null;
+    syncedHash = null;
+    return;
+  }
+  syncedStat = await src.stat();
+  syncedHash = await hashText(fileText);
+}
+
 function currentMarkdown(): string | null {
   return mdWrap.hidden ? el.getMarkdown() : editor.value;
 }
@@ -3120,6 +3166,75 @@ function isDirty(): boolean {
 const unsavedModal = requireEl<HTMLDialogElement>("#unsaved-modal");
 const unsavedText = requireEl<HTMLElement>("#unsaved-text");
 const btnUnsavedSave = requireEl<HTMLButtonElement>("#btn-unsaved-save");
+
+const conflictModal = requireEl<HTMLDialogElement>("#save-conflict-modal");
+const conflictText = requireEl<HTMLElement>("#save-conflict-text");
+const conflictList = requireEl<HTMLElement>("#save-conflict-list");
+const btnConflictMerge = requireEl<HTMLButtonElement>("#btn-conflict-merge");
+
+/**
+ * The save-conflict dialog (spec: docs/specs/save-conflicts.md): one
+ * row per conflicting hunk, each with an ours/theirs choice (ours is
+ * the default). "Save merged" applies the choices, "Overwrite with
+ * mine" discards the outside changes - the only path that loses them,
+ * and it is a deliberate click. Cancel (or Esc) writes nothing.
+ */
+function conflictDialog(
+  conflicts: ConflictChunk[],
+): Promise<"cancel" | "overwrite" | { picks: Array<"ours" | "theirs"> }> {
+  conflictText.textContent = `The file changed on disk since it was last opened or saved - ${conflicts.length} conflicting ${conflicts.length === 1 ? "hunk" : "hunks"}. Pick a side per hunk, or overwrite with yours.`;
+  conflictList.innerHTML = "";
+  conflicts.forEach((c, i) => {
+    const row = document.createElement("div");
+    row.className = "conflict-hunk";
+    const mk = (
+      value: "ours" | "theirs",
+      label: string,
+      lines: string[],
+    ): void => {
+      const lab = document.createElement("label");
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = `conflict-${String(i)}`;
+      radio.value = value;
+      if (value === "ours") radio.checked = true;
+      lab.append(radio, ` ${label}`);
+      const pre = document.createElement("pre");
+      pre.textContent = lines.join("\n");
+      lab.appendChild(pre);
+      row.appendChild(lab);
+    };
+    mk("ours", "yours (open edits)", c.ours);
+    mk("theirs", "on disk", c.theirs);
+    conflictList.appendChild(row);
+  });
+  conflictModal.returnValue = "cancel";
+  conflictModal.showModal();
+  btnConflictMerge.focus();
+  return new Promise((resolve) => {
+    conflictModal.addEventListener(
+      "close",
+      () => {
+        const v = conflictModal.returnValue || "cancel";
+        if (v === "merge") {
+          const picks = conflicts.map((_, i) =>
+            conflictModal.querySelector<HTMLInputElement>(
+              `input[name="conflict-${String(i)}"]:checked`,
+            )?.value === "theirs"
+              ? ("theirs" as const)
+              : ("ours" as const),
+          );
+          resolve({ picks });
+        } else if (v === "overwrite") {
+          resolve("overwrite");
+        } else {
+          resolve("cancel");
+        }
+      },
+      { once: true },
+    );
+  });
+}
 
 /**
  * Before replacing (or closing) the document: true to go ahead. Clean
@@ -3184,6 +3299,49 @@ async function saveCurrent(opts?: { as?: boolean }): Promise<boolean> {
   } catch {
     // keep the raw text
   }
+  // Save-time conflict check (spec: docs/specs/save-conflicts.md): if
+  // the file changed on disk since the last load/save, merge instead of
+  // clobbering. Stat is the cheap check; the content hash is the
+  // authoritative one. Only an explicit choice may overwrite.
+  const src = sourceFor(currentDocPath, webFile);
+  let merged = false;
+  if (src && syncedStat !== null && syncedHash !== null) {
+    const st = await src.stat();
+    if (
+      st !== null &&
+      (st.mtimeMs !== syncedStat.mtimeMs || st.size !== syncedStat.size)
+    ) {
+      const theirsRaw = await src.read();
+      if (theirsRaw !== null && (await hashText(theirsRaw)) !== syncedHash) {
+        let theirs = theirsRaw;
+        try {
+          theirs = canonicalMarkdown(theirsRaw);
+        } catch {
+          // not parseable: merge the raw text
+        }
+        const chunks = merge3(cleanMarkdown ?? md, md, theirs);
+        const conflicts = conflictsOf(chunks);
+        if (conflicts.length === 0) {
+          md = mergeText(chunks, () => "ours");
+          merged = true;
+          await el.load(md);
+          editor.value = md;
+          refreshOutline();
+        } else {
+          const res = await conflictDialog(conflicts);
+          if (res === "cancel") return false;
+          if (res !== "overwrite") {
+            let i = 0;
+            md = mergeText(chunks, () => res.picks[i++] ?? "ours");
+            merged = true;
+            await el.load(md);
+            editor.value = md;
+            refreshOutline();
+          }
+        }
+      }
+    }
+  }
   if (isDesktop()) {
     let path: string | null = null;
     if (currentDocPath !== null && opts?.as !== true) {
@@ -3203,7 +3361,7 @@ async function saveCurrent(opts?: { as?: boolean }): Promise<boolean> {
     }
     if (path === null) return false;
     currentDocPath = path;
-    flash(`Saved ${path}`);
+    flash(merged ? `Merged outside changes - saved ${path}` : `Saved ${path}`);
   } else {
     try {
       const saved = await saveWebFile(
@@ -3213,13 +3371,20 @@ async function saveCurrent(opts?: { as?: boolean }): Promise<boolean> {
       );
       if (saved === null) return false;
       webFile = saved;
-      flash(saved.handle ? `Saved ${saved.name}` : `Downloaded ${saved.name}`);
+      flash(
+        merged
+          ? `Merged outside changes - saved ${saved.name}`
+          : saved.handle
+            ? `Saved ${saved.name}`
+            : `Downloaded ${saved.name}`,
+      );
     } catch (e) {
       flash(`Could not save: ${e instanceof Error ? e.message : String(e)}`);
       return false;
     }
   }
   cleanMarkdown = md;
+  await noteSynced(md);
   void clearDraft();
   // Show the canonical form in the Markdown view too.
   if (!mdWrap.hidden && md !== raw) {
@@ -3286,6 +3451,7 @@ async function showOpened(path: string | null, text: string): Promise<void> {
   editor.value = text;
   refreshOutline();
   markClean();
+  void noteSynced(text);
   reflectTitle();
   flash("Opened document");
 }
@@ -3986,6 +4152,43 @@ function paletteEntries(): PaletteEntry[] {
     action: () => {
       const why = el.insertFootnote();
       flash(why ?? "Footnote added - type the note");
+    },
+  });
+  entries.push({
+    title: "Add a comment",
+    group: "Command",
+    keywords: "comment review annotate remark feedback quote highlight",
+    action: () => {
+      const why = el.insertComment(commentAuthor());
+      flash(why ?? "Comment added - type the comment");
+    },
+  });
+  entries.push({
+    title: "Resolve comment",
+    group: "Command",
+    keywords: "comment resolve reopen done finished review",
+    action: () => {
+      const id = el.activeComment;
+      if (!id) {
+        flash("Click a comment first");
+        return;
+      }
+      const why = el.setCommentResolved(id, true);
+      flash(why ?? "Comment resolved");
+    },
+  });
+  entries.push({
+    title: "Delete comment",
+    group: "Command",
+    keywords: "comment delete remove review",
+    action: () => {
+      const id = el.activeComment;
+      if (!id) {
+        flash("Click a comment first");
+        return;
+      }
+      const why = el.deleteComment(id);
+      flash(why ?? "Comment deleted");
     },
   });
   entries.push({
@@ -4702,6 +4905,9 @@ function updatePalette(): void {
 function openPalette(query?: unknown): void {
   if (paletteModal.open) return;
   el.saveCaret();
+  // Opening the palette clears the shadow selection: stash it first so
+  // "Add a comment" can still quote what was selected.
+  el.stashSelection();
   paletteModal.showModal();
   paletteInput.value = typeof query === "string" ? query : "";
   updatePalette();

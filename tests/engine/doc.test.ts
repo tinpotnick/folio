@@ -795,3 +795,86 @@ describe("select columns and crossfilter keys", () => {
     expect(c.chart.crossfilter).toBe(false);
   });
 });
+
+describe("comments (spec: docs/specs/comments.md)", () => {
+  it("golden comments.md round-trips byte-identically", () => {
+    const text = loadGolden("comments.md");
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  it("parses header fields and free-text body", () => {
+    const src =
+      "::: comment {#c-1}\n" +
+      "anchor: @t\n" +
+      'quote: "hello there"\n' +
+      "author: nick\n" +
+      "created: 2026-11-20\n" +
+      "resolved: true\n" +
+      "in-reply-to: @c-0\n" +
+      "First line.\n" +
+      "Second line.\n" +
+      ":::\n";
+    const doc = parseDoc(src);
+    const b = doc.blocks[0];
+    if (b?.kind !== "comment") throw new Error("not a comment");
+    expect(b.comment).toEqual({
+      id: "c-1",
+      anchor: "t",
+      quote: "hello there",
+      author: "nick",
+      created: "2026-11-20",
+      resolved: true,
+      replyTo: "c-0",
+      text: "First line.\nSecond line.",
+    });
+    expect(serializeDoc(doc)).toBe(src);
+  });
+
+  it("a body whose first line looks like a header key still round-trips", () => {
+    const doc = parseDoc(
+      "::: comment {#c-9}\nauthor: nick\n\nquote: not a header\n:::\n",
+    );
+    const b = doc.blocks[0];
+    if (b?.kind !== "comment") throw new Error("not a comment");
+    expect(b.comment.author).toBe("nick");
+    expect(b.comment.quote).toBeUndefined();
+    expect(b.comment.text).toBe("quote: not a header");
+    expect(serializeDoc(doc)).toBe(
+      "::: comment {#c-9}\nauthor: nick\n\nquote: not a header\n:::\n",
+    );
+  });
+
+  it("document-level comment with empty body round-trips", () => {
+    const src = "::: comment {#c-3}\nauthor: sam\n:::\n";
+    const doc = parseDoc(src);
+    const b = doc.blocks[0];
+    if (b?.kind !== "comment") throw new Error("not a comment");
+    expect(b.comment.text).toBe("");
+    expect(b.comment.anchor).toBeUndefined();
+    expect(serializeDoc(doc)).toBe(src);
+  });
+
+  it("quote escaping round-trips", () => {
+    const src = '::: comment {#c-5}\nquote: "say \\"hi\\" now"\nBody.\n:::\n';
+    const doc = parseDoc(src);
+    const b = doc.blocks[0];
+    if (b?.kind !== "comment") throw new Error("not a comment");
+    expect(b.comment.quote).toBe('say "hi" now');
+    expect(serializeDoc(doc)).toBe(src);
+  });
+
+  it("unterminated comment block throws", () => {
+    expect(() => parseDoc("::: comment {#c-1}\ntext\n")).toThrow(
+      /Unterminated/,
+    );
+  });
+});
+
+describe("comments canonicalization", () => {
+  it("a blank separator between header and body canonicalizes away", () => {
+    const messy = "::: comment {#c-1}\nauthor: nick\n\nBody.\n:::\n";
+    const clean = "::: comment {#c-1}\nauthor: nick\nBody.\n:::\n";
+    expect(canonicalMarkdown(messy)).toBe(clean);
+    expect(canonicalMarkdown(clean)).toBe(clean);
+  });
+});

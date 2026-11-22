@@ -347,6 +347,43 @@ fn write_back(path: &Path, text: &str) -> Result<(), String> {
     std::fs::write(path, text).map_err(|e| e.to_string())
 }
 
+/// mtime/size of a file, for the save-time conflict check (spec:
+/// docs/specs/save-conflicts.md). None when the file is gone.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileStat {
+    mtime_ms: u64,
+    size: u64,
+}
+
+/// Save-time conflict check: the open file's stat, so the page can
+/// tell an external change (another editor, a synced folder) from
+/// its own last write.
+#[tauri::command]
+async fn stat_document(path: String) -> Result<Option<FileStat>, String> {
+    let meta = match std::fs::metadata(Path::new(&path)) {
+        Ok(m) => m,
+        Err(_) => return Ok(None),
+    };
+    let mtime_ms = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    Ok(Some(FileStat {
+        mtime_ms,
+        size: meta.len(),
+    }))
+}
+
+/// Read the open file's current text - the "theirs" of a save-time
+/// merge when the file changed on disk since the last load/save.
+#[tauri::command]
+async fn read_document(path: String) -> Result<String, String> {
+    std::fs::read_to_string(Path::new(&path)).map_err(|e| e.to_string())
+}
+
 /// Save with no dialog: write straight back to the open document's
 /// path. The folder is remembered as the next dialog's hint.
 #[tauri::command]
@@ -720,6 +757,8 @@ pub fn run() {
             open_document,
             save_document,
             write_document,
+            stat_document,
+            read_document,
             save_text_file,
             open_external,
             open_presenter_window,
