@@ -1178,8 +1178,54 @@
         box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
       }
       #unsaved-modal::backdrop,
+      #save-conflict-modal::backdrop,
       #import-modal::backdrop {
         background: rgba(31, 35, 40, 0.4);
+      }
+      #save-conflict-modal {
+        width: min(620px, calc(100vw - 32px));
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
+      }
+      #save-conflict-modal .unsaved-body {
+        padding: 18px 20px 16px;
+        font-size: 13px;
+        max-height: 70vh;
+        overflow: auto;
+      }
+      #save-conflict-modal h2 {
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+      #save-conflict-list {
+        margin: 10px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      #save-conflict-list .conflict-hunk {
+        border: 1px solid var(--line, #d0d7de);
+        border-radius: 8px;
+        padding: 8px 10px;
+      }
+      #save-conflict-list .conflict-hunk pre {
+        margin: 6px 0 0;
+        padding: 6px 8px;
+        border-radius: 6px;
+        background: var(--bg, rgba(0, 0, 0, 0.04));
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-size: 12px;
+      }
+      #save-conflict-list label {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        cursor: pointer;
       }
       #import-modal {
         width: min(620px, calc(100vw - 32px));
@@ -2844,6 +2890,28 @@
           </button>
           <button value="save" class="plain primary" id="btn-unsaved-save">
             Save…
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="save-conflict-modal" aria-label="File changed on disk">
+      <form method="dialog" class="unsaved-body">
+        <h2>Changed on disk</h2>
+        <p id="save-conflict-text"></p>
+        <div id="save-conflict-list"></div>
+        <div class="unsaved-actions">
+          <button value="cancel" class="plain" id="btn-conflict-cancel">
+            Cancel
+          </button>
+          <button
+            value="overwrite"
+            class="plain danger"
+            id="btn-conflict-overwrite"
+          >
+            Overwrite with mine
+          </button>
+          <button value="merge" class="plain primary" id="btn-conflict-merge">
+            Save merged
           </button>
         </div>
       </form>

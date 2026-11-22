@@ -51,7 +51,10 @@ export type DocBlock =
   | { kind: "footnotes"; notes: Footnote[] }
   /** A table of contents (spec: docs/specs/contents.md): the marker
    * line as written, `[[_TOC_]]` (GitLab, Azure DevOps) or `[TOC]`. */
-  | { kind: "toc"; marker: string };
+  | { kind: "toc"; marker: string }
+  /** A review comment (spec: docs/specs/comments.md): a `::: comment`
+   * block anchored to another block by id + quote. */
+  | { kind: "comment"; comment: Comment };
 
 export interface Footnote {
   label: string;
@@ -72,13 +75,31 @@ export interface ListItem {
   children?: ListBody;
 }
 
+/** A review comment (spec: docs/specs/comments.md). */
+export interface Comment {
+  id: string;
+  /** Id of the block commented on; absent = document-level comment. */
+  anchor?: string;
+  /** Quoted text inside the anchor block (single line), used for the
+   * highlight and for re-anchoring after edits elsewhere. */
+  quote?: string;
+  author?: string;
+  /** ISO date the comment was written. */
+  created?: string;
+  resolved?: boolean;
+  /** Id of the comment this replies to (threads are flat blocks). */
+  replyTo?: string;
+  /** The comment body; free text, may span lines. */
+  text: string;
+}
+
 export interface Doc {
   frontmatter: Frontmatter;
   blocks: DocBlock[];
 }
 
 const DIRECTIVE_RE =
-  /^::: (table|chart|image|audio|value|motion) \{#([^}]+)\}(?:[ \t]+(.*))?$/;
+  /^::: (table|chart|image|audio|value|motion|comment) \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 const MERMAID_RE = /^::: mermaid \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 
 export class ParseError extends Error {
@@ -174,6 +195,15 @@ export function parseDoc(text: string): Doc {
           `Unknown ${m[1]} attribute: '${attrs.split(/\s+/)[0] ?? ""}'`,
           0,
         );
+      }
+      // A comment's body is free text, not key: value entries, so it
+      // gets its own reader (header keys first, one blank separator,
+      // then the body verbatim until the closing :::).
+      if (m[1] === "comment") {
+        const r = parseCommentDirective(lines, i, id);
+        doc.blocks.push(r.block);
+        i = r.endLine + 1;
+        continue;
       }
       const body = readDirectiveBody(lines, i, id);
       if (m[1] === "table") doc.blocks.push(parseTableDirective(body, id));
@@ -415,6 +445,43 @@ function parseValueDirective(body: DirectiveBody, id: string): DocBlock {
     throw new ParseError(`value '${id}' has no value:`, 0);
   }
   return { kind: "table", table };
+}
+
+const COMMENT_KEY_RE =
+  /^(anchor|quote|author|created|resolved|in-reply-to):[ \t]?(.*)$/;
+
+/**
+ * A review comment (spec: docs/specs/comments.md):
+ * `::: comment {#c-1}` with known `key: value` header lines first,
+ * then one optional blank line as separator, then the free-text body
+ * verbatim until the closing `:::`. The serializer always emits the
+ * separator blank when the body is non-empty, so a body whose first
+ * line looks like a header key still round-trips as body.
+ */
+function parseCommentDirective(
+  lines: string[],
+  start: number,
+  id: string,
+): { block: DocBlock; endLine: number } {
+  const end = findDirectiveEnd(lines, start + 1);
+  const comment: Comment = { id, text: "" };
+  let i = start + 1;
+  for (; i < end; i++) {
+    const kv = COMMENT_KEY_RE.exec(lines[i] ?? "");
+    if (!kv) break;
+    const key = kv[1] ?? "";
+    const raw = kv[2] ?? "";
+    if (key === "anchor") comment.anchor = raw.replace(/^@/, "");
+    else if (key === "quote")
+      comment.quote = unquoteEscape(raw).replace(/\n/g, " ");
+    else if (key === "author") comment.author = unquoteEscape(raw);
+    else if (key === "created") comment.created = unquote(raw);
+    else if (key === "resolved") comment.resolved = raw.trim() === "true";
+    else if (key === "in-reply-to") comment.replyTo = raw.replace(/^@/, "");
+  }
+  if (i < end && (lines[i] ?? "").trim() === "") i++;
+  comment.text = lines.slice(i, end).join("\n");
+  return { block: { kind: "comment", comment }, endLine: end };
 }
 
 function parseColumn(raw: string): Table["columns"][number] {
@@ -1114,7 +1181,32 @@ function serializeBlock(block: DocBlock): string {
       return serializeImage(block.image);
     case "audio":
       return serializeAudio(block.audio);
+    case "comment":
+      return serializeComment(block.comment);
   }
+}
+
+function serializeComment(c: Comment): string {
+  const lines = [`::: comment {#${c.id}}`];
+  if (c.anchor !== undefined) lines.push(`anchor: @${c.anchor}`);
+  if (c.quote !== undefined) {
+    lines.push(`quote: "${c.quote.replace(/"/g, '\\"').replace(/\n/g, " ")}"`);
+  }
+  if (c.author !== undefined) lines.push(`author: ${c.author}`);
+  if (c.created !== undefined) lines.push(`created: ${c.created}`);
+  if (c.resolved) lines.push("resolved: true");
+  if (c.replyTo !== undefined) lines.push(`in-reply-to: @${c.replyTo}`);
+  if (c.text !== "") {
+    // The separator blank is emitted only when the body's first line
+    // could be mistaken for a header key or is itself blank - so the
+    // canonical form stays tight and still round-trips (the parser
+    // skips at most one blank after the header keys).
+    const first = c.text.split("\n", 1)[0] ?? "";
+    if (first.trim() === "" || COMMENT_KEY_RE.test(first)) lines.push("");
+    lines.push(...c.text.split("\n"));
+  }
+  lines.push(":::");
+  return lines.join("\n");
 }
 
 function serializeMotion(m: Motion): string {

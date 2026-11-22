@@ -72,6 +72,36 @@ export async function writeDocument(
   }
 }
 
+/** The file's mtime/size, for the save-time conflict check (spec:
+ *  docs/specs/save-conflicts.md). Null when the file is gone or not
+ *  on desktop. */
+export async function statDocument(
+  path: string,
+): Promise<{ mtimeMs: number; size: number } | null> {
+  if (!isDesktop()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    return await invoke<{ mtimeMs: number; size: number } | null>(
+      "stat_document",
+      { path },
+    );
+  } catch {
+    return null;
+  }
+}
+
+/** Read the file's current text (the "theirs" of a save-time merge).
+ *  Null when unreadable or not on desktop. */
+export async function readDocument(path: string): Promise<string | null> {
+  if (!isDesktop()) return null;
+  const { invoke } = await import("@tauri-apps/api/core");
+  try {
+    return await invoke<string>("read_document", { path });
+  } catch {
+    return null;
+  }
+}
+
 /** Save an exported text file (an STL model, ...) through a native
  * dialog. Returns the path, or null when cancelled / not desktop. */
 export async function saveTextFile(

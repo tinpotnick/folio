@@ -2993,6 +2993,78 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       section.folio-notes .fn-back { display: none; }
       sup.folio-fnref a { color: inherit; font-weight: normal; text-decoration: none; }
     }
+    /* Review comments (spec: docs/specs/comments.md): an aside in the
+       margin flow, a soft highlight on the quoted text. The highlight
+       is a mark, never a style literal in the document. */
+    aside.folio-comment {
+      margin: 0.6em 0;
+      padding: 0.5em 0.8em;
+      border-left: 0.18em solid var(--folio-accent, #4c6ef5);
+      border-radius: 0 6px 6px 0;
+      background: var(--folio-tint, rgba(0, 0, 0, 0.04));
+      font-size: 0.88em;
+    }
+    aside.folio-comment.resolved { opacity: 0.55; }
+    aside.folio-comment .folio-comment-head {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5em;
+      flex-wrap: wrap;
+    }
+    aside.folio-comment .folio-comment-author { font-weight: 600; }
+    aside.folio-comment .folio-comment-date,
+    aside.folio-comment .folio-comment-badge {
+      color: var(--folio-ink-muted);
+      font-size: 0.92em;
+    }
+    aside.folio-comment .folio-comment-badge {
+      border: 1px solid var(--folio-rule, #d0d7de);
+      border-radius: 999px;
+      padding: 0 0.5em;
+    }
+    aside.folio-comment .folio-comment-resolve,
+    aside.folio-comment .folio-comment-delete {
+      margin-left: auto;
+      border: 1px solid var(--folio-rule, #d0d7de);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--folio-ink-muted);
+      font-family: inherit;
+      font-size: 0.92em;
+      padding: 0.05em 0.5em;
+      cursor: pointer;
+    }
+    aside.folio-comment .folio-comment-delete { margin-left: 0; }
+    aside.folio-comment .folio-comment-resolve:hover,
+    aside.folio-comment .folio-comment-delete:hover {
+      color: var(--folio-ink);
+      border-color: var(--folio-ink-muted);
+    }
+    aside.folio-comment .folio-comment-quote {
+      margin-top: 0.3em;
+      padding-left: 0.6em;
+      border-left: 2px solid var(--folio-rule, #d0d7de);
+      color: var(--folio-ink-muted);
+      font-style: italic;
+      overflow-wrap: anywhere;
+    }
+    aside.folio-comment .folio-comment-body { margin-top: 0.25em; }
+    aside.folio-comment .folio-comment-body:empty::before {
+      content: "Type the comment…";
+      color: var(--folio-ink-muted);
+      font-style: italic;
+    }
+    aside.folio-comment .folio-comment-body:focus { outline: none; }
+    mark.folio-comment-mark {
+      background: color-mix(in srgb, var(--folio-accent, #4c6ef5) 26%, transparent);
+      color: inherit;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    @media print {
+      aside.folio-comment { display: none; }
+      mark.folio-comment-mark { background: transparent; }
+    }
     article.folio-doc a {
       color: var(--folio-accent);
       text-decoration: underline;

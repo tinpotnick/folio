@@ -24,6 +24,7 @@ Ctrl+K from anywhere.
 - [Headings, links and proofing](headings-links.md) - heading levels, links, and the bundled spell and grammar check (Ctrl+K, "grammar")
 - [Lists](lists.md) - bullets, numbers, nesting
 - [Footnotes](footnotes.md) - notes at the foot of the page
+- [Comments and review](comments.md) - annotate a document, resolve and reply
 - [Citations and references](citations.md) - citing sources, the bibliography, citation styles
 - [Numbered tables, figures and cross-references](cross-references.md) - "see Table 2" that stays right
 - [Table of contents](contents.md) - a contents list that keeps itself up to date
