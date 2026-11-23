@@ -20,7 +20,11 @@ the document the component shows, in priority order:
 - **Select all** (Ctrl+A),
 - **Add comment** - the same action as the palette's "Add a comment"
   and Insert › Comment (one implementation, `onRequestComment` on the
-  component; the host owns the author name).
+  component; the host owns the author name),
+- **Set comment author** - opens the host's author dialog, the same
+  action as the palette's "Set comment author" and clicking a
+  comment's author name (`onEditAuthor` on the component; spec:
+  docs/specs/comments.md).
 
 The menu is the same `.folio-menu` as the table menu: Escape closes
 it, a pointer press outside closes it, it is clamped into the window.

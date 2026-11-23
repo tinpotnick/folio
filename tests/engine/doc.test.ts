@@ -3,10 +3,13 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  blockClass,
   canonicalMarkdown,
+  isFigureBlock,
   parseDoc,
   ParseError,
   serializeDoc,
+  type DocBlock,
 } from "@folio/engine/doc";
 import { recalcTable } from "@folio/engine/recalc";
 
@@ -876,5 +879,36 @@ describe("comments canonicalization", () => {
     const clean = "::: comment {#c-1}\nauthor: nick\nBody.\n:::\n";
     expect(canonicalMarkdown(messy)).toBe(clean);
     expect(canonicalMarkdown(clean)).toBe(clean);
+  });
+});
+
+describe("block classification (spec: docs/specs/block-schema.md)", () => {
+  it("text blocks are editable inline, figure blocks are not", () => {
+    // BLOCK_CLASS is a Record keyed by the kind union, so a new kind
+    // that is not classified here fails to compile - this test pins the
+    // two sides of the split.
+    const text: DocBlock["kind"][] = ["heading", "prose", "list", "code"];
+    const figure: DocBlock["kind"][] = [
+      "math",
+      "table",
+      "chart",
+      "motion",
+      "diagram",
+      "image",
+      "audio",
+      "footnotes",
+      "toc",
+      "comment",
+    ];
+    for (const kind of text) {
+      expect(blockClass({ kind } as DocBlock)).toBe("text");
+      expect(isFigureBlock({ kind } as DocBlock)).toBe(false);
+    }
+    for (const kind of figure) {
+      expect(blockClass({ kind } as DocBlock)).toBe("figure");
+      expect(isFigureBlock({ kind } as DocBlock)).toBe(true);
+    }
+    expect(isFigureBlock(undefined)).toBe(false);
+    expect(isFigureBlock(null)).toBe(false);
   });
 });

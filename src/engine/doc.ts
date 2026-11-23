@@ -56,6 +56,54 @@ export type DocBlock =
    * block anchored to another block by id + quote. */
   | { kind: "comment"; comment: Comment };
 
+/** Every block kind is classified exactly once, as "text" or "figure"
+ * (spec: docs/specs/block-schema.md). The Record is keyed by the kind
+ * union, so adding a kind to DocBlock without classifying it here is
+ * a compile error - the component cannot forget a new block type.
+ * "text" blocks are edited inline; "figure" blocks render as
+ * contenteditable=false elements, so the caret can only sit at their
+ * edges (Enter there must open a paragraph after them, and clicking
+ * below a trailing one must offer the same). */
+const BLOCK_CLASS: Record<DocBlock["kind"], "text" | "figure"> = {
+  heading: "text",
+  prose: "text",
+  list: "text",
+  code: "text",
+  math: "figure",
+  table: "figure",
+  chart: "figure",
+  motion: "figure",
+  diagram: "figure",
+  image: "figure",
+  audio: "figure",
+  footnotes: "figure",
+  toc: "figure",
+  comment: "figure",
+};
+
+export type BlockClass = "text" | "figure";
+
+/** The text block kinds (editable inline) and the figure kinds. */
+export type TextBlock = Extract<
+  DocBlock,
+  { kind: "heading" | "prose" | "list" | "code" }
+>;
+export type FigureBlock = Exclude<DocBlock, TextBlock>;
+
+/** The one classification of a block: "text" (editable inline) or
+ * "figure" (non-editable; the caret lives at its edges). */
+export function blockClass(b: DocBlock): BlockClass {
+  return BLOCK_CLASS[b.kind];
+}
+
+/** True for blocks that render as contenteditable=false figures or
+ * asides - the caret can never sit inside them. */
+export function isFigureBlock(
+  b: DocBlock | undefined | null,
+): b is FigureBlock {
+  return !!b && BLOCK_CLASS[b.kind] === "figure";
+}
+
 export interface Footnote {
   label: string;
   /** Inline Markdown; a newline per continuation line. */

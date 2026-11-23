@@ -136,19 +136,111 @@ test.describe("comments", () => {
     expect(md).toContain("::: comment {#c-2}");
   });
 
-  test("the author name is asked once and remembered", async ({ page }) => {
-    page.on("dialog", (d) => void d.accept("sam"));
+  test("the author name is asked once in the dialog and remembered", async ({
+    page,
+  }) => {
     await load(page, "# T\n\nHello there.\n", "");
+    const modal = page.locator("#author-modal");
     await page.locator("#the-doc p", { hasText: "Hello there" }).click();
     await page.keyboard.press("Control+k");
     await page.locator("#palette-input").fill("add a comment");
     await page.keyboard.press("Enter");
+    // No name stored: the author dialog opens before the insert.
+    await expect(modal).toBeVisible();
+    await page.locator("#author-input").fill("sam");
+    await page.locator("#btn-author-save").click();
     await expect(
       page.locator("#the-doc aside.folio-comment .folio-comment-author"),
     ).toHaveText("sam");
     expect(
       await page.evaluate(() => localStorage.getItem("folio-comment-author")),
     ).toBe("sam");
+    // A second comment uses the remembered name - no dialog.
+    await page.locator("#the-doc p", { hasText: "Hello there" }).click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("add a comment");
+    await page.keyboard.press("Enter");
+    await expect(modal).toBeHidden();
+    await expect(
+      page.locator("#the-doc aside.folio-comment .folio-comment-author"),
+    ).toHaveCount(2);
+    await expect(
+      page.locator("#the-doc aside.folio-comment .folio-comment-author").last(),
+    ).toHaveText("sam");
+  });
+
+  test("Set comment author from the palette, the context menu, and the comment's author name", async ({
+    page,
+  }) => {
+    await load(page, DOC); // author "nick" stored
+    const modal = page.locator("#author-modal");
+    // Palette: prefilled with the stored name; Enter in the input saves.
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("set comment author");
+    await page.keyboard.press("Enter");
+    await expect(modal).toBeVisible();
+    await expect(page.locator("#author-input")).toHaveValue("nick");
+    await page.locator("#author-input").fill("sam");
+    await page.keyboard.press("Enter");
+    await expect(modal).toBeHidden();
+    expect(
+      await page.evaluate(() => localStorage.getItem("folio-comment-author")),
+    ).toBe("sam");
+    // Clicking the author name on a comment opens the same dialog.
+    await page
+      .locator("#the-doc aside.folio-comment .folio-comment-author")
+      .first()
+      .click();
+    await expect(modal).toBeVisible();
+    await expect(page.locator("#author-input")).toHaveValue("sam");
+    await page.locator("#btn-author-cancel").click();
+    await expect(modal).toBeHidden();
+    // The right-click menu's entry opens it too.
+    await page.locator("#the-doc p").first().dispatchEvent("contextmenu", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      clientX: 120,
+      clientY: 120,
+    });
+    await page
+      .locator("#the-doc .folio-doc-menu button", {
+        hasText: "Set comment author",
+      })
+      .click();
+    await expect(modal).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(modal).toBeHidden();
+    // The new name is stamped on the next comment.
+    await page.locator("#the-doc p").first().click();
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("add a comment");
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("#the-doc aside.folio-comment .folio-comment-author").last(),
+    ).toHaveText("sam");
+  });
+
+  test("saving a new author renames the comments written under the old name", async ({
+    page,
+  }) => {
+    // Stored "nick"; c-1 is by nick, c-2 by sam.
+    await load(page, DOC);
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("set comment author");
+    await page.keyboard.press("Enter");
+    await page.locator("#author-input").fill("Nicky");
+    await page.locator("#btn-author-save").click();
+    // c-1 renamed, c-2 (another author) untouched.
+    const authors = page.locator(
+      "#the-doc aside.folio-comment .folio-comment-author",
+    );
+    await expect(authors.nth(0)).toHaveText("Nicky");
+    await expect(authors.nth(1)).toHaveText("sam");
+    const md = await source(page);
+    expect(md).not.toContain("author: nick");
+    expect(md).toContain("author: Nicky");
+    expect(md).toContain("author: sam");
   });
 });
 
@@ -182,7 +274,9 @@ test.describe("comments at the end of the document", () => {
       "# T\n\nText.\n\n::: comment {#c-1}\nauthor: nick\nA note.\n:::\n",
     );
     const aside = page.locator("#the-doc aside.folio-comment");
-    await aside.locator(".folio-comment-head .folio-comment-author").click();
+    // Click the aside's own padding (not a head button - the author name
+    // now opens the author dialog) so the comment block owns the key.
+    await aside.click({ position: { x: 6, y: 6 } });
     await page.keyboard.press("Enter");
     await expect(page.locator("#the-doc p")).toHaveCount(2);
     // The caret is in the new paragraph: typing lands there.

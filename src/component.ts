@@ -8,6 +8,7 @@
 import type { Comment, Footnote } from "./engine/doc.js";
 import { headingSlug } from "./engine/outline.js";
 import {
+  isFigureBlock,
   parseDoc,
   serializeDoc,
   type Doc,
@@ -1326,7 +1327,7 @@ export class FolioDoc extends HTMLElement {
       if (
         ev.target === host &&
         this.doc &&
-        this.isNonEditableFigure(this.doc.blocks[this.doc.blocks.length - 1])
+        isFigureBlock(this.doc.blocks[this.doc.blocks.length - 1])
       ) {
         const lastEl = host.lastElementChild as HTMLElement | null;
         const rect = lastEl?.getBoundingClientRect();
@@ -1765,9 +1766,19 @@ export class FolioDoc extends HTMLElement {
         });
         const head = document.createElement("div");
         head.className = "folio-comment-head";
-        const who = document.createElement("span");
+        // The author name is a button: clicking it opens the host's
+        // author dialog (spec: docs/specs/comments.md, "Setting the
+        // author") - a native way to set the name, no Markdown needed.
+        const who = document.createElement("button");
+        who.type = "button";
         who.className = "folio-comment-author";
         who.textContent = c.author ?? "";
+        who.title = "Change the name on new comments";
+        who.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          if (this.onEditAuthor) this.onEditAuthor(c.author);
+          else this.status("Comments are not wired up in this host");
+        });
         head.appendChild(who);
         if (c.created) {
           const when = document.createElement("span");
@@ -2081,6 +2092,26 @@ export class FolioDoc extends HTMLElement {
     this.render();
     this.emitChange("comment");
     return null;
+  }
+
+  /** Rename the author on every comment written under `from` (spec:
+   *  docs/specs/comments.md, "Setting the author"): saving a new author
+   *  name also updates the existing comments stamped with the old one,
+   *  as one undoable change. Returns how many were renamed. */
+  renameCommentAuthor(from: string, to: string): number {
+    if (!this.doc) return 0;
+    let n = 0;
+    for (const b of this.doc.blocks) {
+      if (b.kind === "comment" && (b.comment.author ?? "") === from) {
+        b.comment.author = to;
+        n += 1;
+      }
+    }
+    if (n > 0) {
+      this.render();
+      this.emitChange("comment");
+    }
+    return n;
   }
 
   /** The comment the palette's Resolve/Delete comment commands act on. */
@@ -9353,19 +9384,7 @@ export class FolioDoc extends HTMLElement {
     if (!this.doc) return;
     const host = this.shadowRoot?.querySelector("article.folio-doc");
     if (!host) return;
-    const generated = this.doc.blocks.filter(
-      (b) =>
-        b.kind === "table" ||
-        b.kind === "chart" ||
-        b.kind === "motion" ||
-        b.kind === "diagram" ||
-        b.kind === "math" ||
-        b.kind === "image" ||
-        b.kind === "audio" ||
-        b.kind === "footnotes" ||
-        b.kind === "toc" ||
-        b.kind === "comment",
-    );
+    const generated = this.doc.blocks.filter((b) => isFigureBlock(b));
     let gi = 0;
     const next: DocBlock[] = [];
     // Slide wrappers (.folio-slide) are presentational only: flatten
@@ -10330,19 +10349,9 @@ export class FolioDoc extends HTMLElement {
     const idx = this.blockIndexAtCaret();
     if (idx < 0) return;
     const block = this.doc.blocks[idx];
-    if (
-      !block ||
-      block.kind === "table" ||
-      block.kind === "chart" ||
-      block.kind === "motion" ||
-      block.kind === "diagram" ||
-      block.kind === "math" ||
-      block.kind === "image" ||
-      block.kind === "audio" ||
-      block.kind === "footnotes" ||
-      block.kind === "toc" ||
-      block.kind === "comment"
-    ) {
+    // Figures are generated blocks - they have no text to turn into a
+    // heading or paragraph.
+    if (!block || isFigureBlock(block)) {
       return;
     }
     // A list unlists into one block PER ITEM - merging its items
@@ -11123,24 +11132,6 @@ export class FolioDoc extends HTMLElement {
     }
   }
 
-  /** Block kinds that render as contenteditable=false figures: the
-   * caret can never sit inside them, so when one is the LAST block
-   * there is no caret target below it and typing has nowhere to go. */
-  private isNonEditableFigure(b: Doc["blocks"][number] | undefined): boolean {
-    return (
-      !!b &&
-      (b.kind === "image" ||
-        b.kind === "audio" ||
-        b.kind === "chart" ||
-        b.kind === "diagram" ||
-        b.kind === "math" ||
-        b.kind === "motion" ||
-        // A comment aside is a non-editable block too: clicking below a
-        // trailing one offers a paragraph (spec: docs/specs/comments.md).
-        b.kind === "comment")
-    );
-  }
-
   /** True when the caret sits at the very end of block idx's text.
    * (caretAtBlockEnd's comparePoint misses the boundary case
    * (lastTextNode, len) vs (block, childCount) - it returns -1 there -
@@ -11378,7 +11369,7 @@ export class FolioDoc extends HTMLElement {
         at &&
         idx >= 0 &&
         this.caretAtTextEndOfBlock(idx, at) &&
-        this.isNonEditableFigure(this.doc.blocks[idx + 1]) &&
+        isFigureBlock(this.doc.blocks[idx + 1]) &&
         idx + 2 >= this.doc.blocks.length
       ) {
         ev.preventDefault();
@@ -11496,47 +11487,25 @@ export class FolioDoc extends HTMLElement {
     const block = this.doc.blocks[idx];
     if (!block) return;
     if (
-      block.kind === "table" ||
-      block.kind === "chart" ||
-      block.kind === "motion" ||
-      // A comment aside is not editable (only its body island is, and
-      // that owns its keys earlier): Enter at its edge opens a
-      // paragraph after it.
-      block.kind === "comment" ||
+      // Every figure kind (table, chart, image, math, diagram, comment,
+      // ...) renders contenteditable=false, so the caret can only sit
+      // at its edge: Enter there opens a paragraph after it - one
+      // predicate covers all of them, including future kinds (spec:
+      // docs/specs/block-schema.md).
+      isFigureBlock(block) ||
       (block.kind === "heading" &&
         (!this.caretPoint() || this.caretAtBlockEnd(idx)))
     ) {
-      // Enter at a figure's edge (figures are not editable, so the
-      // caret can only sit at their boundary) or at the END of a
-      // heading: open a new empty paragraph AFTER the block. Without
-      // this there is no way to add a line past a table or the title
-      // without the Markdown view (WebKitGTK does nothing natively
-      // at a heading's end; Chromium splits only mid-heading).
+      // Enter at a figure's edge or at the END of a heading: open a
+      // new empty paragraph AFTER the block. Without this there is no
+      // way to add a line past a table or the title without the
+      // Markdown view (WebKitGTK does nothing natively at a heading's
+      // end; Chromium splits only mid-heading).
       ev.preventDefault();
       this.doc.blocks.splice(idx + 1, 0, { kind: "prose", text: "" });
       this.render();
       this.focusBlockStart(idx + 1);
       this.emitChange("insert");
-      return;
-    }
-    if (block.kind === "math") {
-      // Math blocks are generated output; never split into one.
-      if (
-        ev.target instanceof Element &&
-        ev.target.closest("figure.folio-math")
-      ) {
-        ev.preventDefault();
-      }
-      return;
-    }
-    if (block.kind === "diagram") {
-      // Never split into a selected diagram.
-      if (
-        ev.target instanceof Element &&
-        ev.target.closest("figure.folio-diagram")
-      ) {
-        ev.preventDefault();
-      }
       return;
     }
     if (block.kind === "code") {
@@ -12095,9 +12064,18 @@ export class FolioDoc extends HTMLElement {
 
   /** The document's general context menu (spec:
    *  docs/specs/context-menu.md): the usual clipboard candidates plus
-   *  Add comment. The host sets onRequestComment (it owns the author
-   *  name); the palette's "Add a comment" runs the same hook. */
+   *  Add comment and Set comment author. The host sets onRequestComment
+   *  and onEditAuthor (it owns the author name); the palette's "Add a
+   *  comment" / "Set comment author" run the same hooks. */
   onRequestComment: (() => void) | null = null;
+
+  /** Set the author name stamped on new comments - the host owns the
+   *  profile/storage, the component only asks (spec:
+   *  docs/specs/comments.md, "Setting the author"). Triggered by the
+   *  context menu's "Set comment author" and by clicking a comment's
+   *  author name, which passes that comment's author so the host can
+   *  prefill and rename even when no name is stored yet. */
+  onEditAuthor: ((currentAuthor?: string) => void) | null = null;
 
   private openGeneralMenu(ev: MouseEvent): void {
     if (!this.doc) return;
@@ -12151,6 +12129,14 @@ export class FolioDoc extends HTMLElement {
           icon: MENU_ICONS.comment,
           run: () => {
             if (this.onRequestComment) this.onRequestComment();
+            else this.status("Comments are not wired up in this host");
+          },
+        },
+        {
+          label: "Set comment author…",
+          icon: MENU_ICONS.comment,
+          run: () => {
+            if (this.onEditAuthor) this.onEditAuthor();
             else this.status("Comments are not wired up in this host");
           },
         },

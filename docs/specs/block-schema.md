@@ -24,6 +24,19 @@ Block:
   id: string           # stable, used by refs (@regional-data)
   data: Table | Chart | Diagram | ...
 
+Every kind is classified exactly once as "text" or "figure" in
+`BLOCK_CLASS` (src/engine/doc.ts) - a Record keyed by the kind union,
+so adding a kind without classifying it is a compile error.
+"text" blocks (prose, heading, list, code) are edited inline;
+"figure" blocks (table, chart, motion, diagram, math, image, audio,
+footnotes, toc, comment) render as contenteditable=false elements,
+so the caret can only sit at their edges. One predicate
+(`isFigureBlock`) drives every edge behavior in the component: Enter
+with a figure selected opens a new paragraph AFTER it, ArrowDown past
+a trailing one appends a paragraph, and clicking below a trailing one
+offers the same - a new block kind classified "figure" gets all three
+for free (docs/specs/figure-inspectors.md for the reveal contract).
+
 Comment (spec: docs/specs/comments.md) - a review block, serialized as
 `::: comment {#c-1}` with known `key: value` header lines (anchor,
 quote, author, created, resolved, in-reply-to), then the free-text
