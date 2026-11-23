@@ -69,6 +69,12 @@ hand, never a second representation.
     the paper size of printed and exported pages (docs/specs/
     slides.md). While the slideshow is playing, the effective size is
     the slide aspect instead.
+  - `page.orientation` - `portrait` (default) | `landscape`: the
+    orientation of printed and exported pages, print-only. The deck
+    sizes `16:9` / `4:3` are landscape by definition; `portrait` there
+    swaps the dimensions. A `::: page` block can override size and
+    orientation per section (print.md, "Page sections"). The settings
+    dialog shows an Orientation dropdown next to Paper size.
 
 ## Acceptance
 

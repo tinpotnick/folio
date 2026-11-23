@@ -114,11 +114,26 @@ No separate PDF export engine, no new dependency (ADR-0007).
 - **What**: a `::: page {#sec-2}` block in the body (block-schema.md)
   starts a new print SECTION: a new printed page, and from that point
   until the next `::: page` block the page furniture is the block's
-  `header:` / `footer:` / `numbers:` values. Omitted keys carry
+  `header:` / `footer:` / `numbers:` values and its page geometry is
+  the block's `size:` / `orientation:` values. Omitted keys carry
   forward - the previous section's values; before any block, the style
   defaults (`page.header` = title / custom text / off, `page.footer`
-  = off or text, `page.numbers` = on unless off). So every occurrence
+  = off or text, `page.numbers` = on unless off, `page.size` = theme
+  default, `page.orientation` = portrait). So every occurrence
   updates exactly what it names, from that point onwards.
+- **Orientation**: `page.orientation` = `portrait` (default) |
+  `landscape`, at doc level (a style key next to `page.size`,
+  document-settings.md) and per section (`orientation:` on the block,
+  carrying forward like the furniture keys). CSS: each named
+  `@page folio-sec-N` carries the section's effective
+  `size: <page-size> <orientation>` (every named rule repeats it -
+  a named page replaces the base `@page` for its pages, so the
+  inherited value must be restated). For the deck sizes `16:9` /
+  `4:3` the dimensions are already landscape; `portrait` there swaps
+  them. Orientation and size are print-only; the slideshow's screen
+  aspect is unchanged. On desktop export each section's print run
+  sets its own paper size and orientation in the page setup before
+  stamping and merging.
 - **Slots are independent**: header top left, footer bottom left,
   "Page n of N" bottom right - all three may appear on one page.
   `numbers: off` in a block suppresses numbering from that section on
@@ -146,10 +161,13 @@ No separate PDF export engine, no new dependency (ADR-0007).
   component tags each block element with its section class
   (`folio-sec-N`, computed from the model), and the host's print
   stylesheet (`#print-furniture`) gains one named page per section:
-  `@page folio-sec-N { @top-left { content: "..." } @bottom-left {
+  `@page folio-sec-N { size: <effective size + orientation>;
+@top-left { content: "..." } @bottom-left {
 content: "..." } @bottom-right { content: "Page " counter(page)
 " of " counter(pages) } }` - omitting the boxes a section leaves
-  unset. The existing `@page :first { @top-left { content: none } }`
+  unset, but always restating the carried-forward `size:` (a named
+  page replaces the base `@page` for its pages). The existing
+  `@page :first { @top-left { content: none } }`
   guard still hides the header on the document's first page only.
   The `page:` property itself is set under `@media print` from the
   shadow stylesheet (`.folio-sec-N { page: folio-sec-N }`); the

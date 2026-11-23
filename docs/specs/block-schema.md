@@ -52,13 +52,17 @@ body until the closing `:::`:
   text: string         # the comment body
 
 Page section (spec: docs/specs/print.md, "Page sections") - print
-furniture that changes mid-document, serialized as `::: page {#sec-2}`
-with known `key: value` header lines and NO body (the closing `:::`
-follows the last header line directly):
+furniture and page geometry that change mid-document, serialized as
+`::: page {#sec-2}` with known `key: value` header lines and NO body
+(the closing `:::` follows the last header line directly):
   id: string           # e.g. sec-2
   header?: string      # running header text from this point on
   footer?: string      # running footer text from this point on
   numbers?: string     # "off" / "on" - page numbering from this point on
+  size?: string        # a page.size value (a4 | a5 | letter | 16:9 | 4:3)
+  orientation?: string # "portrait" | "landscape"
+All keys optional; omitted keys carry forward from the previous
+section (doc-level style defaults before the first block).
 Classified "figure": renders as an invisible placeholder on screen
 (page furniture never prints on screen - it is page-only), and in
 paged media it forces a page break and sets the section's furniture.
