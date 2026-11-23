@@ -1776,7 +1776,7 @@ export class FolioDoc extends HTMLElement {
         who.title = "Change the name on new comments";
         who.addEventListener("click", (ev) => {
           ev.stopPropagation();
-          if (this.onEditAuthor) this.onEditAuthor();
+          if (this.onEditAuthor) this.onEditAuthor(c.author);
           else this.status("Comments are not wired up in this host");
         });
         head.appendChild(who);
@@ -2092,6 +2092,26 @@ export class FolioDoc extends HTMLElement {
     this.render();
     this.emitChange("comment");
     return null;
+  }
+
+  /** Rename the author on every comment written under `from` (spec:
+   *  docs/specs/comments.md, "Setting the author"): saving a new author
+   *  name also updates the existing comments stamped with the old one,
+   *  as one undoable change. Returns how many were renamed. */
+  renameCommentAuthor(from: string, to: string): number {
+    if (!this.doc) return 0;
+    let n = 0;
+    for (const b of this.doc.blocks) {
+      if (b.kind === "comment" && (b.comment.author ?? "") === from) {
+        b.comment.author = to;
+        n += 1;
+      }
+    }
+    if (n > 0) {
+      this.render();
+      this.emitChange("comment");
+    }
+    return n;
   }
 
   /** The comment the palette's Resolve/Delete comment commands act on. */
@@ -12053,8 +12073,9 @@ export class FolioDoc extends HTMLElement {
    *  profile/storage, the component only asks (spec:
    *  docs/specs/comments.md, "Setting the author"). Triggered by the
    *  context menu's "Set comment author" and by clicking a comment's
-   *  author name. */
-  onEditAuthor: (() => void) | null = null;
+   *  author name, which passes that comment's author so the host can
+   *  prefill and rename even when no name is stored yet. */
+  onEditAuthor: ((currentAuthor?: string) => void) | null = null;
 
   private openGeneralMenu(ev: MouseEvent): void {
     if (!this.doc) return;

@@ -220,6 +220,28 @@ test.describe("comments", () => {
       page.locator("#the-doc aside.folio-comment .folio-comment-author").last(),
     ).toHaveText("sam");
   });
+
+  test("saving a new author renames the comments written under the old name", async ({
+    page,
+  }) => {
+    // Stored "nick"; c-1 is by nick, c-2 by sam.
+    await load(page, DOC);
+    await page.keyboard.press("Control+k");
+    await page.locator("#palette-input").fill("set comment author");
+    await page.keyboard.press("Enter");
+    await page.locator("#author-input").fill("Nicky");
+    await page.locator("#btn-author-save").click();
+    // c-1 renamed, c-2 (another author) untouched.
+    const authors = page.locator(
+      "#the-doc aside.folio-comment .folio-comment-author",
+    );
+    await expect(authors.nth(0)).toHaveText("Nicky");
+    await expect(authors.nth(1)).toHaveText("sam");
+    const md = await source(page);
+    expect(md).not.toContain("author: nick");
+    expect(md).toContain("author: Nicky");
+    expect(md).toContain("author: sam");
+  });
 });
 
 test.describe("comments at the end of the document", () => {

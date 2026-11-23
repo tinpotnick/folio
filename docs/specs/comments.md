@@ -80,9 +80,13 @@ is drawn is the theme's job.
   author", and clicking the author name in any comment's header (the
   name is a real button there). Adding a first comment with no name
   stored opens the same dialog instead of inserting; cancelling it
-  stamps that one comment "anonymous" without remembering. The stored
-  name applies to NEW comments; existing comments keep the author
-  they were written with. The dialog is also an in-app-help entry
+  stamps that one comment "anonymous" without remembering. Saving a
+  new name also RENAMES every comment in the open document stamped
+  with the previous name (`renameCommentAuthor`, one undoable change;
+  comments by other authors are untouched) - the name is "mine", and
+  my comments follow it. When opened by clicking a comment's author,
+  that comment's author is the prefill and the rename source if no
+  profile name is stored yet. The dialog is also an in-app-help entry
   (demo/help/comments.md).
 - **Trailing comment:** a comment aside is a non-editable block like a
   figure: clicking below a trailing one appends a paragraph, and Enter

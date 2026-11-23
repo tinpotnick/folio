@@ -321,8 +321,8 @@ function storedAuthor(): string | null {
  *  from the palette ("Set comment author"), the context menu, or by
  *  clicking a comment's author name. Resolves with the saved name, or
  *  null when cancelled or left empty. */
-function authorDialog(): Promise<string | null> {
-  authorInput.value = storedAuthor() ?? "";
+function authorDialog(prefill?: string): Promise<string | null> {
+  authorInput.value = storedAuthor() ?? prefill ?? "";
   authorModal.returnValue = "cancel";
   authorModal.showModal();
   authorInput.focus();
@@ -357,12 +357,29 @@ async function addCommentFromUi(): Promise<void> {
   const why = el.insertComment(author);
   flash(why ?? "Comment added - type the comment");
 }
-el.onRequestComment = () => void addCommentFromUi();
-el.onEditAuthor = () => {
-  void authorDialog().then((name) => {
-    if (name) flash(`Comment author: ${name}`);
+/** Open the author dialog and apply a saved name (spec:
+ *  docs/specs/comments.md, "Setting the author"): the name is stored
+ *  for new comments, and every comment in the open document stamped
+ *  with the previous name is renamed - one undoable change.
+ *  `currentAuthor` is the clicked comment's author, used as prefill
+ *  and old name when no profile name is stored yet. */
+function editAuthor(currentAuthor?: string): void {
+  const prev =
+    storedAuthor() ??
+    (currentAuthor && currentAuthor.trim() !== "" ? currentAuthor : null);
+  void authorDialog(currentAuthor).then((name) => {
+    if (!name) return;
+    const renamed =
+      prev && prev !== name ? el.renameCommentAuthor(prev, name) : 0;
+    flash(
+      renamed > 0
+        ? `Comment author: ${name} - updated ${renamed} comment${renamed === 1 ? "" : "s"}`
+        : `Comment author: ${name}`,
+    );
   });
-};
+}
+el.onRequestComment = () => void addCommentFromUi();
+el.onEditAuthor = editAuthor;
 
 // On the desktop the webview's own context menu never shows: folio's
 // menus (proofing, table, the general document menu) handle every
@@ -4252,11 +4269,7 @@ function paletteEntries(): PaletteEntry[] {
     title: "Set comment author",
     group: "Command",
     keywords: "comment author name who review identity sign",
-    action: () => {
-      void authorDialog().then((name) => {
-        if (name) flash(`Comment author: ${name}`);
-      });
-    },
+    action: () => editAuthor(),
   });
   entries.push({
     title: "Resolve comment",

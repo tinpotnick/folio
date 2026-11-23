@@ -10,7 +10,7 @@ steps:
   - Look at the Markdown view.
 expected:
   - The comment is found via Ctrl+K "comment", the Insert menu, or the right-click context menu (all three land on "Add a comment").
-  - The author dialog appears on the first comment when no name is stored; "Set comment author" (Ctrl+K "author", the right-click menu, or clicking the comment's author name) opens the same dialog, prefilled. Saving remembers the name on this device and stamps it on new comments.
+  - The author dialog appears on the first comment when no name is stored; "Set comment author" (Ctrl+K "author", the right-click menu, or clicking the comment's author name) opens the same dialog, prefilled. Saving remembers the name on this device, stamps it on new comments, and renames the existing comments written under the previous name.
   - The selected sentence is quoted in the comment and highlighted in the document; the caret lands in the comment body.
   - The Markdown view shows a `::: comment {#c-1}` block with anchor, quote, author and the text - the file stays plain Markdown.
   - Resolve dims the comment and writes `resolved: true`; Delete removes the block. Both are also reachable by searching "comment" in Ctrl+K.
