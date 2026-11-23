@@ -71,6 +71,11 @@ is drawn is the theme's job.
   the current block with an empty quote.
 - **Identity:** `author`/`created` are written at insert time and are
   plain editable fields - folio does not enforce authorship.
+- **Trailing comment:** a comment aside is a non-editable block like a
+  figure: clicking below a trailing one appends a paragraph, and Enter
+  with the comment selected opens a paragraph after it (the body island
+  keeps its own Enter). The comment body and its buttons own their
+  keystrokes.
 - **Live editing interplay:** deferred. Comment ids are stable block
   anchors, so a future CRDT layer can merge comment blocks without
   special cases.

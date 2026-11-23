@@ -11134,7 +11134,10 @@ export class FolioDoc extends HTMLElement {
         b.kind === "chart" ||
         b.kind === "diagram" ||
         b.kind === "math" ||
-        b.kind === "motion")
+        b.kind === "motion" ||
+        // A comment aside is a non-editable block too: clicking below a
+        // trailing one offers a paragraph (spec: docs/specs/comments.md).
+        b.kind === "comment")
     );
   }
 
@@ -11259,12 +11262,14 @@ export class FolioDoc extends HTMLElement {
         return;
       }
     }
-    // A comment body is its own editable island (spec:
-    // docs/specs/comments.md): the article's block handling must not
-    // see its keystrokes - only undo/redo above applies there.
+    // A comment body is its own editable island, and its head holds
+    // real buttons (spec: docs/specs/comments.md): the article's block
+    // handling must not see their keystrokes - only undo/redo above
+    // applies there.
     if (
       ev.target instanceof Element &&
-      ev.target.closest(".folio-comment-body")
+      (ev.target.closest(".folio-comment-body") ||
+        ev.target.closest(".folio-comment-head button"))
     ) {
       return;
     }
@@ -11343,10 +11348,14 @@ export class FolioDoc extends HTMLElement {
       !ev.altKey &&
       this.doc
     ) {
-      // A selected figure owns the key event (its target is the figure)
+      // A selected figure or comment aside owns the key event (its
+      // target is the non-editable block - the comment body's own keys
+      // were handled above)
       const figTarget =
         ev.target instanceof Element
-          ? (ev.target.closest("figure") as HTMLElement | null)
+          ? (ev.target.closest(
+              "figure, aside.folio-comment",
+            ) as HTMLElement | null)
           : null;
       if (figTarget && figTarget.contentEditable === "false") {
         const idx = Number(figTarget.dataset.blockIndex ?? -1);
@@ -11490,6 +11499,10 @@ export class FolioDoc extends HTMLElement {
       block.kind === "table" ||
       block.kind === "chart" ||
       block.kind === "motion" ||
+      // A comment aside is not editable (only its body island is, and
+      // that owns its keys earlier): Enter at its edge opens a
+      // paragraph after it.
+      block.kind === "comment" ||
       (block.kind === "heading" &&
         (!this.caretPoint() || this.caretAtBlockEnd(idx)))
     ) {
