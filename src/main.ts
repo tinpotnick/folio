@@ -2996,6 +2996,14 @@ btnTable.addEventListener("click", () => {
   flash("Table inserted");
 });
 
+// Flashcard deck insert (spec: docs/specs/flashcards.md): a `:::
+// flashcards` figure with one starter card, at the caret.
+const btnFlashcards = requireEl<HTMLButtonElement>("#btn-flashcards");
+btnFlashcards.addEventListener("click", () => {
+  el.insertFlashcards();
+  flash("Flashcard deck inserted");
+});
+
 /* --- Dark / light mode (spec: docs/specs/dark-light-mode.md) ---
  * The app chrome dresses from CSS variables; every <folio-doc>
  * gets the same mode as an attribute and re-dresses its document
@@ -4649,6 +4657,16 @@ function paletteEntries(): PaletteEntry[] {
     // Same handler as the toolbar button: without a caret the clip
     // appends at the document end; invoked while recording it stops.
     action: () => toggleRecording(),
+  });
+  entries.push({
+    title: "Insert a flashcard deck",
+    group: "Command",
+    keywords:
+      "flashcards flash cards deck study quiz learn vocabulary cards insert add",
+    action: () => {
+      el.insertFlashcards();
+      flash("Flashcard deck inserted");
+    },
   });
   entries.push({
     title: "Toggle the section browser",

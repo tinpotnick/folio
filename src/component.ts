@@ -27,10 +27,13 @@ import type {
   Cell,
   Chart,
   Column,
+  Flashcard,
+  Flashcards,
   Image,
   Motion,
   Table,
 } from "@folio/engine/index.js";
+import { cardHash, dueCount, grade as srsGrade, type SrsGrade } from "./srs.js";
 import { expectedFor, isValidCellValue } from "@folio/engine/cellvalidate";
 import {
   executeQuery,
@@ -714,6 +717,34 @@ export class FolioDoc extends HTMLElement {
   /** The comment block last clicked (spec: docs/specs/comments.md) -
    * the target of the palette's Resolve/Delete comment commands. */
   private activeCommentId: string | null = null;
+  /** Study mode is a SESSION flag, never stored in the document (like
+   *  the slideshow's play flag): while set, the deck figure renders the
+   *  study UI instead of the edit rows (docs/specs/flashcards.md). */
+  private studying: {
+    deckId: string;
+    mode: "flip" | "match" | "choice";
+    order: number[];
+    orderR: number[];
+    pos: number;
+    flipped: boolean;
+    matched: Set<number>;
+    selL: number | null;
+    selR: number | null;
+    badR: number | null;
+    choiceOpts: number[] | null;
+    choicePicked: number | null;
+  } | null = null;
+  /** An in-progress per-card recording (the row's mic button). */
+  private cardRec: {
+    deckId: string;
+    cardIdx: number;
+    stream: MediaStream;
+    rec: MediaRecorder;
+    chunks: Blob[];
+    startedAt: number;
+    tick: number | undefined;
+    btn: HTMLButtonElement;
+  } | null = null;
   /** A non-collapsed selection stashed when a modal opened (opening
    *  the palette clears the shadow selection) - the quote source for
    *  Add a comment run from the palette. */
@@ -1808,6 +1839,9 @@ export class FolioDoc extends HTMLElement {
       case "audio": {
         return this.renderAudio(block, idx);
       }
+      case "flashcards": {
+        return this.renderFlashcards(block, idx);
+      }
       case "motion": {
         return this.renderMotion(block, idx);
       }
@@ -2096,6 +2130,8 @@ export class FolioDoc extends HTMLElement {
         return block.image.id;
       case "audio":
         return block.audio.id;
+      case "flashcards":
+        return block.flashcards.id;
       case "motion":
         return block.motion.id;
       case "heading":
@@ -7559,6 +7595,972 @@ export class FolioDoc extends HTMLElement {
     return bar;
   }
 
+  /* --- Flashcard decks (spec: docs/specs/flashcards.md) --- */
+
+  private static readonly FC_ICONS = {
+    cards:
+      '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="1.5" y="3" width="9" height="11" rx="1.5"/><path d="M5 1.8h8.5a1 1 0 0 1 1 1V12"/></svg>',
+    play: '<svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M3 1.5v9l7-4.5z"/></svg>',
+    mic: '<svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor"><rect x="4" y="1" width="4" height="6" rx="2"/><path d="M2 5.5a4 4 0 0 0 8 0H8.6a2.6 2.6 0 0 1-5.2 0z"/><rect x="5.4" y="9.4" width="1.2" height="1.6"/></svg>',
+    x: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7"/></svg>',
+    plus: '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M6 2v8M2 6h8"/></svg>',
+    check:
+      '<svg class="fc-check" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7.5l3.2 3L12 3.5"/></svg>',
+    wave: (n: number): string =>
+      `<span class="fc-wave">${Array.from({ length: 12 }, (_, i) => {
+        const h =
+          [6, 12, 16, 9, 14, 7, 11, 13, 8, 15, 10, 6][(i + n) % 12] ?? 8;
+        return `<i style="height:${String(h)}px"></i>`;
+      }).join("")}</span>`,
+  };
+
+  /** The deck figure: label strip (title + due badge), the uniform
+   *  inspector bar, the editable card rows - and, while this deck is
+   *  being studied, the study UI (a session flag, never in the file). */
+  private renderFlashcards(
+    block: Extract<Doc["blocks"][number], { kind: "flashcards" }>,
+    idx: number,
+  ): HTMLElement {
+    const deck = block.flashcards;
+    const figure = document.createElement("figure");
+    figure.className = "folio-flashcards";
+    figure.dataset.blockIndex = String(idx);
+    figure.dataset.flashcardsId = deck.id;
+    figure.contentEditable = "false";
+    figure.tabIndex = -1;
+    figure.title = "Flashcard deck - Backspace or Delete removes it";
+    figure.appendChild(this.buildFlashcardsInspector(figure, block));
+    figure.appendChild(this.buildFlashcardsLabel(deck));
+    const body = document.createElement("div");
+    body.className = "folio-fc-body";
+    deck.cards.forEach((card, i) => {
+      body.appendChild(this.buildCardRow(deck, i, card));
+    });
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "folio-fc-add";
+    add.innerHTML = `${FolioDoc.FC_ICONS.plus}<span>Add card</span>`;
+    add.title = "Add a card to this deck";
+    add.addEventListener("click", () => {
+      deck.cards.push({ front: "New card", back: "" });
+      this.render();
+      this.emitChange("insert");
+      const fig = this.shadowRoot?.querySelector<HTMLElement>(
+        `figure.folio-flashcards[data-flashcards-id="${CSS.escape(deck.id)}"]`,
+      );
+      const inp = fig?.querySelector<HTMLInputElement>(
+        `.folio-fc-row[data-card="${String(deck.cards.length - 1)}"] input`,
+      );
+      if (inp) {
+        inp.focus();
+        inp.select();
+      }
+    });
+    body.appendChild(add);
+    figure.appendChild(body);
+    if (this.studying?.deckId === deck.id) {
+      figure.setAttribute("studying", "");
+      figure.appendChild(this.buildStudy(deck));
+    }
+    const bar = figure.querySelector<HTMLElement>(":scope > .folio-inspector");
+    const show = (): void => {
+      if (bar) bar.hidden = false;
+    };
+    figure.addEventListener("mousedown", show);
+    figure.addEventListener("focusin", show);
+    return figure;
+  }
+
+  /** The label strip above the deck: icon, title, card count, and the
+   *  due badge computed from local SRS state (never stored in the
+   *  document). Same role as the audio figure's label strip - the
+   *  figure's clickable identity. */
+  private buildFlashcardsLabel(deck: Flashcards): HTMLElement {
+    const label = document.createElement("div");
+    label.className = "folio-fc-label";
+    label.innerHTML = FolioDoc.FC_ICONS.cards;
+    const title = document.createElement("span");
+    title.className = "fc-title";
+    title.textContent = deck.title || "flashcards";
+    label.appendChild(title);
+    const count = document.createElement("span");
+    count.textContent = `· ${String(deck.cards.length)} card${
+      deck.cards.length === 1 ? "" : "s"
+    }`;
+    label.appendChild(count);
+    if (this.doc) {
+      const due = dueCount(
+        this.doc,
+        deck.id,
+        deck.cards.map((c) => cardHash(c.front, c.back, c.sound)),
+      );
+      const badge = document.createElement("span");
+      badge.className = "fc-badge" + (due === 0 ? " due-zero" : "");
+      badge.textContent = due > 0 ? `${String(due)} due` : "all done";
+      label.appendChild(badge);
+    }
+    return label;
+  }
+
+  /** One editable card row: front and back inputs (model writes on
+   *  change), a play/record button, and delete. */
+  private buildCardRow(
+    deck: Flashcards,
+    i: number,
+    card: Flashcard,
+  ): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "folio-fc-row";
+    row.dataset.card = String(i);
+
+    const front = document.createElement("input");
+    front.className = "fc-front";
+    front.value = card.front;
+    front.placeholder = "front";
+    front.setAttribute("aria-label", `card ${String(i + 1)} front`);
+    const commitFront = (): void => {
+      if (front.value.trim() === "") {
+        // An empty front is not a valid card (the parser rejects it),
+        // so clearing it removes the card.
+        deck.cards.splice(i, 1);
+        this.render();
+        this.emitChange("delete");
+        return;
+      }
+      card.front = front.value;
+      this.emitChange();
+    };
+    front.addEventListener("change", commitFront);
+    front.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        front.blur();
+      }
+    });
+
+    const divider = document.createElement("span");
+    divider.className = "fc-divider";
+    divider.textContent = "→";
+
+    const back = document.createElement("input");
+    back.className = "fc-back";
+    back.value = card.back ?? "";
+    back.placeholder = "back";
+    back.setAttribute("aria-label", `card ${String(i + 1)} back`);
+    back.addEventListener("change", () => {
+      const v = back.value;
+      if (v === "") delete card.back;
+      else card.back = v;
+      this.emitChange();
+    });
+    back.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        back.blur();
+      }
+    });
+
+    const snd = document.createElement("button");
+    snd.type = "button";
+    snd.className = "fc-icon-btn" + (card.sound ? " has-audio" : "");
+    snd.innerHTML = card.sound ? FolioDoc.FC_ICONS.play : FolioDoc.FC_ICONS.mic;
+    snd.title = card.sound
+      ? "Play the card's recording (Alt-click to re-record)"
+      : "Record a sound straight onto this card";
+    snd.setAttribute(
+      "aria-label",
+      card.sound
+        ? `play card ${String(i + 1)} recording`
+        : `record card ${String(i + 1)}`,
+    );
+    snd.addEventListener("click", (ev) => {
+      if (this.cardRec?.deckId === deck.id && this.cardRec.cardIdx === i) {
+        this.stopCardRecording();
+        return;
+      }
+      if (ev.altKey && card.sound) {
+        delete card.sound;
+        void this.toggleCardRecording(deck, i, snd);
+        return;
+      }
+      if (card.sound) this.playCardSound(card);
+      else void this.toggleCardRecording(deck, i, snd);
+    });
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "fc-icon-btn";
+    del.innerHTML = FolioDoc.FC_ICONS.x;
+    del.title = "Delete this card";
+    del.setAttribute("aria-label", `delete card ${String(i + 1)}`);
+    del.addEventListener("click", () => {
+      deck.cards.splice(i, 1);
+      this.render();
+      this.emitChange("delete");
+    });
+
+    row.append(front, divider, back, snd, del);
+    return row;
+  }
+
+  /** The deck inspector (the uniform figure-bar contract): deck title
+   *  and the Study toggle. */
+  private buildFlashcardsInspector(
+    figure: HTMLElement,
+    block: Extract<Doc["blocks"][number], { kind: "flashcards" }>,
+  ): HTMLElement {
+    const bar = this.figureBar();
+    const deck = block.flashcards;
+    const titleInp = document.createElement("input");
+    titleInp.className = "insp-fc-title";
+    titleInp.type = "text";
+    titleInp.placeholder = "deck title";
+    titleInp.title = "Deck title (empty removes it)";
+    titleInp.value = deck.title ?? "";
+    titleInp.addEventListener("change", () => {
+      const v = titleInp.value.trim();
+      if (v) deck.title = v;
+      else delete deck.title;
+      const label = figure.querySelector(".fc-title");
+      if (label) label.textContent = v || "flashcards";
+      this.emitChange();
+    });
+    titleInp.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        titleInp.blur();
+      }
+    });
+    const studyBtn = document.createElement("button");
+    studyBtn.type = "button";
+    studyBtn.textContent =
+      this.studying?.deckId === deck.id ? "Stop studying" : "Study deck";
+    studyBtn.title =
+      "Study this deck (flip, match, or multiple choice) - a session view; the file never changes";
+    studyBtn.addEventListener("click", () => {
+      if (this.studying?.deckId === deck.id) this.stopStudy();
+      else this.startStudy(deck.id);
+    });
+    bar.append(titleInp, studyBtn);
+    return bar;
+  }
+
+  /** Insert a deck after the caret's block (the toolbar's flashcards
+   *  button / the palette's "Insert flashcards"). */
+  insertFlashcards(): void {
+    if (!this.doc) return;
+    const idx = this.blockIndexAtCaret();
+    const at = idx >= 0 ? idx + 1 : this.doc.blocks.length;
+    let n = 0;
+    for (const b of this.doc.blocks) {
+      if (b.kind === "flashcards") n += 1;
+    }
+    const deck: Flashcards = {
+      id: `deck-${String(n + 1)}`,
+      title: "Flashcards",
+      cards: [{ front: "Question", back: "Answer" }],
+    };
+    this.doc.blocks.splice(at, 0, { kind: "flashcards", flashcards: deck });
+    this.render();
+    this.emitChange("insert");
+  }
+
+  /** A card's sound: an `@audio-id` reference resolves to that audio
+   *  block's src (record once, reference from many cards); anything
+   *  else is used raw (a data URI recorded onto the card). */
+  private resolveCardSound(card: Flashcard): string | null {
+    if (!card.sound) return null;
+    if (card.sound.startsWith("@")) {
+      const id = card.sound.slice(1);
+      const b = this.doc?.blocks.find(
+        (x) => x.kind === "audio" && x.audio.id === id,
+      );
+      return b?.kind === "audio" ? b.audio.src : null;
+    }
+    return card.sound;
+  }
+
+  private playCardSound(card: Flashcard): void {
+    const src = this.resolveCardSound(card);
+    if (!src) {
+      this.status("This card has no recording");
+      return;
+    }
+    const el = new globalThis.Audio(src);
+    el.play().catch(() => this.status("Could not play the recording"));
+  }
+
+  /** Per-card recording: the same getUserMedia + MediaRecorder path as
+   *  the toolbar's record button (browser APIs, ADR-0007), landing as
+   *  a data URI on the card itself. One recording at a time; the
+   *  button toggles, and three minutes auto-stops (the 8 MB ceiling
+   *  holds). */
+  private async toggleCardRecording(
+    deck: Flashcards,
+    i: number,
+    btn: HTMLButtonElement,
+  ): Promise<void> {
+    if (this.cardRec) {
+      this.stopCardRecording();
+      return;
+    }
+    if (
+      typeof MediaRecorder === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      this.status("Recording is not supported in this browser");
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      this.status("Microphone unavailable or permission denied");
+      return;
+    }
+    const mime = MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : "";
+    let rec: MediaRecorder;
+    try {
+      rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    } catch {
+      stream.getTracks().forEach((t) => t.stop());
+      this.status("Recording could not start");
+      return;
+    }
+    const chunks: Blob[] = [];
+    const startedAt = Date.now();
+    rec.ondataavailable = (ev: BlobEvent): void => {
+      if (ev.data.size > 0) chunks.push(ev.data);
+    };
+    const tick = window.setInterval((): void => {
+      const secs = Math.floor((Date.now() - startedAt) / 1000);
+      this.status(
+        `Recording ${String(Math.floor(secs / 60))}:${String(secs % 60).padStart(2, "0")} - click the button again to finish`,
+      );
+      if (Date.now() - startedAt >= 3 * 60 * 1000) this.stopCardRecording();
+    }, 500);
+    rec.onstop = (): void => {
+      clearInterval(tick);
+      stream.getTracks().forEach((t) => t.stop());
+      btn.classList.remove("recording");
+      this.cardRec = null;
+      const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+      if (blob.size === 0) {
+        this.status("Nothing recorded");
+        return;
+      }
+      if (blob.size > MAX_EMBED_BYTES) {
+        this.status(
+          "Recording too long (over 8 MB) - the document stays one file",
+        );
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (): void => {
+        if (typeof reader.result !== "string") return;
+        const c = deck.cards[i];
+        if (c) c.sound = reader.result;
+        this.render();
+        this.emitChange();
+        this.status("Recording added to the card");
+      };
+      reader.readAsDataURL(blob);
+    };
+    rec.start(250);
+    this.cardRec = {
+      deckId: deck.id,
+      cardIdx: i,
+      stream,
+      rec,
+      chunks,
+      startedAt,
+      tick,
+      btn,
+    };
+    btn.classList.add("recording");
+  }
+
+  private stopCardRecording(): void {
+    const r = this.cardRec;
+    if (!r) return;
+    if (r.tick !== undefined) clearInterval(r.tick);
+    r.btn.classList.remove("recording");
+    this.cardRec = null;
+    if (r.rec.state !== "inactive") r.rec.stop();
+    else r.stream.getTracks().forEach((t) => t.stop());
+  }
+
+  /* --- Study mode: a session flag, never in the file --- */
+
+  private startStudy(deckId: string): void {
+    if (!this.doc) return;
+    const b = this.doc.blocks.find(
+      (x) => x.kind === "flashcards" && x.flashcards.id === deckId,
+    );
+    if (!b || b.kind !== "flashcards") return;
+    const n = b.flashcards.cards.length;
+    this.studying = {
+      deckId,
+      mode: "flip",
+      order: this.shuffled(n),
+      orderR: this.shuffled(n),
+      pos: 0,
+      flipped: false,
+      matched: new Set(),
+      selL: null,
+      selR: null,
+      badR: null,
+      choiceOpts: null,
+      choicePicked: null,
+    };
+    this.render();
+    this.focusStudy();
+  }
+
+  private stopStudy(): void {
+    this.studying = null;
+    this.render();
+  }
+
+  private focusStudy(): void {
+    this.shadowRoot
+      ?.querySelector<HTMLElement>(
+        "figure.folio-flashcards[studying] .folio-fc-study",
+      )
+      ?.focus();
+  }
+
+  private shuffled(n: number): number[] {
+    const a = Array.from({ length: n }, (_, i) => i);
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i] ?? 0;
+      a[i] = a[j] ?? 0;
+      a[j] = t;
+    }
+    return a;
+  }
+
+  private buildStudy(deck: Flashcards): HTMLElement {
+    const st = this.studying;
+    const root = document.createElement("div");
+    root.className = "folio-fc-study";
+    root.tabIndex = 0;
+    if (st) {
+      root.addEventListener("keydown", (ev) => this.studyKeydown(ev, deck));
+    }
+    const head = document.createElement("div");
+    head.className = "folio-fc-head";
+    const modes = document.createElement("span");
+    modes.className = "fc-mode";
+    const modeLabels: ["flip" | "match" | "choice", string][] = [
+      ["flip", "Flip"],
+      ["match", "Match"],
+      ["choice", "Choice"],
+    ];
+    for (const [m, label] of modeLabels) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "fc-mode-btn" + (st?.mode === m ? " on" : "");
+      b.textContent = label;
+      b.addEventListener("click", () => {
+        if (!this.studying) return;
+        this.studying.mode = m;
+        this.studying.pos = 0;
+        this.studying.flipped = false;
+        this.studying.matched = new Set();
+        this.studying.selL = null;
+        this.studying.selR = null;
+        this.studying.badR = null;
+        this.studying.choiceOpts = null;
+        this.studying.choicePicked = null;
+        this.studying.order = this.shuffled(deck.cards.length);
+        this.studying.orderR = this.shuffled(deck.cards.length);
+        this.render();
+        this.focusStudy();
+      });
+      modes.appendChild(b);
+    }
+    head.appendChild(modes);
+    const prog = document.createElement("div");
+    prog.className = "fc-progress";
+    const fill = document.createElement("i");
+    const pct = st
+      ? st.mode === "match"
+        ? st.matched.size / Math.max(1, deck.cards.length)
+        : Math.min(st.pos, deck.cards.length) / Math.max(1, deck.cards.length)
+      : 0;
+    fill.style.width = `${String(Math.round(pct * 100))}%`;
+    prog.appendChild(fill);
+    head.appendChild(prog);
+    const count = document.createElement("span");
+    count.textContent =
+      st?.mode === "match"
+        ? `${String(st.matched.size)} of ${String(deck.cards.length)} matched`
+        : st && st.pos >= deck.cards.length
+          ? "done"
+          : `Card ${String((st?.pos ?? 0) + 1)} of ${String(deck.cards.length)}`;
+    head.appendChild(count);
+    const shuffleBtn = document.createElement("button");
+    shuffleBtn.type = "button";
+    shuffleBtn.className = "fc-mode-btn";
+    shuffleBtn.textContent = "Shuffle";
+    shuffleBtn.title = "Shuffle the study order";
+    shuffleBtn.addEventListener("click", () => {
+      if (!this.studying) return;
+      this.studying.order = this.shuffled(deck.cards.length);
+      this.studying.orderR = this.shuffled(deck.cards.length);
+      this.studying.pos = 0;
+      this.studying.flipped = false;
+      this.studying.matched = new Set();
+      this.studying.selL = null;
+      this.studying.selR = null;
+      this.studying.badR = null;
+      this.studying.choiceOpts = null;
+      this.studying.choicePicked = null;
+      this.render();
+      this.focusStudy();
+    });
+    head.appendChild(shuffleBtn);
+    root.appendChild(head);
+
+    if (st?.mode === "flip") root.appendChild(this.buildStudyFlip(deck, st));
+    else if (st?.mode === "match")
+      root.appendChild(this.buildStudyMatch(deck, st));
+    else if (st?.mode === "choice")
+      root.appendChild(this.buildStudyChoice(deck, st));
+
+    const foot = document.createElement("div");
+    foot.className = "folio-fc-foot";
+    foot.innerHTML =
+      st?.mode === "flip"
+        ? "<kbd>Space</kbd> flip/next · <kbd>←</kbd><kbd>→</kbd> cards · <kbd>1</kbd>–<kbd>4</kbd> grade · <kbd>Esc</kbd> exit"
+        : st?.mode === "match"
+          ? "press a prompt, then its word · <kbd>Esc</kbd> exit"
+          : "<kbd>1</kbd>–<kbd>4</kbd> answer · <kbd>Space</kbd> next · <kbd>Esc</kbd> exit";
+    root.appendChild(foot);
+    return root;
+  }
+
+  private buildStudyFlip(
+    deck: Flashcards,
+    st: NonNullable<typeof this.studying>,
+  ): HTMLElement {
+    const wrap = document.createElement("div");
+    if (st.pos >= deck.cards.length) {
+      const done = document.createElement("div");
+      done.className = "folio-fc-card";
+      const w = document.createElement("div");
+      w.className = "folio-fc-word folio-fc-done";
+      w.textContent = "Deck complete";
+      done.appendChild(w);
+      const sub = document.createElement("div");
+      sub.className = "fc-sub";
+      sub.textContent = `${String(deck.cards.length)} cards studied - Esc to exit`;
+      done.appendChild(sub);
+      wrap.appendChild(done);
+      return wrap;
+    }
+    const card = deck.cards[st.order[st.pos] ?? 0];
+    if (!card) return wrap;
+    const c = document.createElement("div");
+    c.className = "folio-fc-card";
+    if (!st.flipped) {
+      const w = document.createElement("div");
+      w.className = "folio-fc-word";
+      w.textContent = card.front;
+      c.appendChild(w);
+      if (card.sound) c.appendChild(this.buildPlayButton(card));
+      const sub = document.createElement("div");
+      sub.className = "fc-sub";
+      sub.textContent = "Space to flip";
+      c.appendChild(sub);
+    } else {
+      const top = document.createElement("div");
+      top.className = "fc-front-row";
+      const w = document.createElement("div");
+      w.className = "folio-fc-word folio-fc-word-small";
+      w.textContent = card.front;
+      top.appendChild(w);
+      if (card.sound) {
+        const pb = this.buildPlayButton(card);
+        pb.classList.add("small");
+        top.appendChild(pb);
+      }
+      c.appendChild(top);
+      const div = document.createElement("div");
+      div.className = "fc-divider";
+      c.appendChild(div);
+      const back = document.createElement("div");
+      back.className = "folio-fc-back";
+      back.textContent = card.back ?? "";
+      c.appendChild(back);
+      if (!card.back) {
+        const sub = document.createElement("div");
+        sub.className = "fc-sub";
+        sub.textContent = "(no back on this card)";
+        c.appendChild(sub);
+      }
+      const srs = document.createElement("div");
+      srs.className = "fc-srs";
+      const grades: [SrsGrade, string, string, string][] = [
+        ["again", "Again", "<1m", "again"],
+        ["hard", "Hard", "10m", ""],
+        ["good", "Good", "1d", "good"],
+        ["easy", "Easy", "4d", ""],
+      ];
+      for (const [g, label, sub, cls] of grades) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = cls;
+        b.innerHTML = `${label}<small>${sub}</small>`;
+        b.addEventListener("click", () => this.gradeCurrent(deck, g));
+        srs.appendChild(b);
+      }
+      c.appendChild(srs);
+    }
+    wrap.appendChild(c);
+    return wrap;
+  }
+
+  private buildPlayButton(card: Flashcard): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "fc-play";
+    b.innerHTML =
+      '<svg width="20" height="20" viewBox="0 0 12 12" fill="currentColor"><path d="M3 1.5v9l7-4.5z"/></svg>';
+    b.setAttribute("aria-label", "play pronunciation");
+    b.addEventListener("click", () => this.playCardSound(card));
+    return b;
+  }
+
+  private buildStudyMatch(
+    deck: Flashcards,
+    st: NonNullable<typeof this.studying>,
+  ): HTMLElement {
+    const grid = document.createElement("div");
+    grid.className = "folio-fc-match";
+    const left = document.createElement("div");
+    left.className = "folio-fc-col";
+    const lh = document.createElement("span");
+    lh.className = "fc-col-label";
+    lh.textContent = "Prompt";
+    left.appendChild(lh);
+    st.order.forEach((cardIdx, k) => {
+      const card = deck.cards[cardIdx];
+      if (!card) return;
+      const t = document.createElement("button");
+      t.type = "button";
+      t.className = "folio-fc-tile";
+      if (st.matched.has(cardIdx)) {
+        t.classList.add("ok");
+        t.innerHTML = `${FolioDoc.FC_ICONS.play}${FolioDoc.FC_ICONS.check}`;
+        t.disabled = true;
+      } else if (st.selL === k) {
+        t.classList.add("sel");
+      }
+      if (card.sound) {
+        if (!st.matched.has(cardIdx)) {
+          t.innerHTML = `${FolioDoc.FC_ICONS.play}${FolioDoc.FC_ICONS.wave(k)}`;
+        }
+        t.addEventListener("click", () => {
+          if (!this.studying || st.matched.has(cardIdx)) return;
+          this.studying.selL = k;
+          this.studying.selR = null;
+          this.studying.badR = null;
+          this.playCardSound(card);
+          this.render();
+          this.focusStudy();
+        });
+      } else {
+        const w = document.createElement("span");
+        w.textContent = card.back ?? card.front;
+        if (!st.matched.has(cardIdx)) t.appendChild(w);
+        t.addEventListener("click", () => {
+          if (!this.studying || st.matched.has(cardIdx)) return;
+          this.studying.selL = k;
+          this.studying.selR = null;
+          this.studying.badR = null;
+          this.render();
+          this.focusStudy();
+        });
+      }
+      left.appendChild(t);
+    });
+    const right = document.createElement("div");
+    right.className = "folio-fc-col";
+    const rh = document.createElement("span");
+    rh.className = "fc-col-label";
+    rh.textContent = "Match";
+    right.appendChild(rh);
+    st.orderR.forEach((cardIdx, k) => {
+      const card = deck.cards[cardIdx];
+      if (!card) return;
+      const t = document.createElement("button");
+      t.type = "button";
+      t.className = "folio-fc-tile";
+      const w = document.createElement("span");
+      w.className = "fc-word";
+      w.textContent = card.front;
+      t.appendChild(w);
+      if (st.matched.has(cardIdx)) {
+        t.classList.add("ok");
+        t.insertAdjacentHTML("beforeend", FolioDoc.FC_ICONS.check);
+        t.disabled = true;
+      } else if (st.selR === k) {
+        t.classList.add("sel");
+      }
+      if (st.badR === k) t.classList.add("bad");
+      t.addEventListener("click", () => {
+        if (!this.studying || st.matched.has(cardIdx)) return;
+        if (st.selL === null) {
+          this.studying.selR = k;
+          this.render();
+          this.focusStudy();
+          return;
+        }
+        const li = st.order[st.selL] ?? -1;
+        if (li === cardIdx) {
+          st.matched.add(cardIdx);
+          st.selL = null;
+          st.selR = null;
+          st.badR = null;
+          if (this.doc) {
+            srsGrade(
+              this.doc,
+              deck.id,
+              cardHash(card.front, card.back, card.sound),
+              "good",
+            );
+          }
+          this.render();
+          this.focusStudy();
+        } else {
+          st.selR = k;
+          st.badR = k;
+          this.render();
+          this.focusStudy();
+          window.setTimeout(() => {
+            if (this.studying) {
+              this.studying.selR = null;
+              this.studying.badR = null;
+              this.render();
+              this.focusStudy();
+            }
+          }, 400);
+        }
+      });
+      right.appendChild(t);
+    });
+    grid.append(left, right);
+    const wrap = document.createElement("div");
+    if (st.matched.size >= deck.cards.length && deck.cards.length > 0) {
+      const done = document.createElement("div");
+      done.className = "fc-sub";
+      done.style.textAlign = "center";
+      done.style.marginTop = "14px";
+      done.textContent =
+        "All pairs matched - Esc to exit, or Shuffle to go again";
+      wrap.append(done);
+    }
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  private buildStudyChoice(
+    deck: Flashcards,
+    st: NonNullable<typeof this.studying>,
+  ): HTMLElement {
+    const wrap = document.createElement("div");
+    if (st.pos >= deck.cards.length) {
+      const done = document.createElement("div");
+      done.className = "folio-fc-card";
+      const w = document.createElement("div");
+      w.className = "folio-fc-word folio-fc-done";
+      w.textContent = "Deck complete";
+      done.appendChild(w);
+      wrap.appendChild(done);
+      return wrap;
+    }
+    const cardIdx = st.order[st.pos] ?? 0;
+    const card = deck.cards[cardIdx];
+    if (!card) return wrap;
+    if (!st.choiceOpts) {
+      const others = deck.cards
+        .map((_, i) => i)
+        .filter((i) => i !== cardIdx && (deck.cards[i]?.back ?? "") !== "");
+      const distractors = this.shuffled(others.length)
+        .slice(0, 3)
+        .map((i) => others[i] ?? 0);
+      st.choiceOpts = this.shuffled([cardIdx, ...distractors].length).map(
+        (k) => [cardIdx, ...distractors][k] ?? cardIdx,
+      );
+    }
+    const prompt = document.createElement("div");
+    prompt.className = "folio-fc-prompt";
+    if (card.sound) prompt.appendChild(this.buildPlayButton(card));
+    const q = document.createElement("div");
+    const w = document.createElement("span");
+    w.className = "folio-fc-word";
+    w.textContent = card.front;
+    q.append("Choose the meaning of ", w);
+    prompt.appendChild(q);
+    wrap.appendChild(prompt);
+    const opts = document.createElement("div");
+    opts.className = "folio-fc-opts";
+    st.choiceOpts.forEach((optIdx, k) => {
+      const opt = deck.cards[optIdx];
+      if (!opt) return;
+      const t = document.createElement("button");
+      t.type = "button";
+      t.className = "folio-fc-tile";
+      const label = document.createElement("span");
+      label.textContent = opt.back ?? opt.front;
+      const key = document.createElement("span");
+      key.className = "fc-key";
+      key.textContent = String(k + 1);
+      t.append(label, key);
+      if (st.choicePicked !== null) {
+        if (optIdx === cardIdx) {
+          t.classList.add("ok");
+          t.insertAdjacentHTML("beforeend", FolioDoc.FC_ICONS.check);
+        } else if (st.choicePicked === k) {
+          t.classList.add("bad");
+        }
+        t.disabled = true;
+      }
+      t.addEventListener("click", () => this.pickChoice(deck, k));
+      opts.appendChild(t);
+    });
+    wrap.appendChild(opts);
+    return wrap;
+  }
+
+  private pickChoice(deck: Flashcards, k: number): void {
+    const st = this.studying;
+    if (
+      !st ||
+      st.mode !== "choice" ||
+      !st.choiceOpts ||
+      st.choicePicked !== null
+    )
+      return;
+    const cardIdx = st.order[st.pos] ?? 0;
+    st.choicePicked = k;
+    if (this.doc) {
+      const card = deck.cards[cardIdx];
+      const opt = deck.cards[st.choiceOpts[k] ?? cardIdx];
+      if (card && opt) {
+        srsGrade(
+          this.doc,
+          deck.id,
+          cardHash(card.front, card.back, card.sound),
+          st.choiceOpts[k] === cardIdx ? "good" : "again",
+        );
+      }
+    }
+    this.render();
+    this.focusStudy();
+  }
+
+  private gradeCurrent(deck: Flashcards, g: SrsGrade): void {
+    const st = this.studying;
+    if (!st || !this.doc) return;
+    const card = deck.cards[st.order[st.pos] ?? 0];
+    if (card) {
+      srsGrade(
+        this.doc,
+        deck.id,
+        cardHash(card.front, card.back, card.sound),
+        g,
+      );
+    }
+    st.pos = Math.min(st.pos + 1, deck.cards.length);
+    st.flipped = false;
+    st.choiceOpts = null;
+    st.choicePicked = null;
+    this.render();
+    this.focusStudy();
+  }
+
+  /** Study-mode keys live on the study root (the figure is
+   *  contentEditable=false, so this is the only key path while
+   *  studying). Esc exits; Backspace never deletes the deck. */
+  private studyKeydown(ev: KeyboardEvent, deck: Flashcards): void {
+    const st = this.studying;
+    if (!st) return;
+    const k = ev.key;
+    if (k === "Escape") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this.stopStudy();
+      return;
+    }
+    if (k === "Backspace" || k === "Delete") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
+    const step = (d: number): void => {
+      st.pos = Math.max(0, Math.min(st.pos + d, deck.cards.length));
+      st.flipped = false;
+      st.choiceOpts = null;
+      st.choicePicked = null;
+      this.render();
+      this.focusStudy();
+    };
+    if (st.mode === "flip") {
+      if (k === " " || k === "Enter") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (!st.flipped) {
+          st.flipped = true;
+          this.render();
+          this.focusStudy();
+        } else {
+          step(1);
+        }
+        return;
+      }
+      if (k === "ArrowRight") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        step(1);
+        return;
+      }
+      if (k === "ArrowLeft") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        step(-1);
+        return;
+      }
+      if (st.flipped && ["1", "2", "3", "4"].includes(k)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.gradeCurrent(
+          deck,
+          ["again", "hard", "good", "easy"][Number(k) - 1] as SrsGrade,
+        );
+      }
+      return;
+    }
+    if (st.mode === "choice") {
+      if (["1", "2", "3", "4"].includes(k)) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.pickChoice(deck, Number(k) - 1);
+        return;
+      }
+      if (k === " " || k === "Enter") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        step(1);
+      }
+    }
+  }
+
   /**
    * Insert an image block after the caret's block (the toolbar's
    * image button in document view). src is a data URI from the
@@ -9638,7 +10640,7 @@ export class FolioDoc extends HTMLElement {
   private handleInput(ev?: Event): void {
     if (
       ev?.target instanceof Element &&
-      ev.target.closest(".folio-inspector")
+      ev.target.closest(".folio-inspector, .folio-fc-body, .folio-fc-study")
     ) {
       return;
     }
@@ -11451,7 +12453,7 @@ export class FolioDoc extends HTMLElement {
     const removableFigure =
       ev.target instanceof Element
         ? (ev.target.closest(
-            "figure.folio-diagram, figure.folio-image, figure.folio-audio",
+            "figure.folio-diagram, figure.folio-image, figure.folio-audio, figure.folio-flashcards",
           ) as HTMLElement | null)
         : null;
     if (
