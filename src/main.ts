@@ -5,10 +5,11 @@
  */
 import { CITATION_STYLES } from "./engine/citations.js";
 import {
-  furnitureCss,
   furnitureFont,
   furnitureFor,
   pageSizeFor,
+  sectionsCss,
+  sectionsFor,
 } from "./render/page-furniture";
 import "./component.js";
 import { MAX_EMBED_BYTES } from "./component.js";
@@ -4272,6 +4273,19 @@ function paletteEntries(): PaletteEntry[] {
     action: () => editAuthor(),
   });
   entries.push({
+    title: "Insert page section",
+    group: "Command",
+    keywords:
+      "page section header footer numbers orientation landscape portrait break print pdf pagemark",
+    action: () => {
+      const why = el.insertPageSection();
+      flash(
+        why ??
+          "Page section added - set header:/footer: lines in the Markdown view",
+      );
+    },
+  });
+  entries.push({
     title: "Resolve comment",
     group: "Command",
     keywords: "comment resolve reopen done finished review",
@@ -5089,6 +5103,9 @@ const setPbH2 = requireEl<HTMLSelectElement>("#set-pb-h2");
 const setPageNumbers = requireEl<HTMLSelectElement>("#set-page-numbers");
 const setPageHeader = requireEl<HTMLSelectElement>("#set-page-header");
 const setPageSize = requireEl<HTMLSelectElement>("#set-page-size");
+const setPageOrientation = requireEl<HTMLSelectElement>(
+  "#set-page-orientation",
+);
 const overrideNote = requireEl<HTMLElement>("#settings-override-note");
 const btnSettingsReset = requireEl<HTMLButtonElement>("#btn-settings-reset");
 
@@ -5269,6 +5286,8 @@ function fillSettings(): void {
     style.get("page.numbers") === "off" ? "off" : "default";
   setPageHeader.value = style.get("page.header") === "off" ? "off" : "default";
   fillOptions(setPageSize, PAGE_SIZES, style.get("page.size"));
+  setPageOrientation.value =
+    style.get("page.orientation") === "landscape" ? "landscape" : "default";
   namedPageSizeDefault();
   reflectThemeDefaults();
 }
@@ -5316,6 +5335,7 @@ settingsForm.addEventListener("submit", (ev) => {
       "page.numbers": setPageNumbers.value,
       "page.header": setPageHeader.value,
       "page.size": setPageSize.value,
+      "page.orientation": setPageOrientation.value,
     };
     // The theme name rides the `theme:` frontmatter line;
     // "default" removes it so the fallback look applies.
@@ -5384,32 +5404,47 @@ function preparePrint(): void {
   // Paper size follows the document's `page.size` key - the slide
   // aspect while slide rendering is on (spec: docs/specs/slides.md).
   const doc = el.getDoc();
-  const size =
-    playing || el.hasAttribute("slides")
-      ? doc
-        ? themeFromDoc(doc).slide.aspect === "4/3"
-          ? "4:3"
-          : "16:9"
+  const sliding = playing || el.hasAttribute("slides");
+  const size = sliding
+    ? doc
+      ? themeFromDoc(doc).slide.aspect === "4/3"
+        ? "4:3"
         : "16:9"
-      : pageSizeFor(doc);
+      : "16:9"
+    : pageSizeFor(doc);
+  // Orientation follows the `page.orientation` key (print-only; the
+  // deck sizes are landscape by their dimensions already).
+  const orientation = sliding ? "portrait" : furnitureFor(doc).orientation;
   document.documentElement.style.setProperty(
     "--folio-page-size",
-    pageSizeCss(size),
+    pageSizeCss(size, orientation),
   );
-  // The running header and page numbers, as @page margin boxes - they
-  // only apply from the document's own stylesheet. Suppressed on
-  // slides (one slide per page needs no furniture).
-  const furniture = furnitureFor(doc);
-  if (playing || el.hasAttribute("slides")) {
-    furniture.header = null;
-    furniture.numbers = false;
+  // The running header/footer and page numbers, as @page margin boxes -
+  // one named page per ::: page section (spec: docs/specs/print.md,
+  // "Page sections"). They only apply from the document's own
+  // stylesheet. Suppressed on slides (one slide per page needs no
+  // furniture).
+  const sections = sectionsFor(doc);
+  if (sliding) {
+    for (const s of sections) {
+      s.header = null;
+      s.numbers = false;
+    }
   }
-  printFurnitureStyle.textContent = furnitureCss(furniture, furnitureFont(doc));
+  printFurnitureStyle.textContent = sectionsCss(sections, furnitureFont(doc));
 }
 const printFurnitureStyle = document.head.appendChild(
   document.createElement("style"),
 );
 printFurnitureStyle.id = "print-furniture";
+// The desktop export prints section by section (spec:
+// docs/specs/print.md, "Page sections"): Rust drives this hook to
+// show one section at a time in print media.
+(
+  window as unknown as { __folioPrintSection?: (n: number | null) => void }
+).__folioPrintSection = (n) => {
+  el.setPrintSection(n);
+};
 window.addEventListener("beforeprint", preparePrint);
 window.addEventListener("afterprint", reflectMode);
 
@@ -5482,7 +5517,9 @@ async function exportPdf(): Promise<void> {
   await drawingsSettled();
   if (isDesktop()) {
     flash("Exporting…");
-    const res = await exportPdfFile(pdfName(), furnitureFor(el.getDoc()));
+    // Sections carry their own furniture + page geometry; the desktop
+    // prints per section and stamps/merges (spec: docs/specs/print.md).
+    const res = await exportPdfFile(pdfName(), sectionsFor(el.getDoc()));
     reflectMode();
     if (res.ok) {
       const remind = personalUseReminder();

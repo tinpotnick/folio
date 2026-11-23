@@ -596,14 +596,21 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
 /// Export the document as a PDF (ADR-0025): a save dialog, then the
 /// webview prints itself straight to that file with the print
 /// stylesheet (the document's `page.size`, 18 x 16 mm margins, as
-/// `@page` says; the furniture payload carries the size) - no print
+/// `@page` says; the section payload carries the size) - no print
 /// dialog, the same pages Print makes.
+///
+/// With more than one print section (spec: docs/specs/print.md, "Page
+/// sections") the document is printed once per section - the webview
+/// is told which section to show via `window.__folioPrintSection` -
+/// each run gets its own paper size/orientation, and the section PDFs
+/// are merged in document order and stamped with per-page furniture at
+/// absolute page offsets (page numbers never restart at a section).
 #[tauri::command]
 async fn export_pdf(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
     suggested: String,
-    furniture: Option<pdf_furniture::Furniture>,
+    sections: Vec<pdf_furniture::SectionFurniture>,
 ) -> Result<String, String> {
     let mut dialog = app
         .dialog()
@@ -619,14 +626,116 @@ async fn export_pdf(
         .into_path()
         .map_err(|e| e.to_string())?;
     remember_dir(&app, &path);
-    let page_size = furniture.as_ref().map(|f| f.page_size.clone());
-    print_to_pdf(&window, &path, page_size.as_deref()).await?;
-    // The running header and page numbers: WebKitGTK ignores the print
-    // stylesheet's page-margin boxes, so they are stamped on after.
-    if let Some(f) = furniture {
-        pdf_furniture::stamp(&path, &f)?;
+    if sections.len() <= 1 {
+        let s = sections.into_iter().next();
+        let page_size = s.as_ref().map(|x| x.page_size.clone());
+        let orientation = s.as_ref().map(|x| x.orientation.clone());
+        print_to_pdf(&window, &path, page_size.as_deref(), orientation.as_deref()).await?;
+        // The running header/footer and page numbers: WebKitGTK ignores
+        // the print stylesheet's page-margin boxes, so they are stamped
+        // on after.
+        if let Some(s) = s {
+            let count = lopdf::Document::load(&path)
+                .map_err(|e| e.to_string())?
+                .get_pages()
+                .len();
+            let pages = vec![
+                pdf_furniture::PageFurniture {
+                    header: s.header.clone(),
+                    footer: s.footer.clone(),
+                    numbers: s.numbers,
+                };
+                count
+            ];
+            pdf_furniture::stamp_pages(&path, &pages)?;
+        }
+        return Ok(path.to_string_lossy().into_owned());
     }
+    // Per-section export: print each section alone, then merge + stamp.
+    let tmp = std::env::temp_dir().join(format!("folio-export-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
+    let mut temps: Vec<std::path::PathBuf> = Vec::new();
+    let mut counts: Vec<usize> = Vec::new();
+    for (i, s) in sections.iter().enumerate() {
+        window
+            .eval(&format!(
+                "window.__folioPrintSection && window.__folioPrintSection({i})"
+            ))
+            .map_err(|e| e.to_string())?;
+        // Let the print-media filter reach the webview before printing.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let t = tmp.join(format!("sec-{i}.pdf"));
+        print_to_pdf(&window, &t, Some(&s.page_size), Some(&s.orientation)).await?;
+        let d = lopdf::Document::load(&t).map_err(|e| e.to_string())?;
+        counts.push(d.get_pages().len());
+        temps.push(t);
+    }
+    let _ = window.eval("window.__folioPrintSection && window.__folioPrintSection(null)");
+    pdf_furniture::merge(&temps, &path)?;
+    let mut pages: Vec<pdf_furniture::PageFurniture> = Vec::new();
+    for (s, c) in sections.iter().zip(&counts) {
+        for _ in 0..*c {
+            pages.push(pdf_furniture::PageFurniture {
+                header: s.header.clone(),
+                footer: s.footer.clone(),
+                numbers: s.numbers,
+            });
+        }
+    }
+    pdf_furniture::stamp_pages(&path, &pages)?;
+    std::fs::remove_dir_all(&tmp).ok();
     Ok(path.to_string_lossy().into_owned())
+}
+
+/// The paper for a `page.size` key + orientation (spec:
+/// docs/specs/print.md, "Page sections"). Named paper for the
+/// portrait paper sizes (as before); everything else is a custom size
+/// with the final dimensions baked in, so orientation never depends
+/// on the engine swapping them.
+#[cfg(target_os = "linux")]
+fn paper_for(size: &str, orientation: &str) -> gtk::PaperSize {
+    let landscape = orientation == "landscape";
+    match (size, landscape) {
+        ("a5", false) => gtk::PaperSize::new(Some("iso_a5")),
+        ("letter", false) => gtk::PaperSize::new(Some("na_letter")),
+        ("a4", false) => gtk::PaperSize::new(Some("iso_a4")),
+        ("a4", true) => gtk::PaperSize::new_custom(
+            "folio-a4-landscape",
+            "A4 landscape",
+            297.0,
+            210.0,
+            gtk::Unit::Mm,
+        ),
+        ("a5", true) => gtk::PaperSize::new_custom(
+            "folio-a5-landscape",
+            "A5 landscape",
+            210.0,
+            148.0,
+            gtk::Unit::Mm,
+        ),
+        ("letter", true) => gtk::PaperSize::new_custom(
+            "folio-letter-landscape",
+            "US Letter landscape",
+            11.0 * 25.4,
+            8.5 * 25.4,
+            gtk::Unit::Mm,
+        ),
+        ("16:9", _) => gtk::PaperSize::new_custom(
+            if landscape { "folio-16x9" } else { "folio-16x9-portrait" },
+            "Slide 16:9",
+            if landscape { 16.0 * 25.4 } else { 9.0 * 25.4 },
+            if landscape { 9.0 * 25.4 } else { 16.0 * 25.4 },
+            gtk::Unit::Mm,
+        ),
+        ("4:3", _) => gtk::PaperSize::new_custom(
+            if landscape { "folio-4x3" } else { "folio-4x3-portrait" },
+            "Slide 4:3",
+            if landscape { (32.0 / 3.0) * 25.4 } else { 8.0 * 25.4 },
+            if landscape { 8.0 * 25.4 } else { (32.0 / 3.0) * 25.4 },
+            gtk::Unit::Mm,
+        ),
+        _ => gtk::PaperSize::new(Some("iso_a4")),
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -634,11 +743,13 @@ async fn print_to_pdf(
     window: &tauri::WebviewWindow,
     path: &Path,
     page_size: Option<&str>,
+    orientation: Option<&str>,
 ) -> Result<(), String> {
     use webkit2gtk::PrintOperationExt;
     let uri = gtk::glib::filename_to_uri(path, None).map_err(|e| e.to_string())?;
     // The webview closure is 'static: own the page-size key.
     let page_size = page_size.map(str::to_string);
+    let orientation = orientation.map(str::to_string);
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     window
         .with_webview(move |wv| {
@@ -649,27 +760,13 @@ async fn print_to_pdf(
             settings.set("output-uri", Some(uri.as_str()));
             op.set_print_settings(&settings);
             let page = gtk::PageSetup::new();
-            // The document's `page.size` key (docs/specs/slides.md);
-            // A4 is the default for a raw Markdown file.
-            let paper = match page_size.as_deref().unwrap_or("a4") {
-                "a5" => gtk::PaperSize::new(Some("iso_a5")),
-                "letter" => gtk::PaperSize::new(Some("na_letter")),
-                "16:9" => gtk::PaperSize::new_custom(
-                    "folio-16x9",
-                    "Slide 16:9",
-                    16.0 * 25.4,
-                    9.0 * 25.4,
-                    gtk::Unit::Mm,
-                ),
-                "4:3" => gtk::PaperSize::new_custom(
-                    "folio-4x3",
-                    "Slide 4:3",
-                    (32.0 / 3.0) * 25.4,
-                    8.0 * 25.4,
-                    gtk::Unit::Mm,
-                ),
-                _ => gtk::PaperSize::new(Some("iso_a4")),
-            };
+            // The document's `page.size` key + `page.orientation`
+            // (docs/specs/slides.md, docs/specs/print.md); A4 portrait
+            // is the default for a raw Markdown file.
+            let paper = paper_for(
+                page_size.as_deref().unwrap_or("a4"),
+                orientation.as_deref().unwrap_or("portrait"),
+            );
             page.set_paper_size(&paper);
             page.set_top_margin(18.0, gtk::Unit::Mm);
             page.set_bottom_margin(18.0, gtk::Unit::Mm);
@@ -703,6 +800,7 @@ async fn print_to_pdf(
     _window: &tauri::WebviewWindow,
     _path: &Path,
     _page_size: Option<&str>,
+    _orientation: Option<&str>,
 ) -> Result<(), String> {
     Err("unsupported".into())
 }
@@ -833,13 +931,20 @@ mod tests {
     #[ignore]
     fn stamps_a_sample() {
         let path = std::env::var("FOLIO_PDF_SAMPLE").expect("FOLIO_PDF_SAMPLE");
-        super::pdf_furniture::stamp(
+        let count = lopdf::Document::load(std::path::Path::new(&path))
+            .unwrap()
+            .get_pages()
+            .len();
+        super::pdf_furniture::stamp_pages(
             std::path::Path::new(&path),
-            &super::pdf_furniture::Furniture {
-                header: Some("Q3 Sales Review — £ test".into()),
-                numbers: true,
-                page_size: "a4".into(),
-            },
+            &vec![
+                super::pdf_furniture::PageFurniture {
+                    header: Some("Q3 Sales Review — £ test".into()),
+                    footer: None,
+                    numbers: true,
+                };
+                count
+            ],
         )
         .unwrap();
     }

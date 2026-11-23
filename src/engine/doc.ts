@@ -54,7 +54,12 @@ export type DocBlock =
   | { kind: "toc"; marker: string }
   /** A review comment (spec: docs/specs/comments.md): a `::: comment`
    * block anchored to another block by id + quote. */
-  | { kind: "comment"; comment: Comment };
+  | { kind: "comment"; comment: Comment }
+  /** A print page section (spec: docs/specs/print.md, "Page
+   * sections"): `::: page {#sec-2}` with header:/footer:/numbers:/
+   * size:/orientation: keys and no body. Starts a new printed page
+   * and sets the page furniture/geometry from that point onwards. */
+  | { kind: "page"; page: PageSection };
 
 /** Every block kind is classified exactly once, as "text" or "figure"
  * (spec: docs/specs/block-schema.md). The Record is keyed by the kind
@@ -79,6 +84,7 @@ const BLOCK_CLASS: Record<DocBlock["kind"], "text" | "figure"> = {
   footnotes: "figure",
   toc: "figure",
   comment: "figure",
+  page: "figure",
 };
 
 export type BlockClass = "text" | "figure";
@@ -123,6 +129,24 @@ export interface ListItem {
   children?: ListBody;
 }
 
+/** A print page section (spec: docs/specs/print.md, "Page sections"):
+ * a `::: page {#sec-2}` block. Every key is optional; omitted keys
+ * carry forward from the previous section (doc-level style defaults
+ * before the first block). */
+export interface PageSection {
+  id: string;
+  /** Running header text from this section on (top left). */
+  header?: string;
+  /** Running footer text from this section on (bottom left). */
+  footer?: string;
+  /** "off" | "on" - page numbering from this section on. */
+  numbers?: string;
+  /** A page.size value: a4 | a5 | letter | 16:9 | 4:3. */
+  size?: string;
+  /** "portrait" | "landscape". */
+  orientation?: string;
+}
+
 /** A review comment (spec: docs/specs/comments.md). */
 export interface Comment {
   id: string;
@@ -147,7 +171,7 @@ export interface Doc {
 }
 
 const DIRECTIVE_RE =
-  /^::: (table|chart|image|audio|value|motion|comment) \{#([^}]+)\}(?:[ \t]+(.*))?$/;
+  /^::: (table|chart|image|audio|value|motion|comment|page) \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 const MERMAID_RE = /^::: mermaid \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 
 export class ParseError extends Error {
@@ -251,6 +275,14 @@ export function parseDoc(text: string): Doc {
         const r = parseCommentDirective(lines, i, id);
         doc.blocks.push(r.block);
         i = r.endLine + 1;
+        continue;
+      }
+      // A page section is header keys only, no body (spec:
+      // docs/specs/print.md, "Page sections").
+      if (m[1] === "page") {
+        const body = readDirectiveBody(lines, i, id);
+        doc.blocks.push(parsePageDirective(body, id));
+        i = body.endLine + 1;
         continue;
       }
       const body = readDirectiveBody(lines, i, id);
@@ -530,6 +562,41 @@ function parseCommentDirective(
   if (i < end && (lines[i] ?? "").trim() === "") i++;
   comment.text = lines.slice(i, end).join("\n");
   return { block: { kind: "comment", comment }, endLine: end };
+}
+
+/**
+ * A print page section (spec: docs/specs/print.md, "Page sections"):
+ * `::: page {#sec-2}` with known `key: value` header lines and NO
+ * body - any free-text or indented line is a parse error, and the
+ * serializer emits the closing `:::` directly after the last key.
+ */
+function parsePageDirective(body: DirectiveBody, id: string): DocBlock {
+  const page: PageSection = { id };
+  for (const [k, raw] of body.entries) {
+    switch (k) {
+      case "header":
+        page.header = unquoteEscape(raw);
+        break;
+      case "footer":
+        page.footer = unquoteEscape(raw);
+        break;
+      case "numbers":
+        page.numbers = unquote(raw);
+        break;
+      case "size":
+        page.size = unquote(raw);
+        break;
+      case "orientation":
+        page.orientation = unquote(raw);
+        break;
+      default:
+        throw new ParseError(
+          `Unknown page key: '${k}' (a ::: page block has header keys only, no body)`,
+          0,
+        );
+    }
+  }
+  return { kind: "page", page };
 }
 
 function parseColumn(raw: string): Table["columns"][number] {
@@ -1231,7 +1298,26 @@ function serializeBlock(block: DocBlock): string {
       return serializeAudio(block.audio);
     case "comment":
       return serializeComment(block.comment);
+    case "page":
+      return serializePage(block.page);
   }
+}
+
+function serializePage(p: PageSection): string {
+  const lines = [`::: page {#${p.id}}`];
+  if (p.header !== undefined)
+    lines.push(
+      `header: "${p.header.replace(/"/g, '\\"').replace(/\n/g, " ")}"`,
+    );
+  if (p.footer !== undefined)
+    lines.push(
+      `footer: "${p.footer.replace(/"/g, '\\"').replace(/\n/g, " ")}"`,
+    );
+  if (p.numbers !== undefined) lines.push(`numbers: ${p.numbers}`);
+  if (p.size !== undefined) lines.push(`size: ${p.size}`);
+  if (p.orientation !== undefined) lines.push(`orientation: ${p.orientation}`);
+  lines.push(":::");
+  return lines.join("\n");
 }
 
 function serializeComment(c: Comment): string {
