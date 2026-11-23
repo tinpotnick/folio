@@ -21,6 +21,7 @@ Frontmatter:
 
 Block:
   kind: prose | heading | table | chart | diagram | callout | comment
+         | page
   id: string           # stable, used by refs (@regional-data)
   data: Table | Chart | Diagram | ...
 
@@ -29,7 +30,7 @@ Every kind is classified exactly once as "text" or "figure" in
 so adding a kind without classifying it is a compile error.
 "text" blocks (prose, heading, list, code) are edited inline;
 "figure" blocks (table, chart, motion, diagram, math, image, audio,
-footnotes, toc, comment) render as contenteditable=false elements,
+footnotes, toc, comment, page) render as contenteditable=false elements,
 so the caret can only sit at their edges. One predicate
 (`isFigureBlock`) drives every edge behavior in the component: Enter
 with a figure selected opens a new paragraph AFTER it, ArrowDown past
@@ -49,6 +50,18 @@ body until the closing `:::`:
   resolved?: boolean
   replyTo?: string     # comment id this replies to
   text: string         # the comment body
+
+Page section (spec: docs/specs/print.md, "Page sections") - print
+furniture that changes mid-document, serialized as `::: page {#sec-2}`
+with known `key: value` header lines and NO body (the closing `:::`
+follows the last header line directly):
+  id: string           # e.g. sec-2
+  header?: string      # running header text from this point on
+  footer?: string      # running footer text from this point on
+  numbers?: string     # "off" / "on" - page numbering from this point on
+Classified "figure": renders as an invisible placeholder on screen
+(page furniture never prints on screen - it is page-only), and in
+paged media it forces a page break and sets the section's furniture.
 
 Table:
   columns: [Column, ...]

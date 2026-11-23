@@ -21,7 +21,7 @@ No separate PDF export engine, no new dependency (ADR-0007).
   view switches to the rendered document view first. The user
   prints the document, never the source.
 - **Print stylesheet (host)**: `@page { size: A4; margin: 18mm
-  16mm }`; header, sidebar, status bar, and the Markdown editor
+16mm }`; header, sidebar, status bar, and the Markdown editor
   are `display: none`; the layout collapses; the page itself
   carries the margins.
 - **Print stylesheet (component/theme)**: the article goes full
@@ -77,7 +77,9 @@ No separate PDF export engine, no new dependency (ADR-0007).
 - **Settings**: style keys `page.numbers` and `page.header`, on when
   unset, `"off"` to remove (document-settings.md; the dialog writes
   it quoted, since YAML 1.1 reads a bare `off` as false - both
-  spellings are read the same). No title, no header.
+  spellings are read the same). No title, no header. `page.header`
+  also takes custom text, and `page.footer` adds a bottom-left footer;
+  both can change mid-document via `::: page` blocks (below).
 - **Print / web**: `preparePrint` writes the furniture into the host's
   `<style id="print-furniture">` as `@page` margin boxes
   (`furnitureCss`, `src/render/page-furniture.ts`) - they only apply
@@ -107,3 +109,81 @@ No separate PDF export engine, no new dependency (ADR-0007).
   `tests/e2e/print.spec.ts` (furniture CSS, light mode while printing,
   settings write the keys), eval `evals/page-numbers-first-contact.md`.
 
+## Page sections: changing the header/footer mid-document (proposed 2026-11-23)
+
+- **What**: a `::: page {#sec-2}` block in the body (block-schema.md)
+  starts a new print SECTION: a new printed page, and from that point
+  until the next `::: page` block the page furniture is the block's
+  `header:` / `footer:` / `numbers:` values. Omitted keys carry
+  forward - the previous section's values; before any block, the style
+  defaults (`page.header` = title / custom text / off, `page.footer`
+  = off or text, `page.numbers` = on unless off). So every occurrence
+  updates exactly what it names, from that point onwards.
+- **Slots are independent**: header top left, footer bottom left,
+  "Page n of N" bottom right - all three may appear on one page.
+  `numbers: off` in a block suppresses numbering from that section on
+  (until a later block says `numbers: on`). The document's very first
+  page still shows no running header (it carries the title); the
+  first page of a LATER section does show its section's header.
+- **Page numbers never restart**: the counter is absolute across the
+  document - Chromium's `counter(page)` is global across named pages;
+  the desktop export offsets each section's pages by the page counts
+  of the sections before it. A break after page 3 still reads
+  "Page 4 of 12".
+- **Why a forced page break**: WebKitGTK's print operation never
+  reveals which printed page an element lands on, so a mid-page
+  furniture change cannot be stamped exactly on desktop. Each
+  section starting on a new page makes every page belong to exactly
+  one section, so furniture is exact on both engines - Word's
+  "section break, next page" semantics.
+- **Screen**: the block renders as an invisible placeholder - page
+  furniture is page-only, never screen content (the same rule as
+  `pagebreak.h1`: a page break is a style, not content, AGENTS.md #1).
+  It is read and edited in the Markdown view and inserted from the
+  palette ("Insert page section"); palette + in-app-help + eval ship
+  in the same commit as the feature (ADR-0009).
+- **Chromium (web print, Chromium desktop)**: at beforeprint the
+  component tags each block element with its section class
+  (`folio-sec-N`, computed from the model), and the host's print
+  stylesheet (`#print-furniture`) gains one named page per section:
+  `@page folio-sec-N { @top-left { content: "..." } @bottom-left {
+content: "..." } @bottom-right { content: "Page " counter(page)
+" of " counter(pages) } }` - omitting the boxes a section leaves
+  unset. The existing `@page :first { @top-left { content: none } }`
+  guard still hides the header on the document's first page only.
+  The `page:` property itself is set under `@media print` from the
+  shadow stylesheet (`.folio-sec-N { page: folio-sec-N }`); the
+  `@page` rules must live in the host stylesheet because margin boxes
+  do not apply from inside a shadow root - the same reason the
+  existing furniture is injected there.
+- **Desktop export (WebKitGTK, extends ADR-0027)**: the document is
+  printed once PER SECTION (all other sections `display: none` in
+  print media - exact, because sections start on page boundaries, so
+  each section paginates identically on its own), each section PDF is
+  stamped with its own furniture at absolute page offsets
+  (`pdf_furniture::stamp`), and the section PDFs are merged in document
+  order (lopdf, already linked). Furniture text stays plain: margin
+  boxes take strings, and the Rust stamp already leaves non-WinAnsi
+  text off rather than printing "?". Desktop Print (the GTK print
+  dialog, whose output folio never sees) still gets no furniture -
+  unchanged; the flash points to Export as PDF.
+- **Model / round-trip**: new block kind `page` (block-schema.md),
+  classified "figure" in BLOCK_CLASS, serialized as
+  `::: page {#id}` + its header lines + `:::` (no body, no separator
+  blank). Golden file `tests/golden/page-sections.md` stays
+  byte-identical (invariant #2).
+
+### Acceptance (planned)
+
+- Unit: `tests/engine/doc.test.ts` (parse/serialize `::: page` blocks),
+  `tests/render/page-furniture.test.ts` (section resolution with
+  carry-forward; named-`@page` CSS; `:first` guard), Rust tests in
+  `pdf_furniture.rs` (per-section stamp at absolute offsets, merge
+  order).
+- e2e: `tests/e2e/print.spec.ts` (marker invisible on screen,
+  `break-before: page` in print media only, section classes on block
+  elements, named `@page` rules in the host print stylesheet).
+- WebKitGTK: `tests/webkitgtk/print-native.js` extended (print-media
+  rules and section classes present; engine-matrix rule).
+- Palette + help: "Insert page section" entry; `demo/help/printing.md`.
+- First-contact eval: `evals/page-sections-first-contact.md`.
