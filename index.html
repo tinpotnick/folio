@@ -1185,7 +1185,8 @@
       }
       #unsaved-modal::backdrop,
       #save-conflict-modal::backdrop,
-      #import-modal::backdrop {
+      #import-modal::backdrop,
+      #author-modal::backdrop {
         background: rgba(31, 35, 40, 0.4);
       }
       #save-conflict-modal {
@@ -1232,6 +1233,38 @@
         align-items: baseline;
         gap: 6px;
         cursor: pointer;
+      }
+      #author-modal {
+        width: min(440px, calc(100vw - 48px));
+        border: none;
+        border-radius: 12px;
+        padding: 0;
+        background: var(--surface);
+        color: var(--text);
+        box-shadow: 0 16px 48px rgba(31, 35, 40, 0.25);
+      }
+      #author-modal .author-body {
+        padding: 18px 20px 16px;
+        font-size: 13px;
+      }
+      #author-modal h2 {
+        margin: 0 0 8px;
+        font-size: 15px;
+      }
+      #author-modal p {
+        margin: 0 0 10px;
+        color: var(--text-muted);
+      }
+      #author-modal input[type="text"] {
+        font: inherit;
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        margin-bottom: 12px;
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        background: var(--surface);
+        color: var(--text);
       }
       #import-modal {
         width: min(620px, calc(100vw - 32px));
@@ -2951,6 +2984,32 @@
           </button>
           <button value="merge" class="plain primary" id="btn-conflict-merge">
             Save merged
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="author-modal" aria-label="Comment author name">
+      <form class="author-body" id="author-form">
+        <h2>Comment author</h2>
+        <p>
+          The name stamped on comments you add. It is remembered on this device,
+          and each comment also writes it into the file, so reviewers see it
+          even without folio.
+        </p>
+        <input
+          type="text"
+          id="author-input"
+          maxlength="80"
+          autocomplete="off"
+          placeholder="Your name"
+          aria-label="Name shown on your comments"
+        />
+        <div class="unsaved-actions">
+          <button type="button" class="plain" id="btn-author-cancel">
+            Cancel
+          </button>
+          <button type="submit" class="plain primary" id="btn-author-save">
+            Save
           </button>
         </div>
       </form>

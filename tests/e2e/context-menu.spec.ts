@@ -47,6 +47,9 @@ test.describe("general context menu", () => {
     await expect(
       menu.locator("button", { hasText: "Add comment" }),
     ).toBeEnabled();
+    await expect(
+      menu.locator("button", { hasText: "Set comment author" }),
+    ).toBeEnabled();
     // Esc closes it.
     await page.keyboard.press("Escape");
     await expect(menu).toBeHidden();

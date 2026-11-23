@@ -323,3 +323,43 @@ type: scatter
     await expect(scatter).toContainText("1");
   });
 });
+
+test.describe("Enter at a figure's edge (spec: docs/specs/block-schema.md)", () => {
+  // Every figure kind is contenteditable=false, so with one selected
+  // Enter must open a paragraph after it - one predicate covers all
+  // kinds, including new ones classified "figure" in BLOCK_CLASS.
+  const cases: Array<[string, string, string]> = [
+    [
+      "image",
+      '# T\n\nText.\n\n::: image {#i-1}\nsrc: https://example.com/x.png\nalt: "x"\n:::\n',
+      "#the-doc figure.folio-image",
+    ],
+    ["math", "# T\n\nText.\n\n$$\nx^2\n$$\n", "#the-doc figure.folio-math"],
+    [
+      "diagram",
+      "# T\n\nText.\n\n::: mermaid {#d-1}\ngraph TD; A-->B\n:::\n",
+      "#the-doc figure.folio-diagram",
+    ],
+  ];
+  for (const [name, md, figSel] of cases) {
+    test(`Enter with a trailing ${name} selected appends a paragraph`, async ({
+      page,
+    }) => {
+      await loadDoc(page, md);
+      const fig = page.locator(figSel);
+      await expect(fig).toHaveCount(1);
+      await fig.click();
+      await page.keyboard.press("Enter");
+      await expect(page.locator("#the-doc p")).toHaveCount(2);
+      await page.keyboard.type(`after the ${name}`);
+      await page.locator("#btn-markdown").click();
+      const src = await page.locator("#editor").inputValue();
+      const figMark = name === "math" ? "$$" : ":::";
+      // The new paragraph sits AFTER the figure in the source.
+      expect(src).toContain(`after the ${name}`);
+      expect(src.indexOf("after the")).toBeGreaterThan(
+        src.lastIndexOf(figMark),
+      );
+    });
+  }
+});

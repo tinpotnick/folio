@@ -303,31 +303,66 @@ window.addEventListener("popstate", (ev) => {
 
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
-/** The name stamped on new comments (spec: docs/specs/comments.md):
- *  asked once, then remembered - never invented silently. */
-function commentAuthor(): string {
-  const KEY = "folio-comment-author";
+const AUTHOR_KEY = "folio-comment-author";
+
+/** The stored comment author, or null (spec: docs/specs/comments.md,
+ *  "Setting the author"): a host-profile value, never invented. */
+function storedAuthor(): string | null {
   try {
-    const stored = localStorage.getItem(KEY);
-    if (stored) return stored;
-    const name = window.prompt("Name shown on your comments:", "");
-    if (name && name.trim() !== "") {
-      localStorage.setItem(KEY, name.trim());
-      return name.trim();
-    }
+    const v = localStorage.getItem(AUTHOR_KEY);
+    return v && v.trim() !== "" ? v : null;
   } catch {
-    // No storage (private window): the prompt still ran, or not.
+    return null;
   }
-  return "anonymous";
+}
+
+/** The author dialog (spec: docs/specs/comments.md): the native way to
+ *  set the name stamped on new comments - no Markdown needed. Opens
+ *  from the palette ("Set comment author"), the context menu, or by
+ *  clicking a comment's author name. Resolves with the saved name, or
+ *  null when cancelled or left empty. */
+function authorDialog(): Promise<string | null> {
+  authorInput.value = storedAuthor() ?? "";
+  authorModal.returnValue = "cancel";
+  authorModal.showModal();
+  authorInput.focus();
+  authorInput.select();
+  return new Promise((resolve) => {
+    authorModal.addEventListener(
+      "close",
+      () => {
+        const name = authorInput.value.trim();
+        if (authorModal.returnValue === "save" && name !== "") {
+          try {
+            localStorage.setItem(AUTHOR_KEY, name);
+          } catch {
+            // No storage (private window): the name still applies now.
+          }
+          resolve(name);
+        } else {
+          resolve(null);
+        }
+      },
+      { once: true },
+    );
+  });
 }
 
 /** Add a comment from any UI (palette, context menu, Insert menu):
- *  one implementation - the author name is asked once, remembered. */
-function addCommentFromUi(): void {
-  const why = el.insertComment(commentAuthor());
+ *  one implementation. With no name stored yet, the author dialog asks
+ *  once - then the name is remembered (cancel stamps "anonymous" on
+ *  this comment only, without remembering). */
+async function addCommentFromUi(): Promise<void> {
+  const author = storedAuthor() ?? (await authorDialog()) ?? "anonymous";
+  const why = el.insertComment(author);
   flash(why ?? "Comment added - type the comment");
 }
-el.onRequestComment = addCommentFromUi;
+el.onRequestComment = () => void addCommentFromUi();
+el.onEditAuthor = () => {
+  void authorDialog().then((name) => {
+    if (name) flash(`Comment author: ${name}`);
+  });
+};
 
 // On the desktop the webview's own context menu never shows: folio's
 // menus (proofing, table, the general document menu) handle every
@@ -3212,6 +3247,19 @@ const conflictText = requireEl<HTMLElement>("#save-conflict-text");
 const conflictList = requireEl<HTMLElement>("#save-conflict-list");
 const btnConflictMerge = requireEl<HTMLButtonElement>("#btn-conflict-merge");
 
+const authorModal = requireEl<HTMLDialogElement>("#author-modal");
+const authorInput = requireEl<HTMLInputElement>("#author-input");
+// Enter in the input saves; the dialog is closed in JS (not
+// method="dialog") so the only implicit submit button is Save.
+requireEl<HTMLFormElement>("#author-form").addEventListener("submit", (ev) => {
+  ev.preventDefault();
+  authorModal.close("save");
+});
+requireEl<HTMLButtonElement>("#btn-author-cancel").addEventListener(
+  "click",
+  () => authorModal.close("cancel"),
+);
+
 /**
  * The save-conflict dialog (spec: docs/specs/save-conflicts.md): one
  * row per conflicting hunk, each with an ours/theirs choice (ours is
@@ -4198,7 +4246,17 @@ function paletteEntries(): PaletteEntry[] {
     title: "Add a comment",
     group: "Command",
     keywords: "comment review annotate remark feedback quote highlight",
-    action: () => addCommentFromUi(),
+    action: () => void addCommentFromUi(),
+  });
+  entries.push({
+    title: "Set comment author",
+    group: "Command",
+    keywords: "comment author name who review identity sign",
+    action: () => {
+      void authorDialog().then((name) => {
+        if (name) flash(`Comment author: ${name}`);
+      });
+    },
   });
   entries.push({
     title: "Resolve comment",

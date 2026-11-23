@@ -3011,7 +3011,19 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       gap: 0.5em;
       flex-wrap: wrap;
     }
-    aside.folio-comment .folio-comment-author { font-weight: 600; }
+    aside.folio-comment button.folio-comment-author {
+      border: none;
+      background: transparent;
+      padding: 0;
+      font-family: inherit;
+      font-size: inherit;
+      font-weight: 600;
+      color: inherit;
+      cursor: pointer;
+    }
+    aside.folio-comment button.folio-comment-author:hover {
+      text-decoration: underline;
+    }
     aside.folio-comment .folio-comment-date,
     aside.folio-comment .folio-comment-badge {
       color: var(--folio-ink-muted);

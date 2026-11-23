@@ -34,7 +34,7 @@ is drawn is the theme's job.
   - `quote`: exact quoted text inside the anchor block, used for
     highlighting and re-anchoring after edits elsewhere in the doc
   - `author`: free text, supplied by the host profile (never invented
-    silently; if unknown, the insert dialog asks once and remembers)
+    silently; see "Setting the author" below)
   - `created`: ISO date; `resolved`: bool
   - `in-reply-to`: optional `@comment-id` - threads are flat blocks,
     not nesting
@@ -71,6 +71,19 @@ is drawn is the theme's job.
   the current block with an empty quote.
 - **Identity:** `author`/`created` are written at insert time and are
   plain editable fields - folio does not enforce authorship.
+- **Setting the author (native, no Markdown needed):** the author name
+  is a host-profile setting, not document data - it lives in the host's
+  storage (`localStorage["folio-comment-author"]` on the web/desktop
+  apps), never invented silently. One dialog (`#author-modal`) sets
+  it, reachable three ways, all in the same change: the palette command
+  "Set comment author", the right-click document menu's "Set comment
+  author", and clicking the author name in any comment's header (the
+  name is a real button there). Adding a first comment with no name
+  stored opens the same dialog instead of inserting; cancelling it
+  stamps that one comment "anonymous" without remembering. The stored
+  name applies to NEW comments; existing comments keep the author
+  they were written with. The dialog is also an in-app-help entry
+  (demo/help/comments.md).
 - **Trailing comment:** a comment aside is a non-editable block like a
   figure: clicking below a trailing one appends a paragraph, and Enter
   with the comment selected opens a paragraph after it (the body island
@@ -87,12 +100,14 @@ is drawn is the theme's job.
   on a table cell.
 - e2e (`tests/e2e/comments.spec.ts`): insert on a selection, quote
   highlight anchors after an edit elsewhere, resolve toggle, delete,
-  undo, print hides comments.
+  undo, print hides comments; the author dialog sets/remembers the
+  name (palette, right-click menu, and click-on-author all open it),
+  and a first comment with no name stored asks via the dialog.
 - WebKitGTK: `tests/webkitgtk/comments.js` native case for selection
   quoting (the engine-matrix rule: selection handling is verified in
   both engines).
 - Palette + in-app-help entries exist and are discoverable by the words
-  "comment", "resolve", "review".
+  "comment", "resolve", "review", "author".
 - First-contact eval: `evals/comments-first-contact.md` - a new user
   comments on a paragraph, replies, and resolves, using only visible
   affordances.
