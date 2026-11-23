@@ -16,6 +16,8 @@ GitHub renders natively, plus folio additions.
 | Emphasis      | `*text*`     | `<em>`     | GFM                                                                             |
 | Strikethrough | `~~text~~`   | `<del>`    | GFM                                                                             |
 | Underline     | `++text++`   | `<ins>`    | markdown+ (GFM has no underline; `++` follows the markdown-it `ins` convention) |
+| Subscript     | `~text~`     | `<sub>`    | markdown+ (Pandoc; `~~` still wins - a double tilde is strikethrough)           |
+| Superscript   | `^text^`     | `<sup>`    | markdown+ (Pandoc; `[^label]` footnote refs are not superscripts)               |
 | Inline code   | `` `text` `` | `<code>`   | GFM                                                                             |
 
 Document-view toolbar buttons apply formats with the Range API
@@ -52,12 +54,14 @@ way; keyboard-driven selections are not resolvable on WebKitGTK
 and are a known limitation (mouse drag is the supported gesture).
 
 Round-trip: `inlineMarkdownToHtml` / `htmlToInlineMarkdown` in
-`src/render/inline.ts` are inverse across all five formats
+`src/render/inline.ts` are inverse across all seven formats
 (`<s>`/`<u>` from external pastes map to `~~`/`++` as well).
 
 The source-view highlighter (`src/render/highlight.ts`) tokenizes
-each format (`strike`, `underline` kinds); the host toolbar exposes
-S / U buttons alongside B / I / code, reflecting and toggling in both
+each format (`strike`, `underline`, `sub`, `sup` kinds); the host
+toolbar exposes S / U buttons alongside B / I / code, and the text
+style menu carries Subscript / Superscript items (dropdown items, so
+the bar's width does not grow) - all reflecting and toggling in both
 views like the other inline formats.
 
 ## Non-goals

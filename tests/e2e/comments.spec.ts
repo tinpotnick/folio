@@ -151,3 +151,46 @@ test.describe("comments", () => {
     ).toBe("sam");
   });
 });
+
+test.describe("comments at the end of the document", () => {
+  test("clicking below a trailing comment offers a paragraph there", async ({
+    page,
+  }) => {
+    await load(
+      page,
+      "# T\n\nText.\n\n::: comment {#c-1}\nauthor: nick\nA note.\n:::\n",
+    );
+    const aside = page.locator("#the-doc aside.folio-comment");
+    await expect(aside).toHaveCount(1);
+    const box = await aside.boundingBox();
+    await page.mouse.click(
+      (box?.x ?? 0) + 20,
+      (box?.y ?? 0) + (box?.height ?? 0) + 40,
+    );
+    await expect(page.locator("#the-doc p")).toHaveCount(2);
+    await page.keyboard.type("after the comment");
+    const md = await source(page);
+    expect(md).toContain("after the comment");
+    expect(md).toContain("::: comment {#c-1}");
+  });
+
+  test("Enter with a trailing comment selected appends a paragraph", async ({
+    page,
+  }) => {
+    await load(
+      page,
+      "# T\n\nText.\n\n::: comment {#c-1}\nauthor: nick\nA note.\n:::\n",
+    );
+    const aside = page.locator("#the-doc aside.folio-comment");
+    await aside.locator(".folio-comment-head .folio-comment-author").click();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#the-doc p")).toHaveCount(2);
+    // The caret is in the new paragraph: typing lands there.
+    await page.keyboard.type("past the comment");
+    const md = await source(page);
+    expect(md).toContain("past the comment");
+    expect(md.indexOf("::: comment")).toBeLessThan(
+      md.indexOf("past the comment"),
+    );
+  });
+});

@@ -62,13 +62,20 @@ is drawn is the theme's job.
   the current selection - the selection becomes the quote), "Resolve
   comment" / "Unresolve", "Delete comment" - each also an in-app-help
   entry in the same change (ADR-0009). Comment bodies are edited in
-  place like prose. Every command is undoable.
+  place like prose. Every command is undoable. "Add a comment" is
+  also the document context menu's entry and Insert › Comment in the
+  toolbar - one implementation (docs/specs/context-menu.md).
 - **Insertion rules:** a selection inside a table cell quotes the cell
   text and anchors to the table; a selection spanning blocks anchors
   to the first block and quotes its portion. No selection = anchors to
   the current block with an empty quote.
 - **Identity:** `author`/`created` are written at insert time and are
   plain editable fields - folio does not enforce authorship.
+- **Trailing comment:** a comment aside is a non-editable block like a
+  figure: clicking below a trailing one appends a paragraph, and Enter
+  with the comment selected opens a paragraph after it (the body island
+  keeps its own Enter). The comment body and its buttons own their
+  keystrokes.
 - **Live editing interplay:** deferred. Comment ids are stable block
   anchors, so a future CRDT layer can merge comment blocks without
   special cases.

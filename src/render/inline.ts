@@ -85,6 +85,11 @@ export function inlineMarkdownToHtml(
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
       .replace(/~~([^~]+)~~/g, "<del>$1</del>")
       .replace(/\+\+([^+]+)\+\+/g, "<ins>$1</ins>")
+      // Sub/superscript (Pandoc's ~x~ and ^x^, spec: docs/specs/
+      // inline-syntax.md). After ~~ so a double tilde never reads as
+      // a subscript opener; content starts and ends with a non-space.
+      .replace(/\^(\S(?:[^^]*\S)?)\^/g, "<sup>$1</sup>")
+      .replace(/~(\S(?:[^~]*\S)?)~/g, "<sub>$1</sub>")
       .replace(/\uE000(\d+)\uE000/g, (_m, n: string) => spans[Number(n)] ?? "")
       .replace(/\uE001(\d+)\uE001/g, (_m, n: string) => cites[Number(n)] ?? "")
   );
@@ -151,7 +156,10 @@ function nodesToMarkdown(root: Node): string {
           out += `[^${el.getAttribute("data-fn") ?? ""}]`;
           break;
         }
-        out += nodesToMarkdown(el);
+        out += `^${nodesToMarkdown(el)}^`;
+        break;
+      case "SUB":
+        out += `~${nodesToMarkdown(el)}~`;
         break;
       default:
         out += nodesToMarkdown(el);

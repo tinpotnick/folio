@@ -15,6 +15,8 @@ export type MdTokenKind =
   | "italic"
   | "strike"
   | "underline"
+  | "sub"
+  | "sup"
   | "code"
   | "math"
   | "directive"
@@ -178,6 +180,19 @@ function inlineTokens(text: string): MdToken[] {
     m = /^\+\+([^+\n]+)\+\+/.exec(rest);
     if (m) {
       push("underline", m[0]);
+      i += m[0].length;
+      continue;
+    }
+    // After ~~ so a double tilde never reads as a subscript opener.
+    m = /^\^(\S(?:[^^\n]*\S)?)\^/.exec(rest);
+    if (m) {
+      push("sup", m[0]);
+      i += m[0].length;
+      continue;
+    }
+    m = /^~(\S(?:[^~\n]*\S)?)~/.exec(rest);
+    if (m) {
+      push("sub", m[0]);
       i += m[0].length;
       continue;
     }
