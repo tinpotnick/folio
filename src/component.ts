@@ -592,6 +592,10 @@ const MENU_ICONS = {
   copy: '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5h-7a1 1 0 0 0-1 1v7" stroke-linecap="round"/>',
   paste:
     '<rect x="3.5" y="4" width="9" height="10" rx="1.5"/><path d="M6 4V2.8a.8.8 0 0 1 .8-.8h2.4a.8.8 0 0 1 .8.8V4M5.8 8h4.4M5.8 11h4.4" stroke-linecap="round"/>',
+  "select-all":
+    '<rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke-dasharray="2 1.6"/><path d="M5.5 5.5h5v5h-5z" stroke-linecap="round"/>',
+  comment:
+    '<path d="M2.5 3.5h11v7h-6.2L4 13v-2.5H2.5z" stroke-linejoin="round"/>',
   "row-above":
     '<rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 7h13"/><path d="M8 5.6V9.4M6.4 7.2L8 5.6l1.6 1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   "row-below":
@@ -10922,7 +10926,9 @@ export class FolioDoc extends HTMLElement {
    * "Select some text first"). Returns false when there is nothing
    * usable to format.
    */
-  applyInlineFormat(tag: "strong" | "em" | "del" | "ins"): boolean {
+  applyInlineFormat(
+    tag: "strong" | "em" | "del" | "ins" | "sub" | "sup",
+  ): boolean {
     const root = this.shadowRoot as
       | (ShadowRoot & {
           getSelection?: () => Selection | null;
@@ -10957,6 +10963,8 @@ export class FolioDoc extends HTMLElement {
       em: ["EM", "I"],
       del: ["DEL", "S", "STRIKE"],
       ins: ["INS", "U"],
+      sub: ["SUB"],
+      sup: ["SUP"],
     };
     const tags = synonyms[tag] ?? [];
     let n: Node | null =
@@ -12051,19 +12059,184 @@ export class FolioDoc extends HTMLElement {
     // Proofing first: a grammar/spelling mark under the pointer gets
     // its own menu (word-processor style); in a table cell the table
     // menu keeps the right-click and carries the spelling group.
+    // Anywhere else in the document: the general menu (clipboard +
+    // comment) - so on the desktop, where the webview's own menu is
+    // suppressed, right-click always lands on a folio menu (spec:
+    // docs/specs/context-menu.md).
     if (this.tryProofingMenu(ev)) return;
-    this.tableContextMenu(ev);
+    if (this.tableContextMenu(ev)) return;
+    this.openGeneralMenu(ev);
   }
 
   private tableContextMenu(
     ev: MouseEvent,
     spellAt?: { range: Range; word: string },
-  ): void {
+  ): boolean {
     const cell = (ev.target as HTMLElement).closest(
       "td[data-row-index], th[data-col-index]",
     ) as HTMLElement | null;
-    if (!cell) return;
+    if (!cell) return false;
     this.openTableMenu(ev, cell, spellAt);
+    return true;
+  }
+
+  /** The document's general context menu (spec:
+   *  docs/specs/context-menu.md): the usual clipboard candidates plus
+   *  Add comment. The host sets onRequestComment (it owns the author
+   *  name); the palette's "Add a comment" runs the same hook. */
+  onRequestComment: (() => void) | null = null;
+
+  private openGeneralMenu(ev: MouseEvent): void {
+    if (!this.doc) return;
+    ev.preventDefault();
+    const root = this.shadowRoot;
+    if (!root) return;
+    this.closeMenu();
+    const sel = this.selectionRange();
+    const hasSelection = sel !== null && !sel.collapsed;
+    interface Item {
+      label: string;
+      icon: string;
+      kbd?: string | undefined;
+      disabled?: string | undefined;
+      run: () => void;
+    }
+    const groups: Item[][] = [
+      [
+        {
+          label: "Cut",
+          icon: MENU_ICONS.cut,
+          kbd: "Ctrl+X",
+          disabled: hasSelection ? undefined : "Nothing selected",
+          run: () => void document.execCommand("cut"),
+        },
+        {
+          label: "Copy",
+          icon: MENU_ICONS.copy,
+          kbd: "Ctrl+C",
+          disabled: hasSelection ? undefined : "Nothing selected",
+          run: () => void document.execCommand("copy"),
+        },
+        {
+          label: "Paste",
+          icon: MENU_ICONS.paste,
+          kbd: "Ctrl+V",
+          run: () => void this.menuPaste(),
+        },
+      ],
+      [
+        {
+          label: "Select all",
+          icon: MENU_ICONS["select-all"],
+          kbd: "Ctrl+A",
+          run: () => void document.execCommand("selectAll"),
+        },
+      ],
+      [
+        {
+          label: "Add comment",
+          icon: MENU_ICONS.comment,
+          run: () => {
+            if (this.onRequestComment) this.onRequestComment();
+            else this.status("Comments are not wired up in this host");
+          },
+        },
+      ],
+    ];
+    const menu = document.createElement("div");
+    menu.className = "folio-menu folio-doc-menu";
+    menu.setAttribute("role", "menu");
+    menu.setAttribute("aria-label", "Document menu");
+    menu.addEventListener("keydown", (mev) => {
+      if (mev.key === "Escape") {
+        mev.preventDefault();
+        mev.stopPropagation();
+        this.closeMenu();
+      }
+    });
+    groups.forEach((group, gi) => {
+      if (gi > 0) {
+        const sep = document.createElement("div");
+        sep.className = "menu-sep";
+        sep.setAttribute("role", "separator");
+        menu.appendChild(sep);
+      }
+      for (const item of group) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.setAttribute("role", "menuitem");
+        btn.appendChild(iconSvg(item.icon));
+        const label = document.createElement("span");
+        label.className = "mi-label";
+        label.textContent = item.label;
+        btn.appendChild(label);
+        if (item.kbd) {
+          const kbd = document.createElement("span");
+          kbd.className = "menu-kbd";
+          kbd.textContent = item.kbd;
+          btn.appendChild(kbd);
+        }
+        if (item.disabled) {
+          btn.disabled = true;
+          btn.title = item.disabled;
+          btn.setAttribute("aria-disabled", "true");
+        } else {
+          btn.title = item.label;
+        }
+        btn.addEventListener("mousedown", (mev) => mev.preventDefault());
+        btn.addEventListener("click", () => {
+          this.closeMenu();
+          item.run();
+        });
+        menu.appendChild(btn);
+      }
+    });
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    root.appendChild(menu);
+    const rect = menu.getBoundingClientRect();
+    menu.style.left = `${String(Math.max(8, Math.min(ev.clientX, window.innerWidth - rect.width - 8)))}px`;
+    menu.style.top = `${String(Math.max(8, Math.min(ev.clientY, window.innerHeight - rect.height - 8)))}px`;
+    this.menu = menu;
+    setTimeout(() => {
+      document.addEventListener("pointerdown", this.menuCloser, {
+        once: true,
+      });
+      document.addEventListener("keydown", this.menuKeyCloser);
+    });
+  }
+
+  /** Paste from the context menu: read the clipboard, insert plain
+   *  text at the selection (the same rule as a real paste event -
+   *  never markup), else fall back to execCommand for engines whose
+   *  clipboard API needs a permission we do not have. */
+  private async menuPaste(): Promise<void> {
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      // fall through to execCommand below
+    }
+    if (text === "") {
+      document.execCommand("paste");
+      return;
+    }
+    const root = this.shadowRoot as
+      (ShadowRoot & { getSelection?: () => Selection | null }) | null;
+    const sel = root?.getSelection?.() ?? window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    if (!document.execCommand("insertText", false, text)) {
+      const node = document.createTextNode(text);
+      range.insertNode(node);
+      range.setStartAfter(node);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    this.syncFromDom();
+    this.emitChange();
   }
 
   private openTableMenu(

@@ -62,7 +62,9 @@ is drawn is the theme's job.
   the current selection - the selection becomes the quote), "Resolve
   comment" / "Unresolve", "Delete comment" - each also an in-app-help
   entry in the same change (ADR-0009). Comment bodies are edited in
-  place like prose. Every command is undoable.
+  place like prose. Every command is undoable. "Add a comment" is
+  also the document context menu's entry and Insert › Comment in the
+  toolbar - one implementation (docs/specs/context-menu.md).
 - **Insertion rules:** a selection inside a table cell quotes the cell
   text and anchors to the table; a selection spanning blocks anchors
   to the first block and quotes its portion. No selection = anchors to

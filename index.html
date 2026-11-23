@@ -929,6 +929,12 @@
         color: var(--syntax-blue);
         text-decoration: underline;
       }
+      .tk-sub {
+        color: var(--syntax-blue);
+      }
+      .tk-sup {
+        color: var(--syntax-blue);
+      }
       .tk-directive {
         color: var(--syntax-purple);
         font-weight: 600;
@@ -1900,6 +1906,21 @@
               <button data-block="h3" role="menuitem" title="Heading 3">
                 <span class="mi-label st-h3">Heading 3</span>
               </button>
+              <div class="menu-sep" role="separator"></div>
+              <button
+                data-inline="sub"
+                role="menuitem"
+                title="Subscript the selection (x~2~)"
+              >
+                <span class="mi-label">Subscript (x~2~)</span>
+              </button>
+              <button
+                data-inline="sup"
+                role="menuitem"
+                title="Superscript the selection (x^2^)"
+              >
+                <span class="mi-label">Superscript (x^2^)</span>
+              </button>
             </div>
           </div>
           <button
@@ -2533,6 +2554,24 @@
                     />
                   </svg>
                   <span class="mi-label">Table of contents</span>
+                </button>
+                <button
+                  role="menuitem"
+                  data-insert="Add a comment"
+                  title="Comment on the selected text (or at the caret)"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  >
+                    <path
+                      d="M2.5 3.5h11v7h-6.2L4 13v-2.5H2.5z"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <span class="mi-label">Comment</span>
                 </button>
                 <div class="menu-heading">Music</div>
                 <button

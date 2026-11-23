@@ -3,8 +3,9 @@
 - **Document view** is the rendered report. Click into any text and
   type; table formulas recalculate as you edit.
 - Inline formats follow GitHub Markdown plus a few documented
-  additions: **bold**, *italic*, `code`, ~~strikethrough~~, and
-  ++underline++ (GitHub has no underline, so folio uses `++`).
+  additions: **bold**, *italic*, `code`, ~~strikethrough~~,
+  ++underline++ (GitHub has no underline, so folio uses `++`), and
+  x~2~ subscript / x^2^ superscript (Pandoc's syntax).
 - The text style menu and the format buttons always show where you
   are: the style menu names the block at your caret ("Heading 2"),
   and the format at your caret lights up — in Document view and in

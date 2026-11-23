@@ -321,6 +321,21 @@ function commentAuthor(): string {
   return "anonymous";
 }
 
+/** Add a comment from any UI (palette, context menu, Insert menu):
+ *  one implementation - the author name is asked once, remembered. */
+function addCommentFromUi(): void {
+  const why = el.insertComment(commentAuthor());
+  flash(why ?? "Comment added - type the comment");
+}
+el.onRequestComment = addCommentFromUi;
+
+// On the desktop the webview's own context menu never shows: folio's
+// menus (proofing, table, the general document menu) handle every
+// right-click inside the document (spec: docs/specs/context-menu.md).
+document.addEventListener("contextmenu", (ev) => {
+  if (isDesktop()) ev.preventDefault();
+});
+
 function flash(msg: string): void {
   status.textContent = msg;
   status.classList.add("show");
@@ -1167,6 +1182,20 @@ blockBar.addEventListener("mousedown", (ev) => {
   const btn = (ev.target as HTMLElement).closest("button");
   if (!(btn instanceof HTMLButtonElement)) return;
   ev.preventDefault();
+  // Subscript/superscript live in the style menu (spec:
+  // docs/specs/inline-syntax.md): dropdown items, so the bar's width
+  // does not grow.
+  const inline = btn.dataset.inline;
+  if (inline === "sub" || inline === "sup") {
+    if (currentEditable()) {
+      if (!el.applyInlineFormat(inline)) flash("Select some text first");
+    } else if (document.activeElement === editor) {
+      toggleMdWrap(inline === "sub" ? "~" : "^");
+    } else {
+      flash("Click into the text first");
+    }
+    return;
+  }
   if (currentEditable()) {
     const block = btn.dataset.block;
     if (block === "ul" || block === "ol") {
@@ -2653,6 +2682,15 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
         else if (name === "DEL" || name === "S" || name === "STRIKE")
           inline = "strike";
         else if (name === "INS" || name === "U") inline = "underline";
+        else if (name === "SUB") inline = "sub";
+        else if (
+          name === "SUP" &&
+          !(
+            node instanceof HTMLElement &&
+            node.classList.contains("folio-fnref")
+          )
+        )
+          inline = "sup";
       }
       node = node.parentNode;
     }
@@ -2708,7 +2746,9 @@ function reflectToolbarState(point?: { x: number; y: number }): void {
         tok.kind === "bold" ||
         tok.kind === "italic" ||
         tok.kind === "strike" ||
-        tok.kind === "underline"
+        tok.kind === "underline" ||
+        tok.kind === "sub" ||
+        tok.kind === "sup"
       ) {
         fmt = tok.kind;
       }
@@ -4158,10 +4198,7 @@ function paletteEntries(): PaletteEntry[] {
     title: "Add a comment",
     group: "Command",
     keywords: "comment review annotate remark feedback quote highlight",
-    action: () => {
-      const why = el.insertComment(commentAuthor());
-      flash(why ?? "Comment added - type the comment");
-    },
+    action: () => addCommentFromUi(),
   });
   entries.push({
     title: "Resolve comment",

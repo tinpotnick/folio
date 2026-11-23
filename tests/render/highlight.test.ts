@@ -96,3 +96,13 @@ describe("markdown+ token kinds", () => {
     expect(kinds("$$\nx\n$$\nplain text")[3]).toBe("text");
   });
 });
+
+describe("sub/sup tokens", () => {
+  it("classifies subscript and superscript", () => {
+    const kinds = (s: string) =>
+      highlightMarkdown(s)[0]?.tokens.map((t) => t.kind) ?? [];
+    expect(kinds("H~2~O")).toEqual(["text", "sub", "text"]);
+    expect(kinds("x^2^")).toEqual(["text", "sup"]);
+    expect(kinds("~~gone~~")).toEqual(["strike"]);
+  });
+});

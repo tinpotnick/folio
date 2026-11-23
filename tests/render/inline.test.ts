@@ -89,3 +89,33 @@ describe("code spans are literal", () => {
     );
   });
 });
+
+// @vitest-environment happy-dom
+describe("subscript and superscript (Pandoc's ~x~ and ^x^)", () => {
+  it("converts ~x~ to <sub> and ^x^ to <sup>", () => {
+    expect(inlineMarkdownToHtml("H~2~O and x^2^ end")).toBe(
+      "H<sub>2</sub>O and x<sup>2</sup> end",
+    );
+  });
+
+  it("does not touch a lone tilde or caret", () => {
+    expect(inlineMarkdownToHtml("approx ~5 and a ^ b")).toBe(
+      "approx ~5 and a ^ b",
+    );
+  });
+
+  it("double tilde stays strikethrough, not subscript", () => {
+    expect(inlineMarkdownToHtml("~~gone~~")).toBe("<del>gone</del>");
+  });
+
+  it("footnote refs are not superscripts", () => {
+    expect(inlineMarkdownToHtml("note[^a]")).toContain("folio-fnref");
+    expect(inlineMarkdownToHtml("note[^a]")).not.toContain("<sup>a</sup>");
+  });
+
+  it("round-trips through the HTML seam", async () => {
+    const { htmlToInlineMarkdown } = await import("@folio/render/inline");
+    const src = "H~2~O, x^2^, and note[^a]";
+    expect(htmlToInlineMarkdown(inlineMarkdownToHtml(src))).toBe(src);
+  });
+});
