@@ -789,7 +789,14 @@
         position: relative;
         display: grid;
         grid-template-columns: auto 1fr;
-        min-height: calc(100vh - 100px);
+        /* Fixed-height box, not a page: the textarea scrolls inside it
+           and the overlay is panned in sync, so neither layer ever
+           grows to the full content height (a 30k-px-tall editor is
+           what stalled GPU-composited WebKitGTK on docs with many
+           embedded clips). */
+        height: calc(100vh - 100px);
+        grid-template-rows: minmax(0, 1fr);
+        overflow: hidden;
       }
       .md-wrap[hidden] {
         display: none;
@@ -801,6 +808,9 @@
         padding: 24px 10px 40vh 0;
         white-space: pre;
         line-height: 1.6;
+        box-sizing: border-box;
+        height: 100%;
+        overflow: hidden;
       }
       .md-code {
         position: relative;
@@ -811,6 +821,7 @@
       #editor,
       .md-view {
         grid-row: 1;
+        box-sizing: border-box;
         font-family: ui-monospace, "SF Mono", Menlo, monospace;
         font-size: 14px;
         line-height: 1.6;
@@ -837,6 +848,7 @@
         caret-color: var(--text);
         z-index: 2;
         width: 100%;
+        height: 100%;
       }
       #editor::selection {
         background: rgba(76, 110, 245, 0.25);
@@ -844,9 +856,11 @@
       .md-view {
         grid-column: 2;
         z-index: 1;
+        height: 100%;
         /* Clipped, but still pannable programmatically: the editor's
-           scroll handler mirrors scrollLeft here so the highlight
-           overlay tracks horizontal scrolling of long (data-URI) lines. */
+           scroll handler mirrors scrollLeft/scrollTop here so the
+           highlight overlay tracks the editor exactly, including
+           horizontal scrolling of long (data-URI) lines. */
         overflow: hidden;
       }
       .md-view .ln {

@@ -128,6 +128,28 @@ test.describe("markdown source view", () => {
       return view.scrollLeft;
     });
     expect(panned).toBe(5000);
+    // The source view is a fixed-height box (the textarea scrolls inside
+    // it); the overlay and gutter pan in sync on both axes.
+    const heights = await page.evaluate(() => {
+      const ed = document.querySelector("#editor") as HTMLTextAreaElement;
+      ed.scrollTop = 120;
+      ed.dispatchEvent(new Event("scroll"));
+      const wrap = document.querySelector("#md-wrap") as HTMLElement;
+      const view = document.querySelector("#md-view") as HTMLElement;
+      const gutter = document.querySelector("#md-gutter") as HTMLElement;
+      return {
+        editorH: ed.getBoundingClientRect().height,
+        wrapH: wrap.getBoundingClientRect().height,
+        wideOverflow: ed.scrollWidth > ed.clientWidth, // internal h-scroll
+        edTop: ed.scrollTop,
+        viewTop: view.scrollTop,
+        gutterTop: gutter.scrollTop,
+      };
+    });
+    expect(heights.editorH).toBeCloseTo(heights.wrapH, 0); // fills the box
+    expect(heights.wideOverflow).toBe(true);
+    expect(heights.viewTop).toBe(heights.edTop);
+    expect(heights.gutterTop).toBe(heights.edTop);
     // The data-URI line renders as ONE compact row with a data chip (mime
     // + size), not a 60k-char text run; a huge non-data line truncates.
     const compact = await page.evaluate(() => {

@@ -530,22 +530,11 @@ function renderHighlight(): void {
   lines.forEach((_, i) => {
     mdGutter.appendChild(document.createTextNode(`${String(i + 1)}\n`));
   });
-  // Size the textarea to the OVERLAY's laid-out height (read after the
-  // overlay is in the DOM): the editor's own scrollHeight can be stale
-  // by a frame on WebKitGTK, which left the textarea shorter than its
-  // content - an inner scrollbar, a clipped overlay, white page below.
-  syncEditorHeight();
+  // The source view is a fixed-height box: the textarea scrolls inside
+  // it and the overlay is panned in sync (scroll listener below), so
+  // neither layer ever grows to the full content height - a 30k-px-tall
+  // textarea is what stalled GPU-composited WebKitGTK on big docs.
   scheduleSourceMarks();
-}
-
-/** Size the source textarea to the highlight overlay's laid-out height,
- *  so the transparent editor and the overlay never desynchronize. */
-function syncEditorHeight(): void {
-  if (mdWrap.hidden) return;
-  // One guarded write: setting "auto" first would force a full textarea
-  // relayout twice per render on docs with huge lines.
-  const h = `${String(mdView.scrollHeight)}px`;
-  if (editor.style.height !== h) editor.style.height = h;
 }
 
 /** Expand the caret's overlay row if it was rendered compact - chip or
@@ -821,6 +810,7 @@ btnView.addEventListener("click", () => {
 });
 
 btnMd.addEventListener("click", () => {
+  const t0 = performance.now();
   // Leaving for the source view stops the slideshow (spec:
   // docs/specs/slides.md): play is a flag on the document view.
   if (playing) setPlaying(false);
@@ -837,6 +827,16 @@ btnMd.addEventListener("click", () => {
   renderHighlight();
   btnMd.classList.add("active");
   btnView.classList.remove("active");
+  // Diagnostic for the GPU-composited source-view stall (see
+  // docs/blockers/md-view-edit-stall-2026-11-20.md): how long the
+  // switch handler took, and until two frames had painted after it.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      (window as unknown as Record<string, unknown>).__folioMdSwitch = {
+        handlerMs: Math.round(performance.now() - t0),
+      };
+    }),
+  );
 });
 
 /* --- Slideshow (spec: docs/specs/slides.md) --- */
@@ -3081,6 +3081,8 @@ editor.addEventListener("mouseup", () => refreshCaretLine());
 // panned in sync so caret and colors stay aligned.
 editor.addEventListener("scroll", () => {
   mdView.scrollLeft = editor.scrollLeft;
+  mdView.scrollTop = editor.scrollTop;
+  mdGutter.scrollTop = editor.scrollTop;
 });
 editor.addEventListener("input", () => {
   renderHighlight();
@@ -3361,8 +3363,6 @@ function reflectActiveSection(): void {
 
 window.addEventListener("scroll", reflectActiveSection, { passive: true });
 window.addEventListener("resize", reflectActiveSection, { passive: true });
-window.addEventListener("resize", () => syncEditorHeight(), { passive: true });
-
 btnSidebar.addEventListener("click", () => {
   sidebar.hidden = !sidebar.hidden;
   btnSidebar.setAttribute("aria-pressed", String(!sidebar.hidden));

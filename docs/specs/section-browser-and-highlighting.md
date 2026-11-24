@@ -71,8 +71,14 @@ Contract:
 - Host: a transparent `textarea` overlays a highlighted `<pre>`; both
   share identical font metrics so the caret sits exactly on the
   colored text. Token kinds map to CSS classes `tk-<kind>` in
-  `index.html`. The textarea auto-grows to its content so the overlay
-  never desynchronizes.
+  `index.html`. The source view is a FIXED-HEIGHT box
+  (`height: calc(100vh - 100px)` on `.md-wrap`): the textarea scrolls
+  inside it and the overlay + gutter are panned in sync on both axes
+  (`scrollLeft`/`scrollTop`), so no layer ever grows to the full
+  content height - a 30k-px-tall editor is what stalled
+  GPU-composited WebKitGTK on docs with many embedded clips
+  (docs/blockers/md-view-edit-stall-2026-11-20.md). Print hides the
+  source view entirely.
 - **No soft wrap**: the editor is `wrap="off"` and both layers use
   `white-space: pre`, so a huge line - a data: URL in an image/audio
   directive - is ONE row that scrolls sideways, not thousands of
