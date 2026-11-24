@@ -218,12 +218,15 @@ test.describe("flashcard decks", () => {
       4,
     );
     await page.keyboard.press("1");
-    // Exactly one tile is marked correct (ok) or wrong (bad).
-    await expect(
-      figure.locator(
-        ".folio-fc-opts .folio-fc-tile.ok, .folio-fc-opts .folio-fc-tile.bad",
-      ),
-    ).toHaveCount(1);
+    // The correct option is always marked ok; a wrong pick is
+    // additionally marked bad on the picked tile.
+    const ok = figure.locator(".folio-fc-opts .folio-fc-tile.ok");
+    const bad = figure.locator(".folio-fc-opts .folio-fc-tile.bad");
+    await expect(ok).toHaveCount(1);
+    const picked = figure.locator(".folio-fc-opts .folio-fc-tile").first();
+    await expect(bad).toHaveCount(
+      (await picked.getAttribute("class"))?.includes("bad") ? 1 : 0,
+    );
     // Space advances.
     await page.keyboard.press("Space");
     await expect(figure.locator(".folio-fc-head")).toContainText("Card 2 of 5");

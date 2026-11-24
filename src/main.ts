@@ -4011,6 +4011,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
       "motion swarm murmuration flock birds animated play simulation frames python compute animation movement swirl",
   },
   {
+    id: "flashcards",
+    title: "Spanish for travellers: flashcard deck",
+    file: "demo/examples/flashcards.md",
+    blurb:
+      "flashcards flash cards deck study quiz learn vocabulary cards srs flip match choice audio",
+  },
+  {
     id: "flow",
     title: "Traffic on a small road network",
     file: "demo/examples/flow.md",

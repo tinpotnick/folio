@@ -12450,12 +12450,26 @@ export class FolioDoc extends HTMLElement {
         return;
       }
     }
-    const removableFigure =
+    // A removable figure (diagram, image, audio, flashcards deck) can
+    // be the Backspace target three ways: the key event's target (a
+    // real click focuses the figure in Chromium), the caret/selection
+    // spanning it (WebKitGTK: addRange drops shadow nodes, so cases
+    // select with setBaseAndExtent), or the last mousedown block.
+    const REMOVABLE =
+      "figure.folio-diagram, figure.folio-image, figure.folio-audio, figure.folio-flashcards";
+    let removableFigure =
       ev.target instanceof Element
-        ? (ev.target.closest(
-            "figure.folio-diagram, figure.folio-image, figure.folio-audio, figure.folio-flashcards",
-          ) as HTMLElement | null)
+        ? (ev.target.closest(REMOVABLE) as HTMLElement | null)
         : null;
+    if (!removableFigure) {
+      const at = this.caretPoint();
+      const n =
+        at && (at.node instanceof Element ? at.node : at.node.parentElement);
+      removableFigure = (n?.closest(REMOVABLE) as HTMLElement | null) ?? null;
+    }
+    if (!removableFigure && this.lastBlock?.matches(REMOVABLE)) {
+      removableFigure = this.lastBlock;
+    }
     if (
       removableFigure &&
       (ev.key === "Backspace" || ev.key === "Delete") &&
