@@ -4018,6 +4018,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
       "flashcards flash cards deck study quiz learn vocabulary cards srs flip match choice audio",
   },
   {
+    id: "levantine-arabic",
+    title: "Levantine Arabic: a spoken flashcard deck",
+    file: "demo/examples/levantine-arabic.md",
+    blurb:
+      "levantine arabic shami spoken flashcards flash cards deck study language pronunciation audio clips rtl right-to-left vocabulary tts",
+  },
+  {
     id: "flow",
     title: "Traffic on a small road network",
     file: "demo/examples/flow.md",
