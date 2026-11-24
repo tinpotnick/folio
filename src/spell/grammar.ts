@@ -68,11 +68,44 @@ export interface GrammarHit {
   lint: Lint;
 }
 
-/** Lint one text (a prose block's markdown), markdown-aware. */
-export async function lintText(text: string): Promise<GrammarHit[]> {
+/** Unbroken runs longer than this are not prose - data: URIs, base64
+ * blobs, hashes. Harper's cost on them is super-linear: the 40 kB
+ * Levantine example (eight ~5 kB audio data URIs) took ~30 s to lint,
+ * on the main thread, freezing the whole app after a switch to the
+ * source view; with the runs masked it takes ~0.2 s. */
+export const MAX_LINT_RUN = 128;
+
+/** The text Harper actually sees: every non-whitespace run longer than
+ * MAX_LINT_RUN, and every line in `skipLines` (markup the caller will
+ * not accept hits in anyway), is replaced by spaces of the SAME length,
+ * so hit offsets still index the original text. */
+export function maskForLint(
+  text: string,
+  skipLines?: ReadonlySet<number>,
+): string {
+  let out = text;
+  if (skipLines && skipLines.size > 0) {
+    out = text
+      .split("\n")
+      .map((line, i) => (skipLines.has(i) ? " ".repeat(line.length) : line))
+      .join("\n");
+  }
+  return out.replace(/\S+/g, (run) =>
+    run.length > MAX_LINT_RUN ? " ".repeat(run.length) : run,
+  );
+}
+
+/** Lint one text (a prose block's markdown), markdown-aware. Lines in
+ * `skipLines` and over-long runs are masked first (see maskForLint). */
+export async function lintText(
+  text: string,
+  skipLines?: ReadonlySet<number>,
+): Promise<GrammarHit[]> {
   const l = await getLinter();
   if (!l || text.trim() === "") return [];
-  const lints = await l.lint(text, { language: "markdown" });
+  const masked = maskForLint(text, skipLines);
+  if (masked.trim() === "") return [];
+  const lints = await l.lint(masked, { language: "markdown" });
   return lints.map((lint) => {
     const span = lint.span();
     return {

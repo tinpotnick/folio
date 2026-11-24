@@ -201,7 +201,10 @@ export async function computeSourceMarks(
   }
   let hits: GrammarHit[] = [];
   if (grammarEnabled()) {
-    hits = await lintText(src);
+    // Directive bodies and frontmatter are masked out of the lint (their
+    // hits are dropped below anyway): an audio/image block's data URI
+    // costs Harper tens of seconds on the main thread.
+    hits = await lintText(src, skip);
     marks.push(...grammarMarksInLines(src, lines, lineStarts, hits, skip));
   }
   return { marks, hits };

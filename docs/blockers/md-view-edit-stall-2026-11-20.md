@@ -1,5 +1,16 @@
 # Blocker: source view uneditable ~20 s after switching, GPU-composited WebKitGTK only
 
+## RESOLVED 2026-11-24
+
+Root cause was none of the layout/paint theories below: the user had
+the opt-in grammar check ON (`localStorage folio.grammar.v1`; the
+harness profile has it off, hence no repro). 300 ms after the switch,
+`computeSourceMarks` handed the WHOLE source - base64 audio included -
+to Harper on the main thread: ~30 s measured in Node for the example,
+~0.2 s with the payloads masked. Fixed by `maskForLint`
+(src/spell/grammar.ts; spec: docs/specs/spellcheck-grammar.md,
+"Grammar lint input is bounded"). The notes below are kept as history.
+
 ## Symptom (user, built Tauri app, Levantine Arabic example)
 
 Open arabic example → switch to Markdown view: the markdown is VISIBLE
