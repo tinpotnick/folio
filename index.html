@@ -815,8 +815,13 @@
         font-size: 14px;
         line-height: 1.6;
         tab-size: 2;
-        white-space: pre-wrap;
-        overflow-wrap: break-word;
+        /* No soft wrap: a huge line (a data: URL in an image/audio
+           directive) is one row that scrolls sideways, not thousands
+           of wrapped rows that cost seconds to lay out on every switch
+           to this view. The textarea scrolls itself (wrap=off) and the
+           overlay is panned in sync via scrollLeft. */
+        white-space: pre;
+        overflow-wrap: normal;
         margin: 0;
         padding: 24px 0 40vh 2px;
         border: none;
@@ -839,6 +844,10 @@
       .md-view {
         grid-column: 2;
         z-index: 1;
+        /* Clipped, but still pannable programmatically: the editor's
+           scroll handler mirrors scrollLeft here so the highlight
+           overlay tracks horizontal scrolling of long (data-URI) lines. */
+        overflow: hidden;
       }
       .md-view .ln {
         display: block;
@@ -2901,7 +2910,12 @@
         <div class="md-wrap" id="md-wrap" hidden>
           <div class="md-gutter" id="md-gutter" aria-hidden="true"></div>
           <pre class="md-view" id="md-view" aria-hidden="true"></pre>
-          <textarea id="editor" class="editor" spellcheck="false"></textarea>
+          <textarea
+            id="editor"
+            class="editor"
+            spellcheck="false"
+            wrap="off"
+          ></textarea>
         </div>
       </main>
       <aside id="help-panel" aria-label="Help" hidden>

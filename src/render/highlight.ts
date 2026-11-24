@@ -91,7 +91,14 @@ export function highlightMarkdown(src: string): MdLine[] {
     } else if (/^::: mermaid \{#[^}]+\}$/.test(line.trim())) {
       inMermaid = true;
       tokens = [{ kind: "directive", text: line }];
-    } else if (/^::: (table|chart) \{#[^}]+\}$/.test(line.trim())) {
+    } else if (
+      /^::: (table|chart|image|audio|flashcards|value|motion|comment|page) \{#[^}]+\}$/.test(
+        line.trim(),
+      )
+    ) {
+      // Every standard directive opens a directive body - including
+      // audio/image, whose `src:` line can be a multi-KB data URI that
+      // must take the cheap directive path, never inline scanning.
       directiveDepth = 1;
       tokens = [{ kind: "directive", text: line }];
     } else if (/^#{1,6} /.test(line)) {

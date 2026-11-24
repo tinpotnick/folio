@@ -73,6 +73,21 @@ Contract:
   colored text. Token kinds map to CSS classes `tk-<kind>` in
   `index.html`. The textarea auto-grows to its content so the overlay
   never desynchronizes.
+- **No soft wrap**: the editor is `wrap="off"` and both layers use
+  `white-space: pre`, so a huge line - a data: URL in an image/audio
+  directive - is ONE row that scrolls sideways, not thousands of
+  wrapped rows that cost seconds to lay out on every switch to this
+  view (measured on WebKitGTK: ~630 ms for an 8-clip audio doc with
+  wrapping, ~55 ms without, before the audio preload fix in
+  audio-embeds.md). The textarea scrolls itself horizontally; the
+  overlay is panned in sync (`scrollLeft`) so caret and colors stay
+  aligned.
+- The highlighter recognizes EVERY standard directive opener
+  (`table|chart|image|audio|flashcards|value|motion|comment|page`,
+  plus `mermaid`), so directive bodies - including multi-KB `src:`
+  data-URI lines - take the cheap `directiveLine` path and are never
+  inline-scanned. Lines over 8192 chars are a single plain token
+  regardless (`MAX_INLINE_LINE`).
 
 ## Notes
 

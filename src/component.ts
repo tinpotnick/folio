@@ -1169,6 +1169,19 @@ export class FolioDoc extends HTMLElement {
     return this.doc ? serializeDoc(this.doc) : null;
   }
 
+  /** Pause every playing media element (audio/video figures). Leaving
+   *  the document view for the source view must not leave a clip
+   *  running - or its media pipeline spinning down slowly. */
+  pauseMedia(): void {
+    const media = this.shadowRoot?.querySelectorAll<
+      HTMLAudioElement | HTMLVideoElement
+    >("audio, video");
+    if (!media) return;
+    for (const m of Array.from(media)) {
+      if (!m.paused) m.pause();
+    }
+  }
+
   onChange(fn: (doc: Doc) => void): void {
     this.listeners.push(fn);
   }
@@ -7487,7 +7500,11 @@ export class FolioDoc extends HTMLElement {
     figure.appendChild(label);
     const audio = document.createElement("audio");
     audio.controls = true;
-    audio.preload = "metadata";
+    // A data: URI is already in memory - preloading its "metadata"
+    // only keeps a media pipeline open (slow view switches on
+    // WebKitGTK, where the load never settles and the widget's spinner
+    // spins forever). Play loads it instantly on demand.
+    audio.preload = block.audio.src.startsWith("data:") ? "none" : "metadata";
     audio.src = block.audio.src;
     audio.title = block.audio.alt ?? "";
     figure.appendChild(audio);

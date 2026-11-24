@@ -92,6 +92,45 @@ test.describe("markdown source view", () => {
     expect(gutter?.split("\n").slice(0, 3)).toEqual(["1", "2", "3"]);
   });
 
+  test("a huge data-URI line is one overlay row; editor never soft-wraps", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const big =
+      "# T\n\n::: audio {#c}\nsrc: data:audio/wav;base64," +
+      "A".repeat(60000) +
+      "\n:::\n";
+    await page.locator("#btn-markdown").click();
+    await page.locator("#editor").fill(big);
+    await page.locator("#btn-view").click();
+    await expect(page.locator("#the-doc figure.folio-audio")).toBeVisible();
+    await page.locator("#btn-markdown").click();
+    await expect(page.locator("#editor")).toBeVisible();
+    // No soft wrap: the textarea scrolls sideways, the overlay pans.
+    await expect(page.locator("#editor")).toHaveAttribute("wrap", "off");
+    const editor = page.locator("#editor");
+    const lineCount = (await editor.inputValue()).split("\n").length;
+    await expect(page.locator("#md-view .ln")).toHaveCount(lineCount);
+    await editor.evaluate((el) => {
+      (el as HTMLTextAreaElement).scrollLeft = 5000;
+      el.dispatchEvent(new Event("scroll"));
+    });
+    const panned = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      return view.scrollLeft;
+    });
+    expect(panned).toBe(5000);
+    // The long line is a single overlay row: no wrapped-row explosion.
+    const longRow = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      const rows = Array.from(view.querySelectorAll(".ln"));
+      const long = rows.find((r) => (r.textContent ?? "").length > 50000);
+      return long ? long.getBoundingClientRect().height : -1;
+    });
+    expect(longRow).toBeGreaterThan(0);
+    expect(longRow).toBeLessThan(60); // one text row, not ~600 wrapped rows
+  });
+
   test("edited source round-trips back into the rendered view", async ({
     page,
   }) => {

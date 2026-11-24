@@ -88,6 +88,29 @@ test.describe("audio blocks", () => {
     expect(md).toContain('alt: "the founder, on tape"');
   });
 
+  test("data-URI clips load with preload=none (no perpetual spinner on WebKitGTK)", async ({
+    page,
+  }) => {
+    const wav = tinyWav().toString("base64");
+    await loadDoc(
+      page,
+      "::: audio {#embed}\nsrc: data:audio/wav;base64," +
+        wav +
+        "\n:::\n\n" +
+        "::: audio {#remote}\nsrc: https://example.com/interview.mp3\n:::\n",
+    );
+    const figs = page.locator("#the-doc figure.folio-audio");
+    await expect(figs).toHaveCount(2);
+    await expect(figs.nth(0).locator("audio")).toHaveAttribute(
+      "preload",
+      "none",
+    );
+    await expect(figs.nth(1).locator("audio")).toHaveAttribute(
+      "preload",
+      "metadata",
+    );
+  });
+
   test("the insert button embeds a picked file and reaches the source", async ({
     page,
   }) => {

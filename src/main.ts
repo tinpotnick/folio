@@ -682,6 +682,9 @@ btnMd.addEventListener("click", () => {
   // open editor (an equation's), and that change must land here.
   editor.hidden = false;
   mdWrap.hidden = false;
+  // A clip playing in the document must not keep running (and its
+  // media pipeline open) while the source is on screen.
+  el.pauseMedia();
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
   el.hidden = true;
@@ -2920,6 +2923,12 @@ el.addEventListener("keyup", (ev) =>
 );
 editor.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
 editor.addEventListener("click", () => setTimeout(reflectToolbarState, 0));
+// The source view does not soft-wrap (a data-URI line is one long row):
+// the textarea scrolls itself horizontally, the highlight overlay is
+// panned in sync so caret and colors stay aligned.
+editor.addEventListener("scroll", () => {
+  mdView.scrollLeft = editor.scrollLeft;
+});
 editor.addEventListener("input", () => {
   renderHighlight();
   reflectToolbarState();
