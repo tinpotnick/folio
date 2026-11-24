@@ -18,9 +18,13 @@
 - **Study mode** is a session view - like presenting slides, it never
   changes the file. While studying, the deck offers three modes:
   **Flip** (Space flips, arrows move, 1–4 grade Again/Hard/Good/Easy),
-  **Match** (press a prompt - an audio tile if the card has a sound -
-  then its word), and **Choice** (multiple choice, options drawn from
-  the same deck, keys 1–4). Esc exits. Grading is spaced repetition:
+  **Match** (the Duolingo flow: press a clip in the Listen column, then
+  its word in the Match column), and **Choice** (multiple choice,
+  options drawn from the same deck, keys 1–4). A deck whose cards all
+  have sounds opens in Match by default. While studying, Space works
+  wherever you last clicked inside the deck - and only the deck's label
+  strip opens the inspector bar, so studying never shifts the card out
+  of view. Esc exits. Grading is spaced repetition:
   progress is kept per author in the browser's local storage (keyed by
   document, deck, and card content), never in the Markdown - the label
   strip's badge shows how many cards are due.

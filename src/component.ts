@@ -7663,11 +7663,36 @@ export class FolioDoc extends HTMLElement {
       figure.appendChild(this.buildStudy(deck));
     }
     const bar = figure.querySelector<HTMLElement>(":scope > .folio-inspector");
-    const show = (): void => {
+    const label = figure.querySelector<HTMLElement>(":scope > .folio-fc-label");
+    const show = (ev?: Event): void => {
+      // While studying, the session view owns the figure's clicks: only
+      // the label strip reveals the bar (it carries Stop studying) -
+      // a click on a study button must not push the card out of view
+      // by revealing the bar mid-study (spec: docs/specs/flashcards.md).
+      if (this.studying?.deckId === deck.id) {
+        const t = ev?.target;
+        if (!(t instanceof Node && label?.contains(t))) return;
+      }
       if (bar) bar.hidden = false;
     };
     figure.addEventListener("mousedown", show);
     figure.addEventListener("focusin", show);
+    // While studying, keys route at the figure (capture) so a focused
+    // button inside the study UI (or the label) still drives the study
+    // view; inspector inputs keep their own keystrokes.
+    figure.addEventListener(
+      "keydown",
+      (ev) => {
+        if (!this.studying || this.studying.deckId !== deck.id) return;
+        if (
+          ev.target instanceof Element &&
+          ev.target.closest(".folio-inspector")
+        )
+          return;
+        this.studyKeydown(ev, deck);
+      },
+      true,
+    );
     return figure;
   }
 
@@ -8003,7 +8028,10 @@ export class FolioDoc extends HTMLElement {
     const n = b.flashcards.cards.length;
     this.studying = {
       deckId,
-      mode: "flip",
+      // An audio-first deck (every card has a sound) opens straight into
+      // Match - the Duolingo flow: press a clip, then its word.
+      mode:
+        n > 0 && b.flashcards.cards.every((c) => c.sound) ? "match" : "flip",
       order: this.shuffled(n),
       orderR: this.shuffled(n),
       pos: 0,
@@ -8032,6 +8060,43 @@ export class FolioDoc extends HTMLElement {
       ?.focus();
   }
 
+  /** Re-render ONLY the study UI inside its figure. A full render would
+   *  tear down every figure in the document - audio elements included -
+   *  on every Space, which is slow on WebKitGTK; the study view is a
+   *  session overlay, so swapping its node in place is enough (the card
+   *  rows underneath stay put and keep printing). */
+  private renderStudy(): void {
+    const st = this.studying;
+    if (!st || !this.doc) return;
+    const deckBlock = this.doc.blocks.find(
+      (b) => b.kind === "flashcards" && b.flashcards.id === st.deckId,
+    );
+    if (deckBlock?.kind !== "flashcards") return;
+    const fig = this.shadowRoot?.querySelector<HTMLElement>(
+      "figure.folio-flashcards[studying]",
+    );
+    const old = fig?.querySelector(":scope > .folio-fc-study");
+    if (!fig || !old) {
+      this.render();
+      return;
+    }
+    old.replaceWith(this.buildStudy(deckBlock.flashcards));
+    // Grades change the due badge on the label strip - refresh it too.
+    const badge = fig.querySelector(".fc-badge");
+    if (badge) {
+      const due = dueCount(
+        this.doc,
+        deckBlock.flashcards.id,
+        deckBlock.flashcards.cards.map((c) =>
+          cardHash(c.front, c.back, c.sound),
+        ),
+      );
+      badge.textContent = due > 0 ? `${String(due)} due` : "all done";
+      badge.classList.toggle("due-zero", due === 0);
+    }
+    this.focusStudy();
+  }
+
   private shuffled(n: number): number[] {
     const a = Array.from({ length: n }, (_, i) => i);
     for (let i = a.length - 1; i > 0; i--) {
@@ -8050,6 +8115,14 @@ export class FolioDoc extends HTMLElement {
     root.tabIndex = 0;
     if (st) {
       root.addEventListener("keydown", (ev) => this.studyKeydown(ev, deck));
+      // Buttons in the study UI must not steal focus on click - the
+      // study root owns the keys (Space flips). preventDefault on
+      // mousedown keeps focus in place while the click still fires.
+      root.addEventListener("mousedown", (ev) => {
+        if (ev.target instanceof Element && ev.target.closest("button")) {
+          ev.preventDefault();
+        }
+      });
     }
     const head = document.createElement("div");
     head.className = "folio-fc-head";
@@ -8078,8 +8151,7 @@ export class FolioDoc extends HTMLElement {
         this.studying.choicePicked = null;
         this.studying.order = this.shuffled(deck.cards.length);
         this.studying.orderR = this.shuffled(deck.cards.length);
-        this.render();
-        this.focusStudy();
+        this.renderStudy();
       });
       modes.appendChild(b);
     }
@@ -8120,8 +8192,7 @@ export class FolioDoc extends HTMLElement {
       this.studying.badR = null;
       this.studying.choiceOpts = null;
       this.studying.choicePicked = null;
-      this.render();
-      this.focusStudy();
+      this.renderStudy();
     });
     head.appendChild(shuffleBtn);
     root.appendChild(head);
@@ -8246,7 +8317,7 @@ export class FolioDoc extends HTMLElement {
     left.className = "folio-fc-col";
     const lh = document.createElement("span");
     lh.className = "fc-col-label";
-    lh.textContent = "Prompt";
+    lh.textContent = "Listen";
     left.appendChild(lh);
     st.order.forEach((cardIdx, k) => {
       const card = deck.cards[cardIdx];
@@ -8271,8 +8342,7 @@ export class FolioDoc extends HTMLElement {
           this.studying.selR = null;
           this.studying.badR = null;
           this.playCardSound(card);
-          this.render();
-          this.focusStudy();
+          this.renderStudy();
         });
       } else {
         const w = document.createElement("span");
@@ -8283,8 +8353,7 @@ export class FolioDoc extends HTMLElement {
           this.studying.selL = k;
           this.studying.selR = null;
           this.studying.badR = null;
-          this.render();
-          this.focusStudy();
+          this.renderStudy();
         });
       }
       left.appendChild(t);
@@ -8317,8 +8386,8 @@ export class FolioDoc extends HTMLElement {
         if (!this.studying || st.matched.has(cardIdx)) return;
         if (st.selL === null) {
           this.studying.selR = k;
-          this.render();
-          this.focusStudy();
+          this.renderStudy();
+
           return;
         }
         const li = st.order[st.selL] ?? -1;
@@ -8335,19 +8404,17 @@ export class FolioDoc extends HTMLElement {
               "good",
             );
           }
-          this.render();
-          this.focusStudy();
+          this.renderStudy();
         } else {
           st.selR = k;
           st.badR = k;
-          this.render();
-          this.focusStudy();
+          this.renderStudy();
+
           window.setTimeout(() => {
             if (this.studying) {
               this.studying.selR = null;
               this.studying.badR = null;
-              this.render();
-              this.focusStudy();
+              this.renderStudy();
             }
           }, 400);
         }
@@ -8461,8 +8528,7 @@ export class FolioDoc extends HTMLElement {
         );
       }
     }
-    this.render();
-    this.focusStudy();
+    this.renderStudy();
   }
 
   private gradeCurrent(deck: Flashcards, g: SrsGrade): void {
@@ -8481,8 +8547,7 @@ export class FolioDoc extends HTMLElement {
     st.flipped = false;
     st.choiceOpts = null;
     st.choicePicked = null;
-    this.render();
-    this.focusStudy();
+    this.renderStudy();
   }
 
   /** Study-mode keys live on the study root (the figure is
@@ -8508,8 +8573,7 @@ export class FolioDoc extends HTMLElement {
       st.flipped = false;
       st.choiceOpts = null;
       st.choicePicked = null;
-      this.render();
-      this.focusStudy();
+      this.renderStudy();
     };
     if (st.mode === "flip") {
       if (k === " " || k === "Enter") {
@@ -8517,8 +8581,7 @@ export class FolioDoc extends HTMLElement {
         ev.stopPropagation();
         if (!st.flipped) {
           st.flipped = true;
-          this.render();
-          this.focusStudy();
+          this.renderStudy();
         } else {
           step(1);
         }
@@ -12405,6 +12468,28 @@ export class FolioDoc extends HTMLElement {
         ev.target.closest(".folio-comment-head button"))
     ) {
       return;
+    }
+    // While a deck is being studied, a key that lands on the article
+    // (focus escaped the study UI - a real mouse click on the figure
+    // can select it and focus the host) still drives the study view.
+    if (this.studying) {
+      const st = this.studying;
+      const targetFig =
+        ev.target instanceof Element
+          ? (ev.target.closest("figure.folio-flashcards") as HTMLElement | null)
+          : null;
+      const studyingFig =
+        targetFig ??
+        (this.lastBlock?.matches("figure.folio-flashcards[studying]")
+          ? this.lastBlock
+          : null);
+      const deckBlock = this.doc.blocks.find(
+        (b) => b.kind === "flashcards" && b.flashcards.id === st.deckId,
+      );
+      if (studyingFig && deckBlock?.kind === "flashcards") {
+        this.studyKeydown(ev, deckBlock.flashcards);
+        return;
+      }
     }
     // The table context menu from the keyboard: Shift+F10 or the
     // Menu key opens it at the caret's cell (spec:

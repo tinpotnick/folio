@@ -54,23 +54,36 @@ card: "gato" | "cat"
 - **Study mode is a session flag, never in the file** - the slideshow's
   rule (docs/specs/slides.md): while studying, the deck figure renders
   the study UI instead of the rows (same DOM node; the rows stay
-  underneath and print). Three modes, switchable in the study header:
+  underneath and print). Three modes, switchable in the study header.
+  A deck whose cards ALL have a sound opens in **Match** by default
+  (audio-first decks are listen-then-pick); otherwise it opens in
+  Flip. The modes:
   - **Flip** - front (big, with play button if the card has a sound),
     Space flips to the back; on the back, Again/Hard/Good/Easy grade
     (keys 1-4), arrows navigate, Space next.
-  - **Match** - the Duolingo flow: left column prompts (an audio tile
-    if the card has a sound, else its back text), right column the
-    front words, independently shuffled. Press a prompt (plays the
+  - **Match** - the Duolingo flow (mock-up: docs/mockups/flashcards/
+    study-match.png): left column "Listen" prompts (an audio tile if
+    the card has a sound, else its back text), right column "Match"
+    the front words, independently shuffled. Press a prompt (plays the
     clip), then its word: a correct pair locks with the theme's ok
     color and a check; a wrong pick flashes the bad color and
     deselects. Progress "n of N matched", Shuffle re-deals.
   - **Choice** - prompt card (play + front word) with four options
     drawn from the SAME deck (so distractors are plausible), keys
     1-4, ok/bad feedback, Space next.
-    Esc exits; Backspace in study mode never deletes the deck. All keys
-    are handled on the study root (the figure is not editable, so that
-    is the only key path while studying) and stopPropagation keeps them
-    from reaching document-level handlers.
+    Esc exits; Backspace in study mode never deletes the deck. Keys
+    are handled on the study root AND routed at the figure (capture),
+    plus an article-level fallback when focus escapes to the host
+    (a real click on the figure can select it) - so Space works no
+    matter which inner element holds focus; study buttons preventDefault
+    their mousedown so a click on play never moves focus off the study
+    root. stopPropagation keeps study keys from reaching document-level
+    handlers. While studying, only the label strip reveals the inspector
+    bar (it carries Stop studying) - clicks inside the study UI must not
+    shift the layout under the card. Study interactions re-render ONLY
+    the study node in place (a full render would tear down every figure
+    - audio elements included - on every Space, which is slow on
+      WebKitGTK); the due badge on the label is refreshed after grades.
 - **Spaced repetition is app state, never document state**: grades
   are SM-2 (ease + ms interval) stored in localStorage
   (`src/srs.ts`, key `folio-flash-srs`) keyed by document identity +
