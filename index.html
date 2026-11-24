@@ -957,6 +957,13 @@
       .tk-text {
         color: var(--text);
       }
+      /* Truncation marker on over-long overlay rows (data-URI lines):
+         the row renders a bounded prefix so huge lines stay cheap to
+         lay out and paint; the caret's line always renders in full. */
+      .tk-trunc {
+        color: var(--gutter);
+        font-style: italic;
+      }
       /* The sticky app header's height: the document's sticky
          code headers stop below it instead of under it. */
       #the-doc {

@@ -106,6 +106,12 @@ test.describe("markdown source view", () => {
     await expect(page.locator("#the-doc figure.folio-audio")).toBeVisible();
     await page.locator("#btn-markdown").click();
     await expect(page.locator("#editor")).toBeVisible();
+    // Caret at the top: the huge line must render truncated, not full.
+    await page.evaluate(() => {
+      const ed = document.querySelector("#editor") as HTMLTextAreaElement;
+      ed.setSelectionRange(0, 0);
+      ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
     // No soft wrap: the textarea scrolls sideways, the overlay pans.
     await expect(page.locator("#editor")).toHaveAttribute("wrap", "off");
     const editor = page.locator("#editor");
@@ -121,14 +127,67 @@ test.describe("markdown source view", () => {
     });
     expect(panned).toBe(5000);
     // The long line is a single overlay row: no wrapped-row explosion.
-    const longRow = await page.evaluate(() => {
+    // It renders TRUNCATED in the overlay (bounded paint), with a marker.
+    const trunc = await page.evaluate(() => {
       const view = document.querySelector("#md-view") as HTMLElement;
       const rows = Array.from(view.querySelectorAll(".ln"));
-      const long = rows.find((r) => (r.textContent ?? "").length > 50000);
-      return long ? long.getBoundingClientRect().height : -1;
+      const long = rows.find((r) =>
+        (r.textContent ?? "").includes("data:audio/wav;base64,"),
+      );
+      if (!long) return { found: false } as const;
+      const mark = long.querySelector(".tk-trunc");
+      return {
+        found: true,
+        textLen: (long.textContent ?? "").length,
+        height: long.getBoundingClientRect().height,
+        marker: mark?.textContent ?? "",
+      } as const;
     });
-    expect(longRow).toBeGreaterThan(0);
-    expect(longRow).toBeLessThan(60); // one text row, not ~600 wrapped rows
+    expect(trunc.found).toBe(true);
+    if (trunc.found) {
+      expect(trunc.textLen).toBeLessThan(1100); // prefix + marker, not 60k
+      expect(trunc.height).toBeGreaterThan(0);
+      expect(trunc.height).toBeLessThan(60); // one text row, not wrapped rows
+      expect(trunc.marker).toMatch(/^ …\(\+\d+\)$/);
+    }
+    // The textarea keeps the full text (it is the model - round-trip).
+    await expect(page.locator("#editor")).toHaveValue(/A{60000}/);
+    // Moving the caret into the truncated line expands it in the overlay.
+    await page.evaluate(() => {
+      const ed = document.querySelector("#editor") as HTMLTextAreaElement;
+      const pos = ed.value.indexOf("base64,") + 10;
+      ed.focus();
+      ed.setSelectionRange(pos, pos);
+      ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
+    const expanded = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      const rows = Array.from(view.querySelectorAll(".ln"));
+      const long = rows.find((r) =>
+        (r.textContent ?? "").includes("data:audio/wav;base64,"),
+      );
+      return {
+        textLen: (long?.textContent ?? "").length,
+        hasMarker: !!long?.querySelector(".tk-trunc"),
+      };
+    });
+    expect(expanded.textLen).toBeGreaterThan(50000);
+    expect(expanded.hasMarker).toBe(false);
+    // Moving the caret out truncates it again.
+    await page.evaluate(() => {
+      const ed = document.querySelector("#editor") as HTMLTextAreaElement;
+      ed.setSelectionRange(0, 0);
+      ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
+    const retruncated = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      const rows = Array.from(view.querySelectorAll(".ln"));
+      const long = rows.find((r) =>
+        (r.textContent ?? "").includes("data:audio/wav;base64,"),
+      );
+      return (long?.textContent ?? "").length;
+    });
+    expect(retruncated).toBeLessThan(1100);
   });
 
   test("edited source round-trips back into the rendered view", async ({

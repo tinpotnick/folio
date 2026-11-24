@@ -29,6 +29,17 @@ const mdVisible = !(document.querySelector("#md-wrap")?.hidden ?? true);
 const wrapOff =
   document.querySelector("#editor")?.getAttribute("wrap") === "off";
 const allPaused = auds.every((a) => a.paused);
+// The multi-KB src lines render truncated in the overlay (bounded
+// layout/paint), each with a marker.
+const srcRows = Array.from(document.querySelectorAll("#md-view .ln")).filter(
+  (r) => (r.textContent ?? "").includes("base64,"),
+);
+const truncOk =
+  srcRows.length === 3 &&
+  srcRows.every(
+    (r) =>
+      (r.textContent ?? "").length < 1100 && !!r.querySelector(".tk-trunc"),
+  );
 return [
   "",
   "three data-URI audio figures rendered: " + (auds.length === 3),
@@ -39,4 +50,5 @@ return [
   "markdown view opened on switch: " + mdVisible,
   "source editor is wrap=off (no soft wrap of data-URI lines): " + wrapOff,
   "all clips paused after leaving document view: " + allPaused,
+  "data-URI src lines render truncated in the overlay: " + truncOk,
 ].join(" | ");

@@ -62,7 +62,7 @@ import {
   type Publisher,
 } from "./engine/catalog.js";
 import type { Table } from "./engine/index.js";
-import { highlightMarkdown } from "./render/highlight.js";
+import { highlightMarkdown, type MdLine } from "./render/highlight.js";
 import {
   addCustomWord,
   isMisspelled,
@@ -400,23 +400,95 @@ function flash(msg: string): void {
   );
 }
 
+/** Overlay rows longer than this render TRUNCATED (prefix + a
+ * `…(+N)` marker): with no soft wrap a multi-KB data-URI line is one
+ * unbreakable row, and laying out / painting tens of thousands of
+ * glyphs per row is what made the source view unresponsive for many
+ * seconds on GPU-composited WebKitGTK right after switching to it.
+ * The textarea keeps the full text (it is the model); only the
+ * caret's line renders in full, so colors stay aligned while that
+ * line is being edited. */
+const MAX_OVERLAY_CHARS = 1024;
+
+let lastLines: MdLine[] = [];
+let lastLineStarts: number[] = [];
+const truncatedLines = new Set<number>();
+let expandedLine = -1;
+
+function lineLength(line: MdLine): number {
+  let n = 0;
+  for (const t of line.tokens) n += t.text.length;
+  return n;
+}
+
+function caretLineOf(pos: number): number {
+  let lo = 0;
+  let hi = lastLineStarts.length - 1;
+  let ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if ((lastLineStarts[mid] ?? 0) <= pos) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
+}
+
+function buildLineEl(li: number, full: boolean): HTMLElement {
+  const line = lastLines[li] ?? { tokens: [] };
+  const ln = document.createElement("span");
+  ln.className = "ln";
+  if (line.tokens.length === 0) {
+    ln.textContent = "\u00a0";
+    return ln;
+  }
+  const total = lineLength(line);
+  const truncate = !full && total > MAX_OVERLAY_CHARS;
+  if (truncate) truncatedLines.add(li);
+  else truncatedLines.delete(li);
+  let used = 0;
+  for (const tok of line.tokens) {
+    if (truncate && used >= MAX_OVERLAY_CHARS) break;
+    const span = document.createElement("span");
+    span.className = `tk-${tok.kind}`;
+    if (truncate && used + tok.text.length > MAX_OVERLAY_CHARS) {
+      span.textContent = tok.text.slice(0, MAX_OVERLAY_CHARS - used);
+      used = MAX_OVERLAY_CHARS;
+    } else {
+      span.textContent = tok.text;
+      used += tok.text.length;
+    }
+    ln.appendChild(span);
+  }
+  if (truncate) {
+    const mark = document.createElement("span");
+    mark.className = "tk-trunc";
+    mark.textContent = ` …(+${String(total - MAX_OVERLAY_CHARS)})`;
+    ln.appendChild(mark);
+  }
+  return ln;
+}
+
 function renderHighlight(): void {
   const lines = highlightMarkdown(editor.value);
-  mdView.textContent = "";
-  lines.forEach((line) => {
-    const ln = document.createElement("span");
-    ln.className = "ln";
-    if (line.tokens.length === 0) {
-      ln.textContent = "\u00a0";
-    } else {
-      for (const tok of line.tokens) {
-        const span = document.createElement("span");
-        span.className = `tk-${tok.kind}`;
-        span.textContent = tok.text;
-        ln.appendChild(span);
-      }
+  lastLines = lines;
+  lastLineStarts = [];
+  {
+    let acc = 0;
+    for (const line of lines) {
+      lastLineStarts.push(acc);
+      acc += lineLength(line) + 1;
     }
-    mdView.appendChild(ln);
+  }
+  truncatedLines.clear();
+  const caretLine = caretLineOf(editor.selectionStart ?? 0);
+  expandedLine = caretLine;
+  mdView.textContent = "";
+  lines.forEach((_, li) => {
+    mdView.appendChild(buildLineEl(li, li === caretLine));
   });
   mdGutter.textContent = "";
   lines.forEach((_, i) => {
@@ -436,6 +508,31 @@ function syncEditorHeight(): void {
   if (mdWrap.hidden) return;
   editor.style.height = "auto";
   editor.style.height = `${String(mdView.scrollHeight)}px`;
+}
+
+/** Expand the caret's overlay row if it was truncated (and re-truncate
+ *  the row the caret left): colors then align with the caret inside a
+ *  huge (data-URI) line while that line is being edited. */
+function refreshCaretLine(): void {
+  if (mdWrap.hidden || lastLines.length === 0) return;
+  const li = caretLineOf(editor.selectionStart ?? 0);
+  if (li === expandedLine) return;
+  const prev = expandedLine;
+  expandedLine = li;
+  if (
+    prev >= 0 &&
+    prev < lastLines.length &&
+    prev !== li &&
+    !truncatedLines.has(prev) &&
+    lineLength(lastLines[prev] ?? { tokens: [] }) > MAX_OVERLAY_CHARS
+  ) {
+    const oldEl = mdView.children[prev];
+    if (oldEl) mdView.replaceChild(buildLineEl(prev, false), oldEl);
+  }
+  if (truncatedLines.has(li)) {
+    const newEl = mdView.children[li];
+    if (newEl) mdView.replaceChild(buildLineEl(li, true), newEl);
+  }
 }
 
 /* --- Proofing marks in the Markdown source view (spec:
@@ -508,6 +605,10 @@ async function runSourceMarks(): Promise<void> {
   // mark at a time splits the text node and corrupts the next offset).
   const byToken = new Map<string, SourceMark[]>();
   for (const m of marks) {
+    // Truncated overlay rows render a prefix plus a marker span, so
+    // their child spans no longer map 1:1 to the full tokens the
+    // marks were computed against - skip those rows.
+    if (truncatedLines.has(m.line)) continue;
     const key = `${String(m.line)}:${String(m.token)}`;
     const arr = byToken.get(key) ?? [];
     arr.push(m);
@@ -2932,8 +3033,15 @@ el.addEventListener("keyup", (ev) =>
     reflectToolbarState(caretHint ?? undefined);
   }, 0),
 );
-editor.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
-editor.addEventListener("click", () => setTimeout(reflectToolbarState, 0));
+editor.addEventListener("keyup", () => {
+  refreshCaretLine();
+  setTimeout(reflectToolbarState, 0);
+});
+editor.addEventListener("click", () => {
+  refreshCaretLine();
+  setTimeout(reflectToolbarState, 0);
+});
+editor.addEventListener("mouseup", () => refreshCaretLine());
 // The source view does not soft-wrap (a data-URI line is one long row):
 // the textarea scrolls itself horizontally, the highlight overlay is
 // panned in sync so caret and colors stay aligned.
