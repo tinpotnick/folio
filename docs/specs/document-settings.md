@@ -55,13 +55,26 @@ hand, never a second representation.
     (non-negotiable: documents are semantic).
   - `citation.style`: author-date (default) or numeric
     (docs/specs/citations.md).
-  - `page.numbers`, `page.header` - unset (on) or "off": "Page n of
-    N" and the running title on printed and exported pages
-    (print.md, ADR-0027).
+  - `page.numbers` - unset (on) or "off": "Page n of N" bottom right
+    on printed and exported pages (print.md, ADR-0027).
+  - `page.header` - unset (the document title, from page 2), "off",
+    or custom text: the running header, top left, on printed and
+    exported pages (print.md, ADR-0027).
+  - `page.footer` - unset or "off" (none), or custom text: the
+    running footer, bottom left, on printed and exported pages
+    (print.md, "Page sections").
+  - A `::: page` block in the body overrides any of the three from
+    its position onwards (docs/specs/print.md, "Page sections").
   - `page.size` - `a4` (default) | `a5` | `letter` | `16:9` | `4:3`:
     the paper size of printed and exported pages (docs/specs/
     slides.md). While the slideshow is playing, the effective size is
     the slide aspect instead.
+  - `page.orientation` - `portrait` (default) | `landscape`: the
+    orientation of printed and exported pages, print-only. The deck
+    sizes `16:9` / `4:3` are landscape by definition; `portrait` there
+    swaps the dimensions. A `::: page` block can override size and
+    orientation per section (print.md, "Page sections"). The settings
+    dialog shows an Orientation dropdown next to Paper size.
 
 ## Acceptance
 
