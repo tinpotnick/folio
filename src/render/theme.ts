@@ -2885,6 +2885,17 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       display: block;
       width: 100%;
     }
+    figure.folio-audio .folio-audio-pending {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px dashed var(--folio-rule-strong, #d0d7de);
+      border-radius: 8px;
+      color: var(--folio-ink-muted, #6b7280);
+      font-size: 12px;
+      user-select: none;
+    }
     figure.folio-audio:focus {
       outline: 2px solid var(--folio-focus, #1f3fbf);
     }

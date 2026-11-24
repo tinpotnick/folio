@@ -402,8 +402,6 @@ function flash(msg: string): void {
 
 function renderHighlight(): void {
   const lines = highlightMarkdown(editor.value);
-  editor.style.height = "auto";
-  editor.style.height = `${String(editor.scrollHeight)}px`;
   mdView.textContent = "";
   lines.forEach((line) => {
     const ln = document.createElement("span");
@@ -424,7 +422,20 @@ function renderHighlight(): void {
   lines.forEach((_, i) => {
     mdGutter.appendChild(document.createTextNode(`${String(i + 1)}\n`));
   });
+  // Size the textarea to the OVERLAY's laid-out height (read after the
+  // overlay is in the DOM): the editor's own scrollHeight can be stale
+  // by a frame on WebKitGTK, which left the textarea shorter than its
+  // content - an inner scrollbar, a clipped overlay, white page below.
+  syncEditorHeight();
   scheduleSourceMarks();
+}
+
+/** Size the source textarea to the highlight overlay's laid-out height,
+ *  so the transparent editor and the overlay never desynchronize. */
+function syncEditorHeight(): void {
+  if (mdWrap.hidden) return;
+  editor.style.height = "auto";
+  editor.style.height = `${String(mdView.scrollHeight)}px`;
 }
 
 /* --- Proofing marks in the Markdown source view (spec:
@@ -3208,6 +3219,7 @@ function reflectActiveSection(): void {
 
 window.addEventListener("scroll", reflectActiveSection, { passive: true });
 window.addEventListener("resize", reflectActiveSection, { passive: true });
+window.addEventListener("resize", () => syncEditorHeight(), { passive: true });
 
 btnSidebar.addEventListener("click", () => {
   sidebar.hidden = !sidebar.hidden;

@@ -7498,6 +7498,31 @@ export class FolioDoc extends HTMLElement {
     label.className = "folio-audio-label";
     label.textContent = block.audio.alt || "audio clip";
     figure.appendChild(label);
+    // The native player attaches LAZILY (lazyFigure below): a document
+    // carrying hundreds of clips must not create hundreds of media
+    // widgets up front - on WebKitGTK that is seconds of render and of
+    // view switching. The label strip is the figure's identity until
+    // then; nearing the viewport (or any pointer/focus) attaches it.
+    const pending = document.createElement("div");
+    pending.className = "folio-audio-pending";
+    pending.innerHTML = `${FolioDoc.FC_ICONS.play}<span>audio clip - loads when scrolled into view</span>`;
+    figure.appendChild(pending);
+    if (block.audio.caption) {
+      const cap = document.createElement("figcaption");
+      cap.textContent = block.audio.caption;
+      figure.appendChild(cap);
+    }
+    this.lazyFigure(figure);
+    return figure;
+  }
+
+  /** Attach a lazy audio figure's native player (drawFigureNow's audio
+   *  case): swap the placeholder for the `<audio controls>` element. */
+  private attachAudio(figure: HTMLElement): void {
+    if (figure.querySelector("audio")) return;
+    const idx = Number(figure.dataset.blockIndex ?? -1);
+    const block = this.doc?.blocks[idx];
+    if (!block || block.kind !== "audio") return;
     const audio = document.createElement("audio");
     audio.controls = true;
     // A data: URI is already in memory - preloading its "metadata"
@@ -7507,13 +7532,7 @@ export class FolioDoc extends HTMLElement {
     audio.preload = block.audio.src.startsWith("data:") ? "none" : "metadata";
     audio.src = block.audio.src;
     audio.title = block.audio.alt ?? "";
-    figure.appendChild(audio);
-    if (block.audio.caption) {
-      const cap = document.createElement("figcaption");
-      cap.textContent = block.audio.caption;
-      figure.appendChild(cap);
-    }
-    return figure;
+    figure.querySelector(".folio-audio-pending")?.replaceWith(audio);
   }
 
   /** The audio inspector: alt text, caption, and a replace-file
@@ -9559,6 +9578,10 @@ export class FolioDoc extends HTMLElement {
     if (figure.hasAttribute("data-chart-source")) return this.drawChart(figure);
     if (figure.hasAttribute("data-diagram-id")) return this.drawDiagram(figure);
     if (figure.classList.contains("folio-math")) return this.drawMath(figure);
+    if (figure.classList.contains("folio-audio")) {
+      this.attachAudio(figure);
+      return;
+    }
     // A drawn block builds its picture (a 3D model too: paintJscad only
     // repaints a model already built - none was, and every model stayed
     // "Drawing…").

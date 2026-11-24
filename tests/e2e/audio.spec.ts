@@ -111,6 +111,34 @@ test.describe("audio blocks", () => {
     );
   });
 
+  test("an off-screen audio figure is pending and attaches when scrolled near", async ({
+    page,
+  }) => {
+    const filler = Array.from(
+      { length: 200 },
+      (_, i) => `Paragraph ${String(i)} with some words to push it down.`,
+    ).join("\n\n");
+    const wav = tinyWav().toString("base64");
+    await loadDoc(
+      page,
+      `# T\n\n${filler}\n\n::: audio {#far}\nsrc: data:audio/wav;base64,${wav}\nalt: "far clip"\n:::
+`,
+    );
+    const figure = page.locator("#the-doc figure.folio-audio");
+    await expect(figure).toHaveCount(1);
+    // Below the fold: placeholder, no media widget yet.
+    await expect(figure).toHaveAttribute("data-pending", "figure");
+    await expect(figure.locator(".folio-audio-pending")).toBeVisible();
+    await expect(figure.locator("audio")).toHaveCount(0);
+    // The label strip is still the figure's identity.
+    await expect(figure.locator(".folio-audio-label")).toHaveText("far clip");
+    // Scroll it into view: the player attaches.
+    await figure.scrollIntoViewIfNeeded();
+    await expect(figure.locator("audio")).toHaveCount(1);
+    await expect(figure).not.toHaveAttribute("data-pending", /.*/);
+    await expect(figure.locator("audio")).toHaveAttribute("preload", "none");
+  });
+
   test("the insert button embeds a picked file and reaches the source", async ({
     page,
   }) => {
