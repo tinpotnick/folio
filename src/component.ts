@@ -741,6 +741,9 @@ export class FolioDoc extends HTMLElement {
     selected: { display: number; col: number } | null;
   } = { filter: "", sortBy: null, sortDir: "asc", selected: null };
   private lastBlock: HTMLElement | null = null;
+  /** When set, print CSS shows only this section (desktop PDF export
+   * prints section by section; spec: docs/specs/print.md). */
+  private printSection: number | null = null;
   /** The block the caret was last seen in (typed atoms hydrate on leaving it). */
   private caretBlock: HTMLElement | null = null;
   /**
@@ -1533,7 +1536,123 @@ export class FolioDoc extends HTMLElement {
     this.renderCommentMarks(host);
     this.wrapSlides(host);
     this.refreshSlideState();
+    this.assignSectionClasses(host);
+    // Per-section named pages for print (spec: docs/specs/print.md,
+    // "Page sections") - dynamic because the section count varies.
+    const printSections = document.createElement("style");
+    printSections.id = "folio-print-sections";
+    printSections.textContent = this.printSectionsCss();
+    root.appendChild(printSections);
     this.scheduleMarks();
+  }
+
+  /** Section index per block (spec: docs/specs/print.md, "Page
+   * sections"): 0 before the first `::: page` block; each such block
+   * starts the next section, itself included. */
+  private sectionIndexes(): number[] {
+    const out: number[] = [];
+    let sec = 0;
+    for (const b of this.doc?.blocks ?? []) {
+      if (b.kind === "page") sec += 1;
+      out.push(sec);
+    }
+    return out;
+  }
+
+  /** Tag every block element with its section class (folio-sec-N) -
+   * slide wrappers get the union of their children's - so print CSS
+   * can name pages per section and the desktop export can print one
+   * section at a time. */
+  private assignSectionClasses(host: HTMLElement): void {
+    const secs = this.sectionIndexes();
+    for (const el of Array.from(
+      host.querySelectorAll<HTMLElement>("[data-block-index]"),
+    )) {
+      el.classList.add(
+        `folio-sec-${String(secs[Number(el.dataset.blockIndex ?? -1)] ?? 0)}`,
+      );
+    }
+    for (const w of Array.from(
+      host.querySelectorAll<HTMLElement>(":scope > .folio-slide"),
+    )) {
+      for (const el of Array.from(
+        w.querySelectorAll<HTMLElement>("[data-block-index]"),
+      )) {
+        w.classList.add(
+          `folio-sec-${String(secs[Number(el.dataset.blockIndex ?? -1)] ?? 0)}`,
+        );
+      }
+    }
+  }
+
+  /** The print-only rules that depend on the section count: named
+   * pages per section (section 0 keeps the base `@page`), and - when
+   * a single section is being printed for the desktop export - the
+   * hide-the-others filter. */
+  private printSectionsCss(): string {
+    const secs = this.sectionIndexes();
+    const max = secs.reduce((a, b) => Math.max(a, b), 0);
+    const lines: string[] = ["@media print {"];
+    for (let n = 1; n <= max; n++) {
+      lines.push(`.folio-sec-${String(n)} { page: folio-sec-${String(n)}; }`);
+    }
+    if (this.printSection !== null) {
+      for (let n = 0; n <= max; n++) {
+        if (n !== this.printSection) {
+          lines.push(`.folio-sec-${String(n)} { display: none !important; }`);
+        }
+      }
+      const want = `folio-sec-${String(this.printSection)}`;
+      lines.push(
+        `article.folio-doc[data-print-section] > .folio-slide { display: none !important; }`,
+      );
+      lines.push(
+        `article.folio-doc[data-print-section] > .folio-slide:has(.${want}) { display: block !important; }`,
+      );
+    }
+    lines.push("}");
+    return lines.join("\n");
+  }
+
+  /** Print only section `n` (null = the whole document) - the desktop
+   * PDF export prints each section separately so its furniture can be
+   * stamped at absolute page offsets (spec: docs/specs/print.md).
+   * Called from the host via window.__folioPrintSection. */
+  setPrintSection(n: number | null): void {
+    this.printSection = n;
+    const host = this.shadowRoot?.querySelector("article.folio-doc");
+    if (host) {
+      if (n === null) host.removeAttribute("data-print-section");
+      else host.setAttribute("data-print-section", String(n));
+    }
+    const st = this.shadowRoot?.querySelector<HTMLStyleElement>(
+      "#folio-print-sections",
+    );
+    if (st) st.textContent = this.printSectionsCss();
+  }
+
+  /** Insert a `::: page` section block after the caret's block (spec:
+   * docs/specs/print.md, "Page sections") - the palette's "Insert
+   * page section". The block starts empty; its header:/footer:/
+   * size:/orientation: lines are edited in the Markdown view. */
+  insertPageSection(): string | null {
+    if (!this.doc) return "No document";
+    const at = this.blockIndexAtCaret();
+    const idx = at >= 0 ? at + 1 : this.doc.blocks.length;
+    const used = new Set(
+      this.doc.blocks
+        .filter((b) => b.kind === "page")
+        .map((b) => (b.kind === "page" ? b.page.id : "")),
+    );
+    let n = 1;
+    while (used.has(`sec-${String(n)}`)) n += 1;
+    this.doc.blocks.splice(idx, 0, {
+      kind: "page",
+      page: { id: `sec-${String(n)}` },
+    });
+    this.render();
+    this.emitChange("insert");
+    return null;
   }
 
   /**
@@ -1833,6 +1952,19 @@ export class FolioDoc extends HTMLElement {
         nav.setAttribute("aria-label", "Contents");
         nav.dataset.blockIndex = String(idx);
         return nav;
+      }
+      case "page": {
+        // A print page section (spec: docs/specs/print.md, "Page
+        // sections"): an invisible placeholder on screen; in print a
+        // zero-height forced page break that starts the section.
+        // Classified "figure", so Enter/ArrowDown/click-below all
+        // behave (block-schema.md).
+        const mark = document.createElement("div");
+        mark.className = "folio-pagemark";
+        mark.contentEditable = "false";
+        mark.dataset.blockIndex = String(idx);
+        mark.dataset.pageId = block.page.id;
+        return mark;
       }
       case "footnotes": {
         // The definitions stay where the author wrote them in the
@@ -9407,6 +9539,14 @@ export class FolioDoc extends HTMLElement {
         (el.tagName === "ASIDE" && el.classList.contains("folio-fndefs")) ||
         (el.tagName === "NAV" && el.classList.contains("folio-toc"))
       ) {
+        const g = generated[gi];
+        gi += 1;
+        if (g) next.push(g);
+        continue;
+      }
+      if (el.classList.contains("folio-pagemark")) {
+        // A page-section marker survives the sync like other generated
+        // blocks (it is a "figure" in BLOCK_CLASS).
         const g = generated[gi];
         gi += 1;
         if (g) next.push(g);

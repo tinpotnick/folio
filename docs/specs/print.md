@@ -109,7 +109,7 @@ No separate PDF export engine, no new dependency (ADR-0007).
   `tests/e2e/print.spec.ts` (furniture CSS, light mode while printing,
   settings write the keys), eval `evals/page-numbers-first-contact.md`.
 
-## Page sections: changing the header/footer mid-document (proposed 2026-11-23)
+## Page sections: changing the header/footer mid-document (accepted 2026-11-23 - implemented on vibe/page-sections)
 
 - **What**: a `::: page {#sec-2}` block in the body (block-schema.md)
   starts a new print SECTION: a new printed page, and from that point

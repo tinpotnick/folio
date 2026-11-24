@@ -799,6 +799,48 @@ describe("select columns and crossfilter keys", () => {
   });
 });
 
+describe("page sections (spec: docs/specs/print.md, 'Page sections')", () => {
+  it("golden page-sections.md round-trips byte-identically", () => {
+    const text = loadGolden("page-sections.md");
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  it("parses header keys, no body; unknown key or body line throws", () => {
+    const src =
+      "::: page {#sec-1}\n" +
+      'header: "Chapter 2"\n' +
+      'footer: "Confidential"\n' +
+      "numbers: off\n" +
+      "orientation: landscape\n" +
+      ":::\n";
+    const doc = parseDoc(src);
+    const b = doc.blocks[0];
+    if (b?.kind !== "page") throw new Error("not a page block");
+    expect(b.page).toEqual({
+      id: "sec-1",
+      header: "Chapter 2",
+      footer: "Confidential",
+      numbers: "off",
+      orientation: "landscape",
+    });
+    expect(serializeDoc(doc)).toBe(src);
+    expect(() => parseDoc("::: page {#s}\nbogus: x\n:::\n")).toThrow(
+      /Unknown page key/,
+    );
+    expect(() => parseDoc("::: page {#s}\njust text\n:::\n")).toThrow(
+      /Bad directive line/,
+    );
+  });
+
+  it("is classified as a figure block", () => {
+    const doc = parseDoc("::: page {#s}\nheader: h\n:::\n");
+    const b = doc.blocks[0];
+    if (!b) throw new Error("no block");
+    expect(isFigureBlock(b)).toBe(true);
+    expect(blockClass(b)).toBe("figure");
+  });
+});
+
 describe("comments (spec: docs/specs/comments.md)", () => {
   it("golden comments.md round-trips byte-identically", () => {
     const text = loadGolden("comments.md");
@@ -899,6 +941,7 @@ describe("block classification (spec: docs/specs/block-schema.md)", () => {
       "footnotes",
       "toc",
       "comment",
+      "page",
     ];
     for (const kind of text) {
       expect(blockClass({ kind } as DocBlock)).toBe("text");

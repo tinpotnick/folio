@@ -1070,19 +1070,24 @@ function tableCss(style: TableStyle, mode: Mode): string {
   }
 }
 
-/** The CSS `@page { size: ... }` value for a typed page size. */
-export function pageSizeCss(size: PageSize): string {
+/** The CSS `@page { size: ... }` value for a typed page size and
+ *  orientation (spec: docs/specs/print.md, "Page sections"). No
+ *  orientation = the size's natural one (portrait paper, landscape
+ *  decks); explicit "portrait" on a deck size swaps its dimensions. */
+export function pageSizeCss(size: PageSize, orientation?: string): string {
+  const landscape = orientation === "landscape";
+  const portrait = orientation === "portrait";
   switch (size) {
     case "a4":
-      return "A4";
+      return landscape ? "A4 landscape" : "A4";
     case "a5":
-      return "A5";
+      return landscape ? "A5 landscape" : "A5";
     case "letter":
-      return "letter";
+      return landscape ? "letter landscape" : "letter";
     case "16:9":
-      return "16in 9in";
+      return portrait ? "9in 16in" : "16in 9in";
     case "4:3":
-      return "10.67in 8in";
+      return portrait ? "8in 10.67in" : "10.67in 8in";
   }
 }
 
@@ -2923,6 +2928,26 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       font-weight: 600;
       text-align: center;
       color: var(--folio-ink);
+    }
+    /* Page-section markers (docs/specs/print.md, "Page sections"): a
+       ::: page block is page furniture, never screen content - hidden
+       on screen, a zero-height forced page break in print. The
+       first-child guard keeps a leading marker from opening a blank
+       first page (same as pagebreak.h1). */
+    .folio-pagemark { display: none; }
+    @media print {
+      .folio-pagemark {
+        display: block;
+        height: 0;
+        margin: 0;
+        padding: 0;
+        break-before: page;
+        page-break-before: always;
+      }
+      .folio-pagemark:first-child {
+        break-before: auto;
+        page-break-before: auto;
+      }
     }
     /* Where a reference landed, picked out for a moment. */
     .folio-xref-target { animation: folio-fn-flash 1.6s ease-out; border-radius: 4px; }

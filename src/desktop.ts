@@ -4,7 +4,7 @@
  * same page serves both targets. Open/Save map to native file
  * dialogs; the document remains plain Markdown text end to end.
  */
-import type { Furniture } from "./render/page-furniture";
+import type { PageSectionFurniture } from "./render/page-furniture";
 export function isDesktop(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -176,14 +176,14 @@ export type ExportResult =
  * desktop), or the error. */
 export async function exportPdfFile(
   suggested: string,
-  furniture?: Furniture,
+  sections?: PageSectionFurniture[],
 ): Promise<ExportResult> {
   if (!isDesktop()) return { ok: false, reason: "unsupported" };
   const { invoke } = await import("@tauri-apps/api/core");
   try {
     return {
       ok: true,
-      path: await invoke<string>("export_pdf", { suggested, furniture }),
+      path: await invoke<string>("export_pdf", { suggested, sections }),
     };
   } catch (e) {
     return { ok: false, reason: String(e) };

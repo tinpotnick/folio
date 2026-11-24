@@ -7,22 +7,89 @@
 use lopdf::{dictionary, Dictionary, Document, Object, ObjectId, Stream};
 use std::path::Path;
 
-/// What to put on each page.
+/// What to put on the pages of one print SECTION (spec:
+/// docs/specs/print.md, "Page sections"): the web resolves the
+/// document's `::: page` blocks into one of these per section, and the
+/// export prints each section separately so its furniture can be
+/// stamped at absolute page offsets before merging.
 #[derive(Debug, Clone, serde::Deserialize)]
-pub struct Furniture {
-    /// The running header (the document's title), from page 2 on.
+pub struct SectionFurniture {
+    /// The running header (top left), from page 2 of the DOCUMENT on.
+    #[serde(default)]
     pub header: Option<String>,
+    /// The running footer (bottom left).
+    #[serde(default)]
+    pub footer: Option<String>,
     /// "Page n of N", bottom right.
+    #[serde(default = "default_true")]
     pub numbers: bool,
-    /// The document's `page.size` style key ("a4", "16:9", ...); the
-    /// export's paper size. Suppressed furniture on slides comes
-    /// through header=None, numbers=false.
+    /// The section's paper size key ("a4", "16:9", ...).
     #[serde(default = "default_page_size")]
     pub page_size: String,
+    /// The section's orientation: "portrait" | "landscape".
+    #[serde(default = "default_portrait")]
+    pub orientation: String,
+}
+
+/// The furniture of one absolute page of the merged export.
+#[derive(Debug, Clone)]
+pub struct PageFurniture {
+    pub header: Option<String>,
+    pub footer: Option<String>,
+    pub numbers: bool,
 }
 
 fn default_page_size() -> String {
     "a4".to_string()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_portrait() -> String {
+    "portrait".to_string()
+}
+
+/// Merge section PDFs into one file, in order (lopdf: renumber each
+/// source's objects out of the way, copy them over, re-parent its
+/// pages onto the merged Pages node).
+pub fn merge(paths: &[std::path::PathBuf], out: &Path) -> Result<(), String> {
+    let mut document = Document::with_version("1.5");
+    let pages_id = document.new_object_id();
+    let mut max_id = document.max_id + 1;
+    let mut kids: Vec<Object> = Vec::new();
+    for p in paths {
+        let mut doc = Document::load(p).map_err(|e| e.to_string())?;
+        doc.renumber_objects_with(max_id);
+        max_id = doc.max_id + 1;
+        let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
+        for (id, obj) in std::mem::take(&mut doc.objects) {
+            document.objects.insert(id, obj);
+        }
+        for pid in page_ids {
+            if let Ok(dict) = document.get_dictionary_mut(pid) {
+                let _ = dict.set("Parent", pages_id);
+            }
+            kids.push(Object::Reference(pid));
+        }
+    }
+    let count = kids.len();
+    document.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! {
+            "Type" => "Pages",
+            "Kids" => kids,
+            "Count" => count as i64,
+        }),
+    );
+    let catalog = document.add_object(dictionary! {
+        "Type" => "Catalog",
+        "Pages" => pages_id,
+    });
+    document.trailer.set("Root", catalog);
+    document.save(out).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 const FONT_NAME: &[u8] = b"FolioFurniture";
@@ -157,16 +224,27 @@ fn add_font(doc: &mut Document, page: ObjectId, font: ObjectId) -> Result<(), St
     Ok(())
 }
 
-/// Stamp the furniture onto every page of the PDF at `path`, in place.
-pub fn stamp(path: &Path, f: &Furniture) -> Result<(), String> {
-    // A title Helvetica cannot spell (another script) is left off
-    // rather than printed as "???".
-    let header = f
-        .header
-        .as_deref()
-        .map(str::trim)
-        .filter(|h| !h.is_empty() && h.chars().all(|c| win_ansi(c) != b'?' || c == '?'));
-    if header.is_none() && !f.numbers {
+/// A text Helvetica can spell (WinAnsi), or None - an unspellable
+/// title is left off rather than printed as "???".
+fn spellable(s: &str) -> Option<&str> {
+    let t = s.trim();
+    if t.is_empty() || !t.chars().all(|c| win_ansi(c) != b'?' || c == '?') {
+        None
+    } else {
+        Some(t)
+    }
+}
+
+/// Stamp per-page furniture onto the PDF at `path`, in place. `pages`
+/// is one entry per absolute page of the merged document: the header
+/// is suppressed on the document's first page only (it carries the
+/// title), footers go bottom left, numbers bottom right as absolute
+/// "Page n of N" (spec: docs/specs/print.md, "Page sections").
+pub fn stamp_pages(path: &Path, pages: &[PageFurniture]) -> Result<(), String> {
+    if pages
+        .iter()
+        .all(|p| p.header.is_none() && p.footer.is_none() && !p.numbers)
+    {
         return Ok(());
     }
     let mut doc = Document::load(path).map_err(|e| e.to_string())?;
@@ -176,21 +254,35 @@ pub fn stamp(path: &Path, f: &Furniture) -> Result<(), String> {
         "BaseFont" => "Helvetica",
         "Encoding" => "WinAnsiEncoding",
     });
-    let pages = doc.get_pages();
-    let total = pages.len();
-    for (n, page) in pages {
-        let (w, h) = media_box(&doc, page);
+    let page_ids: Vec<ObjectId> = doc.get_pages().into_values().collect();
+    let total = page_ids.len();
+    if pages.len() != total {
+        return Err(format!(
+            "furniture for {} pages but the PDF has {total}",
+            pages.len()
+        ));
+    }
+    for (i, page) in page_ids.iter().enumerate() {
+        let f = &pages[i];
+        let abs = i + 1;
+        let (w, h) = media_box(&doc, *page);
         let mut ops: Vec<u8> = b"Q q 0.42 g BT\n".to_vec();
         let font_op = format!("/{} {SIZE} Tf\n", String::from_utf8_lossy(FONT_NAME));
         ops.extend_from_slice(font_op.as_bytes());
-        if let Some(title) = header.filter(|_| n > 1) {
+        if let Some(title) = f.header.as_deref().and_then(spellable).filter(|_| abs > 1) {
             let line = format!("1 0 0 1 {:.2} {:.2} Tm ", 16.0 * MM, h - 11.0 * MM);
             ops.extend_from_slice(line.as_bytes());
             ops.extend_from_slice(&pdf_string(title));
             ops.extend_from_slice(b" Tj\n");
         }
+        if let Some(foot) = f.footer.as_deref().and_then(spellable) {
+            let line = format!("1 0 0 1 {:.2} {:.2} Tm ", 16.0 * MM, 9.0 * MM);
+            ops.extend_from_slice(line.as_bytes());
+            ops.extend_from_slice(&pdf_string(foot));
+            ops.extend_from_slice(b" Tj\n");
+        }
         if f.numbers {
-            let label = format!("Page {n} of {total}");
+            let label = format!("Page {abs} of {total}");
             let x = w - 16.0 * MM - text_width(&label);
             let line = format!("1 0 0 1 {:.2} {:.2} Tm ", x, 9.0 * MM);
             ops.extend_from_slice(line.as_bytes());
@@ -198,11 +290,11 @@ pub fn stamp(path: &Path, f: &Furniture) -> Result<(), String> {
             ops.extend_from_slice(b" Tj\n");
         }
         ops.extend_from_slice(b"ET Q\n");
-        add_font(&mut doc, page, font)?;
+        add_font(&mut doc, *page, font)?;
         // Wrap what the page already draws in q ... Q, so no state it
         // leaves behind (a transform, a colour) moves the furniture.
         let opening = doc.add_object(Stream::new(Dictionary::new(), b"q\n".to_vec()));
-        let page_dict = doc.get_dictionary_mut(page).map_err(|e| e.to_string())?;
+        let page_dict = doc.get_dictionary_mut(*page).map_err(|e| e.to_string())?;
         let mut contents = match page_dict.get(b"Contents") {
             Ok(Object::Reference(id)) => vec![Object::Reference(*id)],
             Ok(Object::Array(a)) => a.clone(),
@@ -211,7 +303,7 @@ pub fn stamp(path: &Path, f: &Furniture) -> Result<(), String> {
         contents.insert(0, Object::Reference(opening));
         page_dict.set("Contents", contents);
         // `ops` starts with Q (closing the wrap) then opens its own q.
-        doc.add_page_contents(page, ops)
+        doc.add_page_contents(*page, ops)
             .map_err(|e| e.to_string())?;
     }
     doc.save(path).map_err(|e| e.to_string())?;
@@ -281,17 +373,24 @@ mod tests {
     fn stamps_numbers_on_every_page_and_the_header_from_page_two() {
         let path = std::env::temp_dir().join("folio-furniture-a.pdf");
         two_pages(&path);
-        let f = Furniture {
-            header: Some("Q3 Review".into()),
-            numbers: true,
-            page_size: "a4".into(),
-        };
-        stamp(&path, &f).unwrap();
-        let pages = page_text(&path);
-        assert!(pages[0].contains("(Page 1 of 2)") && !pages[0].contains("Q3 Review"));
-        assert!(pages[1].contains("(Page 2 of 2)") && pages[1].contains("(Q3 Review)"));
+        let pages = vec![
+            PageFurniture {
+                header: Some("Q3 Review".into()),
+                footer: None,
+                numbers: true,
+            },
+            PageFurniture {
+                header: Some("Q3 Review".into()),
+                footer: None,
+                numbers: true,
+            },
+        ];
+        stamp_pages(&path, &pages).unwrap();
+        let out = page_text(&path);
+        assert!(out[0].contains("(Page 1 of 2)") && !out[0].contains("Q3 Review"));
+        assert!(out[1].contains("(Page 2 of 2)") && out[1].contains("(Q3 Review)"));
         // The page's own drawing is wrapped, so it cannot move the stamp.
-        assert!(pages[1].starts_with("q\n"));
+        assert!(out[1].starts_with("q\n"));
         std::fs::remove_file(&path).ok();
     }
 
@@ -299,14 +398,84 @@ mod tests {
     fn a_title_helvetica_cannot_spell_is_left_off() {
         let path = std::env::temp_dir().join("folio-furniture-b.pdf");
         two_pages(&path);
-        let f = Furniture {
-            header: Some("季度报告".into()),
-            numbers: true,
-            page_size: "a4".into(),
-        };
-        stamp(&path, &f).unwrap();
-        let pages = page_text(&path);
-        assert!(pages[1].contains("(Page 2 of 2)") && !pages[1].contains("?"));
+        let pages = vec![
+            PageFurniture {
+                header: Some("季度报告".into()),
+                footer: None,
+                numbers: true,
+            },
+            PageFurniture {
+                header: Some("季度报告".into()),
+                footer: None,
+                numbers: true,
+            },
+        ];
+        stamp_pages(&path, &pages).unwrap();
+        let out = page_text(&path);
+        assert!(out[1].contains("(Page 2 of 2)") && !out[1].contains("?"));
         std::fs::remove_file(&path).ok();
+    }
+
+    /// Sections (spec: docs/specs/print.md, "Page sections"): per-page
+    /// furniture, footer bottom left, and ABSOLUTE numbering across
+    /// the merged document - a section break never restarts the count.
+    #[test]
+    fn stamps_per_section_pages_with_absolute_numbers_and_footer() {
+        let path = std::env::temp_dir().join("folio-furniture-c.pdf");
+        // A three-page merged export: section 0 = pages 1-2, section 1 = page 3.
+        let mut doc = Document::with_version("1.5");
+        let pages_id = doc.new_object_id();
+        let mut kids = vec![];
+        for _ in 0..3 {
+            let content = doc.add_object(Stream::new(dictionary! {}, b"0 0 m".to_vec()));
+            kids.push(Object::Reference(doc.add_object(dictionary! {
+                "Type" => "Page",
+                "Parent" => pages_id,
+                "Contents" => content,
+            })));
+        }
+        doc.objects.insert(
+            pages_id,
+            Object::Dictionary(dictionary! {
+                "Type" => "Pages",
+                "Kids" => kids,
+                "Count" => 3,
+                "Resources" => dictionary! {},
+                "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+            }),
+        );
+        let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+        doc.trailer.set("Root", catalog);
+        doc.save(&path).unwrap();
+
+        let pages = vec![
+            PageFurniture { header: Some("Doc title".into()), footer: Some("Draft".into()), numbers: true },
+            PageFurniture { header: Some("Doc title".into()), footer: Some("Draft".into()), numbers: true },
+            PageFurniture { header: Some("Part Two".into()), footer: None, numbers: true },
+        ];
+        stamp_pages(&path, &pages).unwrap();
+        let out = page_text(&path);
+        // Page 1: no header (carries the title), footer + numbers.
+        assert!(!out[0].contains("(Doc title)") && out[0].contains("(Draft)") && out[0].contains("(Page 1 of 3)"));
+        // Page 3: the new section's header, no footer, absolute number.
+        assert!(out[2].contains("(Part Two)") && !out[2].contains("(Draft)") && out[2].contains("(Page 3 of 3)"));
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// The export merges the per-section PDFs in document order.
+    #[test]
+    fn merges_section_pdfs_in_order() {
+        let dir = std::env::temp_dir();
+        let a = dir.join("folio-merge-a.pdf");
+        let b = dir.join("folio-merge-b.pdf");
+        let out = dir.join("folio-merge-out.pdf");
+        two_pages(&a);
+        two_pages(&b);
+        merge(&[a.clone(), b.clone()], &out).unwrap();
+        let doc = Document::load(&out).unwrap();
+        assert_eq!(doc.get_pages().len(), 4);
+        std::fs::remove_file(&a).ok();
+        std::fs::remove_file(&b).ok();
+        std::fs::remove_file(&out).ok();
     }
 }

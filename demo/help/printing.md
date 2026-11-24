@@ -18,3 +18,17 @@
   off - use Export as PDF**, then print that file if you want paper.
   When printing from a browser, Chrome and Edge show them, Safari
   does not.
+- **Change the header or footer partway through** (spec: page
+  sections): search "insert page section" in the palette (Ctrl+K) to
+  add a `::: page` block where your cursor is. It starts a new printed
+  page, and from there on the pages carry what the block says -
+  `header:`, `footer:`, `numbers: off`, and even `size:` /
+  `orientation: landscape`. Keys you leave out carry over from the
+  previous section, and page numbers keep counting ("Page 4 of 12",
+  never restarting). Edit the block's lines in the Markdown view. On
+  screen the block is invisible - page furniture only ever appears on
+  paper.
+- **Orientation for the whole document**: Document settings has an
+  Orientation dropdown (Portrait/Landscape) next to Paper size - it
+  writes the `page.orientation` style key. A `::: page` block can
+  override it per section.
