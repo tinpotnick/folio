@@ -964,6 +964,17 @@
         color: var(--gutter);
         font-style: italic;
       }
+      /* Data chip: a long data: URI renders as a compact label (mime +
+         size) in the source overlay instead of a multi-KB text run. The
+         full URI is in the file/textarea - open the .md in a text editor
+         and you see it all; the caret's line renders the raw URI. */
+      .md-view .tk-data {
+        background: var(--accent-bg);
+        color: var(--accent-text);
+        border-radius: 4px;
+        padding: 0 6px;
+        white-space: pre;
+      }
       /* The sticky app header's height: the document's sticky
          code headers stop below it instead of under it. */
       #the-doc {

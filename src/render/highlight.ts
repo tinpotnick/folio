@@ -22,6 +22,7 @@ export type MdTokenKind =
   | "directive"
   | "directive-key"
   | "directive-list"
+  | "data"
   | "text";
 
 export interface MdToken {
@@ -108,8 +109,42 @@ export function highlightMarkdown(src: string): MdLine[] {
     } else {
       tokens = inlineTokens(line);
     }
-    return { tokens };
+    return { tokens: splitDataTokens(tokens) };
   });
+}
+
+/** A `data:` URI with a base64 payload longer than this becomes its own
+ * `data` token, so the host can render it as a compact chip instead of a
+ * multi-KB text run (spec: docs/specs/section-browser-and-highlighting.md
+ * - in a plain text editor the URI is all there; in folio it is a chip).
+ * The token's text is the FULL URI: the round-trip property (concatenated
+ * token text equals the source) still holds, and the textarea/file keep
+ * the real bytes. */
+const MIN_DATA_PAYLOAD = 128;
+const DATA_URI_RE = new RegExp(
+  `data:([^\\s;,]{1,120});base64,([A-Za-z0-9+/=]{${String(MIN_DATA_PAYLOAD)},})`,
+  "g",
+);
+
+function splitDataTokens(tokens: MdToken[]): MdToken[] {
+  const out: MdToken[] = [];
+  for (const tok of tokens) {
+    DATA_URI_RE.lastIndex = 0;
+    let last = 0;
+    let found = false;
+    let m: RegExpExecArray | null;
+    while ((m = DATA_URI_RE.exec(tok.text)) !== null) {
+      found = true;
+      if (m.index > last)
+        out.push({ kind: tok.kind, text: tok.text.slice(last, m.index) });
+      out.push({ kind: "data", text: m[0] });
+      last = m.index + m[0].length;
+    }
+    if (!found) out.push(tok);
+    else if (last < tok.text.length)
+      out.push({ kind: tok.kind, text: tok.text.slice(last) });
+  }
+  return out;
 }
 
 function frontmatterLine(line: string): MdToken[] {

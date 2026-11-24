@@ -99,7 +99,9 @@ test.describe("markdown source view", () => {
     const big =
       "# T\n\n::: audio {#c}\nsrc: data:audio/wav;base64," +
       "A".repeat(60000) +
-      "\n:::\n";
+      "\n:::\n\n" +
+      "B".repeat(60000) +
+      "\n";
     await page.locator("#btn-markdown").click();
     await page.locator("#editor").fill(big);
     await page.locator("#btn-view").click();
@@ -126,33 +128,41 @@ test.describe("markdown source view", () => {
       return view.scrollLeft;
     });
     expect(panned).toBe(5000);
-    // The long line is a single overlay row: no wrapped-row explosion.
-    // It renders TRUNCATED in the overlay (bounded paint), with a marker.
-    const trunc = await page.evaluate(() => {
+    // The data-URI line renders as ONE compact row with a data chip (mime
+    // + size), not a 60k-char text run; a huge non-data line truncates.
+    const compact = await page.evaluate(() => {
       const view = document.querySelector("#md-view") as HTMLElement;
       const rows = Array.from(view.querySelectorAll(".ln"));
-      const long = rows.find((r) =>
-        (r.textContent ?? "").includes("data:audio/wav;base64,"),
+      const audioRow = rows.find((r) =>
+        (r.textContent ?? "").includes("base64"),
       );
-      if (!long) return { found: false } as const;
-      const mark = long.querySelector(".tk-trunc");
+      const chip = audioRow?.querySelector(".tk-data");
+      const blobRow = rows.find((r) =>
+        /^B+$/.test((r.textContent ?? "").slice(0, 100)),
+      );
+      const mark = blobRow?.querySelector(".tk-trunc");
       return {
-        found: true,
-        textLen: (long.textContent ?? "").length,
-        height: long.getBoundingClientRect().height,
-        marker: mark?.textContent ?? "",
-      } as const;
+        audioLen: (audioRow?.textContent ?? "").length,
+        audioHeight: audioRow?.getBoundingClientRect().height ?? -1,
+        chipText: chip?.textContent ?? "",
+        noTruncOnAudio: !audioRow?.querySelector(".tk-trunc"),
+        blobLen: (blobRow?.textContent ?? "").length,
+        blobMarker: mark?.textContent ?? "",
+      };
     });
-    expect(trunc.found).toBe(true);
-    if (trunc.found) {
-      expect(trunc.textLen).toBeLessThan(1100); // prefix + marker, not 60k
-      expect(trunc.height).toBeGreaterThan(0);
-      expect(trunc.height).toBeLessThan(60); // one text row, not wrapped rows
-      expect(trunc.marker).toMatch(/^ …\(\+\d+\)$/);
-    }
+    expect(compact.audioLen).toBeLessThan(100); // chip, not 60k
+    expect(compact.audioHeight).toBeGreaterThan(0);
+    expect(compact.audioHeight).toBeLessThan(60); // one row, no wrap explosion
+    expect(compact.chipText).toMatch(
+      /^data:audio\/wav;base64 \[\d+(\.\d+)? kB\]$/,
+    );
+    expect(compact.noTruncOnAudio).toBe(true);
+    expect(compact.blobLen).toBeLessThan(1100); // truncated prefix + marker
+    expect(compact.blobMarker).toMatch(/^ …\(\+\d+\)$/);
     // The textarea keeps the full text (it is the model - round-trip).
     await expect(page.locator("#editor")).toHaveValue(/A{60000}/);
-    // Moving the caret into the truncated line expands it in the overlay.
+    await expect(page.locator("#editor")).toHaveValue(/B{60000}/);
+    // Moving the caret into the chipped line expands it to the raw URI.
     await page.evaluate(() => {
       const ed = document.querySelector("#editor") as HTMLTextAreaElement;
       const pos = ed.value.indexOf("base64,") + 10;
@@ -163,31 +173,31 @@ test.describe("markdown source view", () => {
     const expanded = await page.evaluate(() => {
       const view = document.querySelector("#md-view") as HTMLElement;
       const rows = Array.from(view.querySelectorAll(".ln"));
-      const long = rows.find((r) =>
-        (r.textContent ?? "").includes("data:audio/wav;base64,"),
-      );
+      const long = rows.find((r) => (r.textContent ?? "").includes("base64,"));
       return {
         textLen: (long?.textContent ?? "").length,
-        hasMarker: !!long?.querySelector(".tk-trunc"),
+        hasChip: !!long?.querySelector(".tk-data"),
       };
     });
     expect(expanded.textLen).toBeGreaterThan(50000);
-    expect(expanded.hasMarker).toBe(false);
-    // Moving the caret out truncates it again.
+    expect(expanded.hasChip).toBe(false);
+    // Moving the caret out chips it again.
     await page.evaluate(() => {
       const ed = document.querySelector("#editor") as HTMLTextAreaElement;
       ed.setSelectionRange(0, 0);
       ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
     });
-    const retruncated = await page.evaluate(() => {
+    const rechipped = await page.evaluate(() => {
       const view = document.querySelector("#md-view") as HTMLElement;
       const rows = Array.from(view.querySelectorAll(".ln"));
-      const long = rows.find((r) =>
-        (r.textContent ?? "").includes("data:audio/wav;base64,"),
-      );
-      return (long?.textContent ?? "").length;
+      const long = rows.find((r) => (r.textContent ?? "").includes("base64"));
+      return {
+        textLen: (long?.textContent ?? "").length,
+        hasChip: !!long?.querySelector(".tk-data"),
+      };
     });
-    expect(retruncated).toBeLessThan(1100);
+    expect(rechipped.textLen).toBeLessThan(100);
+    expect(rechipped.hasChip).toBe(true);
   });
 
   test("edited source round-trips back into the rendered view", async ({

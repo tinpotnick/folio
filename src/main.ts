@@ -412,8 +412,27 @@ const MAX_OVERLAY_CHARS = 1024;
 
 let lastLines: MdLine[] = [];
 let lastLineStarts: number[] = [];
+/** Lines rendered as a bounded prefix + marker (no data URI on them):
+ * their child spans no longer map 1:1 to tokens, so proofing marks
+ * skip them. */
 const truncatedLines = new Set<number>();
+/** Lines rendered compact (chip for the data URI, or truncation) that
+ * expand to full raw text while the caret is in them. */
+const compactLines = new Set<number>();
 let expandedLine = -1;
+
+/** Chip label for a data-URI token: the mime type and payload size,
+ * not the payload itself. */
+function dataChipLabel(uri: string): string {
+  const semi = uri.indexOf(";");
+  const mime = semi > 5 ? uri.slice(5, semi) : "";
+  const b64 = uri.indexOf(";base64,");
+  const payload = b64 >= 0 ? uri.length - (b64 + 8) : 0;
+  const kb = payload / 1024;
+  const size =
+    kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(1)} kB`;
+  return `data:${mime};base64 [${size}]`;
+}
 
 function lineLength(line: MdLine): number {
   let n = 0;
@@ -446,14 +465,30 @@ function buildLineEl(li: number, full: boolean): HTMLElement {
     return ln;
   }
   const total = lineLength(line);
-  const truncate = !full && total > MAX_OVERLAY_CHARS;
+  const hasData = line.tokens.some((t) => t.kind === "data");
+  // A line with a data URI renders the URI as a chip; a huge line
+  // without one renders a bounded prefix + marker. Either way the row
+  // stays cheap to lay out and paint.
+  const truncate = !full && !hasData && total > MAX_OVERLAY_CHARS;
+  const chipped = !full && hasData;
   if (truncate) truncatedLines.add(li);
   else truncatedLines.delete(li);
+  if (truncate || chipped) compactLines.add(li);
+  else compactLines.delete(li);
   let used = 0;
   for (const tok of line.tokens) {
     if (truncate && used >= MAX_OVERLAY_CHARS) break;
     const span = document.createElement("span");
-    span.className = `tk-${tok.kind}`;
+    if (tok.kind === "data" && chipped) {
+      // The chip: mime + size only. The textarea still holds the full
+      // URI (it is the model); the caret's line renders the raw URI.
+      span.className = "tk-data";
+      span.textContent = dataChipLabel(tok.text);
+      ln.appendChild(span);
+      continue;
+    }
+    // Full render (caret in the line): the data URI is plain raw text.
+    span.className = tok.kind === "data" ? "tk-text" : `tk-${tok.kind}`;
     if (truncate && used + tok.text.length > MAX_OVERLAY_CHARS) {
       span.textContent = tok.text.slice(0, MAX_OVERLAY_CHARS - used);
       used = MAX_OVERLAY_CHARS;
@@ -484,6 +519,7 @@ function renderHighlight(): void {
     }
   }
   truncatedLines.clear();
+  compactLines.clear();
   const caretLine = caretLineOf(editor.selectionStart ?? 0);
   expandedLine = caretLine;
   mdView.textContent = "";
@@ -506,30 +542,28 @@ function renderHighlight(): void {
  *  so the transparent editor and the overlay never desynchronize. */
 function syncEditorHeight(): void {
   if (mdWrap.hidden) return;
-  editor.style.height = "auto";
-  editor.style.height = `${String(mdView.scrollHeight)}px`;
+  // One guarded write: setting "auto" first would force a full textarea
+  // relayout twice per render on docs with huge lines.
+  const h = `${String(mdView.scrollHeight)}px`;
+  if (editor.style.height !== h) editor.style.height = h;
 }
 
-/** Expand the caret's overlay row if it was truncated (and re-truncate
- *  the row the caret left): colors then align with the caret inside a
- *  huge (data-URI) line while that line is being edited. */
+/** Expand the caret's overlay row if it was rendered compact - chip or
+ *  truncated (and re-compact the row the caret left): colors then align
+ *  with the caret inside a huge (data-URI) line while it is edited. */
 function refreshCaretLine(): void {
   if (mdWrap.hidden || lastLines.length === 0) return;
   const li = caretLineOf(editor.selectionStart ?? 0);
   if (li === expandedLine) return;
   const prev = expandedLine;
   expandedLine = li;
-  if (
-    prev >= 0 &&
-    prev < lastLines.length &&
-    prev !== li &&
-    !truncatedLines.has(prev) &&
-    lineLength(lastLines[prev] ?? { tokens: [] }) > MAX_OVERLAY_CHARS
-  ) {
+  if (prev >= 0 && prev < lastLines.length && prev !== li) {
+    // The caret left prev: re-render it compact (buildLineEl decides
+    // chip/truncation/full and updates the sets).
     const oldEl = mdView.children[prev];
     if (oldEl) mdView.replaceChild(buildLineEl(prev, false), oldEl);
   }
-  if (truncatedLines.has(li)) {
+  if (compactLines.has(li)) {
     const newEl = mdView.children[li];
     if (newEl) mdView.replaceChild(buildLineEl(li, true), newEl);
   }

@@ -29,16 +29,15 @@ const mdVisible = !(document.querySelector("#md-wrap")?.hidden ?? true);
 const wrapOff =
   document.querySelector("#editor")?.getAttribute("wrap") === "off";
 const allPaused = auds.every((a) => a.paused);
-// The multi-KB src lines render truncated in the overlay (bounded
-// layout/paint), each with a marker.
+// The multi-KB src lines render as data chips in the overlay (bounded
+// layout/paint), each with a mime + size label.
 const srcRows = Array.from(document.querySelectorAll("#md-view .ln")).filter(
-  (r) => (r.textContent ?? "").includes("base64,"),
+  (r) => (r.textContent ?? "").includes("base64"),
 );
-const truncOk =
+const chipOk =
   srcRows.length === 3 &&
   srcRows.every(
-    (r) =>
-      (r.textContent ?? "").length < 1100 && !!r.querySelector(".tk-trunc"),
+    (r) => (r.textContent ?? "").length < 100 && !!r.querySelector(".tk-data"),
   );
 return [
   "",
@@ -50,5 +49,5 @@ return [
   "markdown view opened on switch: " + mdVisible,
   "source editor is wrap=off (no soft wrap of data-URI lines): " + wrapOff,
   "all clips paused after leaving document view: " + allPaused,
-  "data-URI src lines render truncated in the overlay: " + truncOk,
+  "data-URI src lines render as chips in the overlay: " + chipOk,
 ].join(" | ");
