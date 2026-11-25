@@ -9010,9 +9010,31 @@ export class FolioDoc extends HTMLElement {
 
   /** RMS peaks (0..1, normalized) of an audio src, or null when the
    * bytes cannot be decoded (external URL, unsupported codec). */
+  /** Bytes of a data: URI decoded straight from base64 - no
+   * fetch(): WebKitGTK's fetch of data: URLs is unreliable, and the
+   * bytes are already in memory. Null when the URI is malformed. */
+  private dataUriBytes(src: string): ArrayBuffer | null {
+    const m = /^data:([^;,]*)(;base64)?,(.*)$/s.exec(src);
+    if (!m) return null;
+    try {
+      if (m[2]) {
+        const bin = atob(m[3] ?? "");
+        const out = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+        return out.buffer;
+      }
+      return new TextEncoder().encode(decodeURIComponent(m[3] ?? "")).buffer;
+    } catch {
+      return null;
+    }
+  }
+
   private async audioPeaks(src: string): Promise<number[] | null> {
     try {
-      const buf = await (await fetch(src)).arrayBuffer();
+      const buf = src.startsWith("data:")
+        ? this.dataUriBytes(src)
+        : await (await fetch(src)).arrayBuffer();
+      if (!buf) return null;
       const AC =
         window.OfflineAudioContext ??
         (
@@ -9022,7 +9044,17 @@ export class FolioDoc extends HTMLElement {
         ).webkitOfflineAudioContext;
       if (!AC) return null;
       const ctx = new AC(1, 1, 44100);
-      const decoded = await ctx.decodeAudioData(buf);
+      // decodeAudioData: promise form where supported, legacy
+      // callback form otherwise (older WebKitGTK) - accept both.
+      const decode = ctx.decodeAudioData.bind(ctx) as unknown as (
+        b: ArrayBuffer,
+        ok?: (b: AudioBuffer) => void,
+        err?: (e: unknown) => void,
+      ) => Promise<AudioBuffer> | undefined;
+      const decoded = await new Promise<AudioBuffer>((resolve, reject) => {
+        const p = decode(buf, resolve, reject);
+        if (p) p.then(resolve, reject);
+      });
       const ch = decoded.getChannelData(0);
       const N = 480;
       const step = Math.max(1, Math.floor(ch.length / N));
@@ -9054,9 +9086,13 @@ export class FolioDoc extends HTMLElement {
     try {
       const a = document.createElement("a");
       if (clip.src.startsWith("data:")) {
-        const blob = await (await fetch(clip.src)).blob();
+        const bytes = this.dataUriBytes(clip.src);
+        if (!bytes) return;
+        const mime =
+          /^data:([^;,]*)/.exec(clip.src)?.[1] ?? "application/octet-stream";
+        const blob = new Blob([bytes], { type: mime });
         a.href = URL.createObjectURL(blob);
-        const ext = (blob.type.split("/")[1] ?? "audio").split(";")[0];
+        const ext = (mime.split("/")[1] ?? "audio").split(";")[0];
         a.download = `${name}.${ext === "mpeg" ? "mp3" : ext}`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 5000);
