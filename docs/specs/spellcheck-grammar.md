@@ -137,6 +137,19 @@ digits, and numbers anywhere were squiggled):
   menu); picking a suggestion rewrites the source in place, and the
   change lands in the model when the view switches back.
 
+## Grammar lint input is bounded
+
+Harper never sees data. Before linting, `maskForLint`
+(src/spell/grammar.ts) replaces every unbroken run longer than 128
+characters (data: URIs, base64, hashes) with spaces of the same
+length, and the source view additionally blanks frontmatter and
+`:::` directive lines - hits there are never shown anyway. Offsets
+are preserved, so marks and suggestions still index the real text.
+Harper runs on the main thread and its cost on such runs is
+super-linear: unmasked, the Levantine Arabic example (eight ~5 kB
+audio clips) took ~30 s and froze the app after switching to the
+Markdown view with grammar check on.
+
 ## Known grammar-coverage gaps (2026-11-18)
 
 Verified against harper.js 3.0.0 (the pinned version) and 3.2.0 (latest),

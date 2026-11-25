@@ -38,6 +38,19 @@ RECORDED media (a file the document carries).
 - **Offline**: data URIs are the recommended form - the sound is
   the document (a sane 8 MB ceiling, the same as images, keeps the
   Markdown source workable; a 3-minute MP3 fits comfortably).
+- **Preload**: a `data:` src gets `preload="none"` (URLs keep
+  `metadata`). A data URI is already in memory, and on WebKitGTK a
+  metadata preload of a data URI never settles - the native widget's
+  spinner spins forever and the media pipeline stays open, which also
+  made switching to Markdown view slow (hundreds of ms per clip).
+  Play loads a data URI instantly on demand. Leaving the document
+  view pauses any playing clip (`FolioDoc.pauseMedia()`).
+- **Lazy widget**: the `<audio controls>` element attaches only when
+  the figure nears the viewport (or on pointer/focus into it) - the
+  lazy-figure contract (docs/specs/section-windowing.md); before that
+  the figure shows its alt-text label plus a placeholder row. A deck
+  document with hundreds of clips stays fast to render and to switch
+  views on.
   External URLs/paths render opportunistically; they are never a
   render dependency.
 - **Insert**: the insert group's speaker button opens the host

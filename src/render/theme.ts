@@ -80,6 +80,8 @@ export interface Theme {
   pageSize: PageSize;
   /** Slide look, applied on top of any theme while playing (slides.md). */
   slide: SlideTheme;
+  /** Flashcard deck look (docs/specs/flashcards.md). */
+  flashcard: FlashcardTheme;
   /** Image figure layout, document-wide - theme-owned per ADR-0002;
    *  never a per-image document key (docs/specs/images.md). */
   figureImage: FigureImageTheme;
@@ -93,6 +95,23 @@ export interface FigureImageTheme {
   align: "left" | "center" | "right";
   /** Figure box max width (CSS length or % of the measure). */
   width: string;
+}
+
+/** The flashcard.* keys: closed, typed, theme-side only (ADR-0002) -
+ *  docs/specs/flashcards.md. Feedback colors are per rendition; the
+ *  radius and all layout live here too, so the deck restyles with any
+ *  theme and dark mode without a single style literal in a document. */
+export interface FlashcardTheme {
+  /** Tile/card corner radius. */
+  radius: string;
+  /** Matched / correct feedback. */
+  ok: Record<Mode, string>;
+  okBg: Record<Mode, string>;
+  okBorder: Record<Mode, string>;
+  /** Wrong-attempt feedback. */
+  bad: Record<Mode, string>;
+  badBg: Record<Mode, string>;
+  badBorder: Record<Mode, string>;
 }
 
 /** Typed `page.size` values (docs/specs/slides.md). */
@@ -229,6 +248,15 @@ const DEFAULT_THEME: Theme = {
     },
   },
   figureImage: { layout: "block", align: "center", width: "100%" },
+  flashcard: {
+    radius: "12px",
+    ok: { light: "#1a7f37", dark: "#3fb950" },
+    okBg: { light: "#dafbe1", dark: "#12261e" },
+    okBorder: { light: "#a6e5b8", dark: "#1f4d33" },
+    bad: { light: "#cf222e", dark: "#f85149" },
+    badBg: { light: "#ffebe9", dark: "#3a1d1d" },
+    badBorder: { light: "#ffb3ad", dark: "#6e2b28" },
+  },
 };
 
 function palette(name: string): Record<Mode, string[]> {
@@ -1098,6 +1126,375 @@ export function pageSizeCss(size: PageSize, orientation?: string): string {
  * composition and image rules are theme decisions. Print paginates
  * one slide per page and uses the slide aspect as the page size.
  */
+/** The flashcard deck + study-mode look (docs/specs/flashcards.md):
+ *  every color is a flashcard.* theme value emitted as a --folio-fc-*
+ *  variable, so any theme (and dark mode) restyles the deck. Layout and
+ *  interaction live in the component; this is the skin only. */
+export function flashcardCss(theme: Theme, mode: Mode): string {
+  const f = theme.flashcard;
+  return `
+    :host {
+      --folio-fc-radius: ${f.radius};
+      --folio-fc-ok: ${f.ok[mode]};
+      --folio-fc-ok-bg: ${f.okBg[mode]};
+      --folio-fc-ok-border: ${f.okBorder[mode]};
+      --folio-fc-bad: ${f.bad[mode]};
+      --folio-fc-bad-bg: ${f.badBg[mode]};
+      --folio-fc-bad-border: ${f.badBorder[mode]};
+    }
+    figure.folio-flashcards {
+      margin: 1.2em 0;
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      color: var(--folio-ink);
+    }
+    figure.folio-flashcards:focus {
+      outline: 2px solid var(--folio-focus, #1f3fbf);
+    }
+    figure.folio-flashcards .folio-fc-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--folio-ink-muted, #6b7280);
+      padding: 1px 1px 6px;
+      user-select: none;
+    }
+    .folio-fc-label .fc-title { font-weight: 600; color: var(--folio-ink); }
+    .folio-fc-label .fc-badge {
+      margin-inline-start: auto;
+      background: var(--folio-accent);
+      color: var(--folio-paper);
+      border-radius: 999px;
+      padding: 1px 9px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .folio-fc-label .fc-badge.due-zero {
+      background: var(--folio-tint);
+      color: var(--folio-ink-muted);
+    }
+    .folio-fc-body {
+      border: 1px solid var(--folio-rule);
+      border-radius: var(--folio-fc-radius);
+      background: var(--folio-paper);
+      overflow: hidden;
+    }
+    .folio-fc-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--folio-rule);
+    }
+    .folio-fc-row:last-of-type { border-bottom: none; }
+    .folio-fc-row.sel {
+      background: color-mix(in srgb, var(--folio-accent) 7%, var(--folio-paper));
+    }
+    .folio-fc-row input {
+      border: 1px solid transparent;
+      background: transparent;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 15px;
+      color: var(--folio-ink);
+      padding: 4px 8px;
+      width: 100%;
+      box-sizing: border-box;
+      unicode-bidi: plaintext;
+      text-align: start;
+    }
+    .folio-fc-row input:hover { border-color: var(--folio-rule); }
+    .folio-fc-row input:focus {
+      border-color: var(--folio-accent);
+      outline: none;
+      background: var(--folio-paper);
+    }
+    .folio-fc-row .fc-divider {
+      color: var(--folio-rule-strong, #d0d7de);
+      text-align: center;
+    }
+    .fc-icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      background: var(--folio-paper);
+      color: var(--folio-ink-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      cursor: pointer;
+    }
+    .fc-icon-btn:hover { border-color: var(--folio-ink-muted); color: var(--folio-ink); }
+    .fc-icon-btn.has-audio { color: var(--folio-accent); border-color: var(--folio-accent); }
+    .fc-icon-btn.recording {
+      color: var(--folio-fc-bad);
+      border-color: var(--folio-fc-bad);
+      animation: folio-fc-pulse 1.2s ease-in-out infinite;
+    }
+    .folio-fc-add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px;
+      margin: 10px 12px 12px;
+      width: calc(100% - 24px);
+      box-sizing: border-box;
+      font: inherit;
+      font-size: 13px;
+      color: var(--folio-ink-muted);
+      border: 1px dashed var(--folio-rule-strong, #d0d7de);
+      border-radius: 8px;
+      background: none;
+      cursor: pointer;
+    }
+    .folio-fc-add:hover { color: var(--folio-accent); border-color: var(--folio-accent); }
+    /* Study mode: a session flag on the figure, never in the file. */
+    .folio-fc-study {
+      border: 1px solid var(--folio-rule);
+      border-radius: var(--folio-fc-radius);
+      background: var(--folio-paper);
+      padding: 18px 20px 14px;
+    }
+    .folio-fc-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--folio-ink-muted);
+    }
+    .fc-mode { display: flex; gap: 4px; }
+    .fc-mode-btn {
+      border: 1px solid transparent;
+      background: none;
+      font: inherit;
+      color: var(--folio-ink-muted);
+      padding: 2px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .fc-mode-btn.on { background: var(--folio-tint); color: var(--folio-ink); font-weight: 600; }
+    .fc-progress {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--folio-rule);
+      overflow: hidden;
+    }
+    .fc-progress > i {
+      display: block;
+      height: 100%;
+      background: var(--folio-accent);
+      border-radius: 3px;
+    }
+    .folio-fc-card {
+      margin-top: 16px;
+      min-height: 240px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: var(--folio-fc-radius);
+      background: var(--folio-paper);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 10px 30px rgba(0, 0, 0, 0.07);
+      padding: 28px;
+      text-align: center;
+    }
+    .folio-fc-word {
+      font-size: 52px;
+      line-height: 1.5;
+      unicode-bidi: plaintext;
+    }
+    .folio-fc-word.small { font-size: 26px; }
+    .fc-play {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      background: var(--folio-accent);
+      color: var(--folio-paper);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--folio-accent) 40%, transparent);
+    }
+    .fc-play:hover { filter: brightness(1.08); }
+    .fc-sub { color: var(--folio-ink-muted); font-size: 14px; }
+    .fc-divider { width: 60%; border-top: 1px solid var(--folio-rule); }
+    .fc-srs { display: flex; gap: 8px; margin-top: 20px; justify-content: center; }
+    .fc-srs button {
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 8px;
+      background: var(--folio-tint);
+      color: var(--folio-ink);
+      padding: 7px 14px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+    .fc-srs button small { font-size: 10.5px; color: var(--folio-ink-muted); }
+    .fc-srs button:hover { border-color: var(--folio-ink-muted); }
+    .fc-srs button.again {
+      background: var(--folio-fc-bad-bg);
+      border-color: var(--folio-fc-bad-border);
+      color: var(--folio-fc-bad);
+    }
+    .fc-srs button.again small { color: var(--folio-fc-bad); }
+    .fc-srs button.good {
+      background: var(--folio-fc-ok-bg);
+      border-color: var(--folio-fc-ok-border);
+      color: var(--folio-fc-ok);
+    }
+    .fc-srs button.good small { color: var(--folio-fc-ok); }
+    .folio-fc-match {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-top: 16px;
+    }
+    .folio-fc-col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+    .fc-col-label {
+      margin: 0 2px;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--folio-ink-muted);
+      font-weight: 600;
+    }
+    .folio-fc-tile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      box-sizing: border-box;
+      font: inherit;
+      font-size: 16px;
+      text-align: start;
+      cursor: pointer;
+      padding: 13px 16px;
+      border-radius: var(--folio-fc-radius);
+      border: 1px solid var(--folio-rule);
+      background: var(--folio-tint);
+      color: var(--folio-ink);
+      unicode-bidi: plaintext;
+    }
+    .folio-fc-tile:hover { border-color: var(--folio-ink-muted); }
+    .folio-fc-tile.sel {
+      border-color: var(--folio-accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--folio-accent) 35%, transparent);
+      background: var(--folio-paper);
+    }
+    .folio-fc-tile.ok {
+      background: var(--folio-fc-ok-bg);
+      border-color: var(--folio-fc-ok-border);
+      color: var(--folio-fc-ok);
+      cursor: default;
+    }
+    .folio-fc-tile.bad {
+      background: var(--folio-fc-bad-bg);
+      border-color: var(--folio-fc-bad-border);
+      color: var(--folio-fc-bad);
+      animation: folio-fc-shake 0.3s;
+    }
+    .folio-fc-tile .fc-word { font-size: 22px; }
+    .fc-wave { display: flex; align-items: center; gap: 2px; height: 18px; }
+    .fc-wave i { width: 3px; border-radius: 2px; background: currentColor; opacity: 0.8; }
+    .fc-dur {
+      margin-inline-start: auto;
+      font-size: 12px;
+      color: var(--folio-ink-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .folio-fc-tile.ok .fc-dur, .folio-fc-tile.bad .fc-dur { color: inherit; opacity: 0.7; }
+    .fc-check { margin-inline-start: auto; }
+    .folio-fc-prompt {
+      margin-top: 16px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: var(--folio-fc-radius);
+      background: var(--folio-paper);
+      font-size: 19px;
+    }
+    .folio-fc-prompt .folio-fc-word { font-size: 26px; }
+    .folio-fc-opts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .folio-fc-opts .folio-fc-tile { justify-content: space-between; }
+    .fc-key {
+      font-size: 11px;
+      color: var(--folio-ink-muted);
+      border: 1px solid var(--folio-rule);
+      border-radius: 4px;
+      padding: 0 5px;
+    }
+    .folio-fc-tile.ok .fc-key, .folio-fc-tile.bad .fc-key {
+      border-color: currentColor;
+      color: inherit;
+    }
+    .folio-fc-foot {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--folio-ink-muted);
+    }
+    .folio-fc-foot kbd {
+      font-family: inherit;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      padding: 0 5px;
+      font-size: 11px;
+      background: var(--folio-tint);
+    }
+    .folio-inspector .insp-fc-title { flex: 1; min-width: 120px; }
+    figure.folio-flashcards[studying] .folio-fc-body { display: none; }
+    .folio-fc-word-small { font-size: 26px; }
+    .folio-fc-done { font-size: 28px; }
+    .folio-fc-back {
+      font-size: 40px;
+      line-height: 1.3;
+      unicode-bidi: plaintext;
+    }
+    .fc-play.small { width: 32px; height: 32px; }
+    .fc-front-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    @keyframes folio-fc-shake {
+      25% { transform: translateX(-5px); }
+      75% { transform: translateX(5px); }
+    }
+    @keyframes folio-fc-pulse { 50% { opacity: 0.45; } }
+    @media (prefers-reduced-motion: reduce) {
+      .folio-fc-tile.bad, .fc-icon-btn.recording { animation: none; }
+    }
+    /* Print: the study UI never prints; the deck prints as its card
+       list, which stays in the DOM underneath. */
+    @media print {
+      figure.folio-flashcards .folio-fc-study { display: none !important; }
+    }
+  `;
+}
+
 export function slideCss(theme: Theme, mode: Mode): string {
   const s = theme.slide;
   const aspect = s.aspect === "4/3" ? "4 / 3" : "16 / 9";
@@ -1736,6 +2133,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
         : ""
     }
     ${slideCss(theme, mode)}
+    ${flashcardCss(theme, mode)}
     /* Numbers right-align (ADR-0002, derived from the column type).
        Specific enough to beat the bidi rule's text-align: start. */
     article.folio-doc td.num,
@@ -2486,6 +2884,17 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
     figure.folio-audio audio {
       display: block;
       width: 100%;
+    }
+    figure.folio-audio .folio-audio-pending {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border: 1px dashed var(--folio-rule-strong, #d0d7de);
+      border-radius: 8px;
+      color: var(--folio-ink-muted, #6b7280);
+      font-size: 12px;
+      user-select: none;
     }
     figure.folio-audio:focus {
       outline: 2px solid var(--folio-focus, #1f3fbf);

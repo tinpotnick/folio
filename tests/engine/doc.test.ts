@@ -386,6 +386,110 @@ After.`);
   });
 });
 
+describe("flashcards blocks", () => {
+  it("golden flashcards.md round-trips byte-identically", () => {
+    const text = loadGolden("flashcards.md");
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+  });
+
+  const deckDoc =
+    "::: flashcards {#spanish-vocab}\n" +
+    'title: "Spanish pronunciation"\n' +
+    'card: "perro" | "dog" | @perro-clip\n' +
+    'card: "gato" | "cat"\n' +
+    'card: "casa" | ""\n' +
+    ":::\n";
+
+  it("parses the flashcards directive with title and cards", () => {
+    const doc = parseDoc(deckDoc);
+    const b = doc.blocks[0];
+    expect(b?.kind).toBe("flashcards");
+    expect(isFigureBlock(b)).toBe(true);
+    if (b?.kind === "flashcards") {
+      expect(b.flashcards.id).toBe("spanish-vocab");
+      expect(b.flashcards.title).toBe("Spanish pronunciation");
+      expect(b.flashcards.cards).toEqual([
+        { front: "perro", back: "dog", sound: "@perro-clip" },
+        { front: "gato", back: "cat" },
+        { front: "casa", back: "" },
+      ]);
+    }
+  });
+
+  it("round-trips byte-identically, including an empty back", () => {
+    expect(serializeDoc(parseDoc(deckDoc))).toBe(deckDoc);
+  });
+
+  it("round-trips a front-only card without inventing a back field", () => {
+    const text = '::: flashcards {#d}\ncard: "hello"\n:::\n';
+    expect(serializeDoc(parseDoc(text))).toBe(text);
+    const doc = parseDoc(text);
+    const b = doc.blocks[0];
+    if (b?.kind === "flashcards") {
+      expect(b.flashcards.cards[0]).toEqual({ front: "hello" });
+    }
+  });
+
+  it("keeps a quoted pipe inside a card field", () => {
+    const text = '::: flashcards {#d}\ncard: "a | b" | "c"\n:::\n';
+    const doc = parseDoc(text);
+    const b = doc.blocks[0];
+    if (b?.kind === "flashcards") {
+      expect(b.flashcards.cards[0]).toEqual({ front: "a | b", back: "c" });
+    }
+    expect(serializeDoc(doc)).toBe(text);
+  });
+
+  it("keeps escaped quotes in card text", () => {
+    const text = '::: flashcards {#d}\ncard: "say \\"hi\\"" | "greet"\n:::\n';
+    const doc = parseDoc(text);
+    const b = doc.blocks[0];
+    if (b?.kind === "flashcards") {
+      expect(b.flashcards.cards[0]?.front).toBe('say "hi"');
+    }
+    expect(serializeDoc(doc)).toBe(text);
+  });
+
+  it("accepts a data URI as the card sound", () => {
+    const text =
+      "::: flashcards {#d}\n" +
+      'card: "perro" | "dog" | data:audio/webm;base64,AAAA\n' +
+      ":::\n";
+    const doc = parseDoc(text);
+    const b = doc.blocks[0];
+    if (b?.kind === "flashcards") {
+      expect(b.flashcards.cards[0]?.sound).toBe("data:audio/webm;base64,AAAA");
+    }
+    expect(serializeDoc(doc)).toBe(text);
+  });
+
+  it("rejects an empty card front", () => {
+    expect(() => parseDoc('::: flashcards {#d}\ncard: "" | "x"\n:::')).toThrow(
+      /empty front/,
+    );
+  });
+
+  it("rejects unknown flashcards directive keys", () => {
+    expect(() =>
+      parseDoc('::: flashcards {#d}\ncard: "a" | "b"\nshuffle: yes\n:::'),
+    ).toThrow(/Unknown flashcards key/);
+  });
+
+  it("a deck sits between prose and an audio block", () => {
+    const clip =
+      "::: audio {#kalb-clip}\nsrc: data:audio/webm;base64,AAAA\n:::\n";
+    const text = `# T\n\n${deckDoc}\n${clip}\nAfter.\n`;
+    const doc = parseDoc(text);
+    expect(doc.blocks.map((b) => b.kind)).toEqual([
+      "heading",
+      "flashcards",
+      "audio",
+      "prose",
+    ]);
+    expect(serializeDoc(doc)).toBe(text);
+  });
+});
+
 describe("lists", () => {
   const rt = (text: string): string => serializeDoc(parseDoc(text));
   const t = (text: string) => ({ text });

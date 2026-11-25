@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { directiveBlockLines } from "../src/spell/source";
 import {
   MAX_WORD_LEN,
   WORD_RE,
@@ -9,8 +11,10 @@ import {
   type SpellChecker,
 } from "../src/spell/check";
 import {
+  MAX_LINT_RUN,
   grammarEnabled,
   lintText,
+  maskForLint,
   setGrammarEnabled,
 } from "../src/spell/grammar";
 
@@ -123,5 +127,37 @@ describe("grammar opt-in", () => {
   it("lintText returns nothing while disabled (never loads the wasm)", async () => {
     setGrammarEnabled(false);
     expect(await lintText("I saw the the dog.")).toEqual([]);
+  });
+});
+
+describe("grammar lint input (maskForLint)", () => {
+  it("blanks over-long runs and skipped lines, preserving every offset", () => {
+    const blob = "A".repeat(MAX_LINT_RUN + 1);
+    const src = `I saw the the dog.\nsrc: data:audio/ogg;base64,${blob}\nskip me\nkeep me`;
+    const masked = maskForLint(src, new Set([2]));
+    expect(masked.length).toBe(src.length);
+    const lines = masked.split("\n");
+    expect(lines[0]).toBe("I saw the the dog.");
+    expect(lines[1]).toBe("src: " + " ".repeat((lines[1] ?? "").length - 5));
+    expect(lines[2]).toBe("       ");
+    expect(lines[3]).toBe("keep me");
+  });
+
+  it("leaves ordinary prose (and runs at the limit) untouched", () => {
+    const src = `Plain prose with a URL https://example.com/a/b and ${"x".repeat(MAX_LINT_RUN)}.`;
+    expect(maskForLint(src.slice(0, -1))).toBe(src.slice(0, -1));
+  });
+
+  it("the Levantine example reaches Harper with no data-URI payload", () => {
+    // Regression: Harper took ~30 s on this file's base64 audio clips
+    // and froze the app after switching to the source view.
+    const src = readFileSync("demo/examples/levantine-arabic.md", "utf8");
+    const masked = maskForLint(src, directiveBlockLines(src));
+    expect(masked.length).toBe(src.length);
+    expect(masked).not.toContain("base64,");
+    expect(Math.max(...masked.split(/\s+/).map((w) => w.length))).toBeLessThan(
+      MAX_LINT_RUN + 1,
+    );
+    expect(masked).toContain("Survival phrases");
   });
 });

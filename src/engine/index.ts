@@ -132,6 +132,26 @@ export interface Audio {
   caption?: string;
 }
 
+/** One flashcard in a deck (spec: docs/specs/flashcards.md): a
+ *  front/back pair, optionally with a sound. */
+export interface Flashcard {
+  front: string;
+  back?: string;
+  /** `@audio-id` - a reference to an audio block in the same
+   *  document (record once, reference from many cards) - or a raw
+   *  data URI recorded straight onto the card. */
+  sound?: string;
+}
+
+/** A flashcard deck: a `::: flashcards {#id}` directive block. The
+ *  deck is a figure (contenteditable=false); study mode is a session
+ *  flag on the component, never stored in the document. */
+export interface Flashcards {
+  id: string; // directive anchor, e.g. spanish-vocab
+  title?: string;
+  cards: Flashcard[];
+}
+
 export interface Chart {
   id?: string; // directive anchor, e.g. growth-chart
   source: string; // table id

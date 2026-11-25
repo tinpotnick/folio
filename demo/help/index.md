@@ -48,6 +48,7 @@ Ctrl+K from anywhere.
 - [Motion figures: swarms and flows](motion.md) - animated figures that play in the document and print as a static rendition
 - [3D models](3d-models.md) - parametric parts in JSCAD, driven by a dataset
 - [Images and audio](images-audio.md) - pictures, sound clips, recording
+- [Flashcard decks](flashcards.md) - study decks with recordings, matching, and spaced repetition
 - [Music with Strudel](music.md) - patterns that play
 - [Python on your data](compute.md) - scripts that read your tables and publish data for charts and formulas
 

@@ -194,6 +194,12 @@ export async function computeSourceMarks(
   const lineStarts = lineStartsOf(src);
   const skip = frontmatterLines(src);
   for (const li of directiveBlockLines(src)) skip.add(li);
+  // A line carrying a data: URI (rendered as a chip in the overlay) is
+  // embed markup, not prose - never spell/grammar-marked (the base64
+  // run used to peg the tab before the token cap).
+  lines.forEach((line, li) => {
+    if (line.tokens.some((t) => t.kind === "data")) skip.add(li);
+  });
   const marks: SourceMark[] = [];
   if (spellOn) {
     const s = await spellReady();
@@ -201,7 +207,10 @@ export async function computeSourceMarks(
   }
   let hits: GrammarHit[] = [];
   if (grammarEnabled()) {
-    hits = await lintText(src);
+    // Directive bodies and frontmatter are masked out of the lint (their
+    // hits are dropped below anyway): an audio/image block's data URI
+    // costs Harper tens of seconds on the main thread.
+    hits = await lintText(src, skip);
     marks.push(...grammarMarksInLines(src, lines, lineStarts, hits, skip));
   }
   return { marks, hits };

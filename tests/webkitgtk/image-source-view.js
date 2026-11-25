@@ -31,7 +31,7 @@ const img = host
   );
 const mdWrap = document.querySelector("#md-wrap");
 const ln = [...document.querySelectorAll("#md-view .ln")].find((l) =>
-  l.textContent?.includes("base64,"),
+  l.querySelector(".tk-data"),
 );
 const marks = ln ? ln.querySelectorAll(".folio-misspelled").length : -1;
 return [
@@ -42,7 +42,8 @@ return [
     (document.querySelector("#editor").value.includes("data:image/png;base64,")
       ? "true"
       : "false"),
-  "no spell marks on the image line: " + (marks === 0 ? "true" : "false"),
+  "image line renders as a data chip, no spell marks on it: " +
+    (ln !== undefined && marks === 0 ? "true" : "false"),
   // reaching this line at all means the engine never locked up
   "page alive: true",
 ].join(" | ");

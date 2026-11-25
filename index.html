@@ -815,8 +815,13 @@
         font-size: 14px;
         line-height: 1.6;
         tab-size: 2;
-        white-space: pre-wrap;
-        overflow-wrap: break-word;
+        /* No soft wrap: a huge line (a data: URL in an image/audio
+           directive) is one row that scrolls sideways, not thousands
+           of wrapped rows that cost seconds to lay out on every switch
+           to this view. The textarea scrolls itself (wrap=off) and the
+           overlay is panned in sync via scrollLeft. */
+        white-space: pre;
+        overflow-wrap: normal;
         margin: 0;
         padding: 24px 0 40vh 2px;
         border: none;
@@ -839,6 +844,10 @@
       .md-view {
         grid-column: 2;
         z-index: 1;
+        /* Clipped, but still pannable programmatically: the editor's
+           scroll handler mirrors scrollLeft here so the highlight
+           overlay tracks horizontal scrolling of long (data-URI) lines. */
+        overflow: hidden;
       }
       .md-view .ln {
         display: block;
@@ -947,6 +956,24 @@
       }
       .tk-text {
         color: var(--text);
+      }
+      /* Truncation marker on over-long overlay rows (data-URI lines):
+         the row renders a bounded prefix so huge lines stay cheap to
+         lay out and paint; the caret's line always renders in full. */
+      .tk-trunc {
+        color: var(--gutter);
+        font-style: italic;
+      }
+      /* Data chip: a long data: URI renders as a compact label (mime +
+         size) in the source overlay instead of a multi-KB text run. The
+         full URI is in the file/textarea - open the .md in a text editor
+         and you see it all; the caret's line renders the raw URI. */
+      .md-view .tk-data {
+        background: var(--accent-bg);
+        color: var(--accent-text);
+        border-radius: 4px;
+        padding: 0 6px;
+        white-space: pre;
       }
       /* The sticky app header's height: the document's sticky
          code headers stop below it instead of under it. */
@@ -2371,6 +2398,24 @@
                   </svg>
                   <span class="mi-label">Record audio</span>
                 </button>
+                <button
+                  role="menuitem"
+                  id="btn-flashcards"
+                  title="Insert a flashcard deck"
+                  aria-label="Insert a flashcard deck"
+                >
+                  <svg
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="1.5" y="3" width="9" height="11" rx="1.5" />
+                    <path d="M5 1.8h8.5a1 1 0 0 1 1 1V12" />
+                  </svg>
+                  <span class="mi-label">Flashcards</span>
+                </button>
               </div>
               <div class="menu-col">
                 <div class="menu-heading">Technical</div>
@@ -2883,7 +2928,12 @@
         <div class="md-wrap" id="md-wrap" hidden>
           <div class="md-gutter" id="md-gutter" aria-hidden="true"></div>
           <pre class="md-view" id="md-view" aria-hidden="true"></pre>
-          <textarea id="editor" class="editor" spellcheck="false"></textarea>
+          <textarea
+            id="editor"
+            class="editor"
+            spellcheck="false"
+            wrap="off"
+          ></textarea>
         </div>
       </main>
       <aside id="help-panel" aria-label="Help" hidden>
