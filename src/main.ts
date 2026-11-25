@@ -4212,6 +4212,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     blurb:
       "stats github traffic page views clones downloads releases trend line chart nightly snapshot live numbers",
   },
+  {
+    id: "page-sections",
+    title: "A report with page sections",
+    file: "demo/examples/page-sections.md",
+    blurb:
+      "print header footer page section orientation landscape portrait page numbers pdf export",
+  },
 ];
 
 interface PaletteEntry {
