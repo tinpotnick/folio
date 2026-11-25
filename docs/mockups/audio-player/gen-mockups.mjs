@@ -50,7 +50,7 @@ const LIGHT = {
   bg: "#f3f4f6", surface: "#ffffff", border: "#e4e6ea", borderStrong: "#d0d7de",
   text: "#1f2328", muted: "#57606a",
   paper: "#ffffff", ink: "#1f2328", inkMuted: "#5c636b", heading: "#14171a",
-  accent: "#2f4fb5", hairline: "#e6e8eb", tint: "#f5f6f8", surface2: "#fafbfc",
+  accent: "#2f4fb5", hairline: "#e6e8eb", rule: "#1f2328", tint: "#f5f6f8", surface2: "#fafbfc",
   inputBg: "#ffffff", focus: "#1f3fbf", hover: "#f3f4f6",
   pageShadow: "rgba(15,23,42,.10)",
   activeBg: "#1f2328", activeFg: "#ffffff",
@@ -59,7 +59,7 @@ const DARK = {
   bg: "#111113", surface: "#18181b", border: "#26262a", borderStrong: "#3f3f46",
   text: "#e4e4e7", muted: "#9a9aa2",
   paper: "#1c1c1f", ink: "#e6e4df", inkMuted: "#a19e98", heading: "#f4f2ed",
-  accent: "#9db4ff", hairline: "#2e2e32", tint: "#252529", surface2: "#1f1f23",
+  accent: "#9db4ff", hairline: "#2e2e32", rule: "#8a8780", tint: "#252529", surface2: "#1f1f23",
   inputBg: "#18181b", focus: "#9db4ff", hover: "#2a2a2f",
   pageShadow: "rgba(0,0,0,.55)",
   activeBg: "#e4e4e7", activeFg: "#18181b",
@@ -70,7 +70,7 @@ const r = (x, y, w, h, fill, extra = "") => `<rect x="${x}" y="${y}" width="${w}
 const rr = (x, y, w, h, fill, rx, extra = "") => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${fill}" ${extra}/>`;
 const circ = (cx, cy, rad, fill, extra = "") => `<circle cx="${cx}" cy="${cy}" r="${rad}" fill="${fill}" ${extra}/>`;
 const t = (x, y, s, o = {}) => `<text x="${x}" y="${y}" font-family="${o.f || F.serif}" font-size="${o.s || 17}" fill="${o.c || "#000"}" text-anchor="${o.a || "start"}"${o.w ? ` font-weight="${o.w}"` : ""}${o.i ? ` font-style="italic"` : ""}${o.ls ? ` letter-spacing="${o.ls}"` : ""}${o.o ? ` opacity="${o.o}"` : ""}>${esc(s)}</text>`;
-const line = (x1, y1, x2, y2, stroke, sw = 1, extra = "") => `<line x1="${x1}" y1="${y1}" x2="${y2}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
+const line = (x1, y1, x2, y2, stroke, sw = 1, extra = "") => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" stroke-width="${sw}" ${extra}/>`;
 const path = (d, fill, extra = "") => `<path d="${d}" fill="${fill}" ${extra}/>`;
 const icon = (name, s, c, x, y) => `<g transform="translate(${x},${y})">${ICONS[name](s, c)}</g>`;
 
@@ -275,40 +275,79 @@ function labelStrip(P, text) {
   return { s: icon("speaker", 13, P.inkMuted, 0, 1) + t(20, 12, text, { f: F.ui, s: 12, c: P.inkMuted }), h: 22 };
 }
 
-/** Variant A: SoundCloud-style waveform card. */
-function cardWaveform(P, cw, { playing, progress, current, total }) {
+/** The speed chip that lives at the right edge of the card. */
+function speedChip(P, x, cy, label, open) {
+  let s = rr(x, cy - 11, 44, 22, open ? P.hover : P.inputBg, 11, `stroke="${P.borderStrong}" stroke-width="1"`);
+  s += t(x + 15, cy + 4, label, { f: F.ui, s: 11.5, c: P.ink, w: 600 });
+  s += icon("chev", 8, P.inkMuted, x + 29, cy - 4);
+  return s;
+}
+
+function speedPopover(P, x, topY, selected) {
+  const pw = 96, ph = 5 * 24 + 10, px = x + 22 - pw, py = topY - ph - 8;
+  let s = `<filter id="psh3" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.16"/></filter>`;
+  s += rr(px, py, pw, ph, P.surface, 8, `stroke="${P.borderStrong}" stroke-width="1" filter="url(#psh3)"`);
+  for (const [i, sp] of ["0.75×", "1×", "1.25×", "1.5×", "2×"].entries()) {
+    const iy = py + 5 + i * 24;
+    if (sp === selected) {
+      s += rr(px + 4, iy, pw - 8, 24, mix(P.accent, P.paper, 0.9), 5);
+      s += icon("check", 10, P.accent, px + 9, iy + 7);
+      s += t(px + 25, iy + 16, sp, { f: F.ui, s: 12, c: P.accent, w: 600 });
+    } else {
+      s += t(px + 25, iy + 16, sp, { f: F.ui, s: 12, c: P.ink });
+    }
+  }
+  return s;
+}
+
+/** Variant A: SoundCloud-style waveform card, with a speed chip. */
+function cardWaveform(P, cw, { playing, progress, current, total, speed = "1×", speedOpen = false }) {
   const h = 92;
   let s = rr(0, 0, cw, h, P.tint, 12, `stroke="${P.hairline}" stroke-width="1"`);
   const cy = h / 2;
   s += circ(34, cy, 23, P.accent);
   s += icon(playing ? "pause" : "play", 20, P.paper, 34 - 10 + (playing ? 0 : 1.5), cy - 10);
-  s += waveform(P, 74, cw - 104, cy, 40, playing ? progress : 0);
-  s += t(cw - 16, cy + 4.5, `${current} / ${total}`, { f: F.ui, s: 13, c: P.inkMuted, a: "end" });
+  s += waveform(P, 74, cw - 152, cy, 40, playing ? progress : 0);
+  s += t(cw - 62, cy + 4.5, `${current} / ${total}`, { f: F.ui, s: 13, c: P.inkMuted, a: "end" });
+  s += speedChip(P, cw - 52, cy, speed, speedOpen);
+  if (speedOpen) s += speedPopover(P, cw - 52, 0, speed);
   return { s, h: h + 12 };
 }
 
-/** Variant B: compact themed strip (the native player's shape, themed). */
-function stripCompact(P, cw, { playing, progress, current, total }) {
+/** Variant B: compact themed strip (the native player's shape, themed).
+ * compact drops volume for narrow containers. */
+function stripCompact(P, cw, { playing, progress, current, total, compact = false }) {
   const h = 46;
   let s = rr(0, 0, cw, h, P.surface, 23, `stroke="${P.hairline}" stroke-width="1"`);
   const cy = h / 2;
   s += circ(27, cy, 15, mix(P.accent, P.paper, 0.88));
   s += icon(playing ? "pause" : "play", 13, P.accent, 27 - 6.5 + (playing ? 0 : 1), cy - 6.5);
-  const tx0 = 52, tx1 = cw - 200;
+  const tx0 = 52, tx1 = cw - (compact ? 116 : 200);
   s += rr(tx0, cy - 2.5, tx1 - tx0, 5, mix(P.inkMuted, P.paper, 0.5), 2.5);
   const pw = (tx1 - tx0) * (playing ? progress : 0);
   if (pw > 0) {
     s += rr(tx0, cy - 2.5, pw, 5, P.accent, 2.5);
     s += circ(tx0 + pw, cy, 5, P.accent);
   }
-  s += t(tx1 + 12, cy + 4.5, `${current} / ${total}`, { f: F.ui, s: 12.5, c: P.inkMuted });
-  s += line(cw - 128, cy - 12, cw - 128, cy + 12, P.hairline, 1);
-  s += icon("volume", 15, P.inkMuted, cw - 114, cy - 7.5);
-  s += rr(cw - 94, cy - 2, 42, 4, mix(P.inkMuted, P.paper, 0.5), 2);
-  s += rr(cw - 94, cy - 2, 30, 4, P.inkMuted, 2);
+  s += t(tx1 + 12, cy + 4.5, compact ? current : `${current} / ${total}`, { f: F.ui, s: 12.5, c: P.inkMuted });
+  if (!compact) {
+    s += line(cw - 128, cy - 12, cw - 128, cy + 12, P.hairline, 1);
+    s += icon("volume", 15, P.inkMuted, cw - 114, cy - 7.5);
+    s += rr(cw - 94, cy - 2, 42, 4, mix(P.inkMuted, P.paper, 0.5), 2);
+    s += rr(cw - 94, cy - 2, 30, 4, P.inkMuted, 2);
+  }
   s += rr(cw - 44, cy - 11, 36, 22, P.tint, 11, `stroke="${P.hairline}" stroke-width="1"`);
   s += t(cw - 26, cy + 4, "1×", { f: F.ui, s: 11.5, c: P.ink, a: "middle", w: 500 });
   return { s, h: h + 12 };
+}
+
+/** Narrowest tier: a chip (play/pause + duration) for table cells etc. */
+function chipPlayer(P, w, { playing, label, accent = false }) {
+  const h = 26;
+  let s = rr(0, 0, w, h, accent ? mix(P.accent, P.paper, 0.88) : P.tint, 13, `stroke="${accent ? P.accent : P.hairline}" stroke-width="${accent ? 1.2 : 1}"`);
+  s += icon(playing ? "pause" : "play", 12, P.accent, 8, 7);
+  s += t(26, 17.5, label, { f: F.ui, s: 11.5, c: P.ink, w: 500 });
+  return { s, h: h + 10 };
 }
 
 /** Variant C: waveform card + a controls row (speed, volume, download). */
@@ -394,11 +433,74 @@ function playerScene(name, P, body, opts = {}) {
   } };
 }
 
-playerScene("variant-a-waveform", LIGHT, (P, cw) => cardWaveform(P, cw, { playing: true, progress: 0.44, current: "1:07", total: "2:31" }), { inspector: true });
+playerScene("variant-a-waveform", LIGHT, (P, cw) => cardWaveform(P, cw, { playing: true, progress: 0.44, current: "1:07", total: "2:31", speed: "1.5×" }), { inspector: true });
+playerScene("variant-a-speed-open", LIGHT, (P, cw) => cardWaveform(P, cw, { playing: true, progress: 0.44, current: "1:07", total: "2:31", speed: "1.5×", speedOpen: true }), { inspector: false });
 playerScene("variant-a-waveform-dark", DARK, (P, cw) => cardWaveform(P, cw, { playing: false, progress: 0, current: "0:00", total: "2:31" }), { inspector: false });
 playerScene("variant-b-strip", LIGHT, (P, cw) => stripCompact(P, cw, { playing: true, progress: 0.44, current: "1:07", total: "2:31" }), { inspector: false });
 playerScene("variant-c-controls", LIGHT, (P, cw) => cardControls(P, cw, { playing: true, progress: 0.44, current: "1:07", total: "2:31" }), { inspector: false });
 playerScene("edit-trim", LIGHT, (P, cw) => cardTrim(P, cw, { current: "1:07", total: "2:31" }), { inspector: true });
+
+/* One clip at three container widths: card / strip / chip. */
+scenes["sizes-ladder"] = {
+  P: LIGHT,
+  tb: toolbar(LIGHT, {}),
+  body: (cw) => {
+    let s = t(0, 44, "One clip, three sizes", { s: 37, c: LIGHT.heading, w: 700 });
+    s += t(0, 88, "The player picks its density from the width of its container:", { s: 17, c: LIGHT.ink });
+    let y = 126;
+    const tiers = [
+      ["CARD · FULL MEASURE · 576 PX", cardWaveform(LIGHT, cw, { playing: true, progress: 0.44, current: "1:07", total: "2:31", speed: "1.5×" })],
+      ["STRIP · 340 PX", stripCompact(LIGHT, 340, { playing: true, progress: 0.44, current: "1:07", total: "2:31", compact: true })],
+      ["CHIP · 176 PX · TABLE CELL", chipPlayer(LIGHT, 176, { playing: false, label: "2:31" })],
+    ];
+    for (const [label, body] of tiers) {
+      s += t(0, y + 10, label, { f: F.ui, s: 11, c: LIGHT.inkMuted, ls: "0.06em", w: 600 });
+      s += `<g transform="translate(0,${y + 18})">${body.s}</g>`;
+      y += 18 + body.h + 24;
+    }
+    return s;
+  },
+};
+
+/* Audio chips inside a dataset table, referencing the figure above. */
+scenes["table-audio"] = {
+  P: LIGHT,
+  tb: toolbar(LIGHT, {}),
+  body: (cw) => {
+    let s = docIntro(LIGHT)(cw).s;
+    let y = 150;
+    const fig = figure(LIGHT, cw, cardWaveform(LIGHT, cw, { playing: true, progress: 0.44, current: "1:07", total: "2:31" }), { inspector: false })(0);
+    s += `<g transform="translate(0,${y})">${fig.s}</g>`; y += fig.h + 6;
+    s += t(0, y + 16, "Each row below points at that one embedded clip:", { s: 17, c: LIGHT.ink });
+    y += 48;
+    // booktabs table: Take | Note | Clip
+    const c1 = 64, c3 = 140, c2 = cw - c1 - c3;
+    const headH = 36, rowH = 46;
+    const rows = [
+      ["1", "Opening answer", { label: "2:31", playing: false }],
+      ["2", "Follow-up on pricing", { label: "1:07", playing: true }],
+      ["3", "Closing, take three", { label: "0:48", playing: false }],
+    ];
+    const tblH = headH + rows.length * rowH;
+    s += line(0, y, cw, y, LIGHT.rule, 1.5);
+    s += line(0, y + headH, cw, y + headH, LIGHT.rule, 1);
+    s += t(8, y + 24, "Take", { s: 15, c: LIGHT.ink, w: 600 });
+    s += t(c1 + 12, y + 24, "Note", { s: 15, c: LIGHT.ink, w: 600 });
+    s += t(c1 + c2 + 12, y + 24, "Clip", { s: 15, c: LIGHT.ink, w: 600 });
+    let ry = y + headH;
+    rows.forEach(([n, note, clip], i) => {
+      ry += rowH;
+      s += t(c1 - 8, ry - 18, n, { s: 15, c: LIGHT.ink, a: "end" });
+      s += t(c1 + 12, ry - 18, note, { s: 15, c: LIGHT.ink });
+      const chip = chipPlayer(LIGHT, 96, { playing: clip.playing, label: clip.label, accent: clip.playing });
+      s += `<g transform="translate(${c1 + c2 + (c3 - 96) / 2},${ry - 34})">${chip.s}</g>`;
+      if (i === 0) s += t(c1 + c2 + 12, ry - 18, "", { s: 15 });
+    });
+    s += line(0, ry, cw, ry, LIGHT.rule, 1.5);
+    s += t(cw / 2, ry + 26, "Table 1. Interview takes — each Clip cell is an @aud:founders-clip reference", { s: 13.5, c: LIGHT.inkMuted, a: "middle" });
+    return s;
+  },
+};
 
 scenes["insert-menu"] = {
   P: LIGHT,
