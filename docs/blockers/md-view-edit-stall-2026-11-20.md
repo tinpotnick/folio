@@ -9,7 +9,15 @@ harness profile has it off, hence no repro). 300 ms after the switch,
 to Harper on the main thread: ~30 s measured in Node for the example,
 ~0.2 s with the payloads masked. Fixed by `maskForLint`
 (src/spell/grammar.ts; spec: docs/specs/spellcheck-grammar.md,
-"Grammar lint input is bounded"). The notes below are kept as history.
+"Grammar lint input is bounded").
+
+Follow-up: the fixed-height internally-scrolling source view tried
+below (commit a5b7332) was REVERTED before merge - it broke the
+page-scroll carry-over between views (dataset.spec "table viewport"
+caught it: charts below the fold never entered the lazy-draw margin
+because the window no longer scrolled while in Markdown view). The
+chips/truncation overlay bounds (d36229b, f4c09ef) stay. The notes
+below are kept as history.
 
 ## Symptom (user, built Tauri app, Levantine Arabic example)
 

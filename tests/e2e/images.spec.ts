@@ -101,10 +101,13 @@ test.describe("image blocks", () => {
     expect(await page.evaluate(() => 1 + 1)).toBe(2);
     await expect(page.locator("#md-wrap")).toBeVisible();
     const marksOnImageLine = await page.evaluate(() => {
+      // the data URI renders as a chip; find the row by the chip
       const ln = Array.from(document.querySelectorAll("#md-view .ln")).find(
-        (l) => l.textContent?.includes("base64,"),
+        (l) => l.querySelector(".tk-data"),
       );
-      return ln ? ln.querySelectorAll(".folio-misspelled").length : -1;
+      return ln
+        ? ln.querySelectorAll(".folio-misspelled, .folio-grammar").length
+        : -1;
     });
     expect(marksOnImageLine).toBe(0);
   });

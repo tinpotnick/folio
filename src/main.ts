@@ -530,11 +530,22 @@ function renderHighlight(): void {
   lines.forEach((_, i) => {
     mdGutter.appendChild(document.createTextNode(`${String(i + 1)}\n`));
   });
-  // The source view is a fixed-height box: the textarea scrolls inside
-  // it and the overlay is panned in sync (scroll listener below), so
-  // neither layer ever grows to the full content height - a 30k-px-tall
-  // textarea is what stalled GPU-composited WebKitGTK on big docs.
+  // Size the textarea to the OVERLAY's laid-out height (read after the
+  // overlay is in the DOM): the editor's own scrollHeight can be stale
+  // by a frame on WebKitGTK, which left the textarea shorter than its
+  // content - an inner scrollbar, a clipped overlay, white page below.
+  syncEditorHeight();
   scheduleSourceMarks();
+}
+
+/** Size the source textarea to the highlight overlay's laid-out height,
+ *  so the transparent editor and the overlay never desynchronize. */
+function syncEditorHeight(): void {
+  if (mdWrap.hidden) return;
+  // One guarded write: setting "auto" first would force a full textarea
+  // relayout twice per render on docs with huge lines.
+  const h = `${String(mdView.scrollHeight)}px`;
+  if (editor.style.height !== h) editor.style.height = h;
 }
 
 /** Expand the caret's overlay row if it was rendered compact - chip or
@@ -3081,8 +3092,6 @@ editor.addEventListener("mouseup", () => refreshCaretLine());
 // panned in sync so caret and colors stay aligned.
 editor.addEventListener("scroll", () => {
   mdView.scrollLeft = editor.scrollLeft;
-  mdView.scrollTop = editor.scrollTop;
-  mdGutter.scrollTop = editor.scrollTop;
 });
 editor.addEventListener("input", () => {
   renderHighlight();
@@ -3363,6 +3372,8 @@ function reflectActiveSection(): void {
 
 window.addEventListener("scroll", reflectActiveSection, { passive: true });
 window.addEventListener("resize", reflectActiveSection, { passive: true });
+window.addEventListener("resize", () => syncEditorHeight(), { passive: true });
+
 btnSidebar.addEventListener("click", () => {
   sidebar.hidden = !sidebar.hidden;
   btnSidebar.setAttribute("aria-pressed", String(!sidebar.hidden));
@@ -5607,9 +5618,11 @@ function preparePrint(): void {
         : "16:9"
       : "16:9"
     : pageSizeFor(doc);
-  // Orientation follows the `page.orientation` key (print-only; the
-  // deck sizes are landscape by their dimensions already).
-  const orientation = sliding ? "portrait" : furnitureFor(doc).orientation;
+  // Orientation follows the `page.orientation` key (print-only). Slide
+  // decks keep their natural landscape aspect: passing an orientation
+  // here would flip 16:9 to 9in 16in (regression caught by
+  // slides.spec "print media while playing").
+  const orientation = sliding ? undefined : furnitureFor(doc).orientation;
   document.documentElement.style.setProperty(
     "--folio-page-size",
     pageSizeCss(size, orientation),
