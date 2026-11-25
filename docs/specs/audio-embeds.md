@@ -46,7 +46,7 @@ RECORDED media (a file the document carries).
   widget's spinner spun forever and the media pipeline stayed open,
   which also made switching to Markdown view slow (hundreds of ms
   per clip). Play loads a data URI instantly on demand; the waveform
-  peaks come from fetching the bytes, not from the media element.
+  peaks come from the bytes directly, not from the media element.
   Leaving the document view pauses any playing clip
   (`FolioDoc.pauseMedia()`).
 - **Lazy widget**: the player attaches only when
@@ -98,10 +98,12 @@ RECORDED media (a file the document carries).
   `audio.folio-audio-engine` element (preload per
   the rule above, no `controls`) plus a `.folio-audio-player` card - accent play/pause
   disc, waveform seek, `current / total` time, a playback-speed chip
-  (0.75×–2×), and a hover row with volume and download. Waveform
-  peaks come from `decodeAudioData` on the data URI; an external URL
-  whose bytes cannot be decoded falls back to a plain progress track
-  (`data-peaks="none"`). The card picks a density tier from its
+  (0.75×–2×), and a hover row with volume and download. Waveform peaks come from `decodeAudioData`: data URIs are decoded
+  straight from their base64 (no `fetch` of a data: URL, which
+  WebKitGTK handles unreliably), external URLs are fetched
+  opportunistically; anything the engine cannot decode (unknown
+  URL, unsupported codec such as Ogg Vorbis on WebKitGTK) falls
+  back to a plain progress track (`data-peaks="none"`). The card picks a density tier from its
   container width (`data-density`: card ≥ 480px, strip ≥ 240px,
   chip below - ResizeObserver), so the same component serves narrow
   containers later (e.g. table cells). The bar reveals on CLICK in
