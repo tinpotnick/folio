@@ -323,6 +323,17 @@ function flattenList(body: ListBody): string[] {
  * drawn-blocks.md): the figure is the picture, the code shows on
  * click. Value: the picture's accessible name.
  */
+/* The audio player's icons (docs/mockups/audio-player/): plain
+ * aria-hidden svg so they never enter figure svg[role] locators. */
+const AP_ICON_PLAY =
+  '<svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M5 3.2v9.6L13 8z" fill="currentColor"/></svg>';
+const AP_ICON_PAUSE =
+  '<svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><rect x="4" y="3" width="3.2" height="10" rx="1" fill="currentColor"/><rect x="8.8" y="3" width="3.2" height="10" rx="1" fill="currentColor"/></svg>';
+const AP_ICON_VOLUME =
+  '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M2.5 6v4h2.4L8 12.6V3.4L4.9 6H2.5z" fill="currentColor"/><path d="M10.3 5.6a3.4 3.4 0 010 4.8M12 3.8a5.8 5.8 0 010 8.4" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>';
+const AP_ICON_DOWNLOAD =
+  '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 2.5v7M5.2 6.8L8 9.6l2.8-2.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.8 10.8v1.7a1 1 0 001 1h8.4a1 1 0 001-1v-1.7" stroke-linecap="round"/></svg>';
+
 const DRAWN_LANGS: Record<string, string> = {
   jscad: "3D model",
   dot: "Graphviz diagram",
@@ -755,6 +766,11 @@ export class FolioDoc extends HTMLElement {
    */
   private dragRange: Range | null = null;
   private dragStart: { x: number; y: number } | null = null;
+  /** True between a mousedown and its mouseup: a focus landing in
+   * that window came from the mouse press, not from Tab - the
+   * audio figure's bar must not reveal on it (it would shift the
+   * player mid-press and swallow the click). */
+  private pressing = false;
   /** Online sample sources the user allowed this session (ADR-0019). */
   private allowedSampleSources = new Set<string>();
   /** The live strudel REPL, once initStrudel has resolved. */
@@ -878,6 +894,16 @@ export class FolioDoc extends HTMLElement {
         void this.highlightCode(owner as HTMLElement);
       }
     }
+    // Same contract for the audio player's speed popover: any press
+    // outside its figure closes it.
+    for (const pop of Array.from(
+      this.shadowRoot?.querySelectorAll<HTMLElement>(
+        ".ap-speed-pop:not([hidden])",
+      ) ?? [],
+    )) {
+      if (pop.closest("figure") === keep) continue;
+      pop.hidden = true;
+    }
   }
 
   /** A press that lands on nothing INSIDE the shadow tree - the
@@ -919,10 +945,17 @@ export class FolioDoc extends HTMLElement {
     }
   });
 
+  private clearPressing = (): void => {
+    this.pressing = false;
+  };
+
   disconnectedCallback(): void {
     this.barObserver.disconnect();
+    for (const ro of this.audioObservers) ro.disconnect();
+    this.audioObservers = [];
     document.removeEventListener("selectionchange", this.trackCaret);
     document.removeEventListener("mousedown", this.outsidePress, true);
+    document.removeEventListener("mouseup", this.clearPressing, true);
   }
 
   connectedCallback(): void {
@@ -939,6 +972,7 @@ export class FolioDoc extends HTMLElement {
     // DOM matches what a render would build.
     document.execCommand("defaultParagraphSeparator", false, "p");
     document.addEventListener("mousedown", this.outsidePress, true);
+    document.addEventListener("mouseup", this.clearPressing, true);
     // The themes' typefaces ship with the component (ADR-0017);
     // @font-face only works on the host document, not in a shadow
     // root.
@@ -1295,6 +1329,8 @@ export class FolioDoc extends HTMLElement {
     // targets with the DOM.
     this.figureObserver?.disconnect();
     this.figureObserver = null;
+    for (const ro of this.audioObservers) ro.disconnect();
+    this.audioObservers = [];
     // A full render replaces every figure: music stops with it
     // (only once the library was ever loaded - never import it
     // for a document that plays nothing).
@@ -1403,6 +1439,7 @@ export class FolioDoc extends HTMLElement {
       "mousedown",
       (ev: MouseEvent) => {
         this.dragStart = { x: ev.clientX, y: ev.clientY };
+        this.pressing = true;
         const el = this.shadowRoot?.elementFromPoint(ev.clientX, ev.clientY);
         this.leaveNewRow(el ?? null);
         const block = el?.closest("[data-block-index]") as HTMLElement | null;
@@ -1421,6 +1458,7 @@ export class FolioDoc extends HTMLElement {
     host.addEventListener(
       "mouseup",
       (ev: MouseEvent) => {
+        this.pressing = false;
         const start = this.dragStart;
         this.dragStart = null;
         if (!start) return;
@@ -7421,11 +7459,12 @@ export class FolioDoc extends HTMLElement {
   }
 
   /**
-   * Embedded audio: the media sibling of the image figure. The
-   * NATIVE <audio controls> element plays the src (a data URI is
-   * offline; an external URL renders opportunistically) - media,
-   * not execution, so the document stays a document. Same bar
-   * contract as the image inspector: alt, caption, replace file.
+   * Embedded audio: the media sibling of the image figure. folio's
+   * OWN player (buildAudioPlayer) drives a hidden <audio> element -
+   * the src is a data URI (offline) or an external URL (rendered
+   * opportunistically); media, not execution, so the document stays
+   * a document. Same bar contract as the image inspector: alt,
+   * caption, replace file.
    */
   private renderAudio(
     block: Extract<Doc["blocks"][number], { kind: "audio" }>,
@@ -7441,20 +7480,14 @@ export class FolioDoc extends HTMLElement {
     figure.tabIndex = -1;
     figure.title = "Audio - Backspace or Delete removes it";
     figure.appendChild(this.buildAudioInspector(figure, block));
-    // The native widget swallows pointer events (its controls live
-    // in a UA shadow DOM), so the ALT TEXT strip is the figure's
-    // clickable identity - click it to reveal the inspector, like
-    // a code block's header. It also names the sound in print.
+    // The ALT TEXT strip is the figure's clickable identity - click
+    // it (or the player) to reveal the inspector, like a code
+    // block's header. It also names the sound in print.
     const label = document.createElement("div");
     label.className = "folio-audio-label";
     label.textContent = block.audio.alt || "audio clip";
     figure.appendChild(label);
-    const audio = document.createElement("audio");
-    audio.controls = true;
-    audio.preload = "metadata";
-    audio.src = block.audio.src;
-    audio.title = block.audio.alt ?? "";
-    figure.appendChild(audio);
+    figure.appendChild(this.buildAudioPlayer(block));
     if (block.audio.caption) {
       const cap = document.createElement("figcaption");
       cap.textContent = block.audio.caption;
@@ -7549,14 +7582,411 @@ export class FolioDoc extends HTMLElement {
       capInp.value = clip.caption ?? "";
       bar.hidden = false;
     };
-    // The native <audio> widget swallows pointer events inside its
-    // UA shadow DOM - a mousedown on the player never reaches the
-    // figure. Focus DOES bubble: clicking or tabbing to the player
-    // reveals the bar the same way.
-    figure.addEventListener("mousedown", () => show());
-    figure.addEventListener("focusin", () => show());
+    // Reveal on CLICK (the figure contract), not mousedown: the
+    // player's own controls need the click to land - revealing on
+    // mousedown or on the mouse-driven focusin would shift the
+    // figure mid-press and swallow the click. Tabbing into the
+    // player (keyboard focus) reveals the bar the same way.
+    figure.addEventListener("click", () => show());
+    figure.addEventListener("focusin", () => {
+      if (!this.pressing) show();
+    });
     bar.append(altInp, capInp, fileInp);
     return bar;
+  }
+
+  /**
+   * folio's own audio player (mock-ups: docs/mockups/audio-player/):
+   * a theme-styled card over a hidden <audio> element - the platform
+   * element stays the playback engine (no dependency, ADR-0007),
+   * the chrome is ours. Play/pause disc, waveform seek (peaks from
+   * decodeAudioData on data URIs; a plain progress track when the
+   * peaks are unavailable, e.g. an external URL), current/total
+   * time, a playback-speed chip, and a hover row with volume and
+   * download. The card picks a density tier (card/strip/chip) from
+   * its container width, so the same component serves narrow
+   * containers later (table cells).
+   */
+  private buildAudioPlayer(
+    block: Extract<Doc["blocks"][number], { kind: "audio" }>,
+  ): HTMLElement {
+    const clip = block.audio;
+    const wrap = document.createElement("div");
+    wrap.className = "folio-audio-player";
+    wrap.dataset.density = "card";
+    wrap.contentEditable = "false";
+
+    const audio = document.createElement("audio");
+    audio.className = "folio-audio-engine";
+    audio.preload = "metadata";
+    audio.src = clip.src;
+    audio.title = clip.alt ?? "";
+    wrap.appendChild(audio);
+
+    const main = document.createElement("div");
+    main.className = "ap-main";
+
+    const playBtn = document.createElement("button");
+    playBtn.type = "button";
+    playBtn.className = "ap-play";
+    playBtn.setAttribute("aria-label", "Play");
+    playBtn.title = "Play";
+    playBtn.innerHTML = AP_ICON_PLAY;
+
+    const BARS = 140;
+    const BAR_W = 3;
+    const GAP = 2;
+    const WAVE_H = 40;
+    const wave = document.createElement("div");
+    wave.className = "ap-wave";
+    wave.tabIndex = 0;
+    wave.setAttribute("role", "slider");
+    wave.setAttribute("aria-label", "Seek");
+    wave.setAttribute("aria-valuemin", "0");
+    wave.setAttribute("aria-valuemax", "100");
+    wave.setAttribute("aria-valuenow", "0");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "ap-wave-svg");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("preserveAspectRatio", "none");
+    svg.setAttribute("viewBox", `0 0 ${BARS * (BAR_W + GAP)} ${WAVE_H}`);
+    const bars: SVGRectElement[] = [];
+    for (let i = 0; i < BARS; i++) {
+      const r = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "rect",
+      ) as SVGRectElement;
+      r.setAttribute("x", String(i * (BAR_W + GAP)));
+      r.setAttribute("y", String((WAVE_H - 4) / 2));
+      r.setAttribute("width", String(BAR_W));
+      r.setAttribute("height", "4");
+      r.setAttribute("rx", "1.5");
+      r.classList.add("ap-bar");
+      svg.appendChild(r);
+      bars.push(r);
+    }
+    const head = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "rect",
+    ) as SVGRectElement;
+    head.setAttribute("x", "0");
+    head.setAttribute("y", "0");
+    head.setAttribute("width", "2");
+    head.setAttribute("height", String(WAVE_H));
+    head.classList.add("ap-head");
+    svg.appendChild(head);
+    wave.appendChild(svg);
+    const track = document.createElement("div");
+    track.className = "ap-track";
+    const trackFill = document.createElement("div");
+    trackFill.className = "ap-track-fill";
+    track.appendChild(trackFill);
+    wave.appendChild(track);
+
+    const time = document.createElement("div");
+    time.className = "ap-time";
+    const cur = document.createElement("span");
+    cur.className = "ap-cur";
+    cur.textContent = "0:00";
+    const sep = document.createElement("span");
+    sep.className = "ap-sep";
+    sep.textContent = " / ";
+    const tot = document.createElement("span");
+    tot.className = "ap-total";
+    tot.textContent = "--:--";
+    time.append(cur, sep, tot);
+
+    const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+    const speedBtn = document.createElement("button");
+    speedBtn.type = "button";
+    speedBtn.className = "ap-speed";
+    speedBtn.textContent = "1×";
+    speedBtn.title = "Playback speed";
+    speedBtn.setAttribute("aria-haspopup", "menu");
+    speedBtn.setAttribute("aria-expanded", "false");
+    const pop = document.createElement("div");
+    pop.className = "ap-speed-pop";
+    pop.setAttribute("role", "menu");
+    pop.setAttribute("aria-label", "Playback speed");
+    pop.hidden = true;
+    for (const s of SPEEDS) {
+      const opt = document.createElement("button");
+      opt.type = "button";
+      opt.className = "ap-speed-opt";
+      opt.setAttribute("role", "menuitemradio");
+      opt.textContent = `${s}×`;
+      opt.setAttribute("aria-checked", s === 1 ? "true" : "false");
+      opt.addEventListener("click", () => {
+        audio.playbackRate = s;
+        speedBtn.textContent = `${s}×`;
+        for (const o of Array.from(pop.querySelectorAll(".ap-speed-opt"))) {
+          o.setAttribute("aria-checked", String(o === opt));
+        }
+        pop.hidden = true;
+        speedBtn.setAttribute("aria-expanded", "false");
+        speedBtn.focus();
+      });
+      pop.appendChild(opt);
+    }
+    speedBtn.addEventListener("click", () => {
+      pop.hidden = !pop.hidden;
+      speedBtn.setAttribute("aria-expanded", String(!pop.hidden));
+      if (!pop.hidden) {
+        pop
+          .querySelector<HTMLButtonElement>(
+            ".ap-speed-opt[aria-checked='true']",
+          )
+          ?.focus();
+      }
+    });
+    pop.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") {
+        ev.stopPropagation();
+        pop.hidden = true;
+        speedBtn.setAttribute("aria-expanded", "false");
+        speedBtn.focus();
+      }
+    });
+
+    const more = document.createElement("div");
+    more.className = "ap-more";
+    const volBtn = document.createElement("button");
+    volBtn.type = "button";
+    volBtn.className = "ap-vol-btn";
+    volBtn.title = "Mute";
+    volBtn.setAttribute("aria-label", "Mute");
+    volBtn.innerHTML = AP_ICON_VOLUME;
+    const vol = document.createElement("input");
+    vol.type = "range";
+    vol.className = "ap-vol";
+    vol.min = "0";
+    vol.max = "1";
+    vol.step = "0.05";
+    vol.value = "1";
+    vol.setAttribute("aria-label", "Volume");
+    vol.addEventListener("input", () => {
+      audio.volume = Number(vol.value);
+      audio.muted = false;
+      volBtn.title = "Mute";
+      volBtn.setAttribute("aria-label", "Mute");
+    });
+    volBtn.addEventListener("click", () => {
+      audio.muted = !audio.muted;
+      volBtn.title = audio.muted ? "Unmute" : "Mute";
+      volBtn.setAttribute("aria-label", audio.muted ? "Unmute" : "Mute");
+      volBtn.classList.toggle("muted", audio.muted);
+    });
+    const dl = document.createElement("button");
+    dl.type = "button";
+    dl.className = "ap-dl";
+    dl.title = "Download the audio file";
+    dl.setAttribute("aria-label", "Download the audio file");
+    dl.innerHTML = AP_ICON_DOWNLOAD;
+    dl.addEventListener("click", () => {
+      void this.downloadAudioClip(clip);
+    });
+    more.append(volBtn, vol, dl);
+
+    main.append(playBtn, wave, time, speedBtn);
+    wrap.append(main, pop, more);
+
+    const fmt = (s: number): string => {
+      if (!isFinite(s) || s < 0) return "--:--";
+      const m = Math.floor(s / 60);
+      return `${String(m)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+    };
+    const paint = (): void => {
+      const d = audio.duration;
+      const f = isFinite(d) && d > 0 ? audio.currentTime / d : 0;
+      cur.textContent = fmt(audio.currentTime);
+      wave.setAttribute("aria-valuenow", String(Math.round(f * 100)));
+      const n = Math.round(f * BARS);
+      bars.forEach((r, i) => r.classList.toggle("on", i < n));
+      head.setAttribute("x", String(Math.max(0, n * (BAR_W + GAP) - 1)));
+      trackFill.style.width = `${String(f * 100)}%`;
+    };
+    audio.addEventListener("loadedmetadata", () => {
+      tot.textContent = fmt(audio.duration);
+      paint();
+    });
+    audio.addEventListener("timeupdate", paint);
+    audio.addEventListener("seeked", paint);
+    audio.addEventListener("durationchange", () => {
+      tot.textContent = fmt(audio.duration);
+    });
+    const setPlaying = (playing: boolean): void => {
+      playBtn.innerHTML = playing ? AP_ICON_PAUSE : AP_ICON_PLAY;
+      playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
+      playBtn.title = playing ? "Pause" : "Play";
+    };
+    audio.addEventListener("play", () => setPlaying(true));
+    audio.addEventListener("pause", () => setPlaying(false));
+    audio.addEventListener("ended", () => {
+      setPlaying(false);
+      paint();
+    });
+    playBtn.addEventListener("click", () => {
+      if (audio.paused) void audio.play().catch(() => undefined);
+      else audio.pause();
+    });
+
+    let seeking = false;
+    const seekTo = (ev: PointerEvent): void => {
+      const r = wave.getBoundingClientRect();
+      if (r.width <= 0) return;
+      const f = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width));
+      if (isFinite(audio.duration)) audio.currentTime = f * audio.duration;
+      paint();
+    };
+    wave.addEventListener("pointerdown", (ev) => {
+      seeking = true;
+      wave.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+      seekTo(ev);
+    });
+    wave.addEventListener("pointermove", (ev) => {
+      if (seeking) seekTo(ev);
+    });
+    const endSeek = (ev: PointerEvent): void => {
+      seeking = false;
+      if (wave.hasPointerCapture(ev.pointerId))
+        wave.releasePointerCapture(ev.pointerId);
+    };
+    wave.addEventListener("pointerup", endSeek);
+    wave.addEventListener("pointercancel", endSeek);
+    wave.addEventListener("keydown", (ev) => {
+      if (!isFinite(audio.duration)) return;
+      if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const d = ev.key === "ArrowRight" ? 5 : -5;
+        audio.currentTime = Math.min(
+          audio.duration,
+          Math.max(0, audio.currentTime + d),
+        );
+        paint();
+      } else if (ev.key === " " || ev.key === "Enter") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        playBtn.click();
+      }
+    });
+
+    // Waveform peaks: decode the data URI (offline); an external URL
+    // is fetched opportunistically - when that fails (CORS, offline)
+    // the player falls back to the plain progress track.
+    void this.audioPeaks(clip.src).then((peaks) => {
+      if (!wrap.isConnected) return;
+      if (!peaks) {
+        wrap.dataset.peaks = "none";
+        return;
+      }
+      bars.forEach((r, i) => {
+        const p = peaks[Math.floor((i / BARS) * peaks.length)] ?? 0.2;
+        const h = 3 + (WAVE_H - 6) * p;
+        r.setAttribute("y", String((WAVE_H - h) / 2));
+        r.setAttribute("height", String(h));
+      });
+    });
+
+    // Density tier from the container width (card/strip/chip) - the
+    // same player serves narrow containers (e.g. table cells).
+    const ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const w = e.contentRect.width;
+        wrap.dataset.density = w < 240 ? "chip" : w < 480 ? "strip" : "card";
+      }
+    });
+    ro.observe(wrap);
+    this.audioObservers.push(ro);
+
+    return wrap;
+  }
+
+  /** RMS peaks (0..1, normalized) of an audio src, or null when the
+   * bytes cannot be decoded (external URL, unsupported codec). */
+  private async audioPeaks(src: string): Promise<number[] | null> {
+    try {
+      const buf = await (await fetch(src)).arrayBuffer();
+      const AC =
+        window.OfflineAudioContext ??
+        (
+          window as unknown as {
+            webkitOfflineAudioContext?: typeof OfflineAudioContext;
+          }
+        ).webkitOfflineAudioContext;
+      if (!AC) return null;
+      const ctx = new AC(1, 1, 44100);
+      const decoded = await ctx.decodeAudioData(buf);
+      const ch = decoded.getChannelData(0);
+      const N = 480;
+      const step = Math.max(1, Math.floor(ch.length / N));
+      const peaks: number[] = [];
+      let max = 0.0001;
+      for (let i = 0; i < N && i * step < ch.length; i++) {
+        let sum = 0;
+        const end = Math.min(ch.length, (i + 1) * step);
+        for (let j = i * step; j < end; j++) sum += Math.abs(ch[j] ?? 0);
+        const p = sum / Math.max(1, end - i * step);
+        peaks.push(p);
+        if (p > max) max = p;
+      }
+      return peaks.map((p) => 0.15 + 0.85 * (p / max));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Download the embedded file (data URI -> blob download; URL ->
+   * follow with the download attribute). */
+  private async downloadAudioClip(clip: Audio): Promise<void> {
+    const name =
+      (clip.alt || clip.id)
+        .replace(/[^\w\- ]+/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .toLowerCase() || clip.id;
+    try {
+      const a = document.createElement("a");
+      if (clip.src.startsWith("data:")) {
+        const blob = await (await fetch(clip.src)).blob();
+        a.href = URL.createObjectURL(blob);
+        const ext = (blob.type.split("/")[1] ?? "audio").split(";")[0];
+        a.download = `${name}.${ext === "mpeg" ? "mp3" : ext}`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      } else {
+        a.href = clip.src;
+        a.download = name;
+        a.target = "_blank";
+        a.rel = "noopener";
+        a.click();
+      }
+    } catch {
+      // A failed export is silent at the media layer; the document
+      // itself is untouched.
+    }
+  }
+
+  /** The palette's "Play / pause the selected audio clip": toggles
+   * the player of the last-clicked audio figure. Null when no audio
+   * figure was clicked. */
+  playSelectedAudio(): string | null {
+    const el = this.lastBlock;
+    const idx = el ? Number(el.dataset.blockIndex ?? -1) : -1;
+    const block = idx >= 0 ? this.doc?.blocks[idx] : undefined;
+    if (
+      !block ||
+      block.kind !== "audio" ||
+      !el?.matches("figure.folio-audio")
+    ) {
+      return null;
+    }
+    const play = el.querySelector<HTMLButtonElement>(".ap-play");
+    if (!play) return null;
+    play.click();
+    const audio = el.querySelector<HTMLAudioElement>("audio");
+    return audio?.paused ? "Playing" : "Paused";
   }
 
   /**
@@ -8432,6 +8862,8 @@ export class FolioDoc extends HTMLElement {
   }
 
   private figureObserver: IntersectionObserver | null = null;
+  /** Per-player ResizeObservers (density tiers); dropped on render. */
+  private audioObservers: ResizeObserver[] = [];
 
   /** Draw a generated figure only when it nears the viewport (spec:
    * docs/specs/section-windowing.md, option 2 - lazy figures). The
@@ -11400,7 +11832,14 @@ export class FolioDoc extends HTMLElement {
     if (
       ev.target instanceof Element &&
       (ev.target.closest(".folio-comment-body") ||
-        ev.target.closest(".folio-comment-head button"))
+        ev.target.closest(".folio-comment-head button") ||
+        // The audio player's controls are their own island: their
+        // keys belong to them (Backspace on a focused play button
+        // must not remove the figure, arrows on the seek slider
+        // seek, Space toggles play).
+        ev.target.closest(
+          ".folio-audio-player button, .folio-audio-player input, .folio-audio-player [role='slider']",
+        ))
     ) {
       return;
     }

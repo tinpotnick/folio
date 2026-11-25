@@ -31,9 +31,14 @@
 - **Audio** embeds like an image - a recorded sound is media, the
   temporal sibling of a picture. Pick a file with **+ Insert ›
   Audio clip** (or hand-type an `::: audio` directive with a `src`);
-  it plays in the page through the browser's own audio controls.
-  Click the figure to edit its alt text, caption, or replace the
-  file; click once and press Backspace or Delete to remove it.
+  it plays in the page through folio's own player - a play button,
+  a waveform you can click to seek, the time, and a speed chip
+  (hover the card for volume and download). The player shrinks to a
+  strip or a small chip when its container is narrow. Click the
+  figure to edit its alt text, caption, or replace the file; click
+  once and press Backspace or Delete to remove it. Search **"play
+  audio"** in the palette (Ctrl+K) to play or pause the selected
+  clip.
   The same 8 MB ceiling applies - and for sounds you want to
   SYNTHESIZE, use a Strudel block instead. **+ Insert › Record
   audio** records straight from the microphone: while it records,

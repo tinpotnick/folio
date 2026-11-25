@@ -4112,6 +4112,17 @@ function paletteEntries(): PaletteEntry[] {
     },
   });
   entries.push({
+    title: "Play / pause the selected audio clip",
+    group: "Command",
+    keywords: "audio sound clip play pause player speaker toggle media",
+    action: () => {
+      flash(
+        el.playSelectedAudio() ??
+          "No audio selected - click an audio figure first",
+      );
+    },
+  });
+  entries.push({
     title: playing ? "Stop slideshow" : "Play slideshow",
     group: "Command",
     keywords: playing
