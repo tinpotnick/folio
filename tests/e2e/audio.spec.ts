@@ -4,9 +4,11 @@ import { insertFrom } from "./toolbar-helpers";
 /**
  * Audio embeds (spec: docs/specs/audio-embeds.md): a recorded sound
  * is media, the temporal sibling of an image - a `::: audio`
- * directive, played by the native <audio> element, embedded as a
- * data URI or rendered opportunistically from a URL. No execution,
- * no styling: the document stays semantic.
+ * directive embedded as a data URI or rendered opportunistically
+ * from a URL. Playback is folio's own player (a theme-styled card
+ * over a hidden <audio> engine - mock-ups: docs/mockups/
+ * audio-player/): play/pause, waveform seek, time, speed chip,
+ * hover volume/download, density tiers by container width.
  */
 
 async function waitForDocument(page: Page): Promise<void> {
@@ -23,11 +25,11 @@ async function loadDoc(page: Page, markdown: string): Promise<void> {
   await page.locator("#btn-view").click();
 }
 
-/** A real 20 ms mono 8 kHz PCM WAV - the picker accepts it and the
- * native element can load its metadata. */
-function tinyWav(): Buffer {
+/** A real mono 8 kHz PCM WAV of the given length - the picker
+ * accepts it and the engine can load its metadata. */
+function wavOf(seconds: number): Buffer {
   const sampleRate = 8000;
-  const n = 160;
+  const n = Math.floor(sampleRate * seconds);
   const dataSize = n * 2;
   const buf = Buffer.alloc(44 + dataSize);
   buf.write("RIFF", 0);
@@ -49,8 +51,16 @@ function tinyWav(): Buffer {
   return buf;
 }
 
+function tinyWav(): Buffer {
+  return wavOf(0.02);
+}
+
+function wavDataUri(seconds: number): string {
+  return `data:audio/wav;base64,${wavOf(seconds).toString("base64")}`;
+}
+
 test.describe("audio blocks", () => {
-  test("a hand-typed audio directive renders the native element", async ({
+  test("a hand-typed audio directive renders folio's player over a hidden engine", async ({
     page,
   }) => {
     await loadDoc(
@@ -63,13 +73,29 @@ test.describe("audio blocks", () => {
     );
     const figure = page.locator("#the-doc figure.folio-audio");
     await expect(figure).toHaveCount(1);
-    const audio = figure.locator("audio");
+    // The platform element is still there - as the playback engine,
+    // without its native controls.
+    const audio = figure.locator("audio.folio-audio-engine");
     await expect(audio).toHaveCount(1);
     await expect(audio).toHaveAttribute(
       "src",
       "https://example.com/interview.mp3",
     );
-    await expect(audio).toHaveAttribute("controls");
+    expect(await audio.evaluate((el) => el.hasAttribute("controls"))).toBe(
+      false,
+    );
+    // folio's own player chrome: play disc, waveform, time, speed.
+    const player = figure.locator(".folio-audio-player");
+    await expect(player).toBeVisible();
+    await expect(player).toHaveAttribute("data-density", "card");
+    await expect(player.locator(".ap-play")).toBeVisible();
+    await expect(player.locator(".ap-wave")).toBeVisible();
+    await expect(player.locator(".ap-wave-svg .ap-bar").first()).toBeAttached();
+    await expect(player.locator(".ap-time")).toContainText("0:00");
+    await expect(player.locator(".ap-speed")).toHaveText("1×");
+    // An external URL's peaks are not decodable here - the player
+    // falls back to the plain progress track.
+    await expect(player).toHaveAttribute("data-peaks", "none");
     await expect(figure.locator(".folio-audio-label")).toHaveText(
       "the founder, on tape",
     );
@@ -86,6 +112,164 @@ test.describe("audio blocks", () => {
     const md = await page.locator("#editor").inputValue();
     expect(md).toContain("::: audio {#clip}");
     expect(md).toContain('alt: "the founder, on tape"');
+  });
+
+  test("the play button plays and pauses through the hidden engine", async ({
+    page,
+  }) => {
+    await loadDoc(
+      page,
+      `::: audio {#clip}\nsrc: ${wavDataUri(2)}\nalt: "tone"\n:::`,
+    );
+    const figure = page.locator("#the-doc figure.folio-audio");
+    const audio = figure.locator("audio.folio-audio-engine");
+    const play = figure.locator(".ap-play");
+    // The data URI decodes into real waveform peaks.
+    await expect
+      .poll(async () =>
+        figure
+          .locator(".ap-wave-svg .ap-bar")
+          .first()
+          .evaluate((r) => Number(r.getAttribute("height"))),
+      )
+      .toBeGreaterThan(4);
+    await expect(figure.locator(".folio-audio-player")).not.toHaveAttribute(
+      "data-peaks",
+      "none",
+    );
+    // Data URIs attach with preload=none (no media pipeline until
+    // play), so the duration settles when playback starts.
+    await expect(audio).toHaveAttribute("preload", "none");
+    await play.click();
+    await expect(play).toHaveAttribute("aria-label", "Pause");
+    await expect
+      .poll(async () => audio.evaluate((el) => (el as HTMLAudioElement).paused))
+      .toBe(false);
+    await expect
+      .poll(async () =>
+        audio.evaluate((el) => (el as HTMLAudioElement).duration),
+      )
+      .toBeGreaterThan(1.5);
+    await expect(figure.locator(".ap-total")).toHaveText("0:02");
+    await play.click();
+    await expect(play).toHaveAttribute("aria-label", "Play");
+    await expect
+      .poll(async () => audio.evaluate((el) => (el as HTMLAudioElement).paused))
+      .toBe(true);
+  });
+
+  test("clicking the waveform seeks", async ({ page }) => {
+    await loadDoc(page, `::: audio {#clip}\nsrc: ${wavDataUri(2)}\n:::`);
+    const figure = page.locator("#the-doc figure.folio-audio");
+    const audio = figure.locator("audio.folio-audio-engine");
+    // preload=none: start playback so the metadata (duration) loads.
+    await figure.locator(".ap-play").click();
+    await expect
+      .poll(async () =>
+        audio.evaluate((el) => (el as HTMLAudioElement).duration),
+      )
+      .toBeGreaterThan(1.5);
+    const wave = figure.locator(".ap-wave");
+    const box = await wave.boundingBox();
+    if (!box) throw new Error("waveform not laid out");
+    await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+    await expect
+      .poll(async () =>
+        audio.evaluate((el) => (el as HTMLAudioElement).currentTime),
+      )
+      .toBeGreaterThan(1.2);
+    // The played portion of the waveform is filled up to the click.
+    await expect
+      .poll(async () => figure.locator(".ap-wave-svg .ap-bar.on").count())
+      .toBeGreaterThan(90);
+  });
+
+  test("the speed chip sets the playback rate", async ({ page }) => {
+    await loadDoc(
+      page,
+      "# T\n\nSome prose to click away to.\n\n" +
+        `::: audio {#clip}\nsrc: ${wavDataUri(2)}\n:::`,
+    );
+    const figure = page.locator("#the-doc figure.folio-audio");
+    const audio = figure.locator("audio.folio-audio-engine");
+    const speed = figure.locator(".ap-speed");
+    await speed.click();
+    const pop = figure.locator(".ap-speed-pop");
+    await expect(pop).toBeVisible();
+    await pop.locator(".ap-speed-opt", { hasText: "1.5×" }).click();
+    await expect
+      .poll(async () =>
+        audio.evaluate((el) => (el as HTMLAudioElement).playbackRate),
+      )
+      .toBe(1.5);
+    await expect(speed).toHaveText("1.5×");
+    await expect(pop).toBeHidden();
+    // The popover closes on a press outside the figure, too.
+    await speed.click();
+    await expect(pop).toBeVisible();
+    await page
+      .locator("folio-doc p", { hasText: "Some prose to click away to" })
+      .click();
+    await expect(pop).toBeHidden();
+  });
+
+  test("the player picks its density tier from the container width", async ({
+    page,
+  }) => {
+    await loadDoc(page, `::: audio {#clip}\nsrc: ${wavDataUri(1)}\n:::`);
+    const figure = page.locator("#the-doc figure.folio-audio");
+    const player = figure.locator(".folio-audio-player");
+    await expect(player).toHaveAttribute("data-density", "card");
+    await figure.evaluate((el) => {
+      (el as HTMLElement).style.width = "340px";
+    });
+    await expect(player).toHaveAttribute("data-density", "strip");
+    await figure.evaluate((el) => {
+      (el as HTMLElement).style.width = "176px";
+    });
+    await expect(player).toHaveAttribute("data-density", "chip");
+  });
+
+  test("Backspace on a focused player button does not remove the figure", async ({
+    page,
+  }) => {
+    await loadDoc(page, `::: audio {#clip}\nsrc: ${wavDataUri(2)}\n:::`);
+    const figure = page.locator("#the-doc figure.folio-audio");
+    const play = figure.locator(".ap-play");
+    await play.click();
+    await expect(play).toBeFocused();
+    await page.keyboard.press("Backspace");
+    await expect(figure).toHaveCount(1);
+    // Space on the focused button toggles playback (native button
+    // behavior, not the figure's removal path).
+    await page.keyboard.press("Space");
+    await expect
+      .poll(async () =>
+        figure
+          .locator("audio")
+          .evaluate((el) => (el as HTMLAudioElement).paused),
+      )
+      .toBe(true);
+  });
+
+  test("print hides the player but keeps the label and caption", async ({
+    page,
+  }) => {
+    await loadDoc(
+      page,
+      "::: audio {#clip}\n" +
+        "src: https://example.com/a.mp3\n" +
+        'alt: "the clip"\n' +
+        'caption: "A caption"\n' +
+        ":::",
+    );
+    const figure = page.locator("#the-doc figure.folio-audio");
+    await page.emulateMedia({ media: "print" });
+    await expect(figure.locator(".folio-audio-player")).toBeHidden();
+    await expect(figure.locator(".folio-audio-label")).toBeVisible();
+    await expect(figure.locator("figcaption")).toBeVisible();
+    await page.emulateMedia({ media: "screen" });
+    await expect(figure.locator(".folio-audio-player")).toBeVisible();
   });
 
   test("data-URI clips load with preload=none (no perpetual spinner on WebKitGTK)", async ({

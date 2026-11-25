@@ -2881,9 +2881,257 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       padding: 1px 1px 6px;
       user-select: none;
     }
-    figure.folio-audio audio {
-      display: block;
+    /* folio's own audio player (mock-ups: docs/mockups/audio-player/):
+       a theme-styled card over a hidden <audio> engine. All colors
+       come from the existing --folio-* vars; the density tier
+       (card/strip/chip) is set from the container width. */
+    figure.folio-audio .folio-audio-player {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      background: var(--folio-tint, #f5f6f8);
+      border: 1px solid var(--folio-hairline, #e6e8eb);
+      border-radius: 12px;
+      padding: 12px 14px;
+      user-select: none;
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      color: var(--folio-ink, #1f2328);
+    }
+    figure.folio-audio .folio-audio-engine {
+      display: none;
+    }
+    figure.folio-audio .ap-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    figure.folio-audio .ap-play {
+      flex: none;
+      width: 46px;
+      height: 46px;
+      padding: 0;
+      border: none;
+      border-radius: 50%;
+      background: var(--folio-accent, #2f4fb5);
+      color: var(--folio-paper, #ffffff);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    figure.folio-audio .ap-play:hover {
+      opacity: 0.9;
+    }
+    figure.folio-audio .ap-play:focus-visible,
+    figure.folio-audio .ap-speed:focus-visible,
+    figure.folio-audio .ap-wave:focus-visible,
+    figure.folio-audio .ap-more button:focus-visible,
+    figure.folio-audio .ap-speed-opt:focus-visible {
+      outline: 2px solid var(--folio-focus, #1f3fbf);
+      outline-offset: 2px;
+    }
+    figure.folio-audio .ap-wave {
+      flex: 1;
+      min-width: 0;
+      height: 40px;
+      position: relative;
+      cursor: pointer;
+      touch-action: none;
+    }
+    figure.folio-audio .ap-wave-svg {
+      position: absolute;
+      inset: 0;
       width: 100%;
+      height: 100%;
+      display: block;
+    }
+    figure.folio-audio .ap-bar {
+      fill: var(--folio-ink-muted, #5c636b);
+      opacity: 0.45;
+    }
+    figure.folio-audio .ap-bar.on {
+      fill: var(--folio-accent, #2f4fb5);
+      opacity: 1;
+    }
+    figure.folio-audio .ap-head {
+      fill: var(--folio-accent, #2f4fb5);
+    }
+    figure.folio-audio .ap-track {
+      display: none;
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 5px;
+      margin-top: -2.5px;
+      border-radius: 3px;
+      background: color-mix(in srgb, var(--folio-ink-muted, #5c636b) 35%, var(--folio-paper, #ffffff));
+    }
+    figure.folio-audio .ap-track-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 3px;
+      background: var(--folio-accent, #2f4fb5);
+    }
+    /* No decodable peaks (external URL): a plain progress track. */
+    figure.folio-audio .folio-audio-player[data-peaks="none"] .ap-wave-svg {
+      display: none;
+    }
+    figure.folio-audio .folio-audio-player[data-peaks="none"] .ap-track {
+      display: block;
+    }
+    figure.folio-audio .ap-time {
+      flex: none;
+      color: var(--folio-ink-muted, #5c636b);
+      font-size: 12.5px;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    figure.folio-audio .ap-speed {
+      flex: none;
+      min-width: 44px;
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 13px;
+      background: var(--folio-input-bg, #ffffff);
+      color: var(--folio-ink, #1f2328);
+      font-family: system-ui, sans-serif;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    figure.folio-audio .ap-speed:hover {
+      background: var(--folio-hover, #f3f4f6);
+    }
+    figure.folio-audio .ap-speed-pop {
+      position: absolute;
+      right: 12px;
+      bottom: calc(100% - 2px);
+      z-index: 3;
+      display: flex;
+      flex-direction: column;
+      padding: 5px;
+      border: 1px solid var(--folio-rule-strong, #d0d7de);
+      border-radius: 8px;
+      background: var(--folio-paper, #ffffff);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+    }
+    figure.folio-audio .ap-speed-opt {
+      border: none;
+      background: none;
+      text-align: left;
+      padding: 5px 18px;
+      border-radius: 5px;
+      font-family: system-ui, sans-serif;
+      font-size: 12.5px;
+      color: var(--folio-ink, #1f2328);
+      cursor: pointer;
+    }
+    figure.folio-audio .ap-speed-opt:hover {
+      background: var(--folio-hover, #f3f4f6);
+    }
+    figure.folio-audio .ap-speed-opt[aria-checked="true"] {
+      background: color-mix(in srgb, var(--folio-accent, #2f4fb5) 10%, var(--folio-paper, #ffffff));
+      color: var(--folio-accent, #2f4fb5);
+      font-weight: 600;
+    }
+    /* Volume + download: collapsed until the card is hovered/focused. */
+    figure.folio-audio .ap-more {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    figure.folio-audio .folio-audio-player:hover .ap-more,
+    figure.folio-audio .folio-audio-player:focus-within .ap-more {
+      display: flex;
+    }
+    figure.folio-audio .ap-more button {
+      flex: none;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: 1px solid var(--folio-hairline, #e6e8eb);
+      border-radius: 6px;
+      background: var(--folio-input-bg, #ffffff);
+      color: var(--folio-ink-muted, #5c636b);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    figure.folio-audio .ap-more button:hover {
+      color: var(--folio-ink, #1f2328);
+    }
+    figure.folio-audio .ap-vol-btn.muted {
+      opacity: 0.5;
+    }
+    figure.folio-audio .ap-vol {
+      width: 72px;
+      accent-color: var(--folio-accent, #2f4fb5);
+    }
+    /* Strip tier (~240-480px): the native player's shape, themed. */
+    figure.folio-audio .folio-audio-player[data-density="strip"] {
+      padding: 8px 12px;
+      border-radius: 23px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-main {
+      gap: 10px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-play {
+      width: 32px;
+      height: 32px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-play svg {
+      width: 13px;
+      height: 13px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-wave {
+      height: 24px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-wave-svg {
+      display: none;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-track {
+      display: block;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-speed {
+      height: 22px;
+      min-width: 38px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="strip"] .ap-more {
+      display: none;
+    }
+    /* Chip tier (<240px, e.g. a table cell): play + duration pill. */
+    figure.folio-audio .folio-audio-player[data-density="chip"] {
+      flex-direction: row;
+      width: fit-content;
+      padding: 3px 12px 3px 4px;
+      border-radius: 15px;
+      gap: 8px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-main {
+      gap: 8px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-play {
+      width: 24px;
+      height: 24px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-play svg {
+      width: 11px;
+      height: 11px;
+    }
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-wave,
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-speed,
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-more {
+      display: none;
+    }
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-cur,
+    figure.folio-audio .folio-audio-player[data-density="chip"] .ap-sep {
+      display: none;
     }
     figure.folio-audio .folio-audio-pending {
       display: flex;
@@ -3791,7 +4039,7 @@ export function themeCss(theme: Theme, mode: Mode = "light"): string {
       pre.folio-code {
         break-inside: avoid;
       }
-      figure.folio-audio audio {
+      figure.folio-audio .folio-audio-player {
         display: none;
       }
       /* Paper shows the document, never the editing furniture: an

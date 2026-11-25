@@ -5,11 +5,13 @@
 ## Decision
 
 A recorded sound is MEDIA - the temporal sibling of an image, not
-execution. Audio embeds as a directive block played by the NATIVE
-`<audio controls>` element: no player dependency (ADR-0007 is
-satisfied by the platform itself), no autoplay, no styling knobs -
-the theme schema stays closed, and a document that talks stays a
-document, not a jukebox.
+execution. Audio embeds as a directive block played by folio's OWN
+player: a theme-styled card (mock-ups: docs/mockups/audio-player/)
+over a hidden `<audio>` element - the platform element stays the
+playback engine, so ADR-0007 is still satisfied by the platform
+itself, no autoplay, and every color comes from the existing
+`--folio-*` variables, so the theme schema stays closed. A document
+that talks stays a document, not a jukebox.
 
 ```
 ::: audio {#founders-clip}
@@ -40,12 +42,14 @@ RECORDED media (a file the document carries).
   Markdown source workable; a 3-minute MP3 fits comfortably).
 - **Preload**: a `data:` src gets `preload="none"` (URLs keep
   `metadata`). A data URI is already in memory, and on WebKitGTK a
-  metadata preload of a data URI never settles - the native widget's
-  spinner spins forever and the media pipeline stays open, which also
-  made switching to Markdown view slow (hundreds of ms per clip).
-  Play loads a data URI instantly on demand. Leaving the document
-  view pauses any playing clip (`FolioDoc.pauseMedia()`).
-- **Lazy widget**: the `<audio controls>` element attaches only when
+   metadata preload of a data URI never settles - the old native
+  widget's spinner spun forever and the media pipeline stayed open,
+  which also made switching to Markdown view slow (hundreds of ms
+  per clip). Play loads a data URI instantly on demand; the waveform
+  peaks come from fetching the bytes, not from the media element.
+  Leaving the document view pauses any playing clip
+  (`FolioDoc.pauseMedia()`).
+- **Lazy widget**: the player attaches only when
   the figure nears the viewport (or on pointer/focus into it) - the
   lazy-figure contract (docs/specs/section-windowing.md); before that
   the figure shows its alt-text label plus a placeholder row. A deck
@@ -56,13 +60,10 @@ RECORDED media (a file the document carries).
 - **Insert**: the insert group's speaker button opens the host
   file picker, reads the file as a data URI, and seeds `alt` from
   the file name.
-- **The label strip**: the native widget swallows pointer events
-  (its controls live in a UA shadow DOM), so every audio figure
-  carries a small `.folio-audio-label` strip ABOVE the player
-  showing the alt text ("audio clip" when empty). It is the
-  figure's clickable identity - mousedown on it reveals the
-  uniform inspector bar, like a code block's header - and it
-  names the sound in print when the player itself is hidden.
+- **The label strip**: every audio figure carries a small
+  `.folio-audio-label` strip ABOVE the player showing the alt text
+  ("audio clip" when empty). It is the figure's clickable identity
+  and names the sound in print when the player itself is hidden.
   Editing the alt updates the strip live.
 
 - **Recording** is a second input path for the same block - host
@@ -91,13 +92,29 @@ RECORDED media (a file the document carries).
   uniform inspector bar (alt, caption, replace file) on the
   click-outside-hides contract; Backspace/Delete on the selected
   figure removes the block.
-- **Playback**: the native element with `controls` and
-  `preload="metadata"` - a URL, a duration, and a play button the
-  platform provides. Nothing else. Audio is not "run": the
+- **Playback** (folio's own player, `buildAudioPlayer` in
+  `src/component.ts`, attached lazily via `attachAudio`): the figure
+  carries a hidden
+  `audio.folio-audio-engine` element (preload per
+  the rule above, no `controls`) plus a `.folio-audio-player` card - accent play/pause
+  disc, waveform seek, `current / total` time, a playback-speed chip
+  (0.75×–2×), and a hover row with volume and download. Waveform
+  peaks come from `decodeAudioData` on the data URI; an external URL
+  whose bytes cannot be decoded falls back to a plain progress track
+  (`data-peaks="none"`). The card picks a density tier from its
+  container width (`data-density`: card ≥ 480px, strip ≥ 240px,
+  chip below - ResizeObserver), so the same component serves narrow
+  containers later (e.g. table cells). The bar reveals on CLICK in
+  the figure (not mousedown) so player controls receive their own
+  clicks, and keyboard focus in the player (not from a mouse press)
+  reveals it too; player controls own their keys - Backspace on a
+  focused button never removes the figure. Audio is not "run": the
   document has no execution affordances, and pressing play on an
   audio figure is no more execution than looking at an image.
+  The palette's "Play / pause the selected audio clip" toggles the
+  last-clicked figure's player.
 - **Print**: a sound cannot print. The print stylesheet hides the
-  element; the figure keeps its caption and alt so the document
+  player card; the figure keeps its caption and alt so the document
   on paper still says what the sound is.
 - **Source view**: the `::: audio` directive lines highlight as
   `directive` tokens (the generic directive grammar; no separate
@@ -107,9 +124,11 @@ RECORDED media (a file the document carries).
 
 - Engine: `tests/engine/doc.test.ts` (parse, byte-identity,
   missing src, unknown keys, coexistence with prose/headings).
-- e2e: `tests/e2e/audio.spec.ts` (hand-typed directive renders
-  the native element; insert-from-file embeds a real WAV and
-  reaches the Markdown source; inspector alt/caption/replace;
-  dismissal contract; Backspace removal; 8 MB refusal; recording
-  via a fake microphone device, and the denied-mic error path).
+- e2e: `tests/e2e/audio.spec.ts` (hand-typed directive renders the
+  player over the hidden engine; play/pause, waveform seek, speed
+  chip, density tiers, print hiding; insert-from-file embeds a real
+  WAV and reaches the Markdown source; inspector alt/caption/
+  replace; dismissal contract; Backspace removal; 8 MB refusal;
+  recording via a fake microphone device, and the denied-mic error
+  path). WebKitGTK: `tests/webkitgtk/audio-player-native.js`.
 - First-contact eval: `evals/audio-embeds-first-contact.md`.
