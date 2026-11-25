@@ -8,6 +8,7 @@ import type {
   Audio,
   Cell,
   Chart,
+  Flashcards,
   Image,
   Motion,
   Table,
@@ -45,6 +46,10 @@ export type DocBlock =
     }
   | { kind: "image"; image: Image }
   | { kind: "audio"; audio: Audio }
+  /** A flashcard deck (spec: docs/specs/flashcards.md): a `:::
+   *  flashcards {#id}` block with a `title:` and one `card:` line per
+   *  card - `card: "front" | "back" | @sound-ref-or-data-uri`. */
+  | { kind: "flashcards"; flashcards: Flashcards }
   /** Footnote definitions (spec: docs/specs/footnotes.md), GitHub's
    * syntax: `[^label]: text`, continuation lines indented. Consecutive
    * definitions are one block so they round-trip without blank lines. */
@@ -81,6 +86,7 @@ const BLOCK_CLASS: Record<DocBlock["kind"], "text" | "figure"> = {
   diagram: "figure",
   image: "figure",
   audio: "figure",
+  flashcards: "figure",
   footnotes: "figure",
   toc: "figure",
   comment: "figure",
@@ -171,7 +177,7 @@ export interface Doc {
 }
 
 const DIRECTIVE_RE =
-  /^::: (table|chart|image|audio|value|motion|comment|page) \{#([^}]+)\}(?:[ \t]+(.*))?$/;
+  /^::: (table|chart|image|audio|flashcards|value|motion|comment|page) \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 const MERMAID_RE = /^::: mermaid \{#([^}]+)\}(?:[ \t]+(.*))?$/;
 
 export class ParseError extends Error {
@@ -293,6 +299,8 @@ export function parseDoc(text: string): Doc {
       else if (m[1] === "motion")
         doc.blocks.push(parseMotionDirective(body, id));
       else if (m[1] === "audio") doc.blocks.push(parseAudioDirective(body, id));
+      else if (m[1] === "flashcards")
+        doc.blocks.push(parseFlashcardsDirective(body, id));
       else doc.blocks.push(parseImageDirective(body, id));
       i = body.endLine + 1;
       continue;
@@ -855,6 +863,59 @@ function parseAudioDirective(body: DirectiveBody, id: string): DocBlock {
   return { kind: "audio", audio };
 }
 
+/** Split a `card:` value on top-level `|` separators - a `|` inside a
+ * quoted field does not split. Fields: front, back?, sound? */
+function splitCardFields(raw: string): string[] {
+  const fields: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i] ?? "";
+    if (quoted && ch === "\\" && i + 1 < raw.length) {
+      cur += ch + (raw[i + 1] ?? "");
+      i++;
+      continue;
+    }
+    if (ch === '"') quoted = !quoted;
+    if (ch === "|" && !quoted) {
+      fields.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += ch;
+  }
+  fields.push(cur.trim());
+  return fields;
+}
+
+function parseFlashcardsDirective(body: DirectiveBody, id: string): DocBlock {
+  const flashcards: Flashcards = { id, cards: [] };
+  for (const [k, raw] of body.entries) {
+    if (k === "title") {
+      flashcards.title = unquoteEscape(raw);
+      continue;
+    }
+    if (k !== "card") {
+      throw new ParseError(`Unknown flashcards key: '${k}'`, 0);
+    }
+    const fields = splitCardFields(raw);
+    const front = unquoteEscape(fields[0] ?? "");
+    if (!front) {
+      throw new ParseError(`Flashcard in '${id}' has an empty front`, 0);
+    }
+    const card: Flashcards["cards"][number] = { front };
+    // Field COUNT decides presence (not emptiness), so both
+    // `card: "a"` and `card: "a" | ""` round-trip byte-identically.
+    if (fields.length > 1) card.back = unquoteEscape(fields[1] ?? "");
+    // Sound is raw: an @audio-id reference or a data URI (no spaces,
+    // no quotes), like an audio block's src.
+    const sound = fields[2] ?? "";
+    if (fields.length > 2 && sound) card.sound = sound;
+    flashcards.cards.push(card);
+  }
+  return { kind: "flashcards", flashcards };
+}
+
 function parseQuery(raw: string): Chart["query"] {
   const map = parseInlineMap(raw);
   const query: Chart["query"] = { select: [] };
@@ -1296,6 +1357,8 @@ function serializeBlock(block: DocBlock): string {
       return serializeImage(block.image);
     case "audio":
       return serializeAudio(block.audio);
+    case "flashcards":
+      return serializeFlashcards(block.flashcards);
     case "comment":
       return serializeComment(block.comment);
     case "page":
@@ -1393,6 +1456,27 @@ function serializeAudio(audio: Audio): string {
   if (audio.alt !== undefined) lines.push(`alt: "${audio.alt}"`);
   if (audio.caption !== undefined) {
     lines.push(`caption: "${audio.caption}"`);
+  }
+  lines.push(":::");
+  return lines.join("\n");
+}
+
+function quoteCardField(s: string): string {
+  return `"${s.replace(/"/g, '\\"')}"`;
+}
+
+function serializeFlashcards(deck: Flashcards): string {
+  const lines = [`::: flashcards {#${deck.id}}`];
+  if (deck.title !== undefined) {
+    lines.push(`title: "${deck.title.replace(/"/g, '\\"')}"`);
+  }
+  for (const card of deck.cards) {
+    const parts = [quoteCardField(card.front)];
+    // Back is emitted iff present in the model, so `card: "a"` and
+    // `card: "a" | ""` each round-trip byte-identically.
+    if (card.back !== undefined) parts.push(quoteCardField(card.back));
+    if (card.sound !== undefined) parts.push(card.sound);
+    lines.push(`card: ${parts.join(" | ")}`);
   }
   lines.push(":::");
   return lines.join("\n");

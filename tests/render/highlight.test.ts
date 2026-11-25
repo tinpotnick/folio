@@ -66,14 +66,14 @@ describe("highlightMarkdown", () => {
     expect(texts("just words")).toEqual(["just words"]);
   });
 
-  it("emits a giant line (a data: URL) as one plain token, unscanned", () => {
+  it("emits a giant line (a data: URL) unscanned, with the URI as a data token", () => {
     // per-character inline scanning on a multi-MB line costs seconds
     // on every keystroke in the source view - cap it
     const big = "src: data:image/png;base64," + "A".repeat(200_000);
     const line = highlightMarkdown(big)[0];
-    expect(line?.tokens).toHaveLength(1);
-    expect(line?.tokens[0]?.kind).toBe("text");
-    expect(line?.tokens[0]?.text).toBe(big);
+    // prefix + data token, never inline-scanned; round-trip holds
+    expect(line?.tokens.map((t) => t.kind)).toEqual(["text", "data"]);
+    expect(line?.tokens.map((t) => t.text).join("")).toBe(big);
     // a bold marker inside the giant line is NOT picked up...
     const big2 = "x".repeat(9000) + "**b**";
     expect(highlightMarkdown(big2)[0]?.tokens).toHaveLength(1);
@@ -104,5 +104,36 @@ describe("sub/sup tokens", () => {
     expect(kinds("H~2~O")).toEqual(["text", "sub", "text"]);
     expect(kinds("x^2^")).toEqual(["text", "sup"]);
     expect(kinds("~~gone~~")).toEqual(["strike"]);
+  });
+});
+
+describe("data-URI tokens", () => {
+  const payload = "A".repeat(500);
+  it("splits a long base64 data URI into a data token, keeping the full text", () => {
+    const src = `::: audio {#a}\nsrc: data:audio/ogg;base64,${payload}\n:::`;
+    const lines = highlightMarkdown(src);
+    const kinds = lines[1]?.tokens.map((t) => t.kind) ?? [];
+    expect(kinds).toEqual(["text", "directive-key", "text", "data"]);
+    // round-trip: concatenated token text equals the source line
+    const rebuilt = lines
+      .map((l) => l.tokens.map((t) => t.text).join(""))
+      .join("\n");
+    expect(rebuilt).toBe(src);
+    const dataTok = lines[1]?.tokens.find((t) => t.kind === "data");
+    expect(dataTok?.text).toBe(`data:audio/ogg;base64,${payload}`);
+  });
+
+  it("leaves short data URIs inline", () => {
+    const src = `src: data:image/png;base64,${"A".repeat(20)}`;
+    const toks = highlightMarkdown(src)[0]?.tokens ?? [];
+    expect(toks.some((t) => t.kind === "data")).toBe(false);
+    expect(toks.map((t) => t.text).join("")).toBe(src);
+  });
+
+  it("chips an inline image data URI in prose too", () => {
+    const src = `before ![pic](data:image/png;base64,${payload}) after`;
+    const toks = highlightMarkdown(src)[0]?.tokens ?? [];
+    expect(toks.some((t) => t.kind === "data")).toBe(true);
+    expect(toks.map((t) => t.text).join("")).toBe(src);
   });
 });

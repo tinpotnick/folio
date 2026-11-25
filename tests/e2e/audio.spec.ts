@@ -137,17 +137,20 @@ test.describe("audio blocks", () => {
       "data-peaks",
       "none",
     );
+    // Data URIs attach with preload=none (no media pipeline until
+    // play), so the duration settles when playback starts.
+    await expect(audio).toHaveAttribute("preload", "none");
+    await play.click();
+    await expect(play).toHaveAttribute("aria-label", "Pause");
+    await expect
+      .poll(async () => audio.evaluate((el) => (el as HTMLAudioElement).paused))
+      .toBe(false);
     await expect
       .poll(async () =>
         audio.evaluate((el) => (el as HTMLAudioElement).duration),
       )
       .toBeGreaterThan(1.5);
     await expect(figure.locator(".ap-total")).toHaveText("0:02");
-    await play.click();
-    await expect(play).toHaveAttribute("aria-label", "Pause");
-    await expect
-      .poll(async () => audio.evaluate((el) => (el as HTMLAudioElement).paused))
-      .toBe(false);
     await play.click();
     await expect(play).toHaveAttribute("aria-label", "Play");
     await expect
@@ -159,6 +162,8 @@ test.describe("audio blocks", () => {
     await loadDoc(page, `::: audio {#clip}\nsrc: ${wavDataUri(2)}\n:::`);
     const figure = page.locator("#the-doc figure.folio-audio");
     const audio = figure.locator("audio.folio-audio-engine");
+    // preload=none: start playback so the metadata (duration) loads.
+    await figure.locator(".ap-play").click();
     await expect
       .poll(async () =>
         audio.evaluate((el) => (el as HTMLAudioElement).duration),
@@ -265,6 +270,57 @@ test.describe("audio blocks", () => {
     await expect(figure.locator("figcaption")).toBeVisible();
     await page.emulateMedia({ media: "screen" });
     await expect(figure.locator(".folio-audio-player")).toBeVisible();
+  });
+
+  test("data-URI clips load with preload=none (no perpetual spinner on WebKitGTK)", async ({
+    page,
+  }) => {
+    const wav = tinyWav().toString("base64");
+    await loadDoc(
+      page,
+      "::: audio {#embed}\nsrc: data:audio/wav;base64," +
+        wav +
+        "\n:::\n\n" +
+        "::: audio {#remote}\nsrc: https://example.com/interview.mp3\n:::\n",
+    );
+    const figs = page.locator("#the-doc figure.folio-audio");
+    await expect(figs).toHaveCount(2);
+    await expect(figs.nth(0).locator("audio")).toHaveAttribute(
+      "preload",
+      "none",
+    );
+    await expect(figs.nth(1).locator("audio")).toHaveAttribute(
+      "preload",
+      "metadata",
+    );
+  });
+
+  test("an off-screen audio figure is pending and attaches when scrolled near", async ({
+    page,
+  }) => {
+    const filler = Array.from(
+      { length: 200 },
+      (_, i) => `Paragraph ${String(i)} with some words to push it down.`,
+    ).join("\n\n");
+    const wav = tinyWav().toString("base64");
+    await loadDoc(
+      page,
+      `# T\n\n${filler}\n\n::: audio {#far}\nsrc: data:audio/wav;base64,${wav}\nalt: "far clip"\n:::
+`,
+    );
+    const figure = page.locator("#the-doc figure.folio-audio");
+    await expect(figure).toHaveCount(1);
+    // Below the fold: placeholder, no media widget yet.
+    await expect(figure).toHaveAttribute("data-pending", "figure");
+    await expect(figure.locator(".folio-audio-pending")).toBeVisible();
+    await expect(figure.locator("audio")).toHaveCount(0);
+    // The label strip is still the figure's identity.
+    await expect(figure.locator(".folio-audio-label")).toHaveText("far clip");
+    // Scroll it into view: the player attaches.
+    await figure.scrollIntoViewIfNeeded();
+    await expect(figure.locator("audio")).toHaveCount(1);
+    await expect(figure).not.toHaveAttribute("data-pending", /.*/);
+    await expect(figure.locator("audio")).toHaveAttribute("preload", "none");
   });
 
   test("the insert button embeds a picked file and reaches the source", async ({

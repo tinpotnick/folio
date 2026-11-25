@@ -92,6 +92,114 @@ test.describe("markdown source view", () => {
     expect(gutter?.split("\n").slice(0, 3)).toEqual(["1", "2", "3"]);
   });
 
+  test("a huge data-URI line is one overlay row; editor never soft-wraps", async ({
+    page,
+  }) => {
+    await waitForDocument(page);
+    const big =
+      "# T\n\n::: audio {#c}\nsrc: data:audio/wav;base64," +
+      "A".repeat(60000) +
+      "\n:::\n\n" +
+      "B".repeat(60000) +
+      "\n";
+    await page.locator("#btn-markdown").click();
+    await page.locator("#editor").fill(big);
+    await page.locator("#btn-view").click();
+    await expect(page.locator("#the-doc figure.folio-audio")).toBeVisible();
+    await page.locator("#btn-markdown").click();
+    await expect(page.locator("#editor")).toBeVisible();
+    // Caret at the top: the huge line must render truncated, not full.
+    await page.evaluate(() => {
+      const ed = document.querySelector("#editor") as HTMLTextAreaElement;
+      ed.setSelectionRange(0, 0);
+      ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
+    // No soft wrap: the textarea scrolls sideways, the overlay pans.
+    await expect(page.locator("#editor")).toHaveAttribute("wrap", "off");
+    const editor = page.locator("#editor");
+    const lineCount = (await editor.inputValue()).split("\n").length;
+    await expect(page.locator("#md-view .ln")).toHaveCount(lineCount);
+    await editor.evaluate((el) => {
+      (el as HTMLTextAreaElement).scrollLeft = 5000;
+      el.dispatchEvent(new Event("scroll"));
+    });
+    const panned = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      return view.scrollLeft;
+    });
+    expect(panned).toBe(5000);
+    // The data-URI line renders as ONE compact row with a data chip (mime
+    // + size), not a 60k-char text run; a huge non-data line truncates.
+    const compact = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      const rows = Array.from(view.querySelectorAll(".ln"));
+      const audioRow = rows.find((r) =>
+        (r.textContent ?? "").includes("base64"),
+      );
+      const chip = audioRow?.querySelector(".tk-data");
+      const blobRow = rows.find((r) =>
+        /^B+$/.test((r.textContent ?? "").slice(0, 100)),
+      );
+      const mark = blobRow?.querySelector(".tk-trunc");
+      return {
+        audioLen: (audioRow?.textContent ?? "").length,
+        audioHeight: audioRow?.getBoundingClientRect().height ?? -1,
+        chipText: chip?.textContent ?? "",
+        noTruncOnAudio: !audioRow?.querySelector(".tk-trunc"),
+        blobLen: (blobRow?.textContent ?? "").length,
+        blobMarker: mark?.textContent ?? "",
+      };
+    });
+    expect(compact.audioLen).toBeLessThan(100); // chip, not 60k
+    expect(compact.audioHeight).toBeGreaterThan(0);
+    expect(compact.audioHeight).toBeLessThan(60); // one row, no wrap explosion
+    expect(compact.chipText).toMatch(
+      /^data:audio\/wav;base64 \[\d+(\.\d+)? kB\]$/,
+    );
+    expect(compact.noTruncOnAudio).toBe(true);
+    expect(compact.blobLen).toBeLessThan(1100); // truncated prefix + marker
+    expect(compact.blobMarker).toMatch(/^ …\(\+\d+\)$/);
+    // The textarea keeps the full text (it is the model - round-trip).
+    await expect(page.locator("#editor")).toHaveValue(/A{60000}/);
+    await expect(page.locator("#editor")).toHaveValue(/B{60000}/);
+    // Moving the caret into the chipped line expands it to the raw URI.
+    await page.evaluate(() => {
+      const ed = document.querySelector("#editor") as HTMLTextAreaElement;
+      const pos = ed.value.indexOf("base64,") + 10;
+      ed.focus();
+      ed.setSelectionRange(pos, pos);
+      ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
+    const expanded = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      const rows = Array.from(view.querySelectorAll(".ln"));
+      const long = rows.find((r) => (r.textContent ?? "").includes("base64,"));
+      return {
+        textLen: (long?.textContent ?? "").length,
+        hasChip: !!long?.querySelector(".tk-data"),
+      };
+    });
+    expect(expanded.textLen).toBeGreaterThan(50000);
+    expect(expanded.hasChip).toBe(false);
+    // Moving the caret out chips it again.
+    await page.evaluate(() => {
+      const ed = document.querySelector("#editor") as HTMLTextAreaElement;
+      ed.setSelectionRange(0, 0);
+      ed.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true }));
+    });
+    const rechipped = await page.evaluate(() => {
+      const view = document.querySelector("#md-view") as HTMLElement;
+      const rows = Array.from(view.querySelectorAll(".ln"));
+      const long = rows.find((r) => (r.textContent ?? "").includes("base64"));
+      return {
+        textLen: (long?.textContent ?? "").length,
+        hasChip: !!long?.querySelector(".tk-data"),
+      };
+    });
+    expect(rechipped.textLen).toBeLessThan(100);
+    expect(rechipped.hasChip).toBe(true);
+  });
+
   test("edited source round-trips back into the rendered view", async ({
     page,
   }) => {

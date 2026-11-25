@@ -62,7 +62,7 @@ import {
   type Publisher,
 } from "./engine/catalog.js";
 import type { Table } from "./engine/index.js";
-import { highlightMarkdown } from "./render/highlight.js";
+import { highlightMarkdown, type MdLine } from "./render/highlight.js";
 import {
   addCustomWord,
   isMisspelled,
@@ -400,31 +400,173 @@ function flash(msg: string): void {
   );
 }
 
+/** Overlay rows longer than this render TRUNCATED (prefix + a
+ * `…(+N)` marker): with no soft wrap a multi-KB data-URI line is one
+ * unbreakable row, and laying out / painting tens of thousands of
+ * glyphs per row is what made the source view unresponsive for many
+ * seconds on GPU-composited WebKitGTK right after switching to it.
+ * The textarea keeps the full text (it is the model); only the
+ * caret's line renders in full, so colors stay aligned while that
+ * line is being edited. */
+const MAX_OVERLAY_CHARS = 1024;
+
+let lastLines: MdLine[] = [];
+let lastLineStarts: number[] = [];
+/** Lines rendered as a bounded prefix + marker (no data URI on them):
+ * their child spans no longer map 1:1 to tokens, so proofing marks
+ * skip them. */
+const truncatedLines = new Set<number>();
+/** Lines rendered compact (chip for the data URI, or truncation) that
+ * expand to full raw text while the caret is in them. */
+const compactLines = new Set<number>();
+let expandedLine = -1;
+
+/** Chip label for a data-URI token: the mime type and payload size,
+ * not the payload itself. */
+function dataChipLabel(uri: string): string {
+  const semi = uri.indexOf(";");
+  const mime = semi > 5 ? uri.slice(5, semi) : "";
+  const b64 = uri.indexOf(";base64,");
+  const payload = b64 >= 0 ? uri.length - (b64 + 8) : 0;
+  const kb = payload / 1024;
+  const size =
+    kb >= 1024 ? `${(kb / 1024).toFixed(1)} MB` : `${kb.toFixed(1)} kB`;
+  return `data:${mime};base64 [${size}]`;
+}
+
+function lineLength(line: MdLine): number {
+  let n = 0;
+  for (const t of line.tokens) n += t.text.length;
+  return n;
+}
+
+function caretLineOf(pos: number): number {
+  let lo = 0;
+  let hi = lastLineStarts.length - 1;
+  let ans = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if ((lastLineStarts[mid] ?? 0) <= pos) {
+      ans = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return ans;
+}
+
+function buildLineEl(li: number, full: boolean): HTMLElement {
+  const line = lastLines[li] ?? { tokens: [] };
+  const ln = document.createElement("span");
+  ln.className = "ln";
+  if (line.tokens.length === 0) {
+    ln.textContent = "\u00a0";
+    return ln;
+  }
+  const total = lineLength(line);
+  const hasData = line.tokens.some((t) => t.kind === "data");
+  // A line with a data URI renders the URI as a chip; a huge line
+  // without one renders a bounded prefix + marker. Either way the row
+  // stays cheap to lay out and paint.
+  const truncate = !full && !hasData && total > MAX_OVERLAY_CHARS;
+  const chipped = !full && hasData;
+  if (truncate) truncatedLines.add(li);
+  else truncatedLines.delete(li);
+  if (truncate || chipped) compactLines.add(li);
+  else compactLines.delete(li);
+  let used = 0;
+  for (const tok of line.tokens) {
+    if (truncate && used >= MAX_OVERLAY_CHARS) break;
+    const span = document.createElement("span");
+    if (tok.kind === "data" && chipped) {
+      // The chip: mime + size only. The textarea still holds the full
+      // URI (it is the model); the caret's line renders the raw URI.
+      span.className = "tk-data";
+      span.textContent = dataChipLabel(tok.text);
+      ln.appendChild(span);
+      continue;
+    }
+    // Full render (caret in the line): the data URI is plain raw text.
+    span.className = tok.kind === "data" ? "tk-text" : `tk-${tok.kind}`;
+    if (truncate && used + tok.text.length > MAX_OVERLAY_CHARS) {
+      span.textContent = tok.text.slice(0, MAX_OVERLAY_CHARS - used);
+      used = MAX_OVERLAY_CHARS;
+    } else {
+      span.textContent = tok.text;
+      used += tok.text.length;
+    }
+    ln.appendChild(span);
+  }
+  if (truncate) {
+    const mark = document.createElement("span");
+    mark.className = "tk-trunc";
+    mark.textContent = ` …(+${String(total - MAX_OVERLAY_CHARS)})`;
+    ln.appendChild(mark);
+  }
+  return ln;
+}
+
 function renderHighlight(): void {
   const lines = highlightMarkdown(editor.value);
-  editor.style.height = "auto";
-  editor.style.height = `${String(editor.scrollHeight)}px`;
-  mdView.textContent = "";
-  lines.forEach((line) => {
-    const ln = document.createElement("span");
-    ln.className = "ln";
-    if (line.tokens.length === 0) {
-      ln.textContent = "\u00a0";
-    } else {
-      for (const tok of line.tokens) {
-        const span = document.createElement("span");
-        span.className = `tk-${tok.kind}`;
-        span.textContent = tok.text;
-        ln.appendChild(span);
-      }
+  lastLines = lines;
+  lastLineStarts = [];
+  {
+    let acc = 0;
+    for (const line of lines) {
+      lastLineStarts.push(acc);
+      acc += lineLength(line) + 1;
     }
-    mdView.appendChild(ln);
+  }
+  truncatedLines.clear();
+  compactLines.clear();
+  const caretLine = caretLineOf(editor.selectionStart ?? 0);
+  expandedLine = caretLine;
+  mdView.textContent = "";
+  lines.forEach((_, li) => {
+    mdView.appendChild(buildLineEl(li, li === caretLine));
   });
   mdGutter.textContent = "";
   lines.forEach((_, i) => {
     mdGutter.appendChild(document.createTextNode(`${String(i + 1)}\n`));
   });
+  // Size the textarea to the OVERLAY's laid-out height (read after the
+  // overlay is in the DOM): the editor's own scrollHeight can be stale
+  // by a frame on WebKitGTK, which left the textarea shorter than its
+  // content - an inner scrollbar, a clipped overlay, white page below.
+  syncEditorHeight();
   scheduleSourceMarks();
+}
+
+/** Size the source textarea to the highlight overlay's laid-out height,
+ *  so the transparent editor and the overlay never desynchronize. */
+function syncEditorHeight(): void {
+  if (mdWrap.hidden) return;
+  // One guarded write: setting "auto" first would force a full textarea
+  // relayout twice per render on docs with huge lines.
+  const h = `${String(mdView.scrollHeight)}px`;
+  if (editor.style.height !== h) editor.style.height = h;
+}
+
+/** Expand the caret's overlay row if it was rendered compact - chip or
+ *  truncated (and re-compact the row the caret left): colors then align
+ *  with the caret inside a huge (data-URI) line while it is edited. */
+function refreshCaretLine(): void {
+  if (mdWrap.hidden || lastLines.length === 0) return;
+  const li = caretLineOf(editor.selectionStart ?? 0);
+  if (li === expandedLine) return;
+  const prev = expandedLine;
+  expandedLine = li;
+  if (prev >= 0 && prev < lastLines.length && prev !== li) {
+    // The caret left prev: re-render it compact (buildLineEl decides
+    // chip/truncation/full and updates the sets).
+    const oldEl = mdView.children[prev];
+    if (oldEl) mdView.replaceChild(buildLineEl(prev, false), oldEl);
+  }
+  if (compactLines.has(li)) {
+    const newEl = mdView.children[li];
+    if (newEl) mdView.replaceChild(buildLineEl(li, true), newEl);
+  }
 }
 
 /* --- Proofing marks in the Markdown source view (spec:
@@ -497,6 +639,10 @@ async function runSourceMarks(): Promise<void> {
   // mark at a time splits the text node and corrupts the next offset).
   const byToken = new Map<string, SourceMark[]>();
   for (const m of marks) {
+    // Truncated overlay rows render a prefix plus a marker span, so
+    // their child spans no longer map 1:1 to the full tokens the
+    // marks were computed against - skip those rows.
+    if (truncatedLines.has(m.line)) continue;
     const key = `${String(m.line)}:${String(m.token)}`;
     const arr = byToken.get(key) ?? [];
     arr.push(m);
@@ -675,6 +821,7 @@ btnView.addEventListener("click", () => {
 });
 
 btnMd.addEventListener("click", () => {
+  const t0 = performance.now();
   // Leaving for the source view stops the slideshow (spec:
   // docs/specs/slides.md): play is a flag on the document view.
   if (playing) setPlaying(false);
@@ -682,12 +829,25 @@ btnMd.addEventListener("click", () => {
   // open editor (an equation's), and that change must land here.
   editor.hidden = false;
   mdWrap.hidden = false;
+  // A clip playing in the document must not keep running (and its
+  // media pipeline open) while the source is on screen.
+  el.pauseMedia();
   const md = el.getMarkdown();
   if (md !== null) editor.value = md;
   el.hidden = true;
   renderHighlight();
   btnMd.classList.add("active");
   btnView.classList.remove("active");
+  // Diagnostic for the GPU-composited source-view stall (see
+  // docs/blockers/md-view-edit-stall-2026-11-20.md): how long the
+  // switch handler took, and until two frames had painted after it.
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      (window as unknown as Record<string, unknown>).__folioMdSwitch = {
+        handlerMs: Math.round(performance.now() - t0),
+      };
+    }),
+  );
 });
 
 /* --- Slideshow (spec: docs/specs/slides.md) --- */
@@ -2918,8 +3078,21 @@ el.addEventListener("keyup", (ev) =>
     reflectToolbarState(caretHint ?? undefined);
   }, 0),
 );
-editor.addEventListener("keyup", () => setTimeout(reflectToolbarState, 0));
-editor.addEventListener("click", () => setTimeout(reflectToolbarState, 0));
+editor.addEventListener("keyup", () => {
+  refreshCaretLine();
+  setTimeout(reflectToolbarState, 0);
+});
+editor.addEventListener("click", () => {
+  refreshCaretLine();
+  setTimeout(reflectToolbarState, 0);
+});
+editor.addEventListener("mouseup", () => refreshCaretLine());
+// The source view does not soft-wrap (a data-URI line is one long row):
+// the textarea scrolls itself horizontally, the highlight overlay is
+// panned in sync so caret and colors stay aligned.
+editor.addEventListener("scroll", () => {
+  mdView.scrollLeft = editor.scrollLeft;
+});
 editor.addEventListener("input", () => {
   renderHighlight();
   reflectToolbarState();
@@ -2994,6 +3167,14 @@ const btnTable = requireEl<HTMLButtonElement>("#btn-table");
 btnTable.addEventListener("click", () => {
   el.insertTable();
   flash("Table inserted");
+});
+
+// Flashcard deck insert (spec: docs/specs/flashcards.md): a `:::
+// flashcards` figure with one starter card, at the caret.
+const btnFlashcards = requireEl<HTMLButtonElement>("#btn-flashcards");
+btnFlashcards.addEventListener("click", () => {
+  el.insertFlashcards();
+  flash("Flashcard deck inserted");
 });
 
 /* --- Dark / light mode (spec: docs/specs/dark-light-mode.md) ---
@@ -3191,6 +3372,7 @@ function reflectActiveSection(): void {
 
 window.addEventListener("scroll", reflectActiveSection, { passive: true });
 window.addEventListener("resize", reflectActiveSection, { passive: true });
+window.addEventListener("resize", () => syncEditorHeight(), { passive: true });
 
 btnSidebar.addEventListener("click", () => {
   sidebar.hidden = !sidebar.hidden;
@@ -4003,6 +4185,20 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
       "motion swarm murmuration flock birds animated play simulation frames python compute animation movement swirl",
   },
   {
+    id: "flashcards",
+    title: "Spanish for travellers: flashcard deck",
+    file: "demo/examples/flashcards.md",
+    blurb:
+      "flashcards flash cards deck study quiz learn vocabulary cards srs flip match choice audio",
+  },
+  {
+    id: "levantine-arabic",
+    title: "Levantine Arabic: a spoken flashcard deck",
+    file: "demo/examples/levantine-arabic.md",
+    blurb:
+      "levantine arabic shami spoken flashcards flash cards deck study language pronunciation audio clips rtl right-to-left vocabulary tts",
+  },
+  {
     id: "flow",
     title: "Traffic on a small road network",
     file: "demo/examples/flow.md",
@@ -4015,6 +4211,13 @@ const EXAMPLES: { id: string; title: string; file: string; blurb: string }[] = [
     file: "demo/examples/stats.md",
     blurb:
       "stats github traffic page views clones downloads releases trend line chart nightly snapshot live numbers",
+  },
+  {
+    id: "page-sections",
+    title: "A report with page sections",
+    file: "demo/examples/page-sections.md",
+    blurb:
+      "print header footer page section orientation landscape portrait page numbers pdf export",
   },
 ];
 
@@ -4660,6 +4863,16 @@ function paletteEntries(): PaletteEntry[] {
     // Same handler as the toolbar button: without a caret the clip
     // appends at the document end; invoked while recording it stops.
     action: () => toggleRecording(),
+  });
+  entries.push({
+    title: "Insert a flashcard deck",
+    group: "Command",
+    keywords:
+      "flashcards flash cards deck study quiz learn vocabulary cards insert add",
+    action: () => {
+      el.insertFlashcards();
+      flash("Flashcard deck inserted");
+    },
   });
   entries.push({
     title: "Toggle the section browser",
@@ -5423,9 +5636,11 @@ function preparePrint(): void {
         : "16:9"
       : "16:9"
     : pageSizeFor(doc);
-  // Orientation follows the `page.orientation` key (print-only; the
-  // deck sizes are landscape by their dimensions already).
-  const orientation = sliding ? "portrait" : furnitureFor(doc).orientation;
+  // Orientation follows the `page.orientation` key (print-only). Slide
+  // decks keep their natural landscape aspect: passing an orientation
+  // here would flip 16:9 to 9in 16in (regression caught by
+  // slides.spec "print media while playing").
+  const orientation = sliding ? undefined : furnitureFor(doc).orientation;
   document.documentElement.style.setProperty(
     "--folio-page-size",
     pageSizeCss(size, orientation),

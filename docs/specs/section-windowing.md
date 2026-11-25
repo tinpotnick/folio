@@ -60,6 +60,13 @@ it when it nears the viewport (src/component.ts `lazyFigure`). The
 DOM is untouched - only the draw is deferred, so the
 DOM-is-source-of-truth editing model is unaffected. Mode changes
 re-dress only figures already drawn; pending ones stay pending.
+Audio figures joined the same contract (2026-11-20): the native
+`<audio controls>` widget is the "draw" - `renderAudio` leaves a
+lightweight placeholder and `attachAudio` swaps in the player when
+the figure nears the viewport (or on pointer/focus). A document with
+hundreds of clips must not create hundreds of media widgets up front:
+measured on WebKitGTK, 300 clips cost ~2.6 s of render and ~3.3 s of
+view switching when eager, ~0.1 s when lazy.
 Print/export never shows a blank figure: `preparePrint` and both
 print paths call `drawAllFigures()` (printDocument/exportPdf await
 it), which draws every pending figure and settles `drawn()`.
