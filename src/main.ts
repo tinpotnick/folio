@@ -237,6 +237,43 @@ function docUrl(path: string | null): string {
  * a browser history entry: Back returns to the previous document
  * instead of leaving folio.
  */
+/** Shipped examples with a fresher live copy on the site (spec:
+ * docs/specs/package-repos.md, "Counting downloads"): the bundled file
+ * is a seed frozen at build time, while the nightly stats workflow
+ * regenerates the live one. */
+const LIVE_EXAMPLES = new Map<string, string>([
+  [
+    "demo/examples/stats.md",
+    "https://tinpotnick.github.io/folio/demo/examples/stats.md",
+  ],
+]);
+
+/** The latest live snapshot of an example, or null when there is none
+ *  / the machine is offline / the local copy already IS the live one
+ *  (on the hosted site both URLs name the same document). */
+async function fetchLatestExample(path: string): Promise<string | null> {
+  const live = LIVE_EXAMPLES.get(path);
+  if (live === undefined) return null;
+  if (new URL(live).href === new URL(path, window.location.href).href) {
+    return null;
+  }
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 4000);
+    try {
+      const res = await fetch(live, { signal: ctl.signal });
+      if (!res.ok) return null;
+      const body = await res.text();
+      // Sanity: it must look like the document, not an error page.
+      return body.includes("::: table") ? body : null;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return null; // offline or slow: the bundled seed serves (offline)
+  }
+}
+
 async function openShipped(
   path: string | null,
   opts: {
@@ -253,9 +290,15 @@ async function openShipped(
     return false;
   let text = BLANK;
   if (path !== null) {
-    const res = await fetch(path);
-    if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
-    text = await res.text();
+    const live = await fetchLatestExample(path);
+    if (live !== null) {
+      text = live;
+      flash("Showing the latest snapshot from folio's site");
+    } else {
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
+      text = await res.text();
+    }
   }
   const mode = opts.history ?? "push";
   // Remember where the reader was on the page they are leaving, so
