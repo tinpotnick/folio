@@ -54,7 +54,15 @@ Handling API, on an INSTALLED app (Chrome, Edge, ChromeOS):
 - `public/sw.js` is the service worker that makes the app installable
   and launchable with files, and caches the app shell (same-origin
   GET; `/pyodide/` and `/repo/` always go to the network) so the
-  installed app works offline. Registered in `src/main.ts` only on a
+  installed app works offline. **What can change on the server is
+  network-first, with the cache as the offline fallback**: the HTML
+  entry and every `.md` document - the stats example is regenerated
+  nightly, and a cache-first policy froze installed apps at their
+  first-opened snapshot, so the live numbers never reached them
+  (2026-11-27). The hashed app shell stays cache-first. The cache
+  name is versioned (`folio-shell-v2`): a new worker generation
+  deletes the old cache on activate, which is what un-freezes
+  already-installed apps. Registered in `src/main.ts` only on a
   production web build - never in dev, never in the desktop shell.
 - `src/web-files.ts` `onWebLaunch` wraps `window.launchQueue`; the
   page opens each launched file as the open, clean document and keeps

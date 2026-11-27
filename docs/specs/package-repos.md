@@ -10,11 +10,11 @@ see docs.flathub.org "Requirements"), folio runs its own signed
 repositories on GitHub Pages, so Linux users install it once and get
 updates through their system:
 
-| | Where | Users add |
-| --- | --- | --- |
-| Flatpak | `/repo/flatpak/` (OSTree, archive-z2) | `folio.flatpakrepo`, or one click on `io.github.tinpotnick.folio.flatpakref` |
-| dnf (Fedora, RHEL, openSUSE) | `/repo/rpm/` metadata (createrepo_c); packages from the release | `folio.repo` |
-| apt (Debian, Ubuntu) | `/repo/apt/` (`stable main`, amd64) | `folio-archive-keyring.gpg` + `folio.list` |
+|                              | Where                                                           | Users add                                                                    |
+| ---------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Flatpak                      | `/repo/flatpak/` (OSTree, archive-z2)                           | `folio.flatpakrepo`, or one click on `io.github.tinpotnick.folio.flatpakref` |
+| dnf (Fedora, RHEL, openSUSE) | `/repo/rpm/` metadata (createrepo_c); packages from the release | `folio.repo`                                                                 |
+| apt (Debian, Ubuntu)         | `/repo/apt/` (`stable main`, amd64)                             | `folio-archive-keyring.gpg` + `folio.list`                                   |
 
 All under https://tinpotnick.github.io/folio/repo/.
 
@@ -105,7 +105,19 @@ invisible - except Fedora's, by design:
   permission GITHUB_TOKEN cannot hold) on every push to main, so a
   merge deploys the current history instead of clobbering the live
   page with the stale seed. main is never touched; the copy in main
-  is the seed. The document is
+  is the seed.
+- **The app opens the latest snapshot when online** (2026-11-27): the
+  bundled copy is frozen at build time, so opening the stats example
+  first fetches the live document from the site
+  (`LIVE_EXAMPLES` in `src/main.ts`, 4 s timeout, skipped where the
+  local copy IS the live one - the hosted web app), falling back to
+  the bundled seed offline or on error. The document itself is still
+  a static snapshot; only WHICH snapshot loads is a network call,
+  never a render dependency. On the web the service worker must also
+  revalidate it (network-first for documents - see
+  docs/specs/web-files.md), or an installed app would stay frozen at
+  its first-opened copy.
+- The document is
   a static snapshot, so it renders fully offline (ADR-0005), and
   GitHub Pages keeps no logs, so reading it never moves its own
   numbers. The seed in main is pinned by tests/engine/stats-demo.test.ts

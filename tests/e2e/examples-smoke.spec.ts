@@ -13,6 +13,12 @@ for (const file of examples) {
   test(`example ${file} draws with no errors`, async ({ page }) => {
     const pageErrors: string[] = [];
     page.on("pageerror", (e) => pageErrors.push(e.message));
+    // The stats example tries the latest live snapshot when online;
+    // the smoke test reads the deterministic bundled seed.
+    await page.route(
+      "https://tinpotnick.github.io/folio/demo/examples/stats.md",
+      (r) => r.abort(),
+    );
     await page.goto(`/?doc=demo/examples/${file}`);
     await page.locator("#the-doc h1").first().waitFor();
     // Read it through, so every (lazy) figure draws.
