@@ -290,9 +290,11 @@ async function openShipped(
     return false;
   let text = BLANK;
   if (path !== null) {
-    text = await fetchLatestExample(path);
-    if (text !== null) flash("Showing the latest snapshot from folio's site");
-    if (text === null) {
+    const live = await fetchLatestExample(path);
+    if (live !== null) {
+      text = live;
+      flash("Showing the latest snapshot from folio's site");
+    } else {
       const res = await fetch(path);
       if (!res.ok) throw new Error(`HTTP ${String(res.status)}`);
       text = await res.text();

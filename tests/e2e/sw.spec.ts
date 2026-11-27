@@ -8,41 +8,48 @@ import { expect, test, type Page } from "@playwright/test";
  * nightly-refreshed stats example never reached them. The hashed app
  * shell stays cache-first (immutable).
  *
- * Uses a throwaway document in public/ (vite serves it) rather than a
- * real example, so no test ever sees the server's file change under it.
+ * Uses throwaway documents in public/ (vite serves them) rather than a
+ * real example, so no test ever sees the server's file change under
+ * it. Each test owns its own file: workers run in parallel.
  */
-const DOC = "sw-fresh.md";
-
 async function registerWorker(page: Page) {
   await page.evaluate(async () => {
-    const reg = await navigator.serviceWorker.register("sw.js");
-    await navigator.serviceWorker.ready;
-    // the worker claims the page on activate; give it a beat
-    await new Promise((r) => setTimeout(r, 200));
-    if (!reg.active) throw new Error("service worker never activated");
+    await navigator.serviceWorker.register("sw.js");
+    // clients.claim() on activate is what puts the worker in control;
+    // poll for it instead of sleeping a fixed beat
+    const deadline = performance.now() + 10_000;
+    while (
+      navigator.serviceWorker.controller === null &&
+      performance.now() < deadline
+    ) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (!navigator.serviceWorker.controller)
+      throw new Error("service worker never took control");
   });
 }
 
 test("documents revalidate: a nightly-refreshed doc reaches an installed app", async ({
   page,
 }) => {
-  writeFileSync(`public/${DOC}`, "seed snapshot\n");
+  const doc = "sw-fresh-revalidate.md";
+  writeFileSync(`public/${doc}`, "seed snapshot\n");
   try {
     await page.goto("/");
     await registerWorker(page);
     const get = () =>
       page.evaluate(
         (u) => fetch(u, { cache: "reload" }).then((r) => r.text()),
-        DOC,
+        doc,
       );
     expect(await get()).toContain("seed snapshot");
     // The nightly redeploy changes the server's copy...
-    writeFileSync(`public/${DOC}`, "nightly snapshot\n");
+    writeFileSync(`public/${doc}`, "nightly snapshot\n");
     // ...and the app must see it despite the cached copy (regression:
     // cache-first served the frozen seed forever).
     expect(await get()).toContain("nightly snapshot");
   } finally {
-    rmSync(`public/${DOC}`);
+    rmSync(`public/${doc}`, { force: true });
   }
 });
 
@@ -50,19 +57,23 @@ test("offline: the cached copy serves (the installed app works offline)", async 
   page,
   context,
 }) => {
-  writeFileSync(`public/${DOC}`, "seed snapshot\n");
+  const doc = "sw-fresh-offline.md";
+  writeFileSync(`public/${doc}`, "seed snapshot\n");
   try {
     await page.goto("/");
     await registerWorker(page);
     // prime the document cache (network-first caches on success)
     expect(
-      await page.evaluate((u) => fetch(u).then((r) => r.text()), DOC),
+      await page.evaluate((u) => fetch(u).then((r) => r.text()), doc),
     ).toContain("seed snapshot");
+    // the SW's cache put races its response; let it settle before
+    // going offline (the fetch handler does not await its own put)
+    await page.waitForTimeout(500);
     await context.setOffline(true);
-    const got = await page.evaluate((u) => fetch(u).then((r) => r.text()), DOC);
+    const got = await page.evaluate((u) => fetch(u).then((r) => r.text()), doc);
     expect(got).toContain("seed snapshot");
     await context.setOffline(false);
   } finally {
-    rmSync(`public/${DOC}`);
+    rmSync(`public/${doc}`, { force: true });
   }
 });
